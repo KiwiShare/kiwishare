@@ -1,11 +1,36 @@
-# Please edit this gitignore file to suit your needs. You may
-# look at other .gitignore files in the provided examples for inspiration.
+# Flutter/Dart 工具生成的缓存与构建产物
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
 
+# IDE 与编辑器配置文件
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+
+# 操作系统生成的隐式文件
 .DS_Store
-node_modules
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Environment variables - Edit if necessary
-.env
-.env.*
-!.env.example
-!.env.test
+# Android 产物
+android/.gradle/
+android/local.properties
+android/app/debug
+android/app/profile
+android/app/release
+
+# iOS 产物
+ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
+ios/Runner.xcworkspace/xcuserdata/
+ios/Pods/
