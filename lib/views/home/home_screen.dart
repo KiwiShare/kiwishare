@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shimmer/shimmer.dart';
-import '../models/item_model.dart';
-import '../providers/app_state.dart';
+import '../../models/item_model.dart';
+import '../../providers/app_state.dart';
+import '../shared/widgets/item_card.dart';
+import '../shared/widgets/item_card_skeleton.dart';
+import 'widgets/category_navigation_button.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onNavigateToSearch;
@@ -23,7 +25,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Cache the future of popular items to avoid redundant fetches on visual redraws
     _popularItemsFuture = Provider.of<AppState>(context, listen: false).getPopularItems();
   }
 
@@ -45,7 +46,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: RefreshIndicator(
           onRefresh: () async {
             _retryFetch();
-            // Wait for future resolution
             await _popularItemsFuture;
           },
           child: SingleChildScrollView(
@@ -164,10 +164,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildCategoryButton(context, 'For You', Icons.home, true),
-                    _buildCategoryButton(context, 'Categories', Icons.grid_view, false),
-                    _buildCategoryButton(context, 'Nearby', Icons.location_on_outlined, false),
-                    _buildCategoryButton(context, 'Saved', Icons.favorite_border, false),
+                    CategoryNavigationButton(
+                      label: 'For You',
+                      icon: Icons.home,
+                      isActive: true,
+                      onTap: () {},
+                    ),
+                    CategoryNavigationButton(
+                      label: 'Categories',
+                      icon: Icons.grid_view,
+                      isActive: false,
+                      onTap: () {},
+                    ),
+                    CategoryNavigationButton(
+                      label: 'Nearby',
+                      icon: Icons.location_on_outlined,
+                      isActive: false,
+                      onTap: () {},
+                    ),
+                    CategoryNavigationButton(
+                      label: 'Saved',
+                      icon: Icons.favorite_border,
+                      isActive: false,
+                      onTap: () {},
+                    ),
                   ],
                 ),
                 const SizedBox(height: 28),
@@ -336,290 +356,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCategoryButton(BuildContext context, String label, IconData icon, bool isActive) {
-    final activeColor = const Color(0xFF3F6FD9);
-    final inactiveBg = const Color(0xFFFAFBFF);
-    final activeText = Colors.white;
-    final inactiveText = const Color(0xFF1F2D5B);
-
-    return Semantics(
-      button: true,
-      selected: isActive,
-      label: 'Category filter $label',
-      child: InkWell(
-        onTap: () {},
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: 76,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isActive ? activeColor : inactiveBg,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF1F2D5B).withOpacity(0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                color: isActive ? activeText : const Color(0xFF6E7FBF),
-                size: 24,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: isActive ? activeText : inactiveText,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ItemCard extends StatelessWidget {
-  final ItemModel item;
-
-  const ItemCard({super.key, required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final appState = Provider.of<AppState>(context);
-    final isFav = appState.isFavorite(item.id);
-
-    return Semantics(
-      label: '${item.title}, price: \$${item.priceNzd} NZD, location: ${item.location}',
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFAFBFF), // Cream Surface
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF1F2D5B).withOpacity(0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            // Item details
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Product Image
-                Expanded(
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: double.infinity,
-                    child: Image.network(
-                      item.imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: const Color(0xFF6E7FBF).withOpacity(0.15),
-                          child: const Center(
-                            child: Icon(
-                              Icons.image_not_supported_outlined,
-                              color: Color(0xFF6E7FBF),
-                              size: 32,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                // Text detail section
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: const Color(0xFF1F2D5B),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '\$${item.priceNzd}',
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: const Color(0xFF3F6FD9), // Cobalt Blue
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on, size: 12, color: Color(0xFF6E7FBF)),
-                          const SizedBox(width: 2),
-                          Expanded(
-                            child: Text(
-                              item.location,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: const Color(0xFF6E7FBF),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            // Sustainable Badge (Bottom-left of image area)
-            if (item.isSustainable)
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE2F0D9).withOpacity(0.95),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFA2D091)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.eco, size: 12, color: Color(0xFF3E8E41)),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Sustainable',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF3E8E41),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            // Favorite Button (Top right of image area)
-            Positioned(
-              top: 4,
-              right: 4,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    appState.toggleFavorite(item.id);
-                  },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      shape: BoxShape.circle,
-                    ),
-                    child: AnimatedScale(
-                      scale: isFav ? 1.1 : 1.0,
-                      duration: const Duration(milliseconds: 150),
-                      child: Icon(
-                        isFav ? Icons.favorite : Icons.favorite_border,
-                        color: isFav ? Colors.red : const Color(0xFF6E7FBF),
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class ItemCardSkeleton extends StatelessWidget {
-  const ItemCardSkeleton({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Shimmer.fromColors(
-      baseColor: const Color(0xFFD9E6F8).withOpacity(0.4),
-      highlightColor: const Color(0xFFFAFBFF),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image area skeleton
-            Expanded(
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                  ),
-                ),
-              ),
-            ),
-            // Text area skeleton
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 100,
-                    height: 14,
-                    color: Colors.white,
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 50,
-                    height: 14,
-                    color: Colors.white,
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 80,
-                    height: 10,
-                    color: Colors.white,
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );

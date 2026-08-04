@@ -4,13 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // View Imports
-import 'views/splash_screen.dart';
-import 'views/home_screen.dart';
-import 'views/search_screen.dart';
-import 'views/post_item_screen.dart';
-import 'views/messages_screen.dart';
-import 'views/profile_screen.dart';
-import 'views/login_view.dart';
+import 'views/splash/splash_screen.dart';
+import 'views/home/home_screen.dart';
+import 'views/search/search_screen.dart';
+import 'views/post/post_item_screen.dart';
+import 'views/messages/messages_screen.dart';
+import 'views/profile/profile_screen.dart';
+import 'views/auth/login_view.dart';
 
 // State and Repositories
 import 'providers/app_state.dart';
