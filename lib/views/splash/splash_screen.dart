@@ -73,7 +73,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   ),
                   child: const Center(
                     child: Icon(
-                      Icons.spa, // Leaf/Kiwi shape visual
+                      Icons.spa,
                       color: Color(0xFF3F6FD9), // Cobalt Blue
                       size: 54,
                     ),

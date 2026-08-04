@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../providers/app_state.dart';
-import 'login_view.dart';
+import '../../providers/app_state.dart';
+import '../auth/login_view.dart';
+import 'widgets/architecture_card.dart';
+import 'widgets/arch_detail_item.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -22,14 +24,10 @@ class ProfileScreen extends StatelessWidget {
               color: Color(0xFFFAFBFF), // Cream
               borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
-            child: SafeArea(
+            child: const SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: LoginView(
-                  onLoginSuccess: () {
-                    Navigator.pop(context);
-                  },
-                ),
+                padding: EdgeInsets.all(8.0),
+                child: LoginView(),
               ),
             ),
           ),
@@ -50,7 +48,7 @@ class ProfileScreen extends StatelessWidget {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: FlatButtonTypeCheckStub.start,
             children: [
               // Screen Title
               Text(
@@ -228,18 +226,18 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               // Client Side Direct Links Card
-              _buildArchitectureCard(
+              ArchitectureCard(
                 title: 'Client-Direct Operations (Flutter Direct)',
                 subtitle: 'Optimized for high concurrency and low latency',
-                color: const Color(0xFFE2F0D9), // Light Green
+                color: const Color(0xFFE2F0D9),
                 borderColor: const Color(0xFFA2D091),
-                items: [
-                  _buildArchDetailItem(
+                items: const [
+                  ArchDetailItem(
                     icon: Icons.sync,
                     label: 'Firestore Streams',
                     description: 'Real-time syncing for product grids, user metadata, and chat lists directly to clients.',
                   ),
-                  _buildArchDetailItem(
+                  ArchDetailItem(
                     icon: Icons.cloud_upload_outlined,
                     label: 'Storage Uploads',
                     description: 'Direct multi-part uploads to Firebase Storage bypassing intermediate gateway servers.',
@@ -249,23 +247,23 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 16),
 
               // Cloud Functions Card
-              _buildArchitectureCard(
+              ArchitectureCard(
                 title: 'Secure Serverless Node.js Backend',
                 subtitle: 'Running on protected privileged Admin SDK envs',
-                color: const Color(0xFFFBE4D8), // Light Orange
+                color: const Color(0xFFFBE4D8),
                 borderColor: const Color(0xFFF2A385),
-                items: [
-                  _buildArchDetailItem(
+                items: const [
+                  ArchDetailItem(
                     icon: Icons.g_translate_outlined,
                     label: 'AI Moderation & Risk Control',
                     description: 'Evaluates listings for prohibited items using Google Cloud Functions without exposing secrets.',
                   ),
-                  _buildArchDetailItem(
+                  ArchDetailItem(
                     icon: Icons.qr_code_scanner,
                     label: 'QR Code Atomic Validation',
                     description: 'Atomic Firestore transaction routines validating handovers to prevent double-redeems.',
                   ),
-                  _buildArchDetailItem(
+                  ArchDetailItem(
                     icon: Icons.calculate_outlined,
                     label: 'Kiwi Trust Score Settlement',
                     description: 'Secured calculations utilizing Admin SDK triggers based on successful transactions.',
@@ -279,87 +277,9 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildArchitectureCard({
-    required String title,
-    required String subtitle,
-    required Color color,
-    required Color borderColor,
-    required List<Widget> items,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor.withOpacity(0.6)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              color: const Color(0xFF1F2D5B),
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: const Color(0xFF6E7FBF),
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-          const Divider(height: 20, color: Color(0xFF1F2D5B)),
-          ...items,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildArchDetailItem({
-    required IconData icon,
-    required String label,
-    required String description,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: const Color(0xFF1F2D5B)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: const Color(0xFF1F2D5B),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    color: const Color(0xFF1F2D5B).withOpacity(0.85),
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+// FlatButtonTypeCheckStub for start crossAxisAlignment alignment
+class FlatButtonTypeCheckStub {
+  static const start = CrossAxisAlignment.start;
 }

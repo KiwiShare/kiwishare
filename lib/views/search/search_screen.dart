@@ -2,9 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../providers/app_state.dart';
-import '../models/item_model.dart';
-import 'home_screen.dart'; // To reuse ItemCard and ItemCardSkeleton
+import '../../providers/app_state.dart';
+import '../../models/item_model.dart';
+import '../shared/widgets/item_card.dart';
+import '../shared/widgets/item_card_skeleton.dart';
+import 'widgets/filter_chip.dart';
+import 'widgets/category_picker_sheet.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -55,54 +58,7 @@ class _SearchScreenState extends State<SearchScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        final appState = Provider.of<AppState>(context);
-        final activeCategory = appState.selectedCategory;
-        final categories = ['All NZ', 'Camping', 'Plants', 'Furniture', 'Transport'];
-
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Filter by Category',
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1F2D5B),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: categories.length,
-                  itemBuilder: (context, index) {
-                    final cat = categories[index];
-                    final isSelected = cat == activeCategory;
-
-                    return ListTile(
-                      title: Text(
-                        cat,
-                        style: GoogleFonts.inter(
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? const Color(0xFF3F6FD9) : const Color(0xFF1F2D5B),
-                        ),
-                      ),
-                      trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF3F6FD9)) : null,
-                      onTap: () {
-                        appState.setCategory(cat);
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
+        return const CategoryPickerSheet();
       },
     );
   }
@@ -180,17 +136,30 @@ class _SearchScreenState extends State<SearchScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  _buildFilterChip('All NZ', active: false),
+                  SearchFilterChip(
+                    label: 'All NZ',
+                    active: false,
+                    onTap: () {},
+                  ),
                   const SizedBox(width: 8),
-                  _buildFilterChip(
-                    'Category: $activeCategory',
+                  SearchFilterChip(
+                    label: 'Category: $activeCategory',
                     active: activeCategory != 'All NZ',
                     onTap: _showCategoryPicker,
                   ),
                   const SizedBox(width: 8),
-                  _buildFilterChip('Sort: Popular', active: false),
+                  SearchFilterChip(
+                    label: 'Sort: Popular',
+                    active: false,
+                    onTap: () {},
+                  ),
                   const SizedBox(width: 8),
-                  _buildFilterChip('Save', active: false, icon: Icons.favorite_border),
+                  SearchFilterChip(
+                    label: 'Save',
+                    active: false,
+                    onTap: () {},
+                    icon: Icons.favorite_border,
+                  ),
                 ],
               ),
             ),
@@ -367,50 +336,6 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label, {required bool active, VoidCallback? onTap, IconData? icon}) {
-    return Semantics(
-      button: true,
-      selected: active,
-      child: InkWell(
-        onTap: onTap ?? () {},
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: active ? const Color(0xFF3F6FD9) : const Color(0xFFFAFBFF),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: active ? const Color(0xFF3F6FD9) : const Color(0xFF6E7FBF).withOpacity(0.3),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 16, color: active ? Colors.white : const Color(0xFF1F2D5B)),
-                const SizedBox(width: 6),
-              ],
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: active ? Colors.white : const Color(0xFF1F2D5B),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.keyboard_arrow_down,
-                size: 14,
-                color: active ? Colors.white : const Color(0xFF6E7FBF),
-              ),
-            ],
-          ),
         ),
       ),
     );
