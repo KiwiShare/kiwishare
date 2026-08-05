@@ -21,14 +21,11 @@ class ProfileScreen extends StatelessWidget {
           ),
           child: Container(
             decoration: const BoxDecoration(
-              color: Color(0xFFFAFBFF), // Cream
+              color: Color(0xFFFAF7F2), // Off-White
               borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
             child: const SafeArea(
-              child: Padding(
-                padding: EdgeInsets.all(8.0),
-                child: LoginView(),
-              ),
+              child: Padding(padding: EdgeInsets.all(8.0), child: LoginView()),
             ),
           ),
         );
@@ -43,7 +40,7 @@ class ProfileScreen extends StatelessWidget {
     final isLoggedIn = appState.isLoggedIn;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFD9E6F8), // Sky Blue background
+      backgroundColor: const Color(0xFFFAF7F2), // Off-White background
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20.0),
@@ -56,7 +53,7 @@ class ProfileScreen extends StatelessWidget {
                 style: GoogleFonts.inter(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1F2D5B),
+                  color: const Color(0xFF2E5E4E), // Sage Green Header
                 ),
               ),
               const SizedBox(height: 24),
@@ -65,11 +62,13 @@ class ProfileScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAFBFF), // Cream
+                  color: const Color(0xFFFAF7F2), // Off-White
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF1F2D5B).withOpacity(0.05),
+                      color: const Color(
+                        0xFF1F1F1F,
+                      ).withOpacity(0.05), // Charcoal shadow
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -84,7 +83,9 @@ class ProfileScreen extends StatelessWidget {
                             children: [
                               CircleAvatar(
                                 radius: 36,
-                                backgroundColor: const Color(0xFF3F6FD9), // Cobalt Blue
+                                backgroundColor: const Color(
+                                  0xFF2E5E4E,
+                                ), // Sage Green
                                 child: Text(
                                   user.displayName.substring(0, 1),
                                   style: GoogleFonts.inter(
@@ -98,7 +99,9 @@ class ProfileScreen extends StatelessWidget {
                                 Container(
                                   padding: const EdgeInsets.all(4),
                                   decoration: const BoxDecoration(
-                                    color: Color(0xFF3E8E41), // Verified Green
+                                    color: Color(
+                                      0xFF2E5E4E,
+                                    ), // Sage Green verified badge
                                     shape: BoxShape.circle,
                                   ),
                                   child: const Icon(
@@ -120,21 +123,28 @@ class ProfileScreen extends StatelessWidget {
                                   style: GoogleFonts.inter(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF1F2D5B),
+                                    color: const Color(0xFF1F1F1F), // Charcoal
                                   ),
                                 ),
                                 const SizedBox(height: 4),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFE2F0D9),
+                                    color: const Color(
+                                      0xFFE2F0D9,
+                                    ), // Light Green
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
                                     'Trust Score: ${user.trustScore}/100',
                                     style: GoogleFonts.inter(
                                       fontWeight: FontWeight.bold,
-                                      color: const Color(0xFF3E8E41),
+                                      color: const Color(
+                                        0xFF2E5E4E,
+                                      ), // Sage Green text
                                       fontSize: 12,
                                     ),
                                   ),
@@ -144,7 +154,10 @@ class ProfileScreen extends StatelessWidget {
                           ),
                           // Logout button
                           IconButton(
-                            icon: const Icon(Icons.logout, color: Color(0xFF6E7FBF)),
+                            icon: const Icon(
+                              Icons.logout,
+                              color: Color(0xFF2E5E4E),
+                            ), // Sage Green
                             onPressed: () {
                               appState.logout();
                             },
@@ -157,11 +170,13 @@ class ProfileScreen extends StatelessWidget {
                           // Guest Avatar
                           CircleAvatar(
                             radius: 36,
-                            backgroundColor: const Color(0xFF6E7FBF).withOpacity(0.15),
+                            backgroundColor: const Color(
+                              0xFFE2F0D9,
+                            ), // Light Green
                             child: const Icon(
                               Icons.person_outline,
                               size: 40,
-                              color: Color(0xFF6E7FBF),
+                              color: Color(0xFF2E5E4E), // Sage Green
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -175,17 +190,22 @@ class ProfileScreen extends StatelessWidget {
                                   style: GoogleFonts.inter(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF1F2D5B),
+                                    color: const Color(0xFF1F1F1F), // Charcoal
                                   ),
                                 ),
                                 const SizedBox(height: 6),
                                 ElevatedButton(
-                                  onPressed: () => _showLoginBottomSheet(context),
+                                  onPressed: () =>
+                                      _showLoginBottomSheet(context),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF3F6FD9), // Cobalt
+                                    backgroundColor: const Color(
+                                      0xFFC96B4A,
+                                    ), // Terracotta button
                                     foregroundColor: Colors.white,
                                     minimumSize: const Size(120, 36),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -211,14 +231,18 @@ class ProfileScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  const Icon(Icons.developer_board, color: Color(0xFF1F2D5B), size: 24),
+                  const Icon(
+                    Icons.developer_board,
+                    color: Color(0xFF2E5E4E),
+                    size: 24,
+                  ), // Sage Green
                   const SizedBox(width: 8),
                   Text(
                     'Core System Architecture',
                     style: GoogleFonts.inter(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1F2D5B),
+                      color: const Color(0xFF2E5E4E), // Sage Green Title
                     ),
                   ),
                 ],
@@ -226,47 +250,52 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               // Client Side Direct Links Card
-              ArchitectureCard(
+              const ArchitectureCard(
                 title: 'Client-Direct Operations (Flutter Direct)',
                 subtitle: 'Optimized for high concurrency and low latency',
-                color: const Color(0xFFE2F0D9),
-                borderColor: const Color(0xFFA2D091),
-                items: const [
+                color: Color(0xFFF2E8DB), // Warm Beige
+                borderColor: Color(0xFF7BAA7A), // Leaf Green border
+                items: [
                   ArchDetailItem(
                     icon: Icons.sync,
                     label: 'Firestore Streams',
-                    description: 'Real-time syncing for product grids, user metadata, and chat lists directly to clients.',
+                    description:
+                        'Real-time syncing for product grids, user metadata, and chat lists directly to clients.',
                   ),
                   ArchDetailItem(
                     icon: Icons.cloud_upload_outlined,
                     label: 'Storage Uploads',
-                    description: 'Direct multi-part uploads to Firebase Storage bypassing intermediate gateway servers.',
+                    description:
+                        'Direct multi-part uploads to Firebase Storage bypassing intermediate gateway servers.',
                   ),
                 ],
               ),
               const SizedBox(height: 16),
 
               // Cloud Functions Card
-              ArchitectureCard(
+              const ArchitectureCard(
                 title: 'Secure Serverless Node.js Backend',
                 subtitle: 'Running on protected privileged Admin SDK envs',
-                color: const Color(0xFFFBE4D8),
-                borderColor: const Color(0xFFF2A385),
-                items: const [
+                color: Color(0xFFFBE4D8), // Light Terracotta
+                borderColor: Color(0xFFC96B4A), // Terracotta border
+                items: [
                   ArchDetailItem(
                     icon: Icons.g_translate_outlined,
                     label: 'AI Moderation & Risk Control',
-                    description: 'Evaluates listings for prohibited items using Google Cloud Functions without exposing secrets.',
+                    description:
+                        'Evaluates listings for prohibited items using Google Cloud Functions without exposing secrets.',
                   ),
                   ArchDetailItem(
                     icon: Icons.qr_code_scanner,
                     label: 'QR Code Atomic Validation',
-                    description: 'Atomic Firestore transaction routines validating handovers to prevent double-redeems.',
+                    description:
+                        'Atomic Firestore transaction routines validating handovers to prevent double-redeems.',
                   ),
                   ArchDetailItem(
                     icon: Icons.calculate_outlined,
                     label: 'Kiwi Trust Score Settlement',
-                    description: 'Secured calculations utilizing Admin SDK triggers based on successful transactions.',
+                    description:
+                        'Secured calculations utilizing Admin SDK triggers based on successful transactions.',
                   ),
                 ],
               ),

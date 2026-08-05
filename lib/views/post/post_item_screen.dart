@@ -7,15 +7,12 @@ import 'widgets/step_line.dart';
 class PostItemScreen extends StatelessWidget {
   final VoidCallback onViewListing;
 
-  const PostItemScreen({
-    super.key,
-    required this.onViewListing,
-  });
+  const PostItemScreen({super.key, required this.onViewListing});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFD9E6F8), // Sky Blue background
+      backgroundColor: const Color(0xFFFAF7F2), // Off-White background
       body: SafeArea(
         child: Column(
           children: [
@@ -26,7 +23,11 @@ class PostItemScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Color(0xFF1F2D5B), size: 28),
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: Color(0xFF2E5E4E),
+                      size: 28,
+                    ),
                     onPressed: () {},
                     tooltip: 'Back',
                   ),
@@ -35,7 +36,7 @@ class PostItemScreen extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1F2D5B),
+                      color: const Color(0xFF2E5E4E), // Sage Green Header
                     ),
                   ),
                   TextButton(
@@ -48,7 +49,7 @@ class PostItemScreen extends StatelessWidget {
                       style: GoogleFonts.inter(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF3F6FD9),
+                        color: const Color(0xFF2E5E4E), // Sage Green
                       ),
                     ),
                   ),
@@ -81,11 +82,13 @@ class PostItemScreen extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(28.0),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFAFBFF), // Cream
+                    color: const Color(0xFFFAF7F2), // Off-White
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF1F2D5B).withOpacity(0.06),
+                        color: const Color(
+                          0xFF1F1F1F,
+                        ).withOpacity(0.06), // Charcoal shadow
                         blurRadius: 12,
                         offset: const Offset(0, 6),
                       ),
@@ -102,25 +105,28 @@ class PostItemScreen extends StatelessWidget {
                           ...List.generate(8, (index) {
                             final double angle = (index * 45) * math.pi / 180;
                             return Transform.translate(
-                              offset: Offset(math.sin(angle) * 40, math.cos(angle) * 40),
+                              offset: Offset(
+                                math.sin(angle) * 40,
+                                math.cos(angle) * 40,
+                              ),
                               child: Container(
                                 width: 8,
                                 height: 8,
                                 decoration: BoxDecoration(
                                   color: index % 2 == 0
-                                      ? const Color(0xFFB4A7E5) // Lavender
-                                      : const Color(0xFF3F6FD9), // Cobalt
+                                      ? const Color(0xFFD4A24A) // Muted Gold
+                                      : const Color(0xFF7BAA7A), // Leaf Green
                                   shape: BoxShape.circle,
                                 ),
                               ),
                             );
                           }),
-                          // Large Blue Checkmark Circle
+                          // Large Sage Green Checkmark Circle
                           Container(
                             width: 60,
                             height: 60,
                             decoration: const BoxDecoration(
-                              color: Color(0xFF3F6FD9),
+                              color: Color(0xFF2E5E4E), // Sage Green
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -138,7 +144,7 @@ class PostItemScreen extends StatelessWidget {
                         style: GoogleFonts.inter(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1F2D5B),
+                          color: const Color(0xFF1F1F1F), // Charcoal
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -148,17 +154,21 @@ class PostItemScreen extends StatelessWidget {
                         textAlign: TextAlign.center,
                         style: GoogleFonts.inter(
                           fontSize: 15,
-                          color: const Color(0xFF6E7FBF),
+                          color: const Color(
+                            0xFF1F1F1F,
+                          ).withOpacity(0.6), // Charcoal opacity
                           height: 1.4,
                         ),
                       ),
                       const SizedBox(height: 40),
 
-                      // Button 1: View my listing
+                      // Button 1: View my listing (Terracotta accent)
                       ElevatedButton(
                         onPressed: onViewListing,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1F2D5B), // Deep Navy
+                          backgroundColor: const Color(
+                            0xFFC96B4A,
+                          ), // Terracotta
                           foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 50),
                           shape: RoundedRectangleBorder(
@@ -176,12 +186,17 @@ class PostItemScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
 
-                      // Button 2: Share listing
+                      // Button 2: Share listing (Sage Green outline)
                       OutlinedButton.icon(
                         onPressed: () {},
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF1F2D5B),
-                          side: const BorderSide(color: Color(0xFF1F2D5B), width: 1.5),
+                          foregroundColor: const Color(
+                            0xFF2E5E4E,
+                          ), // Sage Green
+                          side: const BorderSide(
+                            color: Color(0xFF2E5E4E),
+                            width: 1.5,
+                          ),
                           minimumSize: const Size(double.infinity, 50),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -203,18 +218,22 @@ class PostItemScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // Tip Banner
+            // Tip Banner (Warm Beige panel background)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAFBFF),
+                  color: const Color(0xFFF2E8DB), // Warm Beige
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.lightbulb_outline, color: Color(0xFF3F6FD9), size: 28),
+                    const Icon(
+                      Icons.lightbulb_outline,
+                      color: Color(0xFF2E5E4E),
+                      size: 28,
+                    ), // Sage Green
                     const SizedBox(width: 14),
                     Expanded(
                       child: Text(
@@ -222,7 +241,7 @@ class PostItemScreen extends StatelessWidget {
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1F2D5B),
+                          color: const Color(0xFF1F1F1F), // Charcoal
                         ),
                       ),
                     ),

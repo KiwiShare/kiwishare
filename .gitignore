@@ -30,3 +30,5 @@ android/app/release
 ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
 ios/Runner.xcworkspace/xcuserdata/
 ios/Pods/
+node_modules/
+.eslintcache

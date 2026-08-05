@@ -18,8 +18,12 @@ import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 
 // Global keys for routing
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
-final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
+final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'root',
+);
+final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'shell',
+);
 
 void main() {
   runApp(
@@ -99,20 +103,18 @@ class KiwiShareApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFD9E6F8), // Sky Blue
+        scaffoldBackgroundColor: const Color(0xFFFAF7F2), // Off-White
         colorScheme: ColorScheme.light(
-          primary: const Color(0xFF1F2D5B), // Deep Navy
-          secondary: const Color(0xFF6E7FBF), // Soft Slate
-          background: const Color(0xFFD9E6F8),
-          surface: const Color(0xFFFAFBFF), // Cream
+          primary: const Color(0xFF2E5E4E), // Sage Green
+          secondary: const Color(0xFF7BAA7A), // Leaf Green
+          background: const Color(0xFFFAF7F2), // Off-White
+          surface: const Color(0xFFFAF7F2), // Off-White
           onPrimary: Colors.white,
           onSecondary: Colors.white,
-          onBackground: const Color(0xFF1F2D5B),
-          onSurface: const Color(0xFF1F2D5B),
+          onBackground: const Color(0xFF1F1F1F), // Charcoal
+          onSurface: const Color(0xFF1F1F1F), // Charcoal
         ),
-        textTheme: GoogleFonts.interTextTheme(
-          ThemeData.light().textTheme,
-        ),
+        textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
       ),
       routerConfig: router,
     );
@@ -146,7 +148,7 @@ class KiwiShareShell extends StatelessWidget {
           ),
           child: Container(
             decoration: const BoxDecoration(
-              color: Color(0xFFFAFBFF), // Cream surface
+              color: Color(0xFFFAF7F2), // Off-White surface
               borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
             child: SafeArea(
@@ -178,7 +180,7 @@ class KiwiShareShell extends StatelessWidget {
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1F2D5B).withOpacity(0.08),
+              color: const Color(0xFF1F1F1F).withOpacity(0.08),
               blurRadius: 12,
               offset: const Offset(0, -4),
             ),
@@ -192,7 +194,7 @@ class KiwiShareShell extends StatelessWidget {
               _showLoginBottomSheet(context);
               return;
             }
-            
+
             // GoRouter navigation mapping
             switch (index) {
               case 0:
@@ -213,9 +215,11 @@ class KiwiShareShell extends StatelessWidget {
             }
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: const Color(0xFFFAFBFF), // Cream Surface
-          selectedItemColor: const Color(0xFF3F6FD9), // Cobalt Blue Active
-          unselectedItemColor: const Color(0xFF6E7FBF), // Soft Slate Inactive
+          backgroundColor: const Color(0xFFFAF7F2), // Off-White Surface
+          selectedItemColor: const Color(0xFF2E5E4E), // Sage Green Active
+          unselectedItemColor: const Color(
+            0xFF1F1F1F,
+          ).withOpacity(0.5), // Charcoal Inactive
           selectedLabelStyle: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
             fontSize: 12,
@@ -253,7 +257,7 @@ class KiwiShareShell extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: const BoxDecoration(
-                  color: Color(0xFF3F6FD9), // Cobalt Blue
+                  color: Color(0xFF2E5E4E), // Sage Green
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.add, color: Colors.white, size: 26),

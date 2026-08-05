@@ -1,0 +1,30 @@
+{
+  "name": "project-implementation-five-guys",
+  "version": "1.0.0",
+  "description": "Welcome to the project for COMPSCI 734 - Mobile, Web & Enterprise Computing. We look forward to seeing the amazing things you create this semester! This is your team's repository.",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "prepare": "husky install",
+    "test": "flutter test",
+    "lint": "flutter analyze",
+    "format": "dart format --set-exit-if-changed lib/ test/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UOA-CS734-S2-2026/project-implementation-five-guys.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/UOA-CS734-S2-2026/project-implementation-five-guys/issues"
+  },
+  "homepage": "https://github.com/UOA-CS734-S2-2026/project-implementation-five-guys#readme",
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

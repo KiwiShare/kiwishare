@@ -26,17 +26,23 @@ class SearchFilterChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: active ? const Color(0xFF3F6FD9) : const Color(0xFFFAFBFF),
+            color: active ? const Color(0xFF2E5E4E) : const Color(0xFFFAF7F2),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: active ? const Color(0xFF3F6FD9) : const Color(0xFF6E7FBF).withOpacity(0.3),
+              color: active
+                  ? const Color(0xFF2E5E4E)
+                  : const Color(0xFF2E5E4E).withOpacity(0.3),
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 16, color: active ? Colors.white : const Color(0xFF1F2D5B)),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: active ? Colors.white : const Color(0xFF1F1F1F),
+                ),
                 const SizedBox(width: 6),
               ],
               Text(
@@ -44,14 +50,14 @@ class SearchFilterChip extends StatelessWidget {
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: active ? Colors.white : const Color(0xFF1F2D5B),
+                  color: active ? Colors.white : const Color(0xFF1F1F1F),
                 ),
               ),
               const SizedBox(width: 4),
               Icon(
                 Icons.keyboard_arrow_down,
                 size: 14,
-                color: active ? Colors.white : const Color(0xFF6E7FBF),
+                color: active ? Colors.white : const Color(0xFF2E5E4E),
               ),
             ],
           ),

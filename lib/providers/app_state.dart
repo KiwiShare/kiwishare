@@ -8,10 +8,7 @@ class AppState extends ChangeNotifier {
   final UserRepository userRepository;
   final ItemRepository itemRepository;
 
-  AppState({
-    required this.userRepository,
-    required this.itemRepository,
-  });
+  AppState({required this.userRepository, required this.itemRepository});
 
   // Authentication State
   bool _isLoggedIn = false;
@@ -102,6 +99,8 @@ class AppState extends ChangeNotifier {
 
   Future<List<ItemModel>> searchListingItems(String query) async {
     // Read the first emission from the mock stream interface
-    return itemRepository.searchItems(query: query, category: _selectedCategory).first;
+    return itemRepository
+        .searchItems(query: query, category: _selectedCategory)
+        .first;
   }
 }

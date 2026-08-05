@@ -1,8 +1,4 @@
-enum ItemStatus {
-  active,
-  reserved,
-  sold,
-}
+enum ItemStatus { active, reserved, sold }
 
 class ItemModel {
   final String id;
@@ -77,7 +73,8 @@ class ItemModel {
   }
 
   /// JSON serialization helper.
-  factory ItemModel.fromJson(Map<String, dynamic> json) => ItemModel.fromMap(json);
+  factory ItemModel.fromJson(Map<String, dynamic> json) =>
+      ItemModel.fromMap(json);
 
   Map<String, dynamic> toJson() => toMap();
 
@@ -97,7 +94,16 @@ class ItemModel {
 
   @override
   int get hashCode {
-    return Object.hash(id, title, priceNzd, location, imageUrl, isSustainable, category, status);
+    return Object.hash(
+      id,
+      title,
+      priceNzd,
+      location,
+      imageUrl,
+      isSustainable,
+      category,
+      status,
+    );
   }
 
   @override

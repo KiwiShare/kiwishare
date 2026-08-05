@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# Resolve Flutter SDK path if not already in PATH
+if ! command -v flutter >/dev/null 2>&1; then
+  export PATH="$PATH:/Users/samyao/flutter/bin"
+fi
+
+npm run test

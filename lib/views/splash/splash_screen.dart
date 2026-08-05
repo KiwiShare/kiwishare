@@ -5,16 +5,14 @@ import 'package:google_fonts/google_fonts.dart';
 class SplashScreen extends StatefulWidget {
   final VoidCallback onSplashComplete;
 
-  const SplashScreen({
-    super.key,
-    required this.onSplashComplete,
-  });
+  const SplashScreen({super.key, required this.onSplashComplete});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   Timer? _transitionTimer;
@@ -48,7 +46,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFD9E6F8), // Sky Blue Background
+      backgroundColor: const Color(0xFFFAF7F2), // Off-White background
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnimation,
@@ -61,11 +59,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFAFBFF), // Cream
+                    color: const Color(0xFFFAF7F2), // Off-White
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF1F2D5B).withOpacity(0.12),
+                        color: const Color(
+                          0xFF1F1F1F,
+                        ).withOpacity(0.12), // Charcoal shadow
                         blurRadius: 15,
                         offset: const Offset(0, 8),
                       ),
@@ -74,7 +74,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   child: const Center(
                     child: Icon(
                       Icons.spa,
-                      color: Color(0xFF3F6FD9), // Cobalt Blue
+                      color: Color(0xFF2E5E4E), // Sage Green logo icon
                       size: 54,
                     ),
                   ),
@@ -87,7 +87,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   style: GoogleFonts.inter(
                     fontSize: 36,
                     fontWeight: FontWeight.w900,
-                    color: const Color(0xFF1F2D5B), // Deep Navy
+                    color: const Color(0xFF2E5E4E), // Sage Green title
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -99,7 +99,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   style: GoogleFonts.inter(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF6E7FBF), // Soft Slate
+                    color: const Color(
+                      0xFF1F1F1F,
+                    ).withOpacity(0.6), // Charcoal opacity subtitle
                   ),
                 ),
                 const SizedBox(height: 48),
@@ -109,7 +111,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   width: 32,
                   height: 32,
                   child: CircularProgressIndicator(
-                    color: Color(0xFF3F6FD9),
+                    color: Color(0xFF2E5E4E), // Sage Green loader
                     strokeWidth: 3.5,
                   ),
                 ),
