@@ -35,7 +35,7 @@ class ArchitectureCard extends StatelessWidget {
             style: GoogleFonts.inter(
               fontWeight: FontWeight.bold,
               fontSize: 15,
-              color: const Color(0xFF1F2D5B),
+              color: const Color(0xFF1F1F1F),
             ),
           ),
           const SizedBox(height: 2),
@@ -43,11 +43,11 @@ class ArchitectureCard extends StatelessWidget {
             subtitle,
             style: GoogleFonts.inter(
               fontSize: 12,
-              color: const Color(0xFF6E7FBF),
+              color: const Color(0xFF1F1F1F).withOpacity(0.6),
               fontStyle: FontStyle.italic,
             ),
           ),
-          const Divider(height: 20, color: Color(0xFF1F2D5B)),
+          const Divider(height: 20, color: Color(0xFF1F1F1F)),
           ...items,
         ],
       ),

@@ -10,10 +10,7 @@ import 'widgets/category_navigation_button.dart';
 class HomeScreen extends StatefulWidget {
   final VoidCallback onNavigateToSearch;
 
-  const HomeScreen({
-    super.key,
-    required this.onNavigateToSearch,
-  });
+  const HomeScreen({super.key, required this.onNavigateToSearch});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,12 +22,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _popularItemsFuture = Provider.of<AppState>(context, listen: false).getPopularItems();
+    _popularItemsFuture = Provider.of<AppState>(
+      context,
+      listen: false,
+    ).getPopularItems();
   }
 
   void _retryFetch() {
     setState(() {
-      _popularItemsFuture = Provider.of<AppState>(context, listen: false).getPopularItems(forceRefresh: true);
+      _popularItemsFuture = Provider.of<AppState>(
+        context,
+        listen: false,
+      ).getPopularItems(forceRefresh: true);
     });
   }
 
@@ -41,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentUser = appState.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFD9E6F8), // Sky Blue background
+      backgroundColor: const Color(0xFFFAF7F2), // Off-White app background
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
@@ -50,7 +53,10 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 16.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -63,11 +69,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: GoogleFonts.inter(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1F2D5B), // Deep Navy
+                        color: const Color(0xFF2E5E4E), // Sage Green logo
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.notifications_outlined, size: 28, color: Color(0xFF1F2D5B)),
+                      icon: const Icon(
+                        Icons.notifications_outlined,
+                        size: 28,
+                        color: Color(0xFF2E5E4E), // Sage Green actions
+                      ),
                       onPressed: () {},
                       tooltip: 'Notifications',
                     ),
@@ -87,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: GoogleFonts.inter(
                                 fontSize: 26,
                                 fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1F2D5B),
+                                color: const Color(0xFF1F1F1F), // Charcoal
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -95,7 +105,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               'Find great things, close to home.',
                               style: GoogleFonts.inter(
                                 fontSize: 16,
-                                color: const Color(0xFF6E7FBF), // Soft Slate
+                                color: const Color(
+                                  0xFF1F1F1F,
+                                ).withOpacity(0.6), // Charcoal opacity
                               ),
                             ),
                           ],
@@ -109,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: GoogleFonts.inter(
                               fontSize: 26,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1F2D5B),
+                              color: const Color(0xFF1F1F1F), // Charcoal
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -117,7 +129,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             'Find great things, close to home.',
                             style: GoogleFonts.inter(
                               fontSize: 16,
-                              color: const Color(0xFF6E7FBF),
+                              color: const Color(
+                                0xFF1F1F1F,
+                              ).withOpacity(0.6), // Charcoal opacity
                             ),
                           ),
                         ],
@@ -128,13 +142,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 GestureDetector(
                   onTap: widget.onNavigateToSearch,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFAFBFF), // Cream
+                      color: const Color(0xFFFAF7F2), // Off-White inside
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(
+                          0xFF2E5E4E,
+                        ).withOpacity(0.2), // Light green border
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF1F2D5B).withOpacity(0.06),
+                          color: const Color(0xFF1F1F1F).withOpacity(0.04),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -142,18 +164,26 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.search, color: Color(0xFF6E7FBF), size: 24),
+                        const Icon(
+                          Icons.search,
+                          color: Color(0xFF2E5E4E), // Sage Green
+                          size: 24,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             'Search for items or categories',
                             style: GoogleFonts.inter(
-                              color: const Color(0xFF6E7FBF),
+                              color: const Color(0xFF1F1F1F).withOpacity(0.5),
                               fontSize: 16,
                             ),
                           ),
                         ),
-                        const Icon(Icons.tune, color: Color(0xFF6E7FBF), size: 24),
+                        const Icon(
+                          Icons.tune,
+                          color: Color(0xFF2E5E4E), // Sage Green
+                          size: 24,
+                        ),
                       ],
                     ),
                   ),
@@ -201,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: GoogleFonts.inter(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1F2D5B),
+                        color: const Color(0xFF1F1F1F),
                       ),
                     ),
                     TextButton(
@@ -215,11 +245,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             'See all',
                             style: GoogleFonts.inter(
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF3F6FD9), // Cobalt Blue
+                              color: const Color(0xFF2E5E4E), // Sage Green
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(Icons.arrow_forward, size: 16, color: Color(0xFF3F6FD9)),
+                          const Icon(
+                            Icons.arrow_forward,
+                            size: 16,
+                            color: Color(0xFF2E5E4E),
+                          ),
                         ],
                       ),
                     ),
@@ -235,14 +269,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       return GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.76,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 0.76,
+                            ),
                         itemCount: 4,
-                        itemBuilder: (context, index) => const ItemCardSkeleton(),
+                        itemBuilder: (context, index) =>
+                            const ItemCardSkeleton(),
                       );
                     } else if (snapshot.hasError) {
                       return Center(
@@ -251,14 +287,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.cloud_off, size: 48, color: Color(0xFF6E7FBF)),
+                              const Icon(
+                                Icons.cloud_off,
+                                size: 48,
+                                color: Color(0xFF2E5E4E),
+                              ),
                               const SizedBox(height: 12),
                               Text(
                                 'Error loading popular listings',
                                 style: GoogleFonts.inter(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF1F2D5B),
+                                  color: const Color(0xFF1F1F1F),
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -266,7 +306,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 'Please check your network and try again.',
                                 style: GoogleFonts.inter(
                                   fontSize: 14,
-                                  color: const Color(0xFF6E7FBF),
+                                  color: const Color(
+                                    0xFF1F1F1F,
+                                  ).withOpacity(0.6),
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -274,10 +316,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               ElevatedButton.icon(
                                 onPressed: _retryFetch,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF3F6FD9),
+                                  backgroundColor: const Color(0xFF2E5E4E),
                                   foregroundColor: Colors.white,
                                   minimumSize: const Size(120, 44),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                                 icon: const Icon(Icons.refresh),
                                 label: const Text('Tap to Retry'),
@@ -289,17 +333,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     } else {
                       final items = snapshot.data ?? [];
                       if (items.isEmpty) {
-                        return const Center(child: Text('No popular items found.'));
+                        return const Center(
+                          child: Text('No popular items found.'),
+                        );
                       }
                       return GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.76,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 0.76,
+                            ),
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           return ItemCard(item: items[index]);
@@ -316,13 +363,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   decoration: BoxDecoration(
                     color: const Color(0xFFE2F0D9), // Light sustainable green
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFA2D091).withOpacity(0.5)),
+                    border: Border.all(
+                      color: const Color(0xFFA2D091).withOpacity(0.5),
+                    ),
                   ),
                   child: InkWell(
                     onTap: () {},
                     child: Row(
                       children: [
-                        const Icon(Icons.spa, color: Color(0xFF3E8E41), size: 36),
+                        const Icon(
+                          Icons.spa,
+                          color: Color(0xFF3E8E41),
+                          size: 36,
+                        ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
@@ -333,7 +386,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: GoogleFonts.inter(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF1F2D5B),
+                                  color: const Color(0xFF1F1F1F),
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -341,13 +394,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                 'Buy local. Reduce waste. Build community.',
                                 style: GoogleFonts.inter(
                                   fontSize: 13,
-                                  color: const Color(0xFF1F2D5B).withOpacity(0.8),
+                                  color: const Color(
+                                    0xFF1F1F1F,
+                                  ).withOpacity(0.8),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFF1F2D5B)),
+                        const Icon(
+                          Icons.chevron_right,
+                          color: Color(0xFF1F1F1F),
+                        ),
                       ],
                     ),
                   ),

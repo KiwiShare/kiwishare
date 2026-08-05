@@ -53,7 +53,8 @@ class UserModel {
   }
 
   /// JSON serialization helper matching user's instruction.
-  factory UserModel.fromJson(Map<String, dynamic> json) => UserModel.fromMap(json);
+  factory UserModel.fromJson(Map<String, dynamic> json) =>
+      UserModel.fromMap(json);
 
   Map<String, dynamic> toJson() => toMap();
 

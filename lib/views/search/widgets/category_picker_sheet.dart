@@ -10,7 +10,13 @@ class CategoryPickerSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final activeCategory = appState.selectedCategory;
-    final categories = ['All NZ', 'Camping', 'Plants', 'Furniture', 'Transport'];
+    final categories = [
+      'All NZ',
+      'Camping',
+      'Plants',
+      'Furniture',
+      'Transport',
+    ];
 
     return SafeArea(
       child: Padding(
@@ -24,7 +30,7 @@ class CategoryPickerSheet extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1F2D5B),
+                color: const Color(0xFF1F1F1F),
               ),
             ),
             const SizedBox(height: 16),
@@ -40,11 +46,17 @@ class CategoryPickerSheet extends StatelessWidget {
                   title: Text(
                     cat,
                     style: GoogleFonts.inter(
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected ? const Color(0xFF3F6FD9) : const Color(0xFF1F2D5B),
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: isSelected
+                          ? const Color(0xFF2E5E4E)
+                          : const Color(0xFF1F1F1F),
                     ),
                   ),
-                  trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF3F6FD9)) : null,
+                  trailing: isSelected
+                      ? const Icon(Icons.check, color: Color(0xFF2E5E4E))
+                      : null,
                   onTap: () {
                     appState.setCategory(cat);
                     Navigator.pop(context);

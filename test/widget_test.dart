@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
 import 'package:kiwishare/models/user_model.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/app_state.dart';
@@ -80,7 +79,7 @@ void main() {
     test('Logout clears authenticated user parameters', () async {
       await appState.login();
       expect(appState.isLoggedIn, isTrue);
-      
+
       appState.logout();
       expect(appState.isLoggedIn, isFalse);
       expect(appState.currentUser, isNull);
@@ -98,17 +97,19 @@ void main() {
 
     test('Toggling listing favorites updates set', () {
       expect(appState.isFavorite('item_1'), isFalse);
-      
+
       appState.toggleFavorite('item_1');
       expect(appState.isFavorite('item_1'), isTrue);
-      
+
       appState.toggleFavorite('item_1');
       expect(appState.isFavorite('item_1'), isFalse);
     });
   });
 
   group('Router Compilation Test', () {
-    testWidgets('MaterialApp.router loads cleanly with GoRouter Config', (tester) async {
+    testWidgets('MaterialApp.router loads cleanly with GoRouter Config', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MultiProvider(
           providers: [

@@ -14,16 +14,26 @@ class ItemCard extends StatelessWidget {
     final appState = Provider.of<AppState>(context);
     final isFav = appState.isFavorite(item.id);
 
+    // Seed mock ratings based on item titles to match screenshots
+    String rating = '4.9';
+    if (item.title.contains('Desk')) rating = '4.9';
+    if (item.title.contains('Chair')) rating = '4.8';
+    if (item.title.contains('Lamp')) rating = '4.9';
+    if (item.title.contains('Bookcase')) rating = '4.7';
+
     return Semantics(
-      label: '${item.title}, price: \$${item.priceNzd} NZD, location: ${item.location}',
+      label:
+          '${item.title}, price: \$${item.priceNzd} NZD, location: ${item.location}',
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: const Color(0xFFFAFBFF), // Cream Surface
+          color: const Color(0xFFFAF7F2), // Off-White card body
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1F2D5B).withOpacity(0.06),
+              color: const Color(
+                0xFF1F1F1F,
+              ).withOpacity(0.06), // Charcoal shadow
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -38,21 +48,23 @@ class ItemCard extends StatelessWidget {
               children: [
                 // Product Image
                 Expanded(
-                  child: SizedBox(
+                  child: Container(
                     width: double.infinity,
                     height: double.infinity,
+                    color: const Color(
+                      0xFFF2E8DB,
+                    ), // Warm Beige image background
                     child: Image.network(
                       item.imageUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: const Color(0xFF6E7FBF).withOpacity(0.15),
-                          child: const Center(
-                            child: Icon(
-                              Icons.image_not_supported_outlined,
-                              color: Color(0xFF6E7FBF),
-                              size: 32,
-                            ),
+                        return const Center(
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            color: Color(
+                              0xFF2E5E4E,
+                            ), // Sage Green placeholder icon
+                            size: 32,
                           ),
                         );
                       },
@@ -70,7 +82,7 @@ class ItemCard extends StatelessWidget {
                         style: GoogleFonts.inter(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
-                          color: const Color(0xFF1F2D5B),
+                          color: const Color(0xFF1F1F1F), // Charcoal
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -81,23 +93,36 @@ class ItemCard extends StatelessWidget {
                         style: GoogleFonts.inter(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
-                          color: const Color(0xFF3F6FD9), // Cobalt Blue
+                          color: const Color(0xFF1F1F1F), // Charcoal
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.location,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: const Color(
+                            0xFF1F1F1F,
+                          ).withOpacity(0.6), // Charcoal opacity
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.location_on, size: 12, color: Color(0xFF6E7FBF)),
+                          const Icon(
+                            Icons.star,
+                            size: 12,
+                            color: Color(0xFFD4A24A), // Muted Gold
+                          ),
                           const SizedBox(width: 2),
-                          Expanded(
-                            child: Text(
-                              item.location,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: const Color(0xFF6E7FBF),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            rating,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFD4A24A), // Muted Gold
                             ),
                           ),
                         ],
@@ -114,22 +139,33 @@ class ItemCard extends StatelessWidget {
                 top: 8,
                 left: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE2F0D9).withOpacity(0.95),
+                    color: const Color(
+                      0xFFE2F0D9,
+                    ).withOpacity(0.95), // Light Green
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFA2D091)),
+                    border: Border.all(
+                      color: const Color(0xFF7BAA7A),
+                    ), // Leaf Green border
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.eco, size: 12, color: Color(0xFF3E8E41)),
+                      const Icon(
+                        Icons.eco,
+                        size: 12,
+                        color: Color(0xFF2E5E4E),
+                      ), // Sage Green icon
                       const SizedBox(width: 4),
                       Text(
                         'Sustainable',
                         style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF3E8E41),
+                          color: const Color(0xFF2E5E4E), // Sage Green text
                         ),
                       ),
                     ],
@@ -160,7 +196,9 @@ class ItemCard extends StatelessWidget {
                       duration: const Duration(milliseconds: 150),
                       child: Icon(
                         isFav ? Icons.favorite : Icons.favorite_border,
-                        color: isFav ? Colors.red : const Color(0xFF6E7FBF),
+                        color: isFav
+                            ? Colors.red
+                            : const Color(0xFF2E5E4E), // Sage Green outline
                         size: 20,
                       ),
                     ),

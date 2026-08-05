@@ -7,8 +7,8 @@ class ItemCardSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: const Color(0xFFD9E6F8).withOpacity(0.4),
-      highlightColor: const Color(0xFFFAFBFF),
+      baseColor: const Color(0xFFF2E8DB), // Warm Beige
+      highlightColor: const Color(0xFFFAF7F2), // Off-White
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -35,23 +35,11 @@ class ItemCardSkeleton extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 100,
-                    height: 14,
-                    color: Colors.white,
-                  ),
+                  Container(width: 100, height: 14, color: Colors.white),
                   const SizedBox(height: 8),
-                  Container(
-                    width: 50,
-                    height: 14,
-                    color: Colors.white,
-                  ),
+                  Container(width: 50, height: 14, color: Colors.white),
                   const SizedBox(height: 8),
-                  Container(
-                    width: 80,
-                    height: 10,
-                    color: Colors.white,
-                  ),
+                  Container(width: 80, height: 10, color: Colors.white),
                 ],
               ),
             ),

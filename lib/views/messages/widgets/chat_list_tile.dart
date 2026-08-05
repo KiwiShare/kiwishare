@@ -28,22 +28,25 @@ class ChatListTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1F2D5B).withOpacity(0.04),
+            color: const Color(0xFF1F1F1F).withOpacity(0.04), // Charcoal shadow
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Material(
-        color: const Color(0xFFFAFBFF), // Cream
+        color: const Color(0xFFFAF7F2), // Off-White
         borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8,
+          ),
           leading: Stack(
             children: [
               CircleAvatar(
-                backgroundColor: const Color(0xFFB4A7E5), // Lavender
+                backgroundColor: const Color(0xFF7BAA7A), // Leaf Green
                 radius: 26,
                 child: Text(
                   name.substring(0, 1),
@@ -77,7 +80,7 @@ class ChatListTile extends StatelessWidget {
                 name,
                 style: GoogleFonts.inter(
                   fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
-                  color: const Color(0xFF1F2D5B),
+                  color: const Color(0xFF1F1F1F), // Charcoal
                   fontSize: 16,
                 ),
               ),
@@ -85,7 +88,9 @@ class ChatListTile extends StatelessWidget {
                 time,
                 style: GoogleFonts.inter(
                   fontSize: 11,
-                  color: const Color(0xFF6E7FBF),
+                  color: const Color(
+                    0xFF1F1F1F,
+                  ).withOpacity(0.5), // Charcoal opacity
                 ),
               ),
             ],
@@ -98,9 +103,13 @@ class ChatListTile extends StatelessWidget {
                   child: Text(
                     lastMessage,
                     style: GoogleFonts.inter(
-                      color: isUnread ? const Color(0xFF1F2D5B) : const Color(0xFF6E7FBF),
+                      color: isUnread
+                          ? const Color(0xFF1F1F1F)
+                          : const Color(0xFF1F1F1F).withOpacity(0.6),
                       fontSize: 13,
-                      fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isUnread
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -111,7 +120,7 @@ class ChatListTile extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: const BoxDecoration(
-                      color: Color(0xFF3F6FD9), // Cobalt
+                      color: Color(0xFF2E5E4E), // Sage Green unread badge
                       shape: BoxShape.circle,
                     ),
                     child: Text(
