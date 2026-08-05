@@ -1,14 +1,24 @@
-name: KiwiShare CI/CD Pipeline
+name: Mobile CI Pipeline
 
 on:
   push:
     branches: [ main, feat/folder-structure ]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile.yml'
 
 jobs:
-  analyze_and_test:
+  mobile_ci:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: mobile
 
     steps:
       - name: Checkout repository

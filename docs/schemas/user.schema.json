@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UserModel",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique Firebase Authentication UID."
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 2,
+      "description": "Public display name of the user."
+    },
+    "avatarUrl": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "Optional HTTP link to the user avatar picture."
+    },
+    "trustScore": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "User reputation rating based on successful transactions."
+    },
+    "isVerified": {
+      "type": "boolean",
+      "description": "Flags whether the user profile has completed identity checks."
+    }
+  },
+  "required": ["id", "displayName", "trustScore", "isVerified"]
+}

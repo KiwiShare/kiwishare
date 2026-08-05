@@ -1,17 +1,23 @@
 {
-  "name": "project-implementation-five-guys",
-  "version": "1.0.0",
-  "description": "Welcome to the project for COMPSCI 734 - Mobile, Web & Enterprise Computing. We look forward to seeing the amazing things you create this semester! This is your team's repository.",
-  "main": "index.js",
-  "directories": {
-    "lib": "lib",
-    "test": "test"
-  },
+  "name": "kiwishare-monorepo",
+  "private": true,
+  "description": "Monorepo for KiwiShare - Mobile App (Flutter) and Backend Cloud Functions (Koa + TypeScript)",
   "scripts": {
     "prepare": "husky install",
-    "test": "flutter test",
-    "lint": "flutter analyze",
-    "format": "dart format --set-exit-if-changed lib/ test/"
+    "bootstrap": "pnpm install --ignore-scripts && cd mobile && flutter pub get",
+    "mobile:test": "cd mobile && flutter test",
+    "mobile:analyze": "cd mobile && flutter analyze",
+    "mobile:format": "cd mobile && dart format --set-exit-if-changed lib/ test/",
+    "functions:build": "pnpm --filter functions run build",
+    "functions:test": "pnpm --filter functions run test",
+    "functions:lint": "pnpm --filter functions run lint",
+    "functions:dev": "pnpm --filter functions run dev",
+    "mobile:dev": "cd mobile && flutter run",
+    "dev": "concurrently \"pnpm functions:dev\" \"pnpm mobile:dev\"",
+    "test:all": "pnpm run mobile:test && pnpm run functions:test",
+    "lint:all": "pnpm run mobile:analyze && pnpm run functions:lint",
+    "format:all": "pnpm run mobile:format",
+    "emulators": "firebase emulators:start"
   },
   "repository": {
     "type": "git",
@@ -25,6 +31,12 @@
   },
   "homepage": "https://github.com/UOA-CS734-S2-2026/project-implementation-five-guys#readme",
   "devDependencies": {
+    "concurrently": "^8.2.2",
     "husky": "^9.1.7"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "protobufjs"
+    ]
   }
 }
