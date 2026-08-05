@@ -1,0 +1,4 @@
+packages:
+  - 'functions'
+allowBuilds:
+  protobufjs: set this to true or false
