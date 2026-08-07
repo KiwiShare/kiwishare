@@ -16,6 +16,8 @@ import 'views/auth/login_view.dart';
 import 'providers/app_state.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 // Global keys for routing
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
@@ -25,13 +27,21 @@ final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'shell',
 );
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e');
+  }
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
           create: (_) => AppState(
-            userRepository: MockUserRepository(),
+            userRepository: RestUserRepository(),
             itemRepository: MockItemRepository(),
           ),
         ),

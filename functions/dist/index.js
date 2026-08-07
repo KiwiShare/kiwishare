@@ -40,12 +40,50 @@ exports.api = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const app_1 = __importDefault(require("./app"));
+const path = __importStar(require("path"));
 // Initialize Firebase Admin SDK if not already done in the current context
 try {
-    admin.initializeApp();
+    let credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    if (credPath) {
+        credPath = credPath.trim();
+        // Strip surrounding backticks, single quotes, or double quotes
+        if ((credPath.startsWith('`') && credPath.endsWith('`')) ||
+            (credPath.startsWith('"') && credPath.endsWith('"')) ||
+            (credPath.startsWith("'") && credPath.endsWith("'"))) {
+            credPath = credPath.slice(1, -1).trim();
+        }
+        if (credPath.startsWith('{') && credPath.endsWith('}')) {
+            // Inline JSON string credentials
+            const serviceAccount = JSON.parse(credPath);
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount),
+                projectId: projectId
+            });
+        }
+        else {
+            // File path credentials
+            const absolutePath = path.isAbsolute(credPath)
+                ? credPath
+                : path.resolve(__dirname, '..', credPath);
+            admin.initializeApp({
+                credential: admin.credential.cert(absolutePath),
+                projectId: projectId
+            });
+        }
+    }
+    else {
+        admin.initializeApp();
+    }
 }
 catch (e) {
     // Silent fallback for testing contexts where Firebase credentials are empty
+    try {
+        admin.initializeApp();
+    }
+    catch (err) {
+        // Ignore if already initialized
+    }
 }
 // Export the Koa app instance as a serverless onRequest function
 exports.api = (0, https_1.onRequest)({ cors: true }, app_1.default.callback());

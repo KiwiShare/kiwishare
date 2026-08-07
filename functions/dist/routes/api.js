@@ -41,6 +41,8 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const auth_1 = require("../middleware/auth");
 const admin = __importStar(require("firebase-admin"));
+const nodemailer_1 = __importDefault(require("nodemailer"));
+const resend_1 = require("resend");
 // Initialize router prefix
 const router = new koa_router_1.default({ prefix: '/api' });
 const JWT_SECRET = process.env.JWT_SECRET || 'kiwishare_super_secret_key_123_abc';
@@ -169,6 +171,337 @@ router.post('/auth/login', async (ctx) => {
         return;
     }
     const token = jsonwebtoken_1.default.sign({ id: userDoc.id, email }, JWT_SECRET, { expiresIn: '2h' });
+    ctx.status = 200;
+    ctx.body = {
+        status: 'success',
+        token,
+        user: userDoc
+    };
+});
+// --- 1.1 Passwordless OTP & Google Authentication Endpoints ---
+// Local memory store for OTP verification codes in development/testing
+const localOtps = [];
+router.post('/auth/send-otp', async (ctx) => {
+    const { email } = ctx.request.body;
+    if (!email || !email.includes('@')) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: 'Please provide a valid email address.' };
+        return;
+    }
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes validity
+    const db = getFirestore();
+    if (db) {
+        await db.collection('otps').add({
+            email,
+            code,
+            expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            used: false
+        });
+    }
+    else {
+        localOtps.push({
+            email,
+            code,
+            expiresAt,
+            used: false
+        });
+    }
+    // Developer logging for local testing without SMTP server
+    console.log(`\n📬 [OTP Sent] Email: ${email} | Code: ${code} (Expires in 10 minutes)\n`);
+    // Attempt to send email via Resend API if configured
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const resendFrom = process.env.RESEND_FROM || 'onboarding@resend.dev';
+    let mailSent = false;
+    if (resendApiKey) {
+        try {
+            const resend = new resend_1.Resend(resendApiKey);
+            await resend.emails.send({
+                from: resendFrom,
+                to: email,
+                subject: 'KiwiShare Verification Code',
+                text: `Kia ora!\n\nYour KiwiShare verification code is: ${code}\n\nThis code will expire in 10 minutes. Please do not share this code with anyone.\n\nNgā mihi,\nThe KiwiShare Team`,
+                html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f2e8db; border-radius: 12px; background-color: #faf7f2; color: #1f1f1f;">
+            <h2 style="color: #2e5e4e; text-align: center; margin-bottom: 24px;">KiwiShare</h2>
+            <p>Kia ora!</p>
+            <p>Your KiwiShare verification code is:</p>
+            <div style="font-size: 32px; font-weight: bold; color: #c96b4a; text-align: center; padding: 20px; letter-spacing: 4px; background-color: #f2e8db; border-radius: 8px; margin: 20px 0;">
+              ${code}
+            </div>
+            <p>This code will expire in 10 minutes. Please do not share this code with anyone.</p>
+            <hr style="border: none; border-top: 1px solid #2e5e4e; opacity: 0.1; margin: 30px 0;" />
+            <p style="font-size: 12px; color: #1f1f1f; opacity: 0.6; text-align: center;">Ngā mihi,<br>The KiwiShare Team</p>
+          </div>
+        `
+            });
+            console.log(`✉️ [Resend Email Sent] Real OTP sent via Resend API to: ${email}`);
+            mailSent = true;
+        }
+        catch (error) {
+            console.error(`❌ [Resend Email Error] Failed to send email via Resend: ${error.message || error}`);
+        }
+    }
+    // Attempt to send email via SMTP if configured and not already sent via Resend
+    if (!mailSent) {
+        const smtpHost = process.env.SMTP_HOST;
+        const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 465;
+        const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+        const smtpUser = process.env.SMTP_USER;
+        const smtpPass = process.env.SMTP_PASS;
+        const smtpFrom = process.env.SMTP_FROM || `"KiwiShare" <${smtpUser}>`;
+        if (smtpHost && smtpUser && smtpPass) {
+            try {
+                const transporter = nodemailer_1.default.createTransport({
+                    host: smtpHost,
+                    port: smtpPort,
+                    secure: smtpSecure,
+                    auth: {
+                        user: smtpUser,
+                        pass: smtpPass
+                    }
+                });
+                await transporter.sendMail({
+                    from: smtpFrom,
+                    to: email,
+                    subject: 'KiwiShare Verification Code',
+                    text: `Kia ora!\n\nYour KiwiShare verification code is: ${code}\n\nThis code will expire in 10 minutes. Please do not share this code with anyone.\n\nNgā mihi,\nThe KiwiShare Team`,
+                    html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f2e8db; border-radius: 12px; background-color: #faf7f2; color: #1f1f1f;">
+              <h2 style="color: #2e5e4e; text-align: center; margin-bottom: 24px;">KiwiShare</h2>
+              <p>Kia ora!</p>
+              <p>Your KiwiShare verification code is:</p>
+              <div style="font-size: 32px; font-weight: bold; color: #c96b4a; text-align: center; padding: 20px; letter-spacing: 4px; background-color: #f2e8db; border-radius: 8px; margin: 20px 0;">
+                ${code}
+              </div>
+              <p>This code will expire in 10 minutes. Please do not share this code with anyone.</p>
+              <hr style="border: none; border-top: 1px solid #2e5e4e; opacity: 0.1; margin: 30px 0;" />
+              <p style="font-size: 12px; color: #1f1f1f; opacity: 0.6; text-align: center;">Ngā mihi,<br>The KiwiShare Team</p>
+            </div>
+          `
+                });
+                console.log(`✉️ [SMTP Email Sent] Real OTP sent via SMTP to: ${email}`);
+                mailSent = true;
+            }
+            catch (error) {
+                console.error(`❌ [SMTP Email Error] Failed to send email via SMTP: ${error.message || error}`);
+            }
+        }
+    }
+    const responseBody = { status: 'success', message: 'Verification code sent successfully.' };
+    if (process.env.NODE_ENV !== 'production') {
+        responseBody.devCode = code; // Return code in non-prod environments for automated tests and easier mobile debugging
+    }
+    ctx.status = 200;
+    ctx.body = responseBody;
+});
+router.post('/auth/verify-otp', async (ctx) => {
+    const { email, code, displayName } = ctx.request.body;
+    if (!email || !code) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: 'Email and verification code are required.' };
+        return;
+    }
+    let isValid = false;
+    const db = getFirestore();
+    if (db) {
+        const otpSnap = await db.collection('otps')
+            .where('email', '==', email)
+            .where('code', '==', code)
+            .where('used', '==', false)
+            .orderBy('expiresAt', 'desc')
+            .limit(1)
+            .get();
+        if (!otpSnap.empty) {
+            const otpDoc = otpSnap.docs[0];
+            const otpData = otpDoc.data();
+            const expiresAt = otpData.expiresAt.toDate();
+            if (expiresAt > new Date()) {
+                isValid = true;
+                await otpDoc.ref.update({ used: true });
+            }
+        }
+    }
+    else {
+        const matchedOtpIdx = localOtps.findIndex(o => o.email === email && o.code === code && !o.used && o.expiresAt > new Date());
+        if (matchedOtpIdx !== -1) {
+            isValid = true;
+            localOtps[matchedOtpIdx].used = true;
+        }
+    }
+    if (!isValid) {
+        ctx.status = 401;
+        ctx.body = { status: 'error', message: 'Invalid or expired verification code.' };
+        return;
+    }
+    // Fetch or create user
+    let userDoc = null;
+    if (db) {
+        const userSnap = await db.collection('users').where('email', '==', email).limit(1).get();
+        if (!userSnap.empty) {
+            userDoc = userSnap.docs[0].data();
+        }
+        else {
+            // Create new user profile matching schema
+            const userId = `uid_${Math.random().toString(36).substring(2, 11)}`;
+            const newUser = {
+                id: userId,
+                email,
+                displayName: displayName || email.split('@')[0],
+                avatarUrl: null,
+                trustScore: 100,
+                isVerified: false,
+                authProvider: 'email_otp',
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
+            };
+            await db.collection('users').doc(userId).set(newUser);
+            userDoc = { ...newUser, createdAt: new Date().toISOString() };
+        }
+    }
+    else {
+        // Local memory lookup or create
+        const existing = localUsers.find(u => u.email === email);
+        if (existing) {
+            userDoc = {
+                id: existing.id,
+                email: existing.email,
+                displayName: existing.displayName,
+                avatarUrl: existing.avatarUrl,
+                trustScore: existing.trustScore,
+                isVerified: existing.isVerified
+            };
+        }
+        else {
+            const userId = `uid_${Math.random().toString(36).substring(2, 11)}`;
+            userDoc = {
+                id: userId,
+                email,
+                displayName: displayName || email.split('@')[0],
+                avatarUrl: null,
+                trustScore: 100,
+                isVerified: false,
+                authProvider: 'email_otp',
+                createdAt: new Date().toISOString()
+            };
+            localUsers.push(userDoc);
+        }
+    }
+    const token = jsonwebtoken_1.default.sign({ id: userDoc.id, email: userDoc.email }, JWT_SECRET, { expiresIn: '7d' });
+    ctx.status = 200;
+    ctx.body = {
+        status: 'success',
+        token,
+        user: userDoc
+    };
+});
+router.post('/auth/google', async (ctx) => {
+    const { idToken } = ctx.request.body;
+    if (!idToken) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: 'ID token is required.' };
+        return;
+    }
+    let googleUid = '';
+    let googleEmail = '';
+    let googleName = '';
+    let googlePicture = '';
+    const db = getFirestore();
+    // Handle Mock verification for local testing
+    if (idToken.startsWith('mock_google_token')) {
+        const suffix = idToken.split('_')[3] || 'sam';
+        googleUid = `google_uid_${suffix}`;
+        googleEmail = `${suffix}@kiwishare.co.nz`;
+        googleName = suffix.charAt(0).toUpperCase() + suffix.slice(1);
+        googlePicture = `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde`;
+    }
+    else {
+        if (!db) {
+            ctx.status = 500;
+            ctx.body = { status: 'error', message: 'Firebase Admin SDK not operational for live token verification.' };
+            return;
+        }
+        try {
+            const decodedToken = await admin.auth().verifyIdToken(idToken);
+            googleUid = decodedToken.uid;
+            googleEmail = decodedToken.email || '';
+            googleName = decodedToken.name || '';
+            googlePicture = decodedToken.picture || '';
+        }
+        catch (e) {
+            ctx.status = 401;
+            ctx.body = { status: 'error', message: `Google authentication failed: ${e.message}` };
+            return;
+        }
+    }
+    let userDoc = null;
+    if (db) {
+        // Check if user exists by UID or email
+        const userRef = db.collection('users').doc(googleUid);
+        const userSnap = await userRef.get();
+        if (userSnap.exists) {
+            userDoc = userSnap.data();
+        }
+        else {
+            // Check if user exists by email (to link account if they previously signed up via email)
+            const emailSnap = await db.collection('users').where('email', '==', googleEmail).limit(1).get();
+            if (!emailSnap.empty) {
+                // Link to existing document
+                const existingDoc = emailSnap.docs[0];
+                userDoc = existingDoc.data();
+                // Update user fields
+                await existingDoc.ref.update({
+                    avatarUrl: userDoc.avatarUrl || googlePicture || null,
+                    displayName: userDoc.displayName || googleName || googleEmail.split('@')[0],
+                    authProvider: 'google'
+                });
+                userDoc = { ...userDoc, avatarUrl: userDoc.avatarUrl || googlePicture, displayName: userDoc.displayName || googleName };
+            }
+            else {
+                // Create new user profile matching schema using Google UID as user ID
+                const newUser = {
+                    id: googleUid,
+                    email: googleEmail,
+                    displayName: googleName || googleEmail.split('@')[0],
+                    avatarUrl: googlePicture || null,
+                    trustScore: 100,
+                    isVerified: true, // Pre-verified via Google
+                    authProvider: 'google',
+                    createdAt: admin.firestore.FieldValue.serverTimestamp()
+                };
+                await userRef.set(newUser);
+                userDoc = { ...newUser, createdAt: new Date().toISOString() };
+            }
+        }
+    }
+    else {
+        // Local memory mock logic
+        const existing = localUsers.find(u => u.email === googleEmail || u.id === googleUid);
+        if (existing) {
+            userDoc = {
+                id: existing.id,
+                email: existing.email,
+                displayName: existing.displayName,
+                avatarUrl: existing.avatarUrl || googlePicture,
+                trustScore: existing.trustScore,
+                isVerified: existing.isVerified
+            };
+        }
+        else {
+            userDoc = {
+                id: googleUid,
+                email: googleEmail,
+                displayName: googleName || googleEmail.split('@')[0],
+                avatarUrl: googlePicture || null,
+                trustScore: 100,
+                isVerified: true,
+                authProvider: 'google',
+                createdAt: new Date().toISOString()
+            };
+            localUsers.push(userDoc);
+        }
+    }
+    const token = jsonwebtoken_1.default.sign({ id: userDoc.id, email: userDoc.email }, JWT_SECRET, { expiresIn: '7d' });
     ctx.status = 200;
     ctx.body = {
         status: 'success',

@@ -32,3 +32,8 @@ ios/Runner.xcworkspace/xcuserdata/
 ios/Pods/
 node_modules/
 .eslintcache
+node_modules
+
+# Firebase Secrets
+functions/firebase-adminsdk.json
+functions/.env

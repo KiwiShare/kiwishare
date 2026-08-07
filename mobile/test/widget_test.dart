@@ -7,7 +7,12 @@ import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/repositories/item_repository.dart';
 import 'package:kiwishare/main.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
+
   group('KiwiShare Data Models', () {
     test('UserModel JSON Serialization', () {
       final user = const UserModel(
@@ -70,17 +75,17 @@ void main() {
     });
 
     test('Login sets isLoggedIn to true and populates currentUser', () async {
-      await appState.login();
+      await appState.verifyOtp('sam@kiwishare.co.nz', '123456');
       expect(appState.isLoggedIn, isTrue);
       expect(appState.currentUser, isNotNull);
-      expect(appState.currentUser!.displayName, 'Sam');
+      expect(appState.currentUser!.displayName, 'sam');
     });
 
     test('Logout clears authenticated user parameters', () async {
-      await appState.login();
+      await appState.verifyOtp('sam@kiwishare.co.nz', '123456');
       expect(appState.isLoggedIn, isTrue);
 
-      appState.logout();
+      await appState.logout();
       expect(appState.isLoggedIn, isFalse);
       expect(appState.currentUser, isNull);
     });

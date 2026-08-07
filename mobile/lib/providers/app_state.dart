@@ -4,11 +4,17 @@ import '../models/item_model.dart';
 import '../repositories/user_repository.dart';
 import '../repositories/item_repository.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:google_sign_in/google_sign_in.dart';
+
 class AppState extends ChangeNotifier {
   final UserRepository userRepository;
   final ItemRepository itemRepository;
 
-  AppState({required this.userRepository, required this.itemRepository});
+  AppState({required this.userRepository, required this.itemRepository}) {
+    _loadSession();
+  }
 
   // Authentication State
   bool _isLoggedIn = false;
@@ -19,6 +25,29 @@ class AppState extends ChangeNotifier {
 
   bool _isLoggingIn = false;
   bool get isLoggingIn => _isLoggingIn;
+
+  String? _jwtToken;
+  String? get jwtToken => _jwtToken;
+
+  // Google Sign-In instance configuration
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+  );
+
+  Future<void> _loadSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _jwtToken = prefs.getString('jwt_token');
+      final userJson = prefs.getString('current_user');
+      if (_jwtToken != null && userJson != null) {
+        _currentUser = UserModel.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+        _isLoggedIn = true;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading auth session: $e');
+    }
+  }
 
   // Navigation State
   int _activeTab = 0;
@@ -64,26 +93,100 @@ class AppState extends ChangeNotifier {
   }
 
   // Auth Operations
-  Future<void> login() async {
+  Future<void> sendOtp(String email) async {
     _isLoggingIn = true;
     notifyListeners();
-
     try {
-      // Fetch user profile from repo (simulates delay)
-      _currentUser = await userRepository.fetchCurrentUser();
-      _isLoggedIn = true;
-    } catch (e) {
-      _currentUser = null;
-      _isLoggedIn = false;
+      await userRepository.sendOtp(email);
     } finally {
       _isLoggingIn = false;
       notifyListeners();
     }
   }
 
-  void logout() {
+  Future<void> verifyOtp(String email, String code) async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      final result = await userRepository.verifyOtp(email, code);
+      final token = result['token'] as String;
+      final user = result['user'] as UserModel;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', token);
+      await prefs.setString('current_user', jsonEncode(user.toJson()));
+
+      _jwtToken = token;
+      _currentUser = user;
+      _isLoggedIn = true;
+    } catch (e) {
+      _currentUser = null;
+      _isLoggedIn = false;
+      rethrow;
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loginWithGoogle() async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      // 1. Trigger Google Sign-in prompt on native platform
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        // User cancelled the login flow
+        _isLoggingIn = false;
+        notifyListeners();
+        return;
+      }
+
+      // 2. Fetch the authentication credentials (idToken)
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
+      }
+
+      // 3. Authenticate with backend and fetch JWT + Profile
+      final result = await userRepository.loginWithGoogle(idToken);
+      final token = result['token'] as String;
+      final user = result['user'] as UserModel;
+
+      // 4. Save session locally
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', token);
+      await prefs.setString('current_user', jsonEncode(user.toJson()));
+
+      _jwtToken = token;
+      _currentUser = user;
+      _isLoggedIn = true;
+    } catch (e) {
+      debugPrint('Google Login Provider Error: $e');
+      _currentUser = null;
+      _isLoggedIn = false;
+      rethrow;
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> logout() async {
     _isLoggedIn = false;
     _currentUser = null;
+    _jwtToken = null;
+    
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('jwt_token');
+    await prefs.remove('current_user');
+    
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+    
     notifyListeners();
   }
 
