@@ -26,4 +26,6 @@ const ItemSchema = new Schema<IItem>({
   createdAt: { type: Date, default: Date.now }
 });
 
+ItemSchema.index({ createdAt: -1 });
+
 export default mongoose.models.Item || mongoose.model<IItem>('Item', ItemSchema);
