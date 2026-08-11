@@ -30,9 +30,7 @@ class AppState extends ChangeNotifier {
   String? get jwtToken => _jwtToken;
 
   // Google Sign-In instance configuration
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
-  );
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
 
   Future<void> _loadSession() async {
     try {
@@ -40,7 +38,9 @@ class AppState extends ChangeNotifier {
       _jwtToken = prefs.getString('jwt_token');
       final userJson = prefs.getString('current_user');
       if (_jwtToken != null && userJson != null) {
-        _currentUser = UserModel.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+        _currentUser = UserModel.fromJson(
+          jsonDecode(userJson) as Map<String, dynamic>,
+        );
         _isLoggedIn = true;
         notifyListeners();
       }
@@ -143,7 +143,8 @@ class AppState extends ChangeNotifier {
       }
 
       // 2. Fetch the authentication credentials (idToken)
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
 
       if (idToken == null) {
@@ -178,15 +179,15 @@ class AppState extends ChangeNotifier {
     _isLoggedIn = false;
     _currentUser = null;
     _jwtToken = null;
-    
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     await prefs.remove('current_user');
-    
+
     try {
       await _googleSignIn.signOut();
     } catch (_) {}
-    
+
     notifyListeners();
   }
 

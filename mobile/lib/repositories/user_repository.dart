@@ -21,7 +21,9 @@ class RestUserRepository implements UserRepository {
     if (response.statusCode != 200) {
       try {
         final error = jsonDecode(response.body);
-        throw Exception(error['message'] ?? 'Failed to send verification code.');
+        throw Exception(
+          error['message'] ?? 'Failed to send verification code.',
+        );
       } catch (_) {
         throw Exception('Failed to send verification code.');
       }
@@ -44,7 +46,9 @@ class RestUserRepository implements UserRepository {
     } else {
       try {
         final error = jsonDecode(response.body);
-        throw Exception(error['message'] ?? 'Failed to verify verification code.');
+        throw Exception(
+          error['message'] ?? 'Failed to verify verification code.',
+        );
       } catch (_) {
         throw Exception('Failed to verify verification code.');
       }

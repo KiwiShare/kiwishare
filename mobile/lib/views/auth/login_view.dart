@@ -16,7 +16,7 @@ class _LoginViewState extends State<LoginView> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _codeController = TextEditingController();
-  
+
   bool _codeSent = false;
   bool _isLoading = false;
 
@@ -50,7 +50,9 @@ class _LoginViewState extends State<LoginView> {
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send code: ${e.toString().replaceAll('Exception: ', '')}'),
+            content: Text(
+              'Failed to send code: ${e.toString().replaceAll('Exception: ', '')}',
+            ),
             backgroundColor: const Color(0xFFC96B4A), // Terracotta
           ),
         );
@@ -85,7 +87,9 @@ class _LoginViewState extends State<LoginView> {
       await appState.verifyOtp(email, code);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Welcome back! Logged in as ${appState.currentUser?.displayName ?? 'User'}.'),
+          content: Text(
+            'Welcome back! Logged in as ${appState.currentUser?.displayName ?? 'User'}.',
+          ),
           backgroundColor: const Color(0xFF2E5E4E),
         ),
       );
@@ -96,7 +100,9 @@ class _LoginViewState extends State<LoginView> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Verification failed: ${e.toString().replaceAll('Exception: ', '')}'),
+          content: Text(
+            'Verification failed: ${e.toString().replaceAll('Exception: ', '')}',
+          ),
           backgroundColor: const Color(0xFFC96B4A),
         ),
       );
@@ -119,7 +125,9 @@ class _LoginViewState extends State<LoginView> {
       if (appState.isLoggedIn) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Welcome to KiwiShare! Logged in as ${appState.currentUser?.displayName ?? 'User'}.'),
+            content: Text(
+              'Welcome to KiwiShare! Logged in as ${appState.currentUser?.displayName ?? 'User'}.',
+            ),
             backgroundColor: const Color(0xFF2E5E4E),
           ),
         );
@@ -131,7 +139,9 @@ class _LoginViewState extends State<LoginView> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Google Sign-in failed: ${e.toString().replaceAll('Exception: ', '')}'),
+          content: Text(
+            'Google Sign-in failed: ${e.toString().replaceAll('Exception: ', '')}',
+          ),
           backgroundColor: const Color(0xFFC96B4A),
         ),
       );
@@ -158,7 +168,9 @@ class _LoginViewState extends State<LoginView> {
           children: [
             // Header Text
             Text(
-              _codeSent ? 'Enter Verification Code' : 'Kia ora! Welcome to KiwiShare',
+              _codeSent
+                  ? 'Enter Verification Code'
+                  : 'Kia ora! Welcome to KiwiShare',
               style: GoogleFonts.inter(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
