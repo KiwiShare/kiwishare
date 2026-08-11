@@ -360,7 +360,7 @@ router.get('/listings', async (ctx) => {
   }
 
   if (query && typeof query === 'string' && query.trim() !== '') {
-    const searchRegex = new RegExp(query.trim(), 'i');
+    const searchRegex = new RegExp(query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     filter.$or = [
       { title: searchRegex },
       { category: searchRegex },
