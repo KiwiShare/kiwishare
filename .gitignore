@@ -5,7 +5,7 @@
 .pub-cache/
 .pub/
 build/
-
+functions/dist
 .idea/
 *.iml
 *.iws

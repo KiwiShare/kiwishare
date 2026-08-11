@@ -1,4 +1,5 @@
 packages:
   - 'functions'
 allowBuilds:
-  protobufjs: set this to true or false
+  mongodb-memory-server: true
+  protobufjs: true

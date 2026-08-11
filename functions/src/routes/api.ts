@@ -2,52 +2,17 @@ import Router from 'koa-router';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { authenticateToken } from '../middleware/auth';
-import * as admin from 'firebase-admin';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
+
+// Mongoose Models
+import User from '../models/User';
+import Otp from '../models/Otp';
+import Item from '../models/Item';
 
 // Initialize router prefix
 const router = new Router({ prefix: '/api' });
 const JWT_SECRET = process.env.JWT_SECRET || 'kiwishare_super_secret_key_123_abc';
-
-// Helper to check if Firestore is operational
-function getFirestore() {
-  try {
-    if (admin.apps.length > 0) {
-      return admin.firestore();
-    }
-  } catch (e) {
-    // Fallback to local memory database
-  }
-  return null;
-}
-
-// Local in-memory store for development/testing environments
-const localUsers: any[] = [];
-const localListings: any[] = [
-  {
-    id: 'item_1',
-    title: 'Retro Armchair',
-    priceNzd: '45',
-    location: 'Auckland',
-    imageUrl: 'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c',
-    isSustainable: true,
-    category: 'Furniture',
-    status: 'active',
-    ownerId: 'user_sam'
-  },
-  {
-    id: 'item_2',
-    title: 'Monstera Deliciosa',
-    priceNzd: '15',
-    location: 'Wellington',
-    imageUrl: 'https://images.unsplash.com/photo-1545241047-6083a3684587',
-    isSustainable: true,
-    category: 'Plants',
-    status: 'active',
-    ownerId: 'user_jenny'
-  }
-];
 
 // --- 1. Authentication Endpoints ---
 
@@ -60,34 +25,26 @@ router.post('/auth/register', async (ctx) => {
     return;
   }
 
+  // Check if user already exists
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    ctx.status = 409;
+    ctx.body = { status: 'error', message: 'A user with this email address already exists.' };
+    return;
+  }
+
   const hashedPassword = await bcrypt.hash(password, 12);
-  const newUser = {
-    id: `uid_${Date.now()}`,
+  const userId = `uid_${Date.now()}`;
+
+  const newUser = await User.create({
+    id: userId,
     email,
     displayName,
     trustScore: 100,
     isVerified: false,
-    createdAt: new Date().toISOString()
-  };
-
-  const db = getFirestore();
-  if (db) {
-    // Firestore Admin path
-    const userRef = db.collection('users').doc(newUser.id);
-    await userRef.set({
-      id: newUser.id,
-      email: newUser.email,
-      displayName: newUser.displayName,
-      trustScore: newUser.trustScore,
-      isVerified: newUser.isVerified,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    // Create password credential shadow copy securely
-    await db.collection('secrets').doc(newUser.id).set({ hashedPassword });
-  } else {
-    // Local memory fallback
-    localUsers.push({ ...newUser, hashedPassword });
-  }
+    authProvider: 'email_password',
+    hashedPassword
+  });
 
   const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '2h' });
 
@@ -113,52 +70,30 @@ router.post('/auth/login', async (ctx) => {
     return;
   }
 
-  let userDoc: any = null;
-  let hashedPassword = '';
-
-  const db = getFirestore();
-  if (db) {
-    const userSnap = await db.collection('users').where('email', '==', email).limit(1).get();
-    if (!userSnap.empty) {
-      const uDoc = userSnap.docs[0];
-      userDoc = uDoc.data();
-      const secSnap = await db.collection('secrets').doc(userDoc.id).get();
-      hashedPassword = secSnap.exists ? secSnap.data()?.hashedPassword : '';
-    }
-  } else {
-    // Local memory lookup
-    const localUser = localUsers.find(u => u.email === email);
-    if (localUser) {
-      userDoc = {
-        id: localUser.id,
-        displayName: localUser.displayName,
-        trustScore: localUser.trustScore,
-        isVerified: localUser.isVerified
-      };
-      hashedPassword = localUser.hashedPassword;
-    }
-  }
-
-  if (!userDoc || !hashedPassword || !(await bcrypt.compare(password, hashedPassword))) {
+  // Find user and explicitly select hashedPassword
+  const user = await User.findOne({ email }).select('+hashedPassword');
+  if (!user || !user.hashedPassword || !(await bcrypt.compare(password, user.hashedPassword))) {
     ctx.status = 401;
     ctx.body = { status: 'error', message: 'Invalid credentials provided.' };
     return;
   }
 
-  const token = jwt.sign({ id: userDoc.id, email }, JWT_SECRET, { expiresIn: '2h' });
+  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '2h' });
 
   ctx.status = 200;
   ctx.body = {
     status: 'success',
     token,
-    user: userDoc
+    user: {
+      id: user.id,
+      displayName: user.displayName,
+      trustScore: user.trustScore,
+      isVerified: user.isVerified
+    }
   };
 });
 
 // --- 1.1 Passwordless OTP & Google Authentication Endpoints ---
-
-// Local memory store for OTP verification codes in development/testing
-const localOtps: any[] = [];
 
 router.post('/auth/send-otp', async (ctx) => {
   const { email } = ctx.request.body as any;
@@ -172,23 +107,13 @@ router.post('/auth/send-otp', async (ctx) => {
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes validity
 
-  const db = getFirestore();
-  if (db) {
-    await db.collection('otps').add({
-      email,
-      code,
-      expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      used: false
-    });
-  } else {
-    localOtps.push({
-      email,
-      code,
-      expiresAt,
-      used: false
-    });
-  }
+  // Save OTP in MongoDB
+  await Otp.create({
+    email,
+    code,
+    expiresAt,
+    used: false
+  });
 
   // Developer logging for local testing without SMTP server
   console.log(`\n📬 [OTP Sent] Email: ${email} | Code: ${code} (Expires in 10 minutes)\n`);
@@ -294,101 +219,52 @@ router.post('/auth/verify-otp', async (ctx) => {
     return;
   }
 
-  let isValid = false;
-  const db = getFirestore();
+  // Find the OTP document in MongoDB
+  const otp = await Otp.findOne({
+    email,
+    code,
+    used: false
+  }).sort({ expiresAt: -1 });
 
-  if (db) {
-    const otpSnap = await db.collection('otps')
-      .where('email', '==', email)
-      .where('code', '==', code)
-      .where('used', '==', false)
-      .orderBy('expiresAt', 'desc')
-      .limit(1)
-      .get();
-
-    if (!otpSnap.empty) {
-      const otpDoc = otpSnap.docs[0];
-      const otpData = otpDoc.data();
-      const expiresAt = otpData.expiresAt.toDate();
-      if (expiresAt > new Date()) {
-        isValid = true;
-        await otpDoc.ref.update({ used: true });
-      }
-    }
-  } else {
-    const matchedOtpIdx = localOtps.findIndex(
-      o => o.email === email && o.code === code && !o.used && o.expiresAt > new Date()
-    );
-    if (matchedOtpIdx !== -1) {
-      isValid = true;
-      localOtps[matchedOtpIdx].used = true;
-    }
-  }
-
-  if (!isValid) {
+  if (!otp || otp.expiresAt < new Date()) {
     ctx.status = 401;
     ctx.body = { status: 'error', message: 'Invalid or expired verification code.' };
     return;
   }
 
-  // Fetch or create user
-  let userDoc: any = null;
+  // Mark code as used
+  otp.used = true;
+  await otp.save();
 
-  if (db) {
-    const userSnap = await db.collection('users').where('email', '==', email).limit(1).get();
-    if (!userSnap.empty) {
-      userDoc = userSnap.docs[0].data();
-    } else {
-      // Create new user profile matching schema
-      const userId = `uid_${Math.random().toString(36).substring(2, 11)}`;
-      const newUser = {
-        id: userId,
-        email,
-        displayName: displayName || email.split('@')[0],
-        avatarUrl: null,
-        trustScore: 100,
-        isVerified: false,
-        authProvider: 'email_otp',
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      };
-      await db.collection('users').doc(userId).set(newUser);
-      userDoc = { ...newUser, createdAt: new Date().toISOString() };
-    }
-  } else {
-    // Local memory lookup or create
-    const existing = localUsers.find(u => u.email === email);
-    if (existing) {
-      userDoc = {
-        id: existing.id,
-        email: existing.email,
-        displayName: existing.displayName,
-        avatarUrl: existing.avatarUrl,
-        trustScore: existing.trustScore,
-        isVerified: existing.isVerified
-      };
-    } else {
-      const userId = `uid_${Math.random().toString(36).substring(2, 11)}`;
-      userDoc = {
-        id: userId,
-        email,
-        displayName: displayName || email.split('@')[0],
-        avatarUrl: null,
-        trustScore: 100,
-        isVerified: false,
-        authProvider: 'email_otp',
-        createdAt: new Date().toISOString()
-      };
-      localUsers.push(userDoc);
-    }
+  // Find or create user
+  let user = await User.findOne({ email });
+  if (!user) {
+    const userId = `uid_${Math.random().toString(36).substring(2, 11)}`;
+    user = await User.create({
+      id: userId,
+      email,
+      displayName: displayName || email.split('@')[0],
+      avatarUrl: null,
+      trustScore: 100,
+      isVerified: false,
+      authProvider: 'email_otp'
+    });
   }
 
-  const token = jwt.sign({ id: userDoc.id, email: userDoc.email }, JWT_SECRET, { expiresIn: '7d' });
+  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
 
   ctx.status = 200;
   ctx.body = {
     status: 'success',
     token,
-    user: userDoc
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      trustScore: user.trustScore,
+      isVerified: user.isVerified
+    }
   };
 });
 
@@ -406,8 +282,6 @@ router.post('/auth/google', async (ctx) => {
   let googleName = '';
   let googlePicture = '';
 
-  const db = getFirestore();
-
   // Handle Mock verification for local testing
   if (idToken.startsWith('mock_google_token')) {
     const suffix = idToken.split('_')[3] || 'sam';
@@ -416,17 +290,20 @@ router.post('/auth/google', async (ctx) => {
     googleName = suffix.charAt(0).toUpperCase() + suffix.slice(1);
     googlePicture = `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde`;
   } else {
-    if (!db) {
-      ctx.status = 500;
-      ctx.body = { status: 'error', message: 'Firebase Admin SDK not operational for live token verification.' };
-      return;
-    }
+    // Perform standard HTTP request to Google Tokeninfo endpoint to verify token
     try {
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      googleUid = decodedToken.uid;
-      googleEmail = decodedToken.email || '';
-      googleName = decodedToken.name || '';
-      googlePicture = decodedToken.picture || '';
+      const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+      if (!response.ok) {
+        throw new Error('Google token validation endpoint returned an error.');
+      }
+      const data = await response.json() as any;
+      if (data.error_description) {
+        throw new Error(data.error_description);
+      }
+      googleUid = data.sub;
+      googleEmail = data.email || '';
+      googleName = data.name || '';
+      googlePicture = data.picture || '';
     } catch (e: any) {
       ctx.status = 401;
       ctx.body = { status: 'error', message: `Google authentication failed: ${e.message}` };
@@ -434,103 +311,64 @@ router.post('/auth/google', async (ctx) => {
     }
   }
 
-  let userDoc: any = null;
+  let user = await User.findOne({ $or: [{ id: googleUid }, { email: googleEmail }] });
 
-  if (db) {
-    // Check if user exists by UID or email
-    const userRef = db.collection('users').doc(googleUid);
-    const userSnap = await userRef.get();
-
-    if (userSnap.exists) {
-      userDoc = userSnap.data();
-    } else {
-      // Check if user exists by email (to link account if they previously signed up via email)
-      const emailSnap = await db.collection('users').where('email', '==', googleEmail).limit(1).get();
-      if (!emailSnap.empty) {
-        // Link to existing document
-        const existingDoc = emailSnap.docs[0];
-        userDoc = existingDoc.data();
-        // Update user fields
-        await existingDoc.ref.update({
-          avatarUrl: userDoc.avatarUrl || googlePicture || null,
-          displayName: userDoc.displayName || googleName || googleEmail.split('@')[0],
-          authProvider: 'google'
-        });
-        userDoc = { ...userDoc, avatarUrl: userDoc.avatarUrl || googlePicture, displayName: userDoc.displayName || googleName };
-      } else {
-        // Create new user profile matching schema using Google UID as user ID
-        const newUser = {
-          id: googleUid,
-          email: googleEmail,
-          displayName: googleName || googleEmail.split('@')[0],
-          avatarUrl: googlePicture || null,
-          trustScore: 100,
-          isVerified: true, // Pre-verified via Google
-          authProvider: 'google',
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        };
-        await userRef.set(newUser);
-        userDoc = { ...newUser, createdAt: new Date().toISOString() };
-      }
-    }
+  if (user) {
+    // Update user details if Google provides new info
+    user.avatarUrl = user.avatarUrl || googlePicture || null;
+    user.displayName = user.displayName || googleName || googleEmail.split('@')[0];
+    user.authProvider = 'google';
+    await user.save();
   } else {
-    // Local memory mock logic
-    const existing = localUsers.find(u => u.email === googleEmail || u.id === googleUid);
-    if (existing) {
-      userDoc = {
-        id: existing.id,
-        email: existing.email,
-        displayName: existing.displayName,
-        avatarUrl: existing.avatarUrl || googlePicture,
-        trustScore: existing.trustScore,
-        isVerified: existing.isVerified
-      };
-    } else {
-      userDoc = {
-        id: googleUid,
-        email: googleEmail,
-        displayName: googleName || googleEmail.split('@')[0],
-        avatarUrl: googlePicture || null,
-        trustScore: 100,
-        isVerified: true,
-        authProvider: 'google',
-        createdAt: new Date().toISOString()
-      };
-      localUsers.push(userDoc);
-    }
+    // Create new user profile matching schema using Google UID as user ID
+    user = await User.create({
+      id: googleUid,
+      email: googleEmail,
+      displayName: googleName || googleEmail.split('@')[0],
+      avatarUrl: googlePicture || null,
+      trustScore: 100,
+      isVerified: true, // Pre-verified via Google
+      authProvider: 'google'
+    });
   }
 
-  const token = jwt.sign({ id: userDoc.id, email: userDoc.email }, JWT_SECRET, { expiresIn: '7d' });
+  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
 
   ctx.status = 200;
   ctx.body = {
     status: 'success',
     token,
-    user: userDoc
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      trustScore: user.trustScore,
+      isVerified: user.isVerified
+    }
   };
 });
 
 // --- 2. Listing Endpoints ---
 
 router.get('/listings', async (ctx) => {
-  const { category } = ctx.query;
-  let listings: any[] = [];
+  const { category, query } = ctx.query;
+  const filter: any = {};
 
-  const db = getFirestore();
-  if (db) {
-    let query: admin.firestore.Query = db.collection('items');
-    if (category && category !== 'All NZ') {
-      query = query.where('category', '==', category);
-    }
-    const snap = await query.get();
-    snap.forEach(doc => listings.push(doc.data()));
-  } else {
-    // Local memory filtering
-    listings = (category && category !== 'All NZ')
-      ? localListings.filter(l => l.category === category)
-      : localListings;
+  if (category && category !== 'All NZ' && category !== 'All') {
+    filter.category = category;
   }
 
+  if (query && typeof query === 'string' && query.trim() !== '') {
+    const searchRegex = new RegExp(query.trim(), 'i');
+    filter.$or = [
+      { title: searchRegex },
+      { category: searchRegex },
+      { location: searchRegex }
+    ];
+  }
+
+  const listings = await Item.find(filter).sort({ createdAt: -1 });
   ctx.status = 200;
   ctx.body = listings;
 });
@@ -545,7 +383,7 @@ router.post('/listings', authenticateToken, async (ctx) => {
     return;
   }
 
-  const newItem = {
+  const newItem = await Item.create({
     id: `item_${Date.now()}`,
     title,
     priceNzd,
@@ -554,20 +392,8 @@ router.post('/listings', authenticateToken, async (ctx) => {
     isSustainable,
     category,
     status: 'active',
-    ownerId,
-    createdAt: new Date().toISOString()
-  };
-
-  const db = getFirestore();
-  if (db) {
-    await db.collection('items').doc(newItem.id).set({
-      ...newItem,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-  } else {
-    // Local memory fallback
-    localListings.push(newItem);
-  }
+    ownerId
+  });
 
   ctx.status = 201;
   ctx.body = {
@@ -595,54 +421,33 @@ router.post('/transactions/handover/claim', authenticateToken, async (ctx) => {
     return;
   }
 
-  const db = getFirestore();
-  if (db) {
-    // Run atomic transactional updates to protect data state transitions
-    const itemRef = db.collection('items').doc(itemId);
-    await db.runTransaction(async (transaction) => {
-      const itemDoc = await transaction.get(itemRef);
-      if (!itemDoc.exists) {
-        throw new Error('Listing item not found.');
-      }
-
-      const itemData = itemDoc.data()!;
-      if (itemData.status === 'sold') {
-        throw new Error('Conflict: Item is already transferred.');
-      }
-      if (itemData.ownerId === claimerId) {
-        throw new Error('Self-claims are unauthorized.');
-      }
-
-      // Execute handover transitions
-      transaction.update(itemRef, { status: 'sold', ownerId: claimerId });
-
-      // Atomically increment owner's trust reputation score
-      const ownerRef = db.collection('users').doc(itemData.ownerId);
-      transaction.update(ownerRef, { trustScore: admin.firestore.FieldValue.increment(5) });
-    });
-  } else {
-    // Local memory mock logic
-    const item = localListings.find(l => l.id === itemId);
-    if (!item) {
-      ctx.status = 404;
-      ctx.body = { status: 'error', message: 'Listing item not found.' };
-      return;
-    }
-    if (item.status === 'sold') {
-      ctx.status = 409;
-      ctx.body = { status: 'error', message: 'Conflict: Item is already transferred.' };
-      return;
-    }
-    if (item.ownerId === claimerId) {
-      ctx.status = 400;
-      ctx.body = { status: 'error', message: 'Self-claims are unauthorized.' };
-      return;
-    }
-
-    // Execute state changes
-    item.status = 'sold';
-    item.ownerId = claimerId;
+  const item = await Item.findOne({ id: itemId });
+  if (!item) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Listing item not found.' };
+    return;
   }
+
+  if (item.status === 'sold') {
+    ctx.status = 409;
+    ctx.body = { status: 'error', message: 'Conflict: Item is already transferred.' };
+    return;
+  }
+
+  if (item.ownerId === claimerId) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Self-claims are unauthorized.' };
+    return;
+  }
+
+  // Update item status and owner ID
+  const originalOwnerId = item.ownerId;
+  item.status = 'sold';
+  item.ownerId = claimerId;
+  await item.save();
+
+  // Atomically increment owner's trust reputation score in User database
+  await User.updateOne({ id: originalOwnerId }, { $inc: { trustScore: 5 } });
 
   ctx.status = 200;
   ctx.body = {

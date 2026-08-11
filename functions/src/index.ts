@@ -1,52 +1,68 @@
-import { onRequest } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
+import 'dotenv/config';
+import mongoose from 'mongoose';
 import app from './app';
+import Item from './models/Item';
 
-import * as path from 'path';
+const PORT = process.env.PORT || 3000;
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://REDACTED@/kiwishare';
 
-// Initialize Firebase Admin SDK if not already done in the current context
-try {
-  let credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  if (credPath) {
-    credPath = credPath.trim();
-    // Strip surrounding backticks, single quotes, or double quotes
-    if (
-      (credPath.startsWith('`') && credPath.endsWith('`')) ||
-      (credPath.startsWith('"') && credPath.endsWith('"')) ||
-      (credPath.startsWith("'") && credPath.endsWith("'"))
-    ) {
-      credPath = credPath.slice(1, -1).trim();
-    }
-
-    if (credPath.startsWith('{') && credPath.endsWith('}')) {
-      // Inline JSON string credentials
-      const serviceAccount = JSON.parse(credPath);
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        projectId: projectId
-      });
-    } else {
-      // File path credentials
-      const absolutePath = path.isAbsolute(credPath)
-        ? credPath
-        : path.resolve(__dirname, '..', credPath);
-      admin.initializeApp({
-        credential: admin.credential.cert(absolutePath),
-        projectId: projectId
-      });
-    }
-  } else {
-    admin.initializeApp();
-  }
-} catch (e) {
-  // Silent fallback for testing contexts where Firebase credentials are empty
+async function seedInitialData() {
   try {
-    admin.initializeApp();
-  } catch (err) {
-    // Ignore if already initialized
+    const count = await Item.countDocuments();
+    if (count === 0) {
+      console.log('🌱 Seeding initial database listings...');
+      await Item.create([
+        {
+          id: 'item_1',
+          title: 'Retro Armchair',
+          priceNzd: '45',
+          location: 'Auckland',
+          imageUrl: 'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c',
+          isSustainable: true,
+          category: 'Furniture',
+          status: 'active',
+          ownerId: 'user_sam'
+        },
+        {
+          id: 'item_2',
+          title: 'Monstera Deliciosa',
+          priceNzd: '15',
+          location: 'Wellington',
+          imageUrl: 'https://images.unsplash.com/photo-1545241047-6083a3684587',
+          isSustainable: true,
+          category: 'Plants',
+          status: 'active',
+          ownerId: 'user_jenny'
+        }
+      ]);
+      console.log('✅ Seeding completed.');
+    }
+  } catch (error) {
+    console.error('❌ Failed to seed initial data:', error);
   }
 }
 
-// Export the Koa app instance as a serverless onRequest function
-export const api = onRequest({ cors: true }, app.callback());
+async function startServer() {
+  try {
+    console.log('🔄 Connecting to MongoDB...');
+    await mongoose.connect(MONGODB_URI);
+    console.log('✅ Connected to MongoDB successfully.');
+
+    // Seed data for clean local dev experience
+    await seedInitialData();
+
+    app.listen(PORT, () => {
+      console.log(`\n🚀 [KiwiShare Koa Server] Running locally on http://localhost:${PORT}`);
+      console.log(`👋 Development endpoints: http://localhost:${PORT}/api/listings\n`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start the server:', error);
+    process.exit(1);
+  }
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
+
+export { seedInitialData }; // Export for test runner reuse

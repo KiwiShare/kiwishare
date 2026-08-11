@@ -42,7 +42,7 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => AppState(
             userRepository: RestUserRepository(),
-            itemRepository: MockItemRepository(),
+            itemRepository: RestItemRepository(),
           ),
         ),
       ],

@@ -1,7 +1,30 @@
 import request from 'supertest';
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import app from '../src/app';
 
+jest.setTimeout(60000);
+
 describe('KiwiShare Backend REST Gateway Tests', () => {
+  let mongoServer: MongoMemoryServer;
+
+  beforeAll(async () => {
+    mongoServer = await MongoMemoryServer.create();
+    const mongoUri = mongoServer.getUri();
+    await mongoose.connect(mongoUri);
+    
+    // Seed initial mock listings
+    const { seedInitialData } = require('../src/index');
+    await seedInitialData();
+  });
+
+  afterAll(async () => {
+    await mongoose.connection.close();
+    if (mongoServer) {
+      await mongoServer.stop();
+    }
+  });
+
   let userToken = '';
   const testUser = {
     email: `tester_${Date.now()}@kiwishare.co.nz`,

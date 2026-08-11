@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../models/item_model.dart';
+import '../config/api_config.dart';
 
 abstract class ItemRepository {
   Future<List<ItemModel>> fetchPopularItems();
@@ -128,5 +131,52 @@ class MockItemRepository implements ItemRepository {
     }
 
     yield results;
+  }
+}
+
+class RestItemRepository implements ItemRepository {
+  @override
+  Future<List<ItemModel>> fetchPopularItems() async {
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/listings'),
+      headers: {'Accept': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      final items = data
+          .map((item) => ItemModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+      return items.take(3).toList();
+    } else {
+      throw Exception('Failed to fetch popular items from server.');
+    }
+  }
+
+  @override
+  Stream<List<ItemModel>> searchItems({String? query, String? category}) async* {
+    final queryParams = <String, String>{};
+    if (category != null && category != 'All NZ' && category != 'All') {
+      queryParams['category'] = category;
+    }
+    if (query != null && query.trim().isNotEmpty) {
+      queryParams['query'] = query.trim();
+    }
+
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/listings').replace(queryParameters: queryParams);
+
+    final response = await http.get(
+      uri,
+      headers: {'Accept': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      yield data
+          .map((item) => ItemModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } else {
+      throw Exception('Failed to fetch listings from server.');
+    }
   }
 }
