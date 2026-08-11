@@ -154,7 +154,10 @@ class RestItemRepository implements ItemRepository {
   }
 
   @override
-  Stream<List<ItemModel>> searchItems({String? query, String? category}) async* {
+  Stream<List<ItemModel>> searchItems({
+    String? query,
+    String? category,
+  }) async* {
     final queryParams = <String, String>{};
     if (category != null && category != 'All NZ' && category != 'All') {
       queryParams['category'] = category;
@@ -163,7 +166,9 @@ class RestItemRepository implements ItemRepository {
       queryParams['query'] = query.trim();
     }
 
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/listings').replace(queryParameters: queryParams);
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/listings',
+    ).replace(queryParameters: queryParams);
 
     final response = await http.get(
       uri,

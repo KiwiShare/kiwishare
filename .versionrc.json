@@ -1,0 +1,22 @@
+{
+  "bumpFiles": [
+    {
+      "filename": "package.json",
+      "type": "json"
+    },
+    {
+      "filename": "functions/package.json",
+      "type": "json"
+    },
+    {
+      "filename": "mobile/pubspec.yaml",
+      "updater": "./scripts/pubspec-updater.js"
+    }
+  ],
+  "packageFiles": [
+    {
+      "filename": "package.json",
+      "type": "json"
+    }
+  ]
+}
