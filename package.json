@@ -1,9 +1,14 @@
 {
   "name": "kiwishare-monorepo",
+  "version": "1.1.0",
   "private": true,
   "description": "Monorepo for KiwiShare - Mobile App (Flutter) and Backend Cloud Functions (Koa + TypeScript)",
   "scripts": {
     "prepare": "husky install",
+    "release": "standard-version",
+    "release:patch": "standard-version --release-as patch",
+    "release:minor": "standard-version --release-as minor",
+    "release:major": "standard-version --release-as major",
     "bootstrap": "pnpm install --ignore-scripts && cd mobile && flutter pub get",
     "mobile:test": "cd mobile && flutter test",
     "mobile:analyze": "cd mobile && flutter analyze",
@@ -32,7 +37,8 @@
   "homepage": "https://github.com/UOA-CS734-S2-2026/project-implementation-five-guys#readme",
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "standard-version": "^9.5.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

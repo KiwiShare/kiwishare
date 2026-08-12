@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../models/item_model.dart';
-import '../../../providers/app_state.dart';
+import '../../../providers/providers.dart';
 
 class ItemCard extends StatelessWidget {
   final ItemModel item;
@@ -11,8 +11,8 @@ class ItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appState = Provider.of<AppState>(context);
-    final isFav = appState.isFavorite(item.id);
+    final favoritesProvider = Provider.of<FavoritesProvider>(context);
+    final isFav = favoritesProvider.isFavorite(item.id);
 
     // Seed mock ratings based on item titles to match screenshots
     String rating = '4.9';
@@ -181,7 +181,7 @@ class ItemCard extends StatelessWidget {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () {
-                    appState.toggleFavorite(item.id);
+                    favoritesProvider.toggleFavorite(item.id);
                   },
                   borderRadius: BorderRadius.circular(20),
                   child: Container(

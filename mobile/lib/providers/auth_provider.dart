@@ -1,22 +1,17 @@
 import 'package:flutter/material.dart';
-import '../models/user_model.dart';
-import '../models/item_model.dart';
-import '../repositories/user_repository.dart';
-import '../repositories/item_repository.dart';
-
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../models/user_model.dart';
+import '../repositories/user_repository.dart';
 
-class AppState extends ChangeNotifier {
+class AuthProvider extends ChangeNotifier {
   final UserRepository userRepository;
-  final ItemRepository itemRepository;
 
-  AppState({required this.userRepository, required this.itemRepository}) {
+  AuthProvider({required this.userRepository}) {
     _loadSession();
   }
 
-  // Authentication State
   bool _isLoggedIn = false;
   bool get isLoggedIn => _isLoggedIn;
 
@@ -29,7 +24,6 @@ class AppState extends ChangeNotifier {
   String? _jwtToken;
   String? get jwtToken => _jwtToken;
 
-  // Google Sign-In instance configuration
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
 
   Future<void> _loadSession() async {
@@ -49,50 +43,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Navigation State
-  int _activeTab = 0;
-  int get activeTab => _activeTab;
-
-  // Favorites State
-  final Set<String> _favoriteIds = {};
-  Set<String> get favoriteIds => _favoriteIds;
-
-  // Search Filters
-  String _selectedCategory = 'All NZ';
-  String get selectedCategory => _selectedCategory;
-
-  // Cached Popular Items
-  List<ItemModel>? _cachedPopularItems;
-  List<ItemModel>? get cachedPopularItems => _cachedPopularItems;
-
-  void setActiveTab(int tabIndex) {
-    if (_activeTab != tabIndex) {
-      _activeTab = tabIndex;
-      notifyListeners();
-    }
-  }
-
-  void setCategory(String category) {
-    if (_selectedCategory != category) {
-      _selectedCategory = category;
-      notifyListeners();
-    }
-  }
-
-  bool isFavorite(String itemId) {
-    return _favoriteIds.contains(itemId);
-  }
-
-  void toggleFavorite(String itemId) {
-    if (_favoriteIds.contains(itemId)) {
-      _favoriteIds.remove(itemId);
-    } else {
-      _favoriteIds.add(itemId);
-    }
-    notifyListeners();
-  }
-
-  // Auth Operations
   Future<void> sendOtp(String email) async {
     _isLoggingIn = true;
     notifyListeners();
@@ -133,16 +83,13 @@ class AppState extends ChangeNotifier {
     _isLoggingIn = true;
     notifyListeners();
     try {
-      // 1. Trigger Google Sign-in prompt on native platform
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        // User cancelled the login flow
         _isLoggingIn = false;
         notifyListeners();
         return;
       }
 
-      // 2. Fetch the authentication credentials (idToken)
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
@@ -151,12 +98,10 @@ class AppState extends ChangeNotifier {
         throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
       }
 
-      // 3. Authenticate with backend and fetch JWT + Profile
       final result = await userRepository.loginWithGoogle(idToken);
       final token = result['token'] as String;
       final user = result['user'] as UserModel;
 
-      // 4. Save session locally
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('jwt_token', token);
       await prefs.setString('current_user', jsonEncode(user.toJson()));
@@ -189,22 +134,5 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
 
     notifyListeners();
-  }
-
-  // Listing Data Operations
-  Future<List<ItemModel>> getPopularItems({bool forceRefresh = false}) async {
-    if (_cachedPopularItems != null && !forceRefresh) {
-      return _cachedPopularItems!;
-    }
-    final items = await itemRepository.fetchPopularItems();
-    _cachedPopularItems = items;
-    return items;
-  }
-
-  Future<List<ItemModel>> searchListingItems(String query) async {
-    // Read the first emission from the mock stream interface
-    return itemRepository
-        .searchItems(query: query, category: _selectedCategory)
-        .first;
   }
 }

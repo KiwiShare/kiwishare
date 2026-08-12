@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/item_model.dart';
-import '../../providers/app_state.dart';
+import '../../providers/providers.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/category_navigation_button.dart';
@@ -22,7 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _popularItemsFuture = Provider.of<AppState>(
+    _popularItemsFuture = Provider.of<ListingProvider>(
       context,
       listen: false,
     ).getPopularItems();
@@ -30,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _retryFetch() {
     setState(() {
-      _popularItemsFuture = Provider.of<AppState>(
+      _popularItemsFuture = Provider.of<ListingProvider>(
         context,
         listen: false,
       ).getPopularItems(forceRefresh: true);
@@ -39,9 +39,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final appState = Provider.of<AppState>(context);
-    final isLoggedIn = appState.isLoggedIn;
-    final currentUser = appState.currentUser;
+    final authProvider = Provider.of<AuthProvider>(context);
+    final isLoggedIn = authProvider.isLoggedIn;
+    final currentUser = authProvider.currentUser;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF7F2), // Off-White app background

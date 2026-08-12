@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:kiwishare/models/user_model.dart';
 import 'package:kiwishare/models/item_model.dart';
-import 'package:kiwishare/providers/app_state.dart';
+import 'package:kiwishare/providers/providers.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/repositories/item_repository.dart';
 import 'package:kiwishare/main.dart';
@@ -52,62 +52,63 @@ void main() {
     });
   });
 
-  group('AppState (React Context-Like State)', () {
-    late AppState appState;
+  group('Fine-Grained Providers Test', () {
+    late AuthProvider authProvider;
+    late NavigationProvider navProvider;
+    late FavoritesProvider favProvider;
+    late SearchProvider searchProvider;
     late MockUserRepository mockUserRepo;
-    late MockItemRepository mockItemRepo;
 
     setUp(() {
       mockUserRepo = MockUserRepository();
-      mockItemRepo = MockItemRepository();
-      appState = AppState(
-        userRepository: mockUserRepo,
-        itemRepository: mockItemRepo,
-      );
+      authProvider = AuthProvider(userRepository: mockUserRepo);
+      navProvider = NavigationProvider();
+      favProvider = FavoritesProvider();
+      searchProvider = SearchProvider();
     });
 
     test('Initial State configuration', () {
-      expect(appState.isLoggedIn, isFalse);
-      expect(appState.currentUser, isNull);
-      expect(appState.activeTab, equals(0));
-      expect(appState.selectedCategory, equals('All NZ'));
-      expect(appState.favoriteIds.isEmpty, isTrue);
+      expect(authProvider.isLoggedIn, isFalse);
+      expect(authProvider.currentUser, isNull);
+      expect(navProvider.activeTab, equals(0));
+      expect(searchProvider.selectedCategory, equals('All NZ'));
+      expect(favProvider.favoriteIds.isEmpty, isTrue);
     });
 
     test('Login sets isLoggedIn to true and populates currentUser', () async {
-      await appState.verifyOtp('sam@kiwishare.co.nz', '123456');
-      expect(appState.isLoggedIn, isTrue);
-      expect(appState.currentUser, isNotNull);
-      expect(appState.currentUser!.displayName, 'sam');
+      await authProvider.verifyOtp('sam@kiwishare.co.nz', '123456');
+      expect(authProvider.isLoggedIn, isTrue);
+      expect(authProvider.currentUser, isNotNull);
+      expect(authProvider.currentUser!.displayName, 'sam');
     });
 
     test('Logout clears authenticated user parameters', () async {
-      await appState.verifyOtp('sam@kiwishare.co.nz', '123456');
-      expect(appState.isLoggedIn, isTrue);
+      await authProvider.verifyOtp('sam@kiwishare.co.nz', '123456');
+      expect(authProvider.isLoggedIn, isTrue);
 
-      await appState.logout();
-      expect(appState.isLoggedIn, isFalse);
-      expect(appState.currentUser, isNull);
+      await authProvider.logout();
+      expect(authProvider.isLoggedIn, isFalse);
+      expect(authProvider.currentUser, isNull);
     });
 
     test('Navigation tab index mapping updates', () {
-      appState.setActiveTab(3);
-      expect(appState.activeTab, equals(3));
+      navProvider.setActiveTab(3);
+      expect(navProvider.activeTab, equals(3));
     });
 
     test('Category filtering updates', () {
-      appState.setCategory('Camping');
-      expect(appState.selectedCategory, equals('Camping'));
+      searchProvider.setCategory('Camping');
+      expect(searchProvider.selectedCategory, equals('Camping'));
     });
 
     test('Toggling listing favorites updates set', () {
-      expect(appState.isFavorite('item_1'), isFalse);
+      expect(favProvider.isFavorite('item_1'), isFalse);
 
-      appState.toggleFavorite('item_1');
-      expect(appState.isFavorite('item_1'), isTrue);
+      favProvider.toggleFavorite('item_1');
+      expect(favProvider.isFavorite('item_1'), isTrue);
 
-      appState.toggleFavorite('item_1');
-      expect(appState.isFavorite('item_1'), isFalse);
+      favProvider.toggleFavorite('item_1');
+      expect(favProvider.isFavorite('item_1'), isFalse);
     });
   });
 
@@ -119,10 +120,14 @@ void main() {
         MultiProvider(
           providers: [
             ChangeNotifierProvider(
-              create: (_) => AppState(
-                userRepository: MockUserRepository(),
-                itemRepository: MockItemRepository(),
-              ),
+              create: (_) => AuthProvider(userRepository: MockUserRepository()),
+            ),
+            ChangeNotifierProvider(create: (_) => NavigationProvider()),
+            ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+            ChangeNotifierProvider(create: (_) => SearchProvider()),
+            ChangeNotifierProvider(
+              create: (_) =>
+                  ListingProvider(itemRepository: MockItemRepository()),
             ),
           ],
           child: const KiwiShareApp(),

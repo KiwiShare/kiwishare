@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../providers/app_state.dart';
+import '../../providers/providers.dart';
 import '../auth/login_view.dart';
 import 'widgets/architecture_card.dart';
 import 'widgets/arch_detail_item.dart';
@@ -35,9 +35,9 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appState = Provider.of<AppState>(context);
-    final user = appState.currentUser;
-    final isLoggedIn = appState.isLoggedIn;
+    final authProvider = Provider.of<AuthProvider>(context);
+    final user = authProvider.currentUser;
+    final isLoggedIn = authProvider.isLoggedIn;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF7F2), // Off-White background
@@ -159,7 +159,7 @@ class ProfileScreen extends StatelessWidget {
                               color: Color(0xFF2E5E4E),
                             ), // Sage Green
                             onPressed: () {
-                              appState.logout();
+                              authProvider.logout();
                             },
                             tooltip: 'Log Out',
                           ),
