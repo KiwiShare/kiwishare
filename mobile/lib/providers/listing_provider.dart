@@ -19,9 +19,10 @@ class ListingProvider extends ChangeNotifier {
     return items;
   }
 
-  Future<List<ItemModel>> searchListingItems(String query, String category) async {
-    return itemRepository
-        .searchItems(query: query, category: category)
-        .first;
+  Future<List<ItemModel>> searchListingItems(
+    String query,
+    String category,
+  ) async {
+    return itemRepository.searchItems(query: query, category: category).first;
   }
 }

@@ -48,7 +48,7 @@ class CategoryPickerSheet extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontWeight: isSelected
                           ? FontWeight.bold
-                      : FontWeight.normal,
+                          : FontWeight.normal,
                       color: isSelected
                           ? const Color(0xFF2E5E4E)
                           : const Color(0xFF1F1F1F),

@@ -40,23 +40,13 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => AuthProvider(
-            userRepository: RestUserRepository(),
-          ),
+          create: (_) => AuthProvider(userRepository: RestUserRepository()),
         ),
+        ChangeNotifierProvider(create: (_) => NavigationProvider()),
+        ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+        ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(
-          create: (_) => NavigationProvider(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => FavoritesProvider(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => SearchProvider(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => ListingProvider(
-            itemRepository: RestItemRepository(),
-          ),
+          create: (_) => ListingProvider(itemRepository: RestItemRepository()),
         ),
       ],
       child: const KiwiShareApp(),

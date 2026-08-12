@@ -120,23 +120,14 @@ void main() {
         MultiProvider(
           providers: [
             ChangeNotifierProvider(
-              create: (_) => AuthProvider(
-                userRepository: MockUserRepository(),
-              ),
+              create: (_) => AuthProvider(userRepository: MockUserRepository()),
             ),
+            ChangeNotifierProvider(create: (_) => NavigationProvider()),
+            ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+            ChangeNotifierProvider(create: (_) => SearchProvider()),
             ChangeNotifierProvider(
-              create: (_) => NavigationProvider(),
-            ),
-            ChangeNotifierProvider(
-              create: (_) => FavoritesProvider(),
-            ),
-            ChangeNotifierProvider(
-              create: (_) => SearchProvider(),
-            ),
-            ChangeNotifierProvider(
-              create: (_) => ListingProvider(
-                itemRepository: MockItemRepository(),
-              ),
+              create: (_) =>
+                  ListingProvider(itemRepository: MockItemRepository()),
             ),
           ],
           child: const KiwiShareApp(),

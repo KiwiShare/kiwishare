@@ -202,7 +202,10 @@ class _SearchScreenState extends State<SearchScreen> {
             // Grid results & Loaders via FutureBuilder
             Expanded(
               child: FutureBuilder<List<ItemModel>>(
-                future: listingProvider.searchListingItems(_currentQuery, activeCategory),
+                future: listingProvider.searchListingItems(
+                  _currentQuery,
+                  activeCategory,
+                ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return GridView.builder(
