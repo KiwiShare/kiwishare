@@ -13,7 +13,7 @@ import 'views/profile/profile_screen.dart';
 import 'views/auth/login_view.dart';
 
 // State and Repositories
-import 'providers/app_state.dart';
+import 'providers/providers.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -40,8 +40,21 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => AppState(
+          create: (_) => AuthProvider(
             userRepository: RestUserRepository(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => NavigationProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => FavoritesProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => SearchProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ListingProvider(
             itemRepository: RestItemRepository(),
           ),
         ),
@@ -182,7 +195,7 @@ class KiwiShareShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeIndex = _getSelectedIndex(context);
-    final appState = Provider.of<AppState>(context);
+    final authProvider = Provider.of<AuthProvider>(context);
 
     return Scaffold(
       body: child,
@@ -199,7 +212,7 @@ class KiwiShareShell extends StatelessWidget {
         child: BottomNavigationBar(
           currentIndex: activeIndex,
           onTap: (index) {
-            if (index == 2 && !appState.isLoggedIn) {
+            if (index == 2 && !authProvider.isLoggedIn) {
               // Intercept Post click if not logged in
               _showLoginBottomSheet(context);
               return;

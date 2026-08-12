@@ -1,26 +1,35 @@
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
 import { errorHandler } from './middleware/error';
+import corsMiddleware from './middleware/cors';
+import loggerMiddleware from './middleware/logger';
 import apiRouter from './routes/api';
 
-const app = new Koa();
+import Router from 'koa-router';
 
-// Hook in body parser and centralized error/stack trace filter
+const app = new Koa();
+const rootRouter = new Router();
+
+// Hook in root endpoints
+rootRouter.get('/', (ctx) => {
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    message: 'KiwiShare API Server is running...',
+    timestamp: new Date()
+  };
+});
+
+rootRouter.get('/health', (ctx) => {
+  ctx.status = 200;
+  ctx.body = 'OK';
+});
+
+// Hook in logger, cors, body parser, and centralized error filter
+app.use(loggerMiddleware);
+app.use(corsMiddleware);
 app.use(bodyParser());
 app.use(errorHandler);
-
-// Enable CORS for local development
-app.use(async (ctx, next) => {
-  ctx.set('Access-Control-Allow-Origin', '*');
-  ctx.set('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  ctx.set('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
-
-  if (ctx.method === 'OPTIONS') {
-    ctx.status = 204;
-    return;
-  }
-  await next();
-});
 
 // Enable security headers to prevent tech-stack finger printing
 app.use(async (ctx, next) => {
@@ -29,6 +38,8 @@ app.use(async (ctx, next) => {
 });
 
 // Configure base API routes
+app.use(rootRouter.routes());
+app.use(rootRouter.allowedMethods());
 app.use(apiRouter.routes());
 app.use(apiRouter.allowedMethods());
 

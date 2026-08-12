@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../providers/app_state.dart';
+import '../../providers/providers.dart';
 
 class LoginView extends StatefulWidget {
   final VoidCallback? onLoginSuccess;
@@ -33,11 +33,11 @@ class _LoginViewState extends State<LoginView> {
         _isLoading = true;
       });
 
-      final appState = Provider.of<AppState>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final email = _emailController.text.trim();
 
       try {
-        await appState.sendOtp(email);
+        await authProvider.sendOtp(email);
         setState(() {
           _codeSent = true;
         });
@@ -79,16 +79,16 @@ class _LoginViewState extends State<LoginView> {
       _isLoading = true;
     });
 
-    final appState = Provider.of<AppState>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final email = _emailController.text.trim();
     final code = _codeController.text.trim();
 
     try {
-      await appState.verifyOtp(email, code);
+      await authProvider.verifyOtp(email, code);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Welcome back! Logged in as ${appState.currentUser?.displayName ?? 'User'}.',
+            'Welcome back! Logged in as ${authProvider.currentUser?.displayName ?? 'User'}.',
           ),
           backgroundColor: const Color(0xFF2E5E4E),
         ),
@@ -118,15 +118,15 @@ class _LoginViewState extends State<LoginView> {
       _isLoading = true;
     });
 
-    final appState = Provider.of<AppState>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     try {
-      await appState.loginWithGoogle();
-      if (appState.isLoggedIn) {
+      await authProvider.loginWithGoogle();
+      if (authProvider.isLoggedIn) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Welcome to KiwiShare! Logged in as ${appState.currentUser?.displayName ?? 'User'}.',
+              'Welcome to KiwiShare! Logged in as ${authProvider.currentUser?.displayName ?? 'User'}.',
             ),
             backgroundColor: const Color(0xFF2E5E4E),
           ),

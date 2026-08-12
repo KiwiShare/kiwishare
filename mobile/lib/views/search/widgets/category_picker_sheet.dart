@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../providers/app_state.dart';
+import '../../../providers/providers.dart';
 
 class CategoryPickerSheet extends StatelessWidget {
   const CategoryPickerSheet({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final appState = Provider.of<AppState>(context);
-    final activeCategory = appState.selectedCategory;
+    final searchProvider = Provider.of<SearchProvider>(context);
+    final activeCategory = searchProvider.selectedCategory;
     final categories = [
       'All NZ',
       'Camping',
@@ -48,7 +48,7 @@ class CategoryPickerSheet extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontWeight: isSelected
                           ? FontWeight.bold
-                          : FontWeight.normal,
+                      : FontWeight.normal,
                       color: isSelected
                           ? const Color(0xFF2E5E4E)
                           : const Color(0xFF1F1F1F),
@@ -58,7 +58,7 @@ class CategoryPickerSheet extends StatelessWidget {
                       ? const Icon(Icons.check, color: Color(0xFF2E5E4E))
                       : null,
                   onTap: () {
-                    appState.setCategory(cat);
+                    searchProvider.setCategory(cat);
                     Navigator.pop(context);
                   },
                 );

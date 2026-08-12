@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../providers/app_state.dart';
+import '../../providers/providers.dart';
 import '../../models/item_model.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
@@ -65,8 +65,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final appState = Provider.of<AppState>(context);
-    final activeCategory = appState.selectedCategory;
+    final searchProvider = Provider.of<SearchProvider>(context);
+    final listingProvider = Provider.of<ListingProvider>(context);
+    final activeCategory = searchProvider.selectedCategory;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF7F2), // Off-White Scaffold background
@@ -201,7 +202,7 @@ class _SearchScreenState extends State<SearchScreen> {
             // Grid results & Loaders via FutureBuilder
             Expanded(
               child: FutureBuilder<List<ItemModel>>(
-                future: appState.searchListingItems(_currentQuery),
+                future: listingProvider.searchListingItems(_currentQuery, activeCategory),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return GridView.builder(

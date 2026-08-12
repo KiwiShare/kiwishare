@@ -139,4 +139,17 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.status).toBe('success');
     expect(res.body.newOwnerId).toBe(clRegister.body.user.id);
   });
+
+  test('GET / - returns homepage status', async () => {
+    const res = await request(app.callback()).get('/');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.message).toContain('Server is running');
+  });
+
+  test('GET /health - returns OK', async () => {
+    const res = await request(app.callback()).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('OK');
+  });
 });
