@@ -125,6 +125,7 @@ void main() {
             ChangeNotifierProvider(create: (_) => NavigationProvider()),
             ChangeNotifierProvider(create: (_) => FavoritesProvider()),
             ChangeNotifierProvider(create: (_) => SearchProvider()),
+            ChangeNotifierProvider(create: (_) => ThemeProvider()),
             ChangeNotifierProvider(
               create: (_) =>
                   ListingProvider(itemRepository: MockItemRepository()),

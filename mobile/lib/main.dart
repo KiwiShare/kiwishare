@@ -41,10 +41,13 @@ void main() async {
       providers: [
         ChangeNotifierProvider(
           create: (_) => AuthProvider(userRepository: RestUserRepository()),
+          //@@@For mock test: uncomment below code to login with mock user
+          // create: (_) => AuthProvider(userRepository: MockUserRepository()),
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => FavoritesProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(
           create: (_) => ListingProvider(itemRepository: RestItemRepository()),
         ),
@@ -111,23 +114,32 @@ class KiwiShareApp extends StatelessWidget {
       ],
     );
 
+    final themeMode = context.watch<ThemeProvider>().themeMode;
+    final lightScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF064B3A),
+      brightness: Brightness.light,
+      surface: const Color(0xFFFBFAF6),
+    );
+    final darkScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF4E8878),
+      brightness: Brightness.dark,
+    );
+
     return MaterialApp.router(
       title: 'KiwiShare - Buy. Sell. Share. Sustain.',
       debugShowCheckedModeBanner: false,
+      themeMode: themeMode,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFFAF7F2), // Off-White
-        colorScheme: ColorScheme.light(
-          primary: const Color(0xFF2E5E4E), // Sage Green
-          secondary: const Color(0xFF7BAA7A), // Leaf Green
-          background: const Color(0xFFFAF7F2), // Off-White
-          surface: const Color(0xFFFAF7F2), // Off-White
-          onPrimary: Colors.white,
-          onSecondary: Colors.white,
-          onBackground: const Color(0xFF1F1F1F), // Charcoal
-          onSurface: const Color(0xFF1F1F1F), // Charcoal
-        ),
+        colorScheme: lightScheme,
+        scaffoldBackgroundColor: lightScheme.surface,
         textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: darkScheme,
+        scaffoldBackgroundColor: darkScheme.surface,
+        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
       ),
       routerConfig: router,
     );
