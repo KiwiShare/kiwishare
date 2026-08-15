@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/providers.dart';
 import '../../models/item_model.dart';
+import '../../services/remote_config_service.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/filter_chip.dart';
@@ -182,6 +183,31 @@ class _SearchScreenState extends State<SearchScreen> {
                     active: activeCategory != 'All NZ',
                     onTap: _showCategoryPicker,
                   ),
+                  if (should(FeatureFlag.aiSearch)) ...[
+                    const SizedBox(width: 8),
+                    SearchFilterChip(
+                      label: '✨ AI Match',
+                      active: true,
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'AI Semantic Matching active for this search.',
+                            ),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                  if (should(FeatureFlag.itemDelivery)) ...[
+                    const SizedBox(width: 8),
+                    SearchFilterChip(
+                      label: '🚚 Courier Delivery',
+                      active: false,
+                      onTap: () {},
+                    ),
+                  ],
                   const SizedBox(width: 8),
                   SearchFilterChip(
                     label: 'Sort: Popular',

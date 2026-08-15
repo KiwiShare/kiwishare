@@ -1,0 +1,33 @@
+{
+  "conditions": [],
+  "parameters": {
+    "feature_enable_ai_search": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Toggle AI-powered semantic search and intelligent recommendations filter.",
+      "valueType": "BOOLEAN"
+    },
+    "feature_enable_item_delivery": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Toggle door-to-door courier delivery options and filter chips.",
+      "valueType": "BOOLEAN"
+    },
+    "feature_enable_social_share": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Toggle one-click social media sharing button on published listings.",
+      "valueType": "BOOLEAN"
+    },
+    "announcement_banner": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"message\": \"Welcome to KiwiShare! Buy, Sell, Share, Sustain.\", \"type\": \"info\"}"
+      },
+      "description": "Global promotional/event announcement banner on the mobile home feed.",
+      "valueType": "JSON"
+    }
+  }
+}

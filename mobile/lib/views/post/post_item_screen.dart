@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/remote_config_service.dart';
 import 'widgets/step_circle.dart';
 import 'widgets/step_line.dart';
 
@@ -184,33 +185,35 @@ class PostItemScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
 
-                      // Button 2: Share listing (Sage Green outline)
-                      OutlinedButton.icon(
-                        onPressed: () {},
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(
-                            0xFF2E5E4E,
-                          ), // Sage Green
-                          side: const BorderSide(
-                            color: Color(0xFF2E5E4E),
-                            width: 1.5,
+                      // Button 2: Share listing (Sage Green outline, toggled via Remote Config)
+                      if (should(FeatureFlag.socialShare)) ...[
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () {},
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(
+                              0xFF2E5E4E,
+                            ), // Sage Green
+                            side: const BorderSide(
+                              color: Color(0xFF2E5E4E),
+                              width: 1.5,
+                            ),
+                            minimumSize: const Size(double.infinity, 50),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                           ),
-                          minimumSize: const Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                          icon: const Icon(Icons.share_outlined, size: 20),
+                          label: Text(
+                            'Share listing',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        icon: const Icon(Icons.share_outlined, size: 20),
-                        label: Text(
-                          'Share listing',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
