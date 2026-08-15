@@ -7,9 +7,35 @@ abstract class UserRepository {
   Future<void> sendOtp(String email);
   Future<Map<String, dynamic>> verifyOtp(String email, String code);
   Future<Map<String, dynamic>> loginWithGoogle(String idToken);
+  Future<UserModel> updateProfile({
+    required String token,
+    String? displayName,
+    String? avatarUrl,
+  });
 }
 
 class RestUserRepository implements UserRepository {
+  @override
+  Future<UserModel> updateProfile({
+    required String token,
+    String? displayName,
+    String? avatarUrl,
+  }) async {
+    final response = await http.patch(
+      Uri.parse('${ApiConfig.baseUrl}/api/users/me'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'displayName': ?displayName, 'avatarUrl': ?avatarUrl}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Could not update your profile. Please try again.');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return UserModel.fromJson(data['user'] as Map<String, dynamic>);
+  }
+
   @override
   Future<void> sendOtp(String email) async {
     final response = await http.post(
@@ -80,6 +106,22 @@ class RestUserRepository implements UserRepository {
 }
 
 class MockUserRepository implements UserRepository {
+  @override
+  Future<UserModel> updateProfile({
+    required String token,
+    String? displayName,
+    String? avatarUrl,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    return UserModel(
+      id: 'mock_user_1',
+      displayName: displayName ?? 'Mock User',
+      avatarUrl: avatarUrl,
+      trustScore: 100,
+      isVerified: false,
+    );
+  }
+
   @override
   Future<void> sendOtp(String email) async {
     // Simulate latency

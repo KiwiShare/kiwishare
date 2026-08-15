@@ -25,4 +25,9 @@ class ListingProvider extends ChangeNotifier {
   ) async {
     return itemRepository.searchItems(query: query, category: category).first;
   }
+
+  Future<List<ItemModel>> getMyItems({
+    required bool sold,
+    required String token,
+  }) => itemRepository.fetchMyItems(sold: sold, token: token);
 }

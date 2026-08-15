@@ -1,40 +1,23 @@
 # Deployment and Release Documentation
 
-This document explains the unified release flow and the deployment steps for both the backend (Render) and mobile frontend (Firebase App Distribution & GitHub Releases).
+This document explains the automated release flow and the deployment steps for both the backend (Render) and mobile frontend (Firebase App Distribution & GitHub Releases).
 
 ---
 
-## 1. How to Cut a New Release (Local Flow)
+## 1. Automated Release Flow (Merge to `main`)
 
-We use `standard-version` to automate:
-1. Version bumps in `package.json`, `functions/package.json`, and `mobile/pubspec.yaml` (with build number increment).
-2. Automatic changelog generation in `CHANGELOG.md`.
-3. Creating a Git commit and release tag.
+We have fully automated our release pipeline via GitHub Actions. **Developers do not need to manually create tags or run release scripts locally.**
 
-### Step-by-Step Release Instructions:
-
-1. **Commit your changes** using [Conventional Commits](https://www.conventionalcommits.org/):
-   - Features: `feat: add rate limiter middleware`
-   - Fixes: `fix: resolve login form rendering overflow`
-   - Chores: `chore: update dependencies`
-
-2. **Trigger the release command** (runs standard-version):
-   - To let standard-version determine the next version:
-     ```bash
-     pnpm run release
-     ```
-   - Or target a specific version bump:
-     ```bash
-     pnpm run release:patch  # Bumps patch (e.g., 1.0.0 -> 1.0.1)
-     pnpm run release:minor  # Bumps minor (e.g., 1.0.0 -> 1.1.0)
-     pnpm run release:major  # Bumps major (e.g., 1.0.0 -> 2.0.0)
-     ```
-
-3. **Push the commit and tag to GitHub**:
-   ```bash
-   git push --follow-tags origin main
-   ```
-   *This push will trigger the automated Mobile CI/CD pipeline on GitHub Actions.*
+### Workflow Summary:
+1. Feature branches are developed and merged into the **`pre`** branch via PR/MR for staging validation.
+2. Once verified, create a PR/MR from **`pre`** into **`main`**.
+3. Upon merging into **`main`**, GitHub Actions (`.github/workflows/release-publish.yml`) will automatically:
+   - Analyze commit history (using Conventional Commits) to calculate the next Semantic Version (`patch`, `minor`, `major`).
+   - Automatically tag the commit (e.g., `v1.2.0`) in GitHub.
+   - Build the **Android APK** (`KiwiShare-Android-vX.X.X.apk`).
+   - Build the **iOS Package** (`KiwiShare-iOS-vX.X.X.zip`).
+   - Create a **GitHub Release** with auto-generated release notes and attach both Android and iOS installation packages.
+   - Distribute the Android APK to **Firebase App Distribution** (if configured).
 
 ---
 
@@ -55,7 +38,8 @@ The backend Koa server is deployed to [Render.com](https://render.com) as a Web 
      - **Name**: `kiwishare-backend`
      - **Region**: Select a region close to your users (e.g., `Singapore` or `Oregon`).
      - **Branch**: `main`
-     - **Root Directory**: `functions` *(Crucial: This isolates the Node/Koa app package from the monorepo root)*
+     - **Auto-Deploy**: `Yes` *(Render will automatically redeploy on every merge to main)*
+     - **Root Directory**: `functions` *(Crucial: Isolates the Node/Koa app package from the monorepo root)*
      - **Runtime**: `Node`
      - **Build Command**:
        ```bash
@@ -73,43 +57,30 @@ The backend Koa server is deployed to [Render.com](https://render.com) as a Web 
    - `PORT`: `10000` (Render binds to this automatically, but Koa will listen to it)
    - `JWT_SECRET`: A secure random string for signing user authentication tokens.
 
-Render will now automatically rebuild and deploy the backend every time you push to the `main` branch.
-
 ---
 
-## 3. Mobile Deployment (Flutter Client)
+## 3. Mobile Deployment & Package Distribution
 
-On pushing a tag (e.g., `v1.0.1`), the GitHub Action `.github/workflows/release-publish.yml` is triggered to compile and deploy the Flutter Android application.
+On every push/merge to `main`, GitHub Actions executes multi-platform builds:
+
+### Packages Available on GitHub Releases:
+- **Android APK**: `KiwiShare-Android-vX.X.X.apk` (Directly installable on any Android device).
+- **iOS App Package**: `KiwiShare-iOS-vX.X.X.zip` (Contains the built `Runner.app` bundle).
 
 ### GitHub Actions Secrets Configuration:
 
-To allow GitHub Actions to release the mobile app, go to your GitHub repository -> **Settings** -> **Secrets and variables** -> **Actions**, and add the following **Repository secrets**:
+To enable automated Firebase App Distribution, configure the following secrets in **GitHub Repository** -> **Settings** -> **Secrets and variables** -> **Actions**:
 
 1. **`FIREBASE_APP_ID`**:
-   - The App ID for your Android app in Firebase.
-   - Found in **Firebase Console** -> **Project Settings** (gear icon) -> **General** -> Under **Your apps**, copy the **App ID** for the Android app (format: `1:XXXXXX:android:XXXXXX`).
-
+   - The App ID for your Android app in Firebase (format: `1:XXXXXX:android:XXXXXX`).
 2. **`FIREBASE_TOKEN`**:
-   - CI token to authenticate Firebase CLI tools.
-   - Generate it locally by running:
-     ```bash
-     pnpm install -g firebase-tools
-     firebase login:ci
-     ```
-   - Complete the browser login. The command line will output a long token. Copy and add it as the `FIREBASE_TOKEN` secret.
-
-### Setup Firebase App Distribution:
-
-1. In the **Firebase Console**, go to **Release & Monitor** -> **App Distribution**.
-2. Click **Get Started** and select the Android app.
-3. Go to the **Testers & Groups** tab.
-4. Create a group named `testers` (or invite users directly) and add the email addresses of team members who need to test the app.
-5. In your Firebase App Distribution settings, make sure the release is distributed to this group.
+   - CI token generated via `firebase login:ci`.
 
 ---
 
 ## 4. Verification
 
-After pushing a new tag:
-- **GitHub Releases**: A new Release page will be created in your repository. It will contain the autogenerated release notes (changelog) and a downloadable `app-release.apk` file.
-- **Firebase App Distribution**: The build will be uploaded, and testers in the test group will receive an email invitation to download the new version of KiwiShare on their Android device.
+After merging a PR/MR from `pre` into `main`:
+1. **GitHub Actions Tab**: Observe the `Release & Publish Pipeline` running `Calculate Version & Tag`, `Build Android APK`, `Build iOS Package`, and `Publish Release & Distribute`.
+2. **GitHub Releases Tab**: A new Release entry will appear containing the release notes and downloadable `.apk` & `.zip` packages.
+3. **Render Dashboard**: The backend service will show a new deploy event automatically triggered by the push to `main`.
