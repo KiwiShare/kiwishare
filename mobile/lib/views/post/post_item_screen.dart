@@ -425,23 +425,13 @@ class _PostItemScreenState extends State<PostItemScreen> {
               const SizedBox(height: AppSpacing.md),
               _ResponsiveFieldRow(
                 label: 'Category',
-                child: DropdownButtonFormField<String>(
+                child: _MobileSelectionFormField(
                   key: const Key('post_category_field'),
                   value: _category,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Select a category',
-                  ),
-                  items: _categories
-                      .map(
-                        (category) => DropdownMenuItem(
-                          value: category,
-                          child: Text(category),
-                        ),
-                      )
-                      .toList(),
+                  hintText: 'Select a category',
+                  sheetTitle: 'Choose category',
+                  options: _categories,
                   onChanged: (value) => setState(() => _category = value),
-                  validator: (value) => value == null ? 'Required' : null,
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -469,43 +459,25 @@ class _PostItemScreenState extends State<PostItemScreen> {
               const SizedBox(height: AppSpacing.md),
               _ResponsiveFieldRow(
                 label: 'Location',
-                child: DropdownButtonFormField<String>(
+                child: _MobileSelectionFormField(
                   key: const Key('post_location_field'),
                   value: _location,
-                  isExpanded: true,
-                  decoration: const InputDecoration(hintText: 'Auckland CBD'),
-                  items: _locations
-                      .map(
-                        (location) => DropdownMenuItem(
-                          value: location,
-                          child: Text(location),
-                        ),
-                      )
-                      .toList(),
+                  hintText: 'Auckland CBD',
+                  sheetTitle: 'Choose location',
+                  options: _locations,
                   onChanged: (value) => setState(() => _location = value),
-                  validator: (value) => value == null ? 'Required' : null,
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
               _ResponsiveFieldRow(
                 label: 'Condition',
-                child: DropdownButtonFormField<String>(
+                child: _MobileSelectionFormField(
                   key: const Key('post_condition_field'),
                   value: _condition,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Select condition',
-                  ),
-                  items: _conditions
-                      .map(
-                        (condition) => DropdownMenuItem(
-                          value: condition,
-                          child: Text(condition),
-                        ),
-                      )
-                      .toList(),
+                  hintText: 'Select condition',
+                  sheetTitle: 'Choose condition',
+                  options: _conditions,
                   onChanged: (value) => setState(() => _condition = value),
-                  validator: (value) => value == null ? 'Required' : null,
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -767,34 +739,239 @@ class _ResponsiveFieldRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final useStackedLayout = MediaQuery.textScalerOf(context).scale(14) > 18;
     final labelWidget = Text(
       label,
       style: Theme.of(context).textTheme.labelLarge,
     );
 
-    if (useStackedLayout) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          labelWidget,
-          const SizedBox(height: AppSpacing.sm),
-          child,
-        ],
-      );
-    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scaledLabelSize = MediaQuery.textScalerOf(context).scale(14);
+        final useStackedLayout =
+            constraints.maxWidth < 344 || scaledLabelSize > 18;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 68,
-          height: 48,
-          child: Align(alignment: Alignment.centerLeft, child: labelWidget),
+        if (useStackedLayout) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              labelWidget,
+              const SizedBox(height: AppSpacing.sm),
+              child,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 68,
+              height: 48,
+              child: Align(alignment: Alignment.centerLeft, child: labelWidget),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(child: child),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MobileSelectionFormField extends StatelessWidget {
+  final String? value;
+  final String hintText;
+  final String sheetTitle;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  const _MobileSelectionFormField({
+    super.key,
+    required this.value,
+    required this.hintText,
+    required this.sheetTitle,
+    required this.options,
+    required this.onChanged,
+  });
+
+  Future<String?> _showOptions(BuildContext context, String? selectedValue) {
+    return showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.large),
         ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(child: child),
-      ],
+      ),
+      builder: (context) => _SelectionSheet(
+        title: sheetTitle,
+        options: options,
+        selectedValue: selectedValue,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FormField<String>(
+      initialValue: value,
+      validator: (value) => value == null ? 'Required' : null,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      builder: (field) {
+        return Semantics(
+          button: true,
+          label: '$sheetTitle. ${field.value ?? 'No option selected'}.',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            onTap: () async {
+              final selectedValue = await _showOptions(context, field.value);
+              if (selectedValue == null) {
+                return;
+              }
+              field.didChange(selectedValue);
+              onChanged(selectedValue);
+            },
+            child: InputDecorator(
+              isEmpty: field.value == null,
+              decoration: InputDecoration(
+                hintText: hintText,
+                errorText: field.errorText,
+                suffixIcon: const Icon(Icons.chevron_right_rounded),
+              ),
+              child: Text(field.value ?? ''),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SelectionSheet extends StatelessWidget {
+  final String title;
+  final List<String> options;
+  final String? selectedValue;
+
+  const _SelectionSheet({
+    required this.title,
+    required this.options,
+    required this.selectedValue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topCenter,
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          key: const Key('post_selection_sheet'),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            0,
+            AppSpacing.lg,
+            AppSpacing.xl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final optionWidth =
+                      (constraints.maxWidth - AppSpacing.sm) / 2;
+                  return Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: options.map((option) {
+                      final isSelected = option == selectedValue;
+                      return SizedBox(
+                        width: optionWidth,
+                        child: Semantics(
+                          selected: isSelected,
+                          button: true,
+                          child: Material(
+                            color: isSelected
+                                ? AppColors.brandSecondaryContainer
+                                : AppColors.surface,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.small,
+                              ),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? AppColors.brandPrimary
+                                    : AppColors.border,
+                              ),
+                            ),
+                            child: InkWell(
+                              key: Key('post_selection_option_$option'),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.small,
+                              ),
+                              onTap: () => Navigator.pop(context, option),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 48,
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.md,
+                                    vertical: AppSpacing.sm,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          option,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodyMedium,
+                                        ),
+                                      ),
+                                      if (isSelected) ...[
+                                        const SizedBox(width: AppSpacing.xs),
+                                        const Icon(
+                                          Icons.check_rounded,
+                                          size: 20,
+                                          color: AppColors.brandPrimary,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

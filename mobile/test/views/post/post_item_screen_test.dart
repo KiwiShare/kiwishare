@@ -105,6 +105,53 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
   });
 
+  testWidgets('uses a compact mobile sheet for listing selections', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(buildTestApp(onCancel: () {}));
+
+    await tester.tap(find.byKey(const Key('post_category_field')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('post_selection_sheet')), findsOneWidget);
+    expect(find.text('Choose category'), findsOneWidget);
+    expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+
+    await tester.tap(
+      find.byKey(const Key('post_selection_option_Electronics')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('post_selection_sheet')), findsNothing);
+    expect(find.text('Electronics'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('stacks labels above fields on narrow mobile screens', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(buildTestApp(onCancel: () {}));
+
+    final titleLabel = tester.getRect(find.text('Title'));
+    final titleField = tester.getRect(
+      find.byKey(const Key('post_title_field')),
+    );
+
+    expect(titleField.left, closeTo(titleLabel.left, 1));
+    expect(titleField.top, greaterThan(titleLabel.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('cancel action is wired and empty submission is validated', (
     tester,
   ) async {
