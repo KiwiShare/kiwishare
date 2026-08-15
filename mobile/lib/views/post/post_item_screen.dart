@@ -1,6 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../services/remote_config_service.dart';
+import 'widgets/step_circle.dart';
+import 'widgets/step_line.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 

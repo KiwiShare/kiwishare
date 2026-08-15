@@ -16,6 +16,7 @@ import 'views/auth/login_view.dart';
 import 'providers/providers.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
+import 'services/remote_config_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
@@ -34,8 +35,9 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    await RemoteConfigService.instance.initialize();
   } catch (e) {
-    debugPrint('Firebase initialization failed: $e');
+    debugPrint('Firebase/RemoteConfig initialization failed: $e');
   }
   runApp(
     MultiProvider(
