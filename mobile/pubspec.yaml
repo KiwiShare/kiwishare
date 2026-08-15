@@ -44,6 +44,7 @@ dependencies:
   http: ^1.2.0
   shared_preferences: ^2.2.2
   firebase_remote_config: ^4.4.7
+  image_picker: ^1.2.3
 
 
 dev_dependencies:
