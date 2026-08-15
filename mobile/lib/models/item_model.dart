@@ -9,6 +9,12 @@ class ItemModel {
   final bool isSustainable;
   final String category;
   final ItemStatus status;
+  final String? description;
+  final String? condition;
+  final String? ownerId;
+  final double? distanceKm;
+  final double? latitude;
+  final double? longitude;
 
   const ItemModel({
     required this.id,
@@ -19,7 +25,15 @@ class ItemModel {
     required this.isSustainable,
     required this.category,
     required this.status,
+    this.description,
+    this.condition,
+    this.ownerId,
+    this.distanceKm,
+    this.latitude,
+    this.longitude,
   });
+
+  double get priceValue => double.tryParse(priceNzd) ?? 0;
 
   /// Create a copy of this ItemModel with updated fields.
   ItemModel copyWith({
@@ -31,6 +45,12 @@ class ItemModel {
     bool? isSustainable,
     String? category,
     ItemStatus? status,
+    String? description,
+    String? condition,
+    String? ownerId,
+    double? distanceKm,
+    double? latitude,
+    double? longitude,
   }) {
     return ItemModel(
       id: id ?? this.id,
@@ -41,6 +61,12 @@ class ItemModel {
       isSustainable: isSustainable ?? this.isSustainable,
       category: category ?? this.category,
       status: status ?? this.status,
+      description: description ?? this.description,
+      condition: condition ?? this.condition,
+      ownerId: ownerId ?? this.ownerId,
+      distanceKm: distanceKm ?? this.distanceKm,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 
@@ -55,20 +81,35 @@ class ItemModel {
       'isSustainable': isSustainable,
       'category': category,
       'status': status.name,
+      if (description != null) 'description': description,
+      if (condition != null) 'condition': condition,
+      if (ownerId != null) 'ownerId': ownerId,
+      if (distanceKm != null) 'distanceKm': distanceKm,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
     };
   }
 
   /// Create from Map.
   factory ItemModel.fromMap(Map<String, dynamic> map) {
     return ItemModel(
-      id: map['id'] as String,
-      title: map['title'] as String,
-      priceNzd: map['priceNzd'] as String,
-      location: map['location'] as String,
-      imageUrl: map['imageUrl'] as String,
-      isSustainable: map['isSustainable'] as bool,
-      category: map['category'] as String,
-      status: ItemStatus.values.byName(map['status'] as String),
+      id: map['id']?.toString() ?? '',
+      title: map['title']?.toString() ?? '',
+      priceNzd: map['priceNzd']?.toString() ?? '0',
+      location: map['location']?.toString() ?? 'Location unavailable',
+      imageUrl: map['imageUrl']?.toString() ?? '',
+      isSustainable: map['isSustainable'] == true,
+      category: map['category']?.toString() ?? 'Other',
+      status: ItemStatus.values.firstWhere(
+        (value) => value.name == map['status']?.toString(),
+        orElse: () => ItemStatus.active,
+      ),
+      description: map['description']?.toString(),
+      condition: map['condition']?.toString(),
+      ownerId: map['ownerId']?.toString(),
+      distanceKm: _asDouble(map['distanceKm']),
+      latitude: _asDouble(map['latitude']),
+      longitude: _asDouble(map['longitude']),
     );
   }
 
@@ -89,7 +130,13 @@ class ItemModel {
         other.imageUrl == imageUrl &&
         other.isSustainable == isSustainable &&
         other.category == category &&
-        other.status == status;
+        other.status == status &&
+        other.description == description &&
+        other.condition == condition &&
+        other.ownerId == ownerId &&
+        other.distanceKm == distanceKm &&
+        other.latitude == latitude &&
+        other.longitude == longitude;
   }
 
   @override
@@ -103,11 +150,22 @@ class ItemModel {
       isSustainable,
       category,
       status,
+      description,
+      condition,
+      ownerId,
+      distanceKm,
+      latitude,
+      longitude,
     );
   }
 
   @override
   String toString() {
-    return 'ItemModel(id: $id, title: $title, priceNzd: $priceNzd, location: $location, imageUrl: $imageUrl, isSustainable: $isSustainable, category: $category, status: $status)';
+    return 'ItemModel(id: $id, title: $title, priceNzd: $priceNzd, location: $location, imageUrl: $imageUrl, isSustainable: $isSustainable, category: $category, status: $status, distanceKm: $distanceKm)';
   }
+}
+
+double? _asDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '');
 }

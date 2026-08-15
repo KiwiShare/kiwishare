@@ -1,17 +1,24 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../../providers/providers.dart';
+
 import '../../models/item_model.dart';
+import '../../models/listing_query.dart';
+import '../../providers/providers.dart';
+import '../../services/listing_location_service.dart';
 import '../../services/remote_config_service.dart';
+import '../../theme/app_theme.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/filter_chip.dart';
-import 'widgets/category_picker_sheet.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  final ListingLocationService? locationService;
+  final ValueChanged<ItemModel>? onOpenItem;
+
+  const SearchScreen({super.key, this.locationService, this.onOpenItem});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -19,418 +26,396 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   late final TextEditingController _searchController;
-  Timer? _debounceTimer;
-  String _currentQuery = 'Camping'; // Default query from the mockup
+  late final ListingLocationService _locationService;
+  Timer? _debounce;
+  ListingQuery? _loadedQuery;
+  Future<List<ItemModel>>? _results;
 
   @override
   void initState() {
     super.initState();
-    _searchController = TextEditingController(text: _currentQuery);
+    _searchController = TextEditingController();
+    _locationService = widget.locationService ?? DeviceListingLocationService();
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
-    _debounceTimer?.cancel();
     super.dispose();
   }
 
+  Future<List<ItemModel>> _load(ListingProvider provider, ListingQuery query) {
+    if (_results == null || _loadedQuery != query) {
+      _loadedQuery = query;
+      _results = provider.searchListingItems(query);
+    }
+    return _results!;
+  }
+
+  void _refresh() => setState(() {
+    _results = null;
+  });
+
   void _onSearchChanged(String value) {
-    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      setState(() {
-        _currentQuery = value;
-      });
+    setState(() {});
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) context.read<SearchProvider>().setQuery(value);
     });
   }
 
-  void _clearSearch() {
-    _searchController.clear();
-    setState(() {
-      _currentQuery = '';
-    });
+  void _openItem(ItemModel item) {
+    if (widget.onOpenItem != null) {
+      widget.onOpenItem!(item);
+    } else {
+      context.push('/products/${item.id}', extra: item);
+    }
   }
 
-  void _showCategoryPicker() {
-    showModalBottomSheet(
+  Future<void> _chooseLocation() async {
+    final search = context.read<SearchProvider>();
+    await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFFFAF7F2), // Off-White sheet background
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return const CategoryPickerSheet();
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final searchProvider = Provider.of<SearchProvider>(context);
-    final listingProvider = Provider.of<ListingProvider>(context);
-    final activeCategory = searchProvider.selectedCategory;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAF7F2), // Off-White Scaffold background
-      body: SafeArea(
-        child: Column(
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
           children: [
-            // Header Bar
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Color(0xFF2E5E4E),
-                      size: 28,
-                    ),
-                    onPressed: () {},
-                    tooltip: 'Back',
-                  ),
-                  Text(
-                    'Search',
-                    style: GoogleFonts.inter(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF2E5E4E), // Sage Green Title
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.tune,
-                      color: Color(0xFF2E5E4E),
-                      size: 28,
-                    ),
-                    onPressed: () {},
-                    tooltip: 'Tune',
-                  ),
-                ],
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Text(
+                'Browse by location',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
-
-            // Search Bar Input
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFAF7F2), // Off-White inside
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(
-                      0xFF2E5E4E,
-                    ).withOpacity(0.2), // Light green border
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(
-                        0xFF1F1F1F,
-                      ).withOpacity(0.04), // Charcoal shadow
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      color: Color(0xFF2E5E4E),
-                    ), // Sage Green
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(
-                              Icons.close,
-                              color: Color(0xFF2E5E4E),
-                            ),
-                            onPressed: _clearSearch,
-                            tooltip: 'Clear search',
-                          )
-                        : null,
-                    hintText: 'Search for items or categories',
-                    hintStyle: GoogleFonts.inter(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.5),
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  style: GoogleFonts.inter(
-                    color: const Color(0xFF1F1F1F),
-                    fontSize: 16,
-                  ),
-                ),
+            ListTile(
+              leading: const Icon(Icons.near_me_outlined),
+              title: const Text('Items near you'),
+              subtitle: const Text(
+                'Uses approximate location only after you choose this option',
               ),
-            ),
-
-            // Filters Horizontal Row
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  SearchFilterChip(
-                    label: 'All NZ',
-                    active: false,
-                    onTap: () {},
-                  ),
-                  const SizedBox(width: 8),
-                  SearchFilterChip(
-                    label: 'Category: $activeCategory',
-                    active: activeCategory != 'All NZ',
-                    onTap: _showCategoryPicker,
-                  ),
-                  if (should(FeatureFlag.aiSearch)) ...[
-                    const SizedBox(width: 8),
-                    SearchFilterChip(
-                      label: '✨ AI Match',
-                      active: true,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'AI Semantic Matching active for this search.',
-                            ),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                  if (should(FeatureFlag.itemDelivery)) ...[
-                    const SizedBox(width: 8),
-                    SearchFilterChip(
-                      label: '🚚 Courier Delivery',
-                      active: false,
-                      onTap: () {},
-                    ),
-                  ],
-                  const SizedBox(width: 8),
-                  SearchFilterChip(
-                    label: 'Sort: Popular',
-                    active: false,
-                    onTap: () {},
-                  ),
-                  const SizedBox(width: 8),
-                  SearchFilterChip(
-                    label: 'Save',
-                    active: false,
-                    onTap: () {},
-                    icon: Icons.favorite_border,
-                  ),
-                ],
-              ),
-            ),
-
-            // Grid results & Loaders via FutureBuilder
-            Expanded(
-              child: FutureBuilder<List<ItemModel>>(
-                future: listingProvider.searchListingItems(
-                  _currentQuery,
-                  activeCategory,
-                ),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return GridView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 0.76,
-                          ),
-                      itemCount: 6,
-                      itemBuilder: (context, index) => const ItemCardSkeleton(),
-                    );
-                  } else if (snapshot.hasError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              size: 48,
-                              color: Colors.red,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Error matching results',
-                              style: GoogleFonts.inter(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1F1F1F),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                setState(() {});
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2E5E4E),
-                                foregroundColor: Colors.white,
-                                minimumSize: const Size(120, 44),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Tap to Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  } else {
-                    final items = snapshot.data ?? [];
-                    if (items.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.search_off,
-                                size: 64,
-                                color: Color(0xFF2E5E4E),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No listings found',
-                                style: GoogleFonts.inter(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF1F1F1F),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Try adjusting your search filters or searching for something else.',
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(
-                                  fontSize: 14,
-                                  color: const Color(
-                                    0xFF1F1F1F,
-                                  ).withOpacity(0.6),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 8,
-                          ),
-                          child: Text(
-                            '${items.length} results',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1F1F1F).withOpacity(0.8),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GridView.builder(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                  childAspectRatio: 0.76,
-                                ),
-                            itemCount: items.length,
-                            itemBuilder: (context, index) {
-                              return ItemCard(item: items[index]);
-                            },
-                          ),
-                        ),
-                      ],
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                try {
+                  final position = await _locationService
+                      .getApproximatePosition();
+                  if (mounted) {
+                    search.setNearby(
+                      latitude: position.latitude,
+                      longitude: position.longitude,
                     );
                   }
+                } on ListingLocationException catch (error) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(error.message)));
+                  }
+                }
+              },
+            ),
+            for (final location in SearchProvider.locations)
+              ListTile(
+                leading: Icon(
+                  location == 'All NZ' ? Icons.public : Icons.location_city,
+                ),
+                title: Text(location),
+                trailing: search.selectedLocation == location
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () {
+                  search.setLocation(location);
+                  Navigator.pop(sheetContext);
                 },
               ),
-            ),
-
-            // Safe shopping banner at the bottom
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFAF7F2), // Off-White
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFF2E5E4E).withOpacity(0.2),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.03),
-                      blurRadius: 6,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.verified_user,
-                      color: Color(0xFF2E5E4E),
-                      size: 28,
-                    ), // Sage Green
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Shop safely, meet locally.',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1F1F1F),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Choose public places and build trust.',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: const Color(0xFF1F1F1F).withOpacity(0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right, color: Color(0xFF2E5E4E)),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
     );
   }
+
+  Future<void> _chooseSort() async {
+    final search = context.read<SearchProvider>();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Text(
+                'Sort listings',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            for (final sort in ListingSortOrder.values)
+              if (sort != ListingSortOrder.nearest || search.isNearby)
+                RadioListTile<ListingSortOrder>(
+                  value: sort,
+                  groupValue: search.sortOrder,
+                  title: Text(sort.label),
+                  onChanged: (value) {
+                    if (value != null) search.setSortOrder(value);
+                    Navigator.pop(sheetContext);
+                  },
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final search = context.watch<SearchProvider>();
+    final listingProvider = context.read<ListingProvider>();
+    final favorites = context.watch<FavoritesProvider>();
+    final query = search.listingQuery;
+
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text('Browse'),
+        actions: [
+          TextButton.icon(
+            key: const Key('location-button'),
+            onPressed: _chooseLocation,
+            icon: Icon(
+              search.isNearby ? Icons.near_me : Icons.location_on_outlined,
+            ),
+            label: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(
+                search.selectedLocation,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+        ],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
+            child: TextField(
+              key: const Key('products-search-field'),
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                labelText: should(FeatureFlag.aiSearch)
+                    ? 'Search listings with AI assistance'
+                    : 'Search listings',
+                hintText: 'Try “camping stove”',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        onPressed: () {
+                          _searchController.clear();
+                          search.setQuery('');
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.close),
+                      ),
+              ),
+            ),
+          ),
+          Semantics(
+            label: 'Product categories',
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Row(
+                children: [
+                  for (final category in SearchProvider.categories) ...[
+                    SearchFilterChip(
+                      label: category,
+                      active: search.selectedCategory == category,
+                      onTap: () => search.toggleCategory(category),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: Row(
+              children: [
+                SearchFilterChip(
+                  label: 'Sort: ${search.sortOrder.label}',
+                  active: search.sortOrder != ListingSortOrder.popular,
+                  onTap: _chooseSort,
+                  icon: Icons.sort,
+                  showDropdown: true,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                SearchFilterChip(
+                  label: 'Saved',
+                  active: search.showSavedOnly,
+                  onTap: search.toggleSavedOnly,
+                  icon: search.showSavedOnly
+                      ? Icons.favorite
+                      : Icons.favorite_border,
+                ),
+                if (search.selectedCategory != null ||
+                    search.selectedLocation != 'All NZ' ||
+                    search.showSavedOnly) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  TextButton(
+                    onPressed: search.resetFilters,
+                    child: const Text('Clear filters'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<ItemModel>>(
+              future: _load(listingProvider, query),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const _LoadingGrid();
+                }
+                if (snapshot.hasError) {
+                  return _MessageState(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Could not load listings',
+                    message: 'Check your connection and try again.',
+                    actionLabel: 'Retry',
+                    onAction: _refresh,
+                  );
+                }
+                var items = snapshot.data ?? const <ItemModel>[];
+                if (search.showSavedOnly) {
+                  items = items
+                      .where((item) => favorites.isFavorite(item.id))
+                      .toList();
+                }
+                if (items.isEmpty) {
+                  return _MessageState(
+                    icon: search.showSavedOnly
+                        ? Icons.favorite_border
+                        : Icons.search_off,
+                    title: search.showSavedOnly
+                        ? 'No saved listings yet'
+                        : 'No listings found',
+                    message: 'Try another search, category, or location.',
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg,
+                        AppSpacing.md,
+                        AppSpacing.lg,
+                        AppSpacing.sm,
+                      ),
+                      child: Text(
+                        '${items.length} listings',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    Expanded(
+                      child: GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.lg,
+                          0,
+                          AppSpacing.lg,
+                          AppSpacing.lg,
+                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: AppSpacing.md,
+                              mainAxisSpacing: AppSpacing.md,
+                              childAspectRatio: 0.72,
+                            ),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) => ItemCard(
+                          item: items[index],
+                          onTap: () => _openItem(items[index]),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoadingGrid extends StatelessWidget {
+  const _LoadingGrid();
+
+  @override
+  Widget build(BuildContext context) => GridView.builder(
+    padding: const EdgeInsets.all(AppSpacing.lg),
+    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 2,
+      crossAxisSpacing: AppSpacing.md,
+      mainAxisSpacing: AppSpacing.md,
+      childAspectRatio: 0.72,
+    ),
+    itemCount: 6,
+    itemBuilder: (context, index) => const ItemCardSkeleton(),
+  );
+}
+
+class _MessageState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _MessageState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 48, color: AppColors.brandPrimary),
+          const SizedBox(height: AppSpacing.lg),
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.sm),
+          Text(message, textAlign: TextAlign.center),
+          if (onAction != null) ...[
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+          ],
+        ],
+      ),
+    ),
+  );
 }

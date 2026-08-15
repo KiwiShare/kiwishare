@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../../../theme/app_theme.dart';
 
 class SearchFilterChip extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
   final IconData? icon;
+  final bool showDropdown;
 
   const SearchFilterChip({
     super.key,
@@ -13,6 +14,7 @@ class SearchFilterChip extends StatelessWidget {
     required this.active,
     required this.onTap,
     this.icon,
+    this.showDropdown = false,
   });
 
   @override
@@ -20,46 +22,38 @@ class SearchFilterChip extends StatelessWidget {
     return Semantics(
       button: true,
       selected: active,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: active ? const Color(0xFF2E5E4E) : const Color(0xFFFAF7F2),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: active
-                  ? const Color(0xFF2E5E4E)
-                  : const Color(0xFF2E5E4E).withOpacity(0.3),
-            ),
+      child: Material(
+        color: active ? AppColors.brandPrimaryContainer : AppColors.surface,
+        shape: StadiumBorder(
+          side: BorderSide(
+            color: active ? AppColors.brandPrimary : AppColors.border,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(
-                  icon,
-                  size: 16,
-                  color: active ? Colors.white : const Color(0xFF1F1F1F),
-                ),
-                const SizedBox(width: 6),
-              ],
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: active ? Colors.white : const Color(0xFF1F1F1F),
-                ),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const StadiumBorder(),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 18, color: AppColors.brandPrimary),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                  Text(label, style: Theme.of(context).textTheme.labelLarge),
+                  if (showDropdown) ...[
+                    const SizedBox(width: AppSpacing.xs),
+                    const Icon(
+                      Icons.arrow_drop_down,
+                      color: AppColors.brandPrimary,
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.keyboard_arrow_down,
-                size: 14,
-                color: active ? Colors.white : const Color(0xFF2E5E4E),
-              ),
-            ],
+            ),
           ),
         ),
       ),

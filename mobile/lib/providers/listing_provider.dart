@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/item_model.dart';
+import '../models/listing_query.dart';
 import '../repositories/item_repository.dart';
 
 class ListingProvider extends ChangeNotifier {
@@ -19,12 +20,10 @@ class ListingProvider extends ChangeNotifier {
     return items;
   }
 
-  Future<List<ItemModel>> searchListingItems(
-    String query,
-    String category,
-  ) async {
-    return itemRepository.searchItems(query: query, category: category).first;
-  }
+  Future<List<ItemModel>> searchListingItems(ListingQuery query) =>
+      itemRepository.fetchListings(query);
+
+  Future<ItemModel> getItemById(String id) => itemRepository.fetchItemById(id);
 
   Future<List<ItemModel>> getMyItems({
     required bool sold,

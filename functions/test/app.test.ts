@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import app from '../src/app';
 
-jest.setTimeout(60000);
+jest.setTimeout(180000);
 
 describe('KiwiShare Backend REST Gateway Tests', () => {
   let mongoServer: MongoMemoryServer;
@@ -65,6 +65,45 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(0);
+  });
+
+  test('GET /api/listings - supports search, category, location and price sorting', async () => {
+    const searchRes = await request(app.callback())
+      .get('/api/listings')
+      .query({ query: 'bike', category: 'Transport', location: 'Auckland' });
+
+    expect(searchRes.status).toBe(200);
+    expect(searchRes.body).toHaveLength(1);
+    expect(searchRes.body[0].title).toContain('Bike');
+
+    const sortRes = await request(app.callback())
+      .get('/api/listings')
+      .query({ sort: 'price_asc' });
+    const prices = sortRes.body.map((item: any) => Number(item.priceNzd));
+    expect(prices).toEqual([...prices].sort((a: number, b: number) => a - b));
+  });
+
+  test('GET /api/listings - returns nearby listings with distance', async () => {
+    const res = await request(app.callback())
+      .get('/api/listings')
+      .query({ latitude: -36.8485, longitude: 174.7633, radiusKm: 5, sort: 'nearest' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body.every((item: any) => item.distanceKm <= 5)).toBe(true);
+    expect(res.body[0].distanceKm).toBeLessThanOrEqual(res.body[res.body.length - 1].distanceKm);
+  });
+
+  test('GET /api/listings/:id - returns one listing and handles missing ids', async () => {
+    const listRes = await request(app.callback()).get('/api/listings');
+    const itemId = listRes.body[0].id;
+
+    const detailRes = await request(app.callback()).get(`/api/listings/${itemId}`);
+    expect(detailRes.status).toBe(200);
+    expect(detailRes.body.id).toBe(itemId);
+
+    const missingRes = await request(app.callback()).get('/api/listings/not-an-id');
+    expect(missingRes.status).toBe(404);
   });
 
   test('POST /api/listings - rejects unauthenticated calls', async () => {

@@ -71,7 +71,7 @@ void main() {
       expect(authProvider.isLoggedIn, isFalse);
       expect(authProvider.currentUser, isNull);
       expect(navProvider.activeTab, equals(0));
-      expect(searchProvider.selectedCategory, equals('All NZ'));
+      expect(searchProvider.selectedCategory, isNull);
       expect(favProvider.favoriteIds.isEmpty, isTrue);
     });
 

@@ -11,6 +11,8 @@ import 'views/post/post_item_screen.dart';
 import 'views/messages/messages_screen.dart';
 import 'views/profile/profile_screen.dart';
 import 'views/auth/login_view.dart';
+import 'views/products/product_summary_screen.dart';
+import 'models/item_model.dart';
 
 // State and Repositories
 import 'providers/providers.dart';
@@ -113,6 +115,16 @@ class KiwiShareApp extends StatelessWidget {
               builder: (context, state) => const ProfileScreen(),
             ),
           ],
+        ),
+        GoRoute(
+          parentNavigatorKey: _rootNavigatorKey,
+          path: '/products/:id',
+          builder: (context, state) => ProductSummaryScreen(
+            itemId: state.pathParameters['id']!,
+            initialItem: state.extra is ItemModel
+                ? state.extra as ItemModel
+                : null,
+          ),
         ),
       ],
     );
