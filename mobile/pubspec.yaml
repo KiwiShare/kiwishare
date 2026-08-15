@@ -43,6 +43,7 @@ dependencies:
   google_sign_in: ^6.2.1
   http: ^1.2.0
   shared_preferences: ^2.2.2
+  image_picker: ^1.2.3
 
 
 dev_dependencies:
