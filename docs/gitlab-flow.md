@@ -8,7 +8,7 @@ This document outlines the branching strategy, development rules, hotfix workflo
 
 We use a simplified environment-based **GitLab Flow** consisting of three types of branches:
 
-1. **`main` (Production)**: Stores the stable, production-ready code. Commits here correspond to actual app releases and are tagged (`v*`).
+1. **`main` (Production)**: Stores the stable, production-ready code. Merging into `main` automatically triggers production release, tagging, and package building.
 2. **`pre` (Pre-production / Testing)**: Reflects the staging/testing environment. All new features must be merged and verified here before reaching production.
 3. **`feature/*` (Development)**: Short-lived branches used by developers to implement features, chores, or standard bug fixes.
 
@@ -17,7 +17,7 @@ We use a simplified environment-based **GitLab Flow** consisting of three types 
 ```mermaid
 graph TD
     %% Main Branches
-    MainBranch[main / master]
+    MainBranch[main]
     PreBranch[pre]
     FeatureBranch[feature/xxx]
 
@@ -25,12 +25,14 @@ graph TD
     Start([1. Start Feature]) -->|Checkout from main| FeatureBranch
     FeatureBranch -->|2. Develop & Commit| TestPre[3. Submit PR/MR to pre]
     TestPre -->|Merge & Deploy Staging| StagingTest{4. Test on Pre-prod}
-    StagingTest -->|Pass| ProdPR[5. Submit PR/MR to main]
-    ProdPR -->|Merge & Tag| MainBranch
+    StagingTest -->|Pass| ProdPR[5. Submit PR/MR from pre to main]
+    ProdPR -->|Merge PR into main| MainBranch
+    MainBranch -->|Automatic CI/CD| AutoRelease[Auto-Tag + GitHub Release + Render Deploy]
     
     %% Hotfix Flow
     MainBranch -->|Production Bug| HotfixBranch[hotfix/xxx]
     HotfixBranch -->|Fix & Verify| MergeMain[Merge to main]
+    MergeMain -->|Auto Release| AutoRelease
     MergeMain -->|Deploy Prod| SyncPre[Merge main back to pre]
     SyncPre -->|Update Staging| PreBranch
 ```
@@ -59,17 +61,19 @@ Create a Pull/Merge Request (PR/MR) targeting the **`pre`** branch.
 
 ### Step 3: Testing and Validation
 - Code analysis, formatting, and unit tests will run automatically on the PR to `pre`.
-- Once merged to `pre`, build artifacts are compiled and published to the staging environment (e.g., Firebase App Distribution for the mobile app, and Render staging for the API).
+- Once merged to `pre`, the staging environment is updated (Firebase App Distribution for testers, Render staging for backend API).
 - Product owners, QA, or team members test the feature on `pre`.
 
 ### Step 4: Promote to Production (`main`)
 After testing is complete and the feature is confirmed stable:
 1. Submit a PR/MR from **`pre`** to **`main`**.
-2. Once approved and merged, cut the new release tag from `main`:
-   ```bash
-   pnpm run release
-   git push --follow-tags origin main
-   ```
+2. Once the PR is approved and merged into `main`:
+   - **GitHub Actions automatically runs the Release Pipeline**:
+     - Calculates the new semantic version and creates the release tag (`vX.X.X`).
+     - Builds the Android APK (`KiwiShare-Android-vX.X.X.apk`) and iOS Package (`KiwiShare-iOS-vX.X.X.zip`).
+     - Publishes the GitHub Release with downloadable packages and release notes.
+     - Uploads the Android build to Firebase App Distribution.
+   - **Render automatically detects the push to `main` and redeploys the backend API**.
 
 ---
 
@@ -86,7 +90,7 @@ If a critical bug is discovered in production (`main`), follow this path to reso
 2. **Implement and test the fix** locally.
 3. **Submit a PR/MR to `main`**:
    - Merge the PR to `main` after review.
-   - Tag the new hotfix release (e.g., `v1.0.1` or `v1.0.2-patch`) to deploy the fix to production immediately.
+   - GitHub Actions will automatically tag the hotfix release (e.g., `v1.0.1`) and deploy it immediately.
 
 ---
 
