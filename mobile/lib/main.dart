@@ -44,10 +44,13 @@ void main() async {
       providers: [
         ChangeNotifierProvider(
           create: (_) => AuthProvider(userRepository: RestUserRepository()),
+          //@@@For mock test: uncomment below code to login with mock user
+          // create: (_) => AuthProvider(userRepository: MockUserRepository()),
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => FavoritesProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(
           create: (_) => ListingProvider(itemRepository: RestItemRepository()),
         ),
@@ -114,10 +117,23 @@ class KiwiShareApp extends StatelessWidget {
       ],
     );
 
+    final themeMode = context.watch<ThemeProvider>().themeMode;
+    final darkScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF4E8878),
+      brightness: Brightness.dark,
+    );
+
     return MaterialApp.router(
       title: 'KiwiShare - Buy. Sell. Share. Sustain.',
       debugShowCheckedModeBanner: false,
+      themeMode: themeMode,
       theme: buildKiwiShareTheme(),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: darkScheme,
+        scaffoldBackgroundColor: darkScheme.surface,
+        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+      ),
       routerConfig: router,
     );
   }
