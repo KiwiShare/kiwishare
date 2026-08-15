@@ -89,8 +89,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Remote Config: Dynamic Announcement Banner (Promotions, Events)
                 Builder(
                   builder: (context) {
-                    final banner =
-                        RemoteConfigService.instance.getJson('announcement_banner');
+                    final banner = RemoteConfigService.instance.getJson(
+                      'announcement_banner',
+                    );
                     final isEnabled = banner['enabled'] == true;
                     final message = banner['message']?.toString() ?? '';
 
