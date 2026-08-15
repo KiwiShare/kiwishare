@@ -50,7 +50,8 @@ class RemoteConfigService {
 
       // Debug mode uses 0-second fetch interval for immediate testing
       // Release mode defaults to 1-hour cache
-      final interval = minimumFetchInterval ??
+      final interval =
+          minimumFetchInterval ??
           (kDebugMode ? Duration.zero : const Duration(hours: 1));
 
       await _remoteConfig!.setConfigSettings(
@@ -65,14 +66,18 @@ class RemoteConfigService {
 
       // Listen for real-time config updates if supported
       _remoteConfig!.onConfigUpdated.listen((event) async {
-        debugPrint('🔥 [RemoteConfig] Config updated for keys: ${event.updatedKeys}');
+        debugPrint(
+          '🔥 [RemoteConfig] Config updated for keys: ${event.updatedKeys}',
+        );
         await _remoteConfig!.activate();
       });
 
       _isInitialized = true;
       debugPrint('✅ [RemoteConfig] Initialized successfully.');
     } catch (e) {
-      debugPrint('⚠️ [RemoteConfig] Failed to initialize: $e (Falling back to in-app defaults)');
+      debugPrint(
+        '⚠️ [RemoteConfig] Failed to initialize: $e (Falling back to in-app defaults)',
+      );
     }
   }
 
@@ -99,7 +104,9 @@ class RemoteConfigService {
       return defaultValue ?? (_defaults[key]?.toString() ?? '');
     }
     final value = _remoteConfig!.getString(key);
-    return value.isNotEmpty ? value : (defaultValue ?? (_defaults[key]?.toString() ?? ''));
+    return value.isNotEmpty
+        ? value
+        : (defaultValue ?? (_defaults[key]?.toString() ?? ''));
   }
 
   /// Get Integer configuration with fallback
@@ -111,7 +118,10 @@ class RemoteConfigService {
   }
 
   /// Get parsed JSON configuration with fallback
-  Map<String, dynamic> getJson(String key, {Map<String, dynamic>? defaultValue}) {
+  Map<String, dynamic> getJson(
+    String key, {
+    Map<String, dynamic>? defaultValue,
+  }) {
     final rawString = getString(key);
     if (rawString.isEmpty) return defaultValue ?? {};
     try {
