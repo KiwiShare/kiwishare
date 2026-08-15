@@ -6,6 +6,10 @@ import '../config/api_config.dart';
 abstract class ItemRepository {
   Future<List<ItemModel>> fetchPopularItems();
   Stream<List<ItemModel>> searchItems({String? query, String? category});
+  Future<List<ItemModel>> fetchMyItems({
+    required bool sold,
+    required String token,
+  });
 }
 
 class MockItemRepository implements ItemRepository {
@@ -91,6 +95,21 @@ class MockItemRepository implements ItemRepository {
   ];
 
   @override
+  Future<List<ItemModel>> fetchMyItems({
+    required bool sold,
+    required String token,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return _allMockItems
+        .where(
+          (item) => sold
+              ? item.status == ItemStatus.sold
+              : item.status != ItemStatus.sold,
+        )
+        .toList();
+  }
+
+  @override
   Future<List<ItemModel>> fetchPopularItems() async {
     // Simulate 800ms network delay
     await Future.delayed(const Duration(milliseconds: 800));
@@ -135,6 +154,27 @@ class MockItemRepository implements ItemRepository {
 }
 
 class RestItemRepository implements ItemRepository {
+  @override
+  Future<List<ItemModel>> fetchMyItems({
+    required bool sold,
+    required String token,
+  }) async {
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/users/me/listings',
+    ).replace(queryParameters: {'status': sold ? 'sold' : 'active,reserved'});
+    final response = await http.get(
+      uri,
+      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch your listings.');
+    }
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => ItemModel.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   @override
   Future<List<ItemModel>> fetchPopularItems() async {
     final response = await http.get(

@@ -135,4 +135,23 @@ class AuthProvider extends ChangeNotifier {
 
     notifyListeners();
   }
+
+  Future<void> updateDisplayName(String value) async {
+    final name = value.trim();
+    if (name.length < 2 || name.length > 30) {
+      throw ArgumentError('Name must be between 2 and 30 characters.');
+    }
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to edit your profile.');
+    }
+    final updated = await userRepository.updateProfile(
+      token: token,
+      displayName: name,
+    );
+    _currentUser = updated;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('current_user', jsonEncode(updated.toJson()));
+    notifyListeners();
+  }
 }

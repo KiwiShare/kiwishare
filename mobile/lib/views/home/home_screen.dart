@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/item_model.dart';
 import '../../providers/providers.dart';
+import '../../services/remote_config_service.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/category_navigation_button.dart';
@@ -83,7 +84,54 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+
+                // Remote Config: Dynamic Announcement Banner (Promotions, Events)
+                Builder(
+                  builder: (context) {
+                    final banner = RemoteConfigService.instance.getJson(
+                      'announcement_banner',
+                    );
+                    final isEnabled = banner['enabled'] == true;
+                    final message = banner['message']?.toString() ?? '';
+
+                    if (isEnabled && message.isNotEmpty) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2F0D9), // Light Green
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF7BAA7A)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.campaign_outlined,
+                              color: Color(0xFF2E5E4E),
+                              size: 22,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                message,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF2E5E4E),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
 
                 // Greeting Section - reactively bound to AppState login status
                 isLoggedIn && currentUser != null
