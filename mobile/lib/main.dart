@@ -18,6 +18,7 @@ import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'theme/app_theme.dart';
 
 // Global keys for routing
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
@@ -96,7 +97,7 @@ class KiwiShareApp extends StatelessWidget {
             GoRoute(
               path: '/post',
               builder: (context, state) => PostItemScreen(
-                onViewListing: () {
+                onCancel: () {
                   context.go('/home');
                 },
               ),
@@ -115,11 +116,6 @@ class KiwiShareApp extends StatelessWidget {
     );
 
     final themeMode = context.watch<ThemeProvider>().themeMode;
-    final lightScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF064B3A),
-      brightness: Brightness.light,
-      surface: const Color(0xFFFBFAF6),
-    );
     final darkScheme = ColorScheme.fromSeed(
       seedColor: const Color(0xFF4E8878),
       brightness: Brightness.dark,
@@ -129,12 +125,7 @@ class KiwiShareApp extends StatelessWidget {
       title: 'KiwiShare - Buy. Sell. Share. Sustain.',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: lightScheme,
-        scaffoldBackgroundColor: lightScheme.surface,
-        textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
-      ),
+      theme: buildKiwiShareTheme(),
       darkTheme: ThemeData(
         useMaterial3: true,
         colorScheme: darkScheme,
@@ -196,6 +187,11 @@ class KiwiShareShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final location = GoRouterState.of(context).uri.toString();
+    if (location.startsWith('/post')) {
+      return child;
+    }
+
     final activeIndex = _getSelectedIndex(context);
     final authProvider = Provider.of<AuthProvider>(context);
 
