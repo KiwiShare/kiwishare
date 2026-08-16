@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/remote_config_service.dart';
@@ -397,7 +398,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                         itemCount: items.length,
                         itemBuilder: (context, index) {
-                          return ItemCard(item: items[index]);
+                          final item = items[index];
+                          return ItemCard(
+                            item: item,
+                            onTap: () => context.push('/items/${item.id}'),
+                          );
                         },
                       );
                     }

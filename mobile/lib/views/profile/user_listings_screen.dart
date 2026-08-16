@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/item_model.dart';
@@ -63,7 +64,13 @@ class UserListingsScreen extends StatelessWidget {
                     childAspectRatio: 0.76,
                   ),
                   itemCount: items.length,
-                  itemBuilder: (context, index) => ItemCard(item: items[index]),
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return ItemCard(
+                      item: item,
+                      onTap: () => context.push('/items/${item.id}'),
+                    );
+                  },
                 );
               },
             ),

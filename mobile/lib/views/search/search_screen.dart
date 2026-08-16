@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/providers.dart';
@@ -362,7 +363,11 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ),
                             itemCount: items.length,
                             itemBuilder: (context, index) {
-                              return ItemCard(item: items[index]);
+                              final item = items[index];
+                              return ItemCard(
+                                item: item,
+                                onTap: () => context.push('/items/${item.id}'),
+                              );
                             },
                           ),
                         ),

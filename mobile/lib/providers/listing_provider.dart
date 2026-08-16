@@ -19,6 +19,8 @@ class ListingProvider extends ChangeNotifier {
     return items;
   }
 
+  Future<ItemModel> getItemById(String id) => itemRepository.fetchItemById(id);
+
   Future<List<ItemModel>> searchListingItems(
     String query,
     String category,

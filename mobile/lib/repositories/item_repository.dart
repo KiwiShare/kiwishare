@@ -5,6 +5,7 @@ import '../config/api_config.dart';
 
 abstract class ItemRepository {
   Future<List<ItemModel>> fetchPopularItems();
+  Future<ItemModel> fetchItemById(String id);
   Stream<List<ItemModel>> searchItems({String? query, String? category});
   Future<List<ItemModel>> fetchMyItems({
     required bool sold,
@@ -95,6 +96,15 @@ class MockItemRepository implements ItemRepository {
   ];
 
   @override
+  Future<ItemModel> fetchItemById(String id) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return _allMockItems.firstWhere(
+      (item) => item.id == id,
+      orElse: () => throw const ItemNotFoundException(),
+    );
+  }
+
+  @override
   Future<List<ItemModel>> fetchMyItems({
     required bool sold,
     required String token,
@@ -154,6 +164,25 @@ class MockItemRepository implements ItemRepository {
 }
 
 class RestItemRepository implements ItemRepository {
+  @override
+  Future<ItemModel> fetchItemById(String id) async {
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/listings/$id'),
+      headers: {'Accept': 'application/json'},
+    );
+    if (response.statusCode == 404) {
+      throw const ItemNotFoundException();
+    }
+    if (response.statusCode != 200) {
+      throw const ItemRepositoryException(
+        'We could not load this item. Check your connection and try again.',
+      );
+    }
+    return ItemModel.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
   @override
   Future<List<ItemModel>> fetchMyItems({
     required bool sold,
@@ -224,4 +253,17 @@ class RestItemRepository implements ItemRepository {
       throw Exception('Failed to fetch listings from server.');
     }
   }
+}
+
+class ItemRepositoryException implements Exception {
+  const ItemRepositoryException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class ItemNotFoundException extends ItemRepositoryException {
+  const ItemNotFoundException() : super('This item is no longer available.');
 }
