@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/product_location_service.dart';
+import '../../services/remote_config_service.dart';
 import '../../theme/app_theme.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
@@ -268,6 +269,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final filters = context.watch<SearchProvider>();
     final listingProvider = context.read<ListingProvider>();
+    final aiSearchEnabled = should(FeatureFlag.aiSearch);
 
     return PopScope(
       canPop: filters.previewItemId == null,
@@ -328,7 +330,12 @@ class _SearchScreenState extends State<SearchScreen> {
                   decoration: InputDecoration(
                     labelText: 'Search products',
                     hintText: 'Search by item name or category',
-                    prefixIcon: const Icon(Icons.search),
+                    prefixIcon: Icon(
+                      aiSearchEnabled ? Icons.auto_awesome : Icons.search,
+                    ),
+                    helperText: aiSearchEnabled
+                        ? 'Smart search is on; regular keyword search remains available.'
+                        : null,
                     suffixIcon: _searchController.text.isEmpty
                         ? IconButton(
                             key: const Key('search-filter-button'),
