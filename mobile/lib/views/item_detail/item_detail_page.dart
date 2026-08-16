@@ -88,8 +88,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       );
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
-      if (context.canPop()) {
-        context.pop();
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.pop();
       } else {
         context.go('/home');
       }

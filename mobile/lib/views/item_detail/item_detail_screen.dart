@@ -23,12 +23,14 @@ class ItemDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final favoriteProvider = context.watch<FavoritesProvider>();
     final isFavorite = favoriteProvider.isFavorite(item.id);
+    final useAccessibleHeader = MediaQuery.textScalerOf(context).scale(16) > 24;
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
-        title: const Text('Item details'),
+        toolbarHeight: useAccessibleHeader ? 88 : kToolbarHeight,
+        title: const Text('Item details', maxLines: 2),
         actions: [
           IconButton(
             key: const Key('detail_favorite_button'),
@@ -416,11 +418,13 @@ class _Badge extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: foreground),
         const SizedBox(width: AppSpacing.xs),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: foreground,
-            fontWeight: FontWeight.w600,
+        Flexible(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: foreground,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
