@@ -21,6 +21,22 @@ class ListingProvider extends ChangeNotifier {
 
   Future<ItemModel> getItemById(String id) => itemRepository.fetchItemById(id);
 
+  Future<ItemModel> updateItem({
+    required ItemModel item,
+    required String token,
+  }) async {
+    final updated = await itemRepository.updateItem(item: item, token: token);
+    final cachedItems = _cachedPopularItems;
+    if (cachedItems != null) {
+      final index = cachedItems.indexWhere(
+        (candidate) => candidate.id == item.id,
+      );
+      if (index != -1) cachedItems[index] = updated;
+    }
+    notifyListeners();
+    return updated;
+  }
+
   Future<List<ItemModel>> searchListingItems(
     String query,
     String category,

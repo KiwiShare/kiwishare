@@ -6,6 +6,10 @@ import '../config/api_config.dart';
 abstract class ItemRepository {
   Future<List<ItemModel>> fetchPopularItems();
   Future<ItemModel> fetchItemById(String id);
+  Future<ItemModel> updateItem({
+    required ItemModel item,
+    required String token,
+  });
   Stream<List<ItemModel>> searchItems({String? query, String? category});
   Future<List<ItemModel>> fetchMyItems({
     required bool sold,
@@ -105,6 +109,20 @@ class MockItemRepository implements ItemRepository {
   }
 
   @override
+  Future<ItemModel> updateItem({
+    required ItemModel item,
+    required String token,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final index = _allMockItems.indexWhere(
+      (candidate) => candidate.id == item.id,
+    );
+    if (index == -1) throw const ItemNotFoundException();
+    _allMockItems[index] = item;
+    return item;
+  }
+
+  @override
   Future<List<ItemModel>> fetchMyItems({
     required bool sold,
     required String token,
@@ -181,6 +199,44 @@ class RestItemRepository implements ItemRepository {
     return ItemModel.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
     );
+  }
+
+  @override
+  Future<ItemModel> updateItem({
+    required ItemModel item,
+    required String token,
+  }) async {
+    final response = await http.put(
+      Uri.parse('${ApiConfig.baseUrl}/api/listings/${item.id}'),
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'title': item.title,
+        'description': item.description,
+        'condition': item.condition,
+        'category': item.category,
+        'priceNzd': item.priceNzd,
+        'location': item.location,
+        'negotiable': item.negotiable,
+        'isSustainable': item.isSustainable,
+      }),
+    );
+    if (response.statusCode == 404) throw const ItemNotFoundException();
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw const ItemAuthorizationException(
+        'You can only edit your own listing.',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw const ItemRepositoryException(
+        'Your changes could not be saved. Check the details and try again.',
+      );
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return ItemModel.fromJson(data['item'] as Map<String, dynamic>);
   }
 
   @override
@@ -266,4 +322,8 @@ class ItemRepositoryException implements Exception {
 
 class ItemNotFoundException extends ItemRepositoryException {
   const ItemNotFoundException() : super('This item is no longer available.');
+}
+
+class ItemAuthorizationException extends ItemRepositoryException {
+  const ItemAuthorizationException(super.message);
 }

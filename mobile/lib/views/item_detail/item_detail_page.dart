@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../models/item_model.dart';
 import '../../providers/listing_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../repositories/item_repository.dart';
 import '../../theme/app_theme.dart';
 import 'item_detail_screen.dart';
+import 'item_edit_screen.dart';
 
 class ItemDetailPage extends StatefulWidget {
   const ItemDetailPage({super.key, required this.itemId});
@@ -30,6 +32,15 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
   void _retry() {
     setState(() => _itemFuture = _loadItem());
+  }
+
+  Future<void> _editItem(ItemModel item) async {
+    final updatedItem = await Navigator.of(context).push<ItemModel>(
+      MaterialPageRoute(builder: (context) => ItemEditScreen(item: item)),
+    );
+    if (updatedItem != null && mounted) {
+      setState(() => _itemFuture = Future.value(updatedItem));
+    }
   }
 
   @override
@@ -86,7 +97,13 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
           );
         }
 
-        return ItemDetailScreen(item: snapshot.data!);
+        final item = snapshot.data!;
+        final currentUserId = context.watch<AuthProvider>().currentUser?.id;
+        final isOwner = currentUserId != null && item.ownerId == currentUserId;
+        return ItemDetailScreen(
+          item: item,
+          onEdit: isOwner ? () => _editItem(item) : null,
+        );
       },
     );
   }

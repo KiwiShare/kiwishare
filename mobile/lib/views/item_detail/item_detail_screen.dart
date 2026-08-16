@@ -6,9 +6,10 @@ import '../../providers/favorites_provider.dart';
 import '../../theme/app_theme.dart';
 
 class ItemDetailScreen extends StatelessWidget {
-  const ItemDetailScreen({super.key, required this.item});
+  const ItemDetailScreen({super.key, required this.item, this.onEdit});
 
   final ItemModel item;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +22,16 @@ class ItemDetailScreen extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         title: const Text('Item details'),
         actions: [
+          if (onEdit != null)
+            IconButton(
+              key: const Key('detail_edit_button'),
+              tooltip: 'Edit listing',
+              onPressed: onEdit,
+              icon: const Icon(
+                Icons.edit_outlined,
+                color: AppColors.brandPrimary,
+              ),
+            ),
           IconButton(
             key: const Key('detail_favorite_button'),
             tooltip: isFavorite ? 'Remove from saved items' : 'Save item',

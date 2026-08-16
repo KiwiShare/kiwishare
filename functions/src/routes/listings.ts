@@ -94,6 +94,81 @@ router.get('/listings/:id', async (ctx) => {
   ctx.body = formatListing(item);
 });
 
+router.put('/listings/:id', authenticateToken, async (ctx) => {
+  const { id } = ctx.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Listing item not found.' };
+    return;
+  }
+
+  const item = await Item.findById(id);
+  if (!item || !['active', 'reserved'].includes(item.status)) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Listing item not found.' };
+    return;
+  }
+
+  const currentOwnerId = item.sellerId?.toString() || item.ownerId;
+  if (currentOwnerId !== ctx.state.user.id) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'You can only edit your own listing.' };
+    return;
+  }
+
+  const { title, description, condition, category, priceNzd, location, negotiable, isSustainable } =
+    ctx.request.body as any;
+  const normalizedTitle = typeof title === 'string' ? title.trim() : '';
+  const normalizedDescription = typeof description === 'string' ? description.trim() : '';
+  const normalizedCategory = typeof category === 'string' ? category.trim() : '';
+  const normalizedPrice = typeof priceNzd === 'string' ? priceNzd.trim() : '';
+  const normalizedLocation = typeof location === 'string' ? location.trim() : '';
+  const validConditions = ['new', 'like_new', 'good', 'fair', 'poor'];
+  const priceValue = Number(normalizedPrice);
+
+  if (
+    normalizedTitle.length < 3 ||
+    normalizedTitle.length > 100 ||
+    normalizedDescription.length < 3 ||
+    normalizedDescription.length > 2000 ||
+    !normalizedCategory ||
+    !validConditions.includes(condition) ||
+    !/^\d+(\.\d{1,2})?$/.test(normalizedPrice) ||
+    !Number.isFinite(priceValue) ||
+    priceValue <= 0 ||
+    !normalizedLocation ||
+    typeof negotiable !== 'boolean' ||
+    typeof isSustainable !== 'boolean'
+  ) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Please provide valid listing details.' };
+    return;
+  }
+
+  const locationParts = normalizedLocation.split(',').map((part: string) => part.trim()).filter(Boolean);
+  const city = locationParts[locationParts.length - 1];
+  const suburb = locationParts.length > 1 ? locationParts.slice(0, -1).join(', ') : '';
+
+  item.title = normalizedTitle;
+  item.description = normalizedDescription;
+  item.condition = condition;
+  item.category = normalizedCategory;
+  item.price = Math.round(priceValue * 100);
+  item.priceNzd = normalizedPrice;
+  item.location = {
+    city,
+    suburb,
+    coordinates: item.location?.coordinates
+  };
+  item.negotiable = negotiable;
+  item.isSustainable = isSustainable;
+  await item.save();
+  await item.populate('sellerId', 'displayName avatarUrl rating reviewCount trustScore isVerified');
+
+  ctx.status = 200;
+  ctx.body = { status: 'updated', item: formatListing(item) };
+});
+
 router.post('/listings', authenticateToken, async (ctx) => {
   const { title, priceNzd, location, imageUrl, isSustainable, category } = ctx.request.body as any;
   const ownerId = ctx.state.user.id;
