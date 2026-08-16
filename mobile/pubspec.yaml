@@ -45,6 +45,8 @@ dependencies:
   shared_preferences: ^2.2.2
   firebase_remote_config: ^4.4.7
   image_picker: ^1.2.3
+  geocoding: ^5.0.0
+  geolocator: ^12.0.0
 
 
 dev_dependencies:

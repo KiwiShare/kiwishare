@@ -30,6 +30,8 @@
 	<string>KiwiShare uses the camera so you can photograph items you want to list.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>KiwiShare accesses your photo library so you can add listing photos.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>KiwiShare uses your location to show the pickup area for your listing.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
