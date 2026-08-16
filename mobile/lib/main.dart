@@ -11,6 +11,8 @@ import 'views/post/post_item_screen.dart';
 import 'views/messages/messages_screen.dart';
 import 'views/profile/profile_screen.dart';
 import 'views/auth/login_view.dart';
+import 'views/products/product_detail_screen.dart';
+import 'models/item_model.dart';
 
 // State and Repositories
 import 'providers/providers.dart';
@@ -100,7 +102,10 @@ class KiwiShareApp extends StatelessWidget {
             ),
             GoRoute(
               path: '/search',
-              builder: (context, state) => const SearchScreen(),
+              builder: (context, state) => SearchScreen(
+                requestNearby: state.uri.queryParameters['nearby'] == 'true',
+                openMap: state.uri.queryParameters['map'] == 'true',
+              ),
             ),
             GoRoute(
               path: '/post',
@@ -119,6 +124,13 @@ class KiwiShareApp extends StatelessWidget {
               builder: (context, state) => const ProfileScreen(),
             ),
           ],
+        ),
+        GoRoute(
+          parentNavigatorKey: _rootNavigatorKey,
+          path: '/items/:itemId',
+          builder: (context, state) => ProductDetailScreen(
+            item: state.extra is ItemModel ? state.extra as ItemModel : null,
+          ),
         ),
       ],
     );

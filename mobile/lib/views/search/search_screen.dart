@@ -1,17 +1,33 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../../providers/providers.dart';
+
 import '../../models/item_model.dart';
-import '../../services/remote_config_service.dart';
+import '../../providers/providers.dart';
+import '../../services/product_location_service.dart';
+import '../../theme/app_theme.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/filter_chip.dart';
-import 'widgets/category_picker_sheet.dart';
+import 'widgets/product_filter_sheet.dart';
+import 'widgets/product_map_view.dart';
+import 'widgets/product_preview_card.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  final ProductLocationService? locationService;
+  final ValueChanged<ItemModel>? onOpenItem;
+  final bool requestNearby;
+  final bool openMap;
+
+  const SearchScreen({
+    super.key,
+    this.locationService,
+    this.onOpenItem,
+    this.requestNearby = false,
+    this.openMap = false,
+  });
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -19,418 +35,571 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   late final TextEditingController _searchController;
-  Timer? _debounceTimer;
-  String _currentQuery = 'Camping'; // Default query from the mockup
+  late final ProductLocationService _locationService;
+  Timer? _debounce;
+  Future<List<ItemModel>>? _productsFuture;
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
-    _searchController = TextEditingController(text: _currentQuery);
+    _searchController = TextEditingController();
+    _locationService = widget.locationService ?? DeviceProductLocationService();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    final filters = context.read<SearchProvider>();
+    _searchController.text = filters.query;
+    if (widget.openMap) filters.setViewMode(ProductViewMode.map);
+    if (widget.requestNearby) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showLocationPicker();
+      });
+    }
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
-    _debounceTimer?.cancel();
     super.dispose();
   }
 
+  Future<List<ItemModel>> _loadProducts(ListingProvider provider) {
+    return _productsFuture ??= provider.searchListingItems('', 'All');
+  }
+
   void _onSearchChanged(String value) {
-    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      setState(() {
-        _currentQuery = value;
-      });
+    setState(() {});
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) context.read<SearchProvider>().setQuery(value);
     });
   }
 
   void _clearSearch() {
     _searchController.clear();
-    setState(() {
-      _currentQuery = '';
-    });
+    context.read<SearchProvider>().setQuery('');
+    setState(() {});
   }
 
-  void _showCategoryPicker() {
-    showModalBottomSheet(
+  List<ItemModel> _applyFilters(
+    List<ItemModel> source,
+    SearchProvider filters,
+  ) {
+    final query = filters.query.toLowerCase();
+    final products = source.where((item) {
+      final queryMatches =
+          query.isEmpty ||
+          item.title.toLowerCase().contains(query) ||
+          item.category.toLowerCase().contains(query);
+      final categoryMatches =
+          filters.selectedCategory == 'All' ||
+          item.category.toLowerCase() ==
+              filters.selectedCategory.toLowerCase() ||
+          (filters.selectedCategory == 'Transport' &&
+              item.category.toLowerCase() == 'vehicle');
+      final locationMatches =
+          filters.selectedLocation == 'All NZ' ||
+          item.location.toLowerCase().contains(
+            filters.selectedLocation.toLowerCase(),
+          );
+      final sustainabilityMatches =
+          !filters.sustainableOnly || item.isSustainable;
+      final minimumMatches =
+          filters.minimumPrice == null ||
+          item.numericPrice >= filters.minimumPrice!;
+      final maximumMatches =
+          filters.maximumPrice == null ||
+          item.numericPrice <= filters.maximumPrice!;
+      return queryMatches &&
+          categoryMatches &&
+          locationMatches &&
+          sustainabilityMatches &&
+          minimumMatches &&
+          maximumMatches;
+    }).toList();
+
+    switch (filters.selectedSort) {
+      case ProductSort.recommended:
+        break;
+      case ProductSort.priceLowToHigh:
+        products.sort((a, b) => a.numericPrice.compareTo(b.numericPrice));
+      case ProductSort.priceHighToLow:
+        products.sort((a, b) => b.numericPrice.compareTo(a.numericPrice));
+    }
+    return products;
+  }
+
+  Future<void> _useCurrentLocation() async {
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+      context.read<SearchProvider>()
+        ..setLocation(
+          location.city,
+          nearYou: true,
+          latitude: location.latitude,
+          longitude: location.longitude,
+        )
+        ..setViewMode(ProductViewMode.map);
+    } on ProductLocationException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your location is unavailable. Choose a city to keep browsing.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showLocationPicker() async {
+    final filters = context.read<SearchProvider>();
+    await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFFFAF7F2), // Off-White sheet background
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return const CategoryPickerSheet();
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final searchProvider = Provider.of<SearchProvider>(context);
-    final listingProvider = Provider.of<ListingProvider>(context);
-    final activeCategory = searchProvider.selectedCategory;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAF7F2), // Off-White Scaffold background
-      body: SafeArea(
-        child: Column(
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
           children: [
-            // Header Bar
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Color(0xFF2E5E4E),
-                      size: 28,
-                    ),
-                    onPressed: () {},
-                    tooltip: 'Back',
-                  ),
-                  Text(
-                    'Search',
-                    style: GoogleFonts.inter(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF2E5E4E), // Sage Green Title
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.tune,
-                      color: Color(0xFF2E5E4E),
-                      size: 28,
-                    ),
-                    onPressed: () {},
-                    tooltip: 'Tune',
-                  ),
-                ],
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Text(
+                'Choose location',
+                style: Theme.of(context).textTheme.headlineMedium,
               ),
             ),
-
-            // Search Bar Input
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFAF7F2), // Off-White inside
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(
-                      0xFF2E5E4E,
-                    ).withOpacity(0.2), // Light green border
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(
-                        0xFF1F1F1F,
-                      ).withOpacity(0.04), // Charcoal shadow
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      color: Color(0xFF2E5E4E),
-                    ), // Sage Green
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(
-                              Icons.close,
-                              color: Color(0xFF2E5E4E),
-                            ),
-                            onPressed: _clearSearch,
-                            tooltip: 'Clear search',
-                          )
-                        : null,
-                    hintText: 'Search for items or categories',
-                    hintStyle: GoogleFonts.inter(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.5),
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  style: GoogleFonts.inter(
-                    color: const Color(0xFF1F1F1F),
-                    fontSize: 16,
-                  ),
-                ),
+            const SizedBox(height: AppSpacing.sm),
+            ListTile(
+              key: const Key('near-you-option'),
+              leading: const Icon(Icons.my_location),
+              title: const Text('Use my current location'),
+              subtitle: const Text(
+                'Uses an approximate location once; background tracking is off',
               ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _useCurrentLocation();
+              },
             ),
-
-            // Filters Horizontal Row
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  SearchFilterChip(
-                    label: 'All NZ',
-                    active: false,
-                    onTap: () {},
-                  ),
-                  const SizedBox(width: 8),
-                  SearchFilterChip(
-                    label: 'Category: $activeCategory',
-                    active: activeCategory != 'All NZ',
-                    onTap: _showCategoryPicker,
-                  ),
-                  if (should(FeatureFlag.aiSearch)) ...[
-                    const SizedBox(width: 8),
-                    SearchFilterChip(
-                      label: '✨ AI Match',
-                      active: true,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'AI Semantic Matching active for this search.',
-                            ),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                  if (should(FeatureFlag.itemDelivery)) ...[
-                    const SizedBox(width: 8),
-                    SearchFilterChip(
-                      label: '🚚 Courier Delivery',
-                      active: false,
-                      onTap: () {},
-                    ),
-                  ],
-                  const SizedBox(width: 8),
-                  SearchFilterChip(
-                    label: 'Sort: Popular',
-                    active: false,
-                    onTap: () {},
-                  ),
-                  const SizedBox(width: 8),
-                  SearchFilterChip(
-                    label: 'Save',
-                    active: false,
-                    onTap: () {},
-                    icon: Icons.favorite_border,
-                  ),
-                ],
-              ),
-            ),
-
-            // Grid results & Loaders via FutureBuilder
-            Expanded(
-              child: FutureBuilder<List<ItemModel>>(
-                future: listingProvider.searchListingItems(
-                  _currentQuery,
-                  activeCategory,
+            for (final location in SearchProvider.locations)
+              ListTile(
+                leading: Icon(
+                  location == 'All NZ' ? Icons.public : Icons.location_city,
                 ),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return GridView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 0.76,
-                          ),
-                      itemCount: 6,
-                      itemBuilder: (context, index) => const ItemCardSkeleton(),
-                    );
-                  } else if (snapshot.hasError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              size: 48,
-                              color: Colors.red,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Error matching results',
-                              style: GoogleFonts.inter(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1F1F1F),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                setState(() {});
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2E5E4E),
-                                foregroundColor: Colors.white,
-                                minimumSize: const Size(120, 44),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Tap to Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  } else {
-                    final items = snapshot.data ?? [];
-                    if (items.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.search_off,
-                                size: 64,
-                                color: Color(0xFF2E5E4E),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No listings found',
-                                style: GoogleFonts.inter(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF1F1F1F),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Try adjusting your search filters or searching for something else.',
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(
-                                  fontSize: 14,
-                                  color: const Color(
-                                    0xFF1F1F1F,
-                                  ).withOpacity(0.6),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 8,
-                          ),
-                          child: Text(
-                            '${items.length} results',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1F1F1F).withOpacity(0.8),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GridView.builder(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                  childAspectRatio: 0.76,
-                                ),
-                            itemCount: items.length,
-                            itemBuilder: (context, index) {
-                              return ItemCard(item: items[index]);
-                            },
-                          ),
-                        ),
-                      ],
-                    );
-                  }
+                title: Text(location),
+                trailing:
+                    filters.selectedLocation == location && !filters.isNearYou
+                    ? const Icon(Icons.check, color: AppColors.brandPrimary)
+                    : null,
+                onTap: () {
+                  filters.setLocation(location);
+                  Navigator.pop(sheetContext);
                 },
               ),
-            ),
-
-            // Safe shopping banner at the bottom
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFAF7F2), // Off-White
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFF2E5E4E).withOpacity(0.2),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.03),
-                      blurRadius: 6,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.verified_user,
-                      color: Color(0xFF2E5E4E),
-                      size: 28,
-                    ), // Sage Green
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Shop safely, meet locally.',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1F1F1F),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Choose public places and build trust.',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: const Color(0xFF1F1F1F).withOpacity(0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right, color: Color(0xFF2E5E4E)),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
     );
   }
+
+  Future<void> _showSortPicker() async {
+    final filters = context.read<SearchProvider>();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Sort products',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+              ),
+            ),
+            for (final sort in ProductSort.values)
+              RadioListTile<ProductSort>(
+                value: sort,
+                groupValue: filters.selectedSort,
+                title: Text(sort.label),
+                onChanged: (value) {
+                  if (value != null) filters.setSort(value);
+                  Navigator.pop(sheetContext);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showFilters() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => ProductFilterSheet(filters: context.read<SearchProvider>()),
+  );
+
+  void _openProduct(ItemModel item) {
+    if (widget.onOpenItem != null) {
+      widget.onOpenItem!(item);
+      return;
+    }
+    context.push('/items/${item.id}', extra: item);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filters = context.watch<SearchProvider>();
+    final listingProvider = context.read<ListingProvider>();
+
+    return PopScope(
+      canPop: filters.previewItemId == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && filters.previewItemId != null) {
+          filters.selectPreview(null);
+        }
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Products',
+                        style: Theme.of(context).textTheme.headlineLarge,
+                      ),
+                    ),
+                    TextButton.icon(
+                      key: const Key('products-location-button'),
+                      onPressed: _showLocationPicker,
+                      icon: Icon(
+                        filters.isNearYou
+                            ? Icons.my_location
+                            : Icons.location_on_outlined,
+                      ),
+                      label: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 128),
+                        child: Text(
+                          filters.isNearYou
+                              ? 'Near you · ${filters.selectedLocation}'
+                              : filters.selectedLocation,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: TextField(
+                  key: const Key('products-search-field'),
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    labelText: 'Search products',
+                    hintText: 'Search by item name or category',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? IconButton(
+                            key: const Key('search-filter-button'),
+                            tooltip: 'Price and sustainability filters',
+                            onPressed: _showFilters,
+                            icon: Icon(
+                              Icons.tune,
+                              color: filters.hasActiveFilters
+                                  ? AppColors.brandAccent
+                                  : AppColors.brandPrimary,
+                            ),
+                          )
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: _clearSearch,
+                            icon: const Icon(Icons.close),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Row(
+                  children: [
+                    for (final category in SearchProvider.categories) ...[
+                      SearchFilterChip(
+                        key: Key('category-$category'),
+                        label: category,
+                        active: filters.selectedCategory == category,
+                        onTap: () => filters.toggleCategory(category),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Row(
+                  children: [
+                    SearchFilterChip(
+                      key: const Key('list-view-toggle'),
+                      label: 'List',
+                      active: filters.viewMode == ProductViewMode.list,
+                      onTap: () => filters.setViewMode(ProductViewMode.list),
+                      icon: Icons.view_module_outlined,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    SearchFilterChip(
+                      key: const Key('map-view-toggle'),
+                      label: 'Map',
+                      active: filters.viewMode == ProductViewMode.map,
+                      onTap: () => filters.setViewMode(ProductViewMode.map),
+                      icon: Icons.map_outlined,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    SearchFilterChip(
+                      label: 'Sort: ${filters.selectedSort.label}',
+                      active: filters.selectedSort != ProductSort.recommended,
+                      onTap: _showSortPicker,
+                      icon: Icons.sort,
+                      showDropdown: true,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    SearchFilterChip(
+                      label: 'Filters',
+                      active:
+                          filters.minimumPrice != null ||
+                          filters.maximumPrice != null ||
+                          filters.sustainableOnly,
+                      onTap: _showFilters,
+                      icon: Icons.tune,
+                    ),
+                    if (filters.hasActiveFilters) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      TextButton(
+                        onPressed: filters.resetFilters,
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Expanded(
+                child: FutureBuilder<List<ItemModel>>(
+                  future: _loadProducts(listingProvider),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const _ProductsLoadingGrid();
+                    }
+                    if (snapshot.hasError) {
+                      return _ProductsMessage(
+                        icon: Icons.cloud_off_outlined,
+                        title: 'Could not load products',
+                        message: 'Check your connection and try again.',
+                        actionLabel: 'Retry',
+                        onAction: () => setState(() => _productsFuture = null),
+                      );
+                    }
+
+                    final products = _applyFilters(
+                      snapshot.data ?? const [],
+                      filters,
+                    );
+                    if (products.isEmpty) {
+                      return const _ProductsMessage(
+                        icon: Icons.search_off,
+                        title: 'No products found',
+                        message:
+                            'Try another name, category, price, or location.',
+                      );
+                    }
+                    final selectedItem = products
+                        .where((item) => item.id == filters.previewItemId)
+                        .firstOrNull;
+                    return Stack(
+                      children: [
+                        Positioned.fill(
+                          child: filters.viewMode == ProductViewMode.map
+                              ? ProductMapView(
+                                  products: products,
+                                  selectedItemId: filters.previewItemId,
+                                  userLatitude: filters.userLatitude,
+                                  userLongitude: filters.userLongitude,
+                                  onSelectProduct: (item) =>
+                                      filters.selectPreview(item.id),
+                                  onClearSelection: () =>
+                                      filters.selectPreview(null),
+                                )
+                              : _ProductsGrid(
+                                  products: products,
+                                  nearYou: filters.isNearYou,
+                                  onSelectProduct: (item) =>
+                                      filters.selectPreview(item.id),
+                                ),
+                        ),
+                        if (selectedItem != null)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: ProductPreviewCard(
+                              item: selectedItem,
+                              onOpen: () => _openProduct(selectedItem),
+                              onClose: () => filters.selectPreview(null),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductsGrid extends StatelessWidget {
+  final List<ItemModel> products;
+  final bool nearYou;
+  final ValueChanged<ItemModel> onSelectProduct;
+
+  const _ProductsGrid({
+    required this.products,
+    required this.nearYou,
+    required this.onSelectProduct,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.sm,
+          ),
+          child: Text(
+            nearYou
+                ? 'Items near you · ${products.length}'
+                : 'Available products · ${products.length}',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.lg,
+              AppSpacing.lg,
+            ),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 220,
+              crossAxisSpacing: AppSpacing.md,
+              mainAxisSpacing: AppSpacing.md,
+              childAspectRatio: 0.74 - (textScale - 1) * 0.18,
+            ),
+            itemCount: products.length,
+            itemBuilder: (context, index) => ItemCard(
+              item: products[index],
+              onTap: () => onSelectProduct(products[index]),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProductsLoadingGrid extends StatelessWidget {
+  const _ProductsLoadingGrid();
+
+  @override
+  Widget build(BuildContext context) => GridView.builder(
+    padding: const EdgeInsets.all(AppSpacing.lg),
+    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: 220,
+      crossAxisSpacing: AppSpacing.md,
+      mainAxisSpacing: AppSpacing.md,
+      childAspectRatio: 0.74,
+    ),
+    itemCount: 6,
+    itemBuilder: (_, _) => const ItemCardSkeleton(),
+  );
+}
+
+class _ProductsMessage extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _ProductsMessage({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 48, color: AppColors.brandPrimary),
+          const SizedBox(height: AppSpacing.lg),
+          Text(title, style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: AppSpacing.sm),
+          Text(message, textAlign: TextAlign.center),
+          if (onAction != null) ...[
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+          ],
+        ],
+      ),
+    ),
+  );
 }
