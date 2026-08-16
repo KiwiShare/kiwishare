@@ -5,6 +5,26 @@ import Item from '../models/Item';
 
 const router = new Router();
 
+const cityCentres: Record<string, [number, number]> = {
+  auckland: [174.7633, -36.8485],
+  wellington: [174.7756, -41.2866],
+  hamilton: [175.2793, -37.7870],
+  christchurch: [172.6362, -43.5321],
+  dunedin: [170.5028, -45.8788]
+};
+
+function approximateCoordinates(city: string, stableKey: string): [number, number] {
+  const normalizedCity = city.trim().toLowerCase();
+  const centre = cityCentres[normalizedCity] || [174.0, -41.0];
+  const hash = Array.from(stableKey).reduce(
+    (value, character) => ((value * 31) + character.charCodeAt(0)) >>> 0,
+    0
+  );
+  const longitudeOffset = ((hash % 17) - 8) * 0.0012;
+  const latitudeOffset = (((Math.floor(hash / 17)) % 17) - 8) * 0.0009;
+  return [centre[0] + longitudeOffset, centre[1] + latitudeOffset];
+}
+
 // --- 2. Listing Endpoints ---
 
 router.get('/listings', async (ctx) => {
@@ -31,7 +51,12 @@ router.get('/listings', async (ctx) => {
     const suburb = itemObj.location?.suburb || '';
     const city = itemObj.location?.city || '';
     const locationStr = [suburb, city].filter(Boolean).join(', ') || 'Auckland';
-    const coordinates = itemObj.location?.coordinates?.coordinates;
+    const storedCoordinates = itemObj.location?.coordinates?.coordinates;
+    const coordinates = Array.isArray(storedCoordinates) &&
+      storedCoordinates.length >= 2 &&
+      storedCoordinates.every((coordinate: unknown) => typeof coordinate === 'number')
+      ? storedCoordinates as number[]
+      : approximateCoordinates(city || 'Auckland', itemObj.id);
 
     return {
       ...itemObj,
@@ -40,8 +65,8 @@ router.get('/listings', async (ctx) => {
       location: locationStr,
       priceNzd: itemObj.priceNzd || (itemObj.price ? (itemObj.price / 100).toString() : '0'),
       ownerId: itemObj.sellerId?.toString() || itemObj.ownerId || '',
-      longitude: Array.isArray(coordinates) ? coordinates[0] : undefined,
-      latitude: Array.isArray(coordinates) ? coordinates[1] : undefined
+      longitude: coordinates[0],
+      latitude: coordinates[1]
     };
   });
 
@@ -63,6 +88,7 @@ router.post('/listings', authenticateToken, async (ctx) => {
   const city = parts[parts.length - 1] || 'Auckland';
   const suburb = parts.length > 1 ? parts[0] : '';
   const priceCents = Math.round(parseFloat(priceNzd) * 100);
+  const coordinates = approximateCoordinates(city, `${ownerId}:${title}`);
 
   const newItem = await Item.create({
     sellerId: new mongoose.Types.ObjectId(ownerId),
@@ -76,7 +102,7 @@ router.post('/listings', authenticateToken, async (ctx) => {
       suburb,
       coordinates: {
         type: 'Point',
-        coordinates: [174.7633, -36.8485]
+        coordinates
       }
     },
     category,
@@ -94,7 +120,9 @@ router.post('/listings', authenticateToken, async (ctx) => {
     imageUrl: imageUrl,
     location: location,
     priceNzd: priceNzd,
-    ownerId: ownerId
+    ownerId: ownerId,
+    longitude: coordinates[0],
+    latitude: coordinates[1]
   };
 
   ctx.status = 201;
