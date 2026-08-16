@@ -44,7 +44,7 @@
 
 ---
 
-## 📸 Screenshots / Demos (Optional for UI Changes)
+## 📸 Screenshots / Demos (Mandatory)
 <!-- Add screenshots, GIFs, or short demo videos showing before & after. -->
 
 ---
