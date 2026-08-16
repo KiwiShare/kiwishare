@@ -214,8 +214,9 @@ class KiwiShareShell extends StatelessWidget {
 
     final activeIndex = _getSelectedIndex(context);
     final authProvider = Provider.of<AuthProvider>(context);
+    final searchProvider = context.watch<SearchProvider>();
 
-    return Scaffold(
+    final shell = Scaffold(
       body: child,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -330,6 +331,18 @@ class KiwiShareShell extends StatelessWidget {
           ],
         ),
       ),
+    );
+
+    return BackButtonListener(
+      onBackButtonPressed: () async {
+        if (location.startsWith('/search') &&
+            searchProvider.previewItemId != null) {
+          searchProvider.selectPreview(null);
+          return true;
+        }
+        return false;
+      },
+      child: shell,
     );
   }
 }
