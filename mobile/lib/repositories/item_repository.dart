@@ -25,6 +25,9 @@ class MockItemRepository implements ItemRepository {
       isSustainable: true,
       category: 'Plants',
       status: ItemStatus.active,
+      description: 'Healthy indoor monstera in a reusable ceramic pot.',
+      latitude: -36.8509,
+      longitude: 174.7645,
     ),
     const ItemModel(
       id: 'item_2',
@@ -36,6 +39,9 @@ class MockItemRepository implements ItemRepository {
       isSustainable: false,
       category: 'Furniture',
       status: ItemStatus.active,
+      description: 'Comfortable fabric armchair with light signs of use.',
+      latitude: -41.2902,
+      longitude: 174.7787,
     ),
     const ItemModel(
       id: 'item_3',
@@ -47,6 +53,10 @@ class MockItemRepository implements ItemRepository {
       isSustainable: false,
       category: 'Transport',
       status: ItemStatus.active,
+      description:
+          'Reliable commuter bike, recently serviced and ready to ride.',
+      latitude: -37.7878,
+      longitude: 175.2810,
     ),
     const ItemModel(
       id: 'item_4',
@@ -58,6 +68,9 @@ class MockItemRepository implements ItemRepository {
       isSustainable: true,
       category: 'Camping',
       status: ItemStatus.active,
+      description: 'Water-resistant two-person tent with poles and carry bag.',
+      latitude: -43.5309,
+      longitude: 172.6346,
     ),
     const ItemModel(
       id: 'item_5',
@@ -69,6 +82,9 @@ class MockItemRepository implements ItemRepository {
       isSustainable: true,
       category: 'Camping',
       status: ItemStatus.active,
+      description: 'Warm three-season sleeping bag in good condition.',
+      latitude: -41.2821,
+      longitude: 174.7694,
     ),
     const ItemModel(
       id: 'item_6',
@@ -80,6 +96,9 @@ class MockItemRepository implements ItemRepository {
       isSustainable: false,
       category: 'Camping',
       status: ItemStatus.active,
+      description: 'Compact single-burner stove for weekend trips.',
+      latitude: -36.8624,
+      longitude: 174.7541,
     ),
     const ItemModel(
       id: 'item_7',
@@ -91,6 +110,9 @@ class MockItemRepository implements ItemRepository {
       isSustainable: false,
       category: 'Camping',
       status: ItemStatus.active,
+      description: 'Rechargeable lantern with three brightness settings.',
+      latitude: -45.8758,
+      longitude: 170.5006,
     ),
   ];
 

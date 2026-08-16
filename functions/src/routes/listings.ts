@@ -31,6 +31,7 @@ router.get('/listings', async (ctx) => {
     const suburb = itemObj.location?.suburb || '';
     const city = itemObj.location?.city || '';
     const locationStr = [suburb, city].filter(Boolean).join(', ') || 'Auckland';
+    const coordinates = itemObj.location?.coordinates?.coordinates;
 
     return {
       ...itemObj,
@@ -38,7 +39,9 @@ router.get('/listings', async (ctx) => {
       imageUrl: itemObj.images?.[0]?.url || itemObj.imageUrl || '',
       location: locationStr,
       priceNzd: itemObj.priceNzd || (itemObj.price ? (itemObj.price / 100).toString() : '0'),
-      ownerId: itemObj.sellerId?.toString() || itemObj.ownerId || ''
+      ownerId: itemObj.sellerId?.toString() || itemObj.ownerId || '',
+      longitude: Array.isArray(coordinates) ? coordinates[0] : undefined,
+      latitude: Array.isArray(coordinates) ? coordinates[1] : undefined
     };
   });
 
