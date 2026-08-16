@@ -31,13 +31,19 @@ final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
+  if (DefaultFirebaseOptions.isConfigured) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      await RemoteConfigService.instance.initialize();
+    } catch (e) {
+      debugPrint('Firebase/RemoteConfig initialization failed: $e');
+    }
+  } else {
+    debugPrint(
+      'ℹ️ [Firebase] Placeholder credentials detected. Skipping Firebase init and using in-app local defaults.',
     );
-    await RemoteConfigService.instance.initialize();
-  } catch (e) {
-    debugPrint('Firebase/RemoteConfig initialization failed: $e');
   }
   runApp(
     MultiProvider(

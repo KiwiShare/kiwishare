@@ -1,8 +1,15 @@
 import 'package:flutter/foundation.dart';
 
 class ApiConfig {
+  /// Custom base URL passed at build/run time via:
+  /// `--dart-define=API_BASE_URL=http://<YOUR_IP>:3000`
+  static const String _customBaseUrl = String.fromEnvironment('API_BASE_URL');
+
   /// Resolves the Koa backend server URL dynamically depending on platform
   static String get baseUrl {
+    if (_customBaseUrl.isNotEmpty) {
+      return _customBaseUrl;
+    }
     if (kIsWeb) {
       return 'http://localhost:3000';
     }

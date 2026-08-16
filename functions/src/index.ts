@@ -4,7 +4,8 @@ import app from './app';
 import Item from './models/Item';
 import connectDB from './config/db';
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://REDACTED@/kiwishare';
 const MONGODB_URI_TEST = process.env.MONGODB_URI_TEST || MONGODB_URI;
 
@@ -148,9 +149,9 @@ async function startServer() {
     // Seed data for clean local dev experience
     await seedInitialData();
 
-    app.listen(PORT, () => {
-      console.log(`\n🚀 [KiwiShare Koa Server] Running locally on http://localhost:${PORT}`);
-      console.log(`👋 Development endpoints: http://localhost:${PORT}/api/listings\n`);
+    app.listen(PORT, HOST, () => {
+      console.log(`\n🚀 [KiwiShare Koa Server] Running on http://${HOST}:${PORT}`);
+      console.log(`👋 Local: http://localhost:${PORT}/api/listings\n`);
     });
   } catch (error) {
     console.error('❌ Failed to start the server:', error);
