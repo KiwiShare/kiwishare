@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/item_model.dart';
@@ -20,6 +21,7 @@ class ItemDetailPage extends StatefulWidget {
 
 class _ItemDetailPageState extends State<ItemDetailPage> {
   late Future<ItemModel> _itemFuture;
+  var _isDeleting = false;
 
   @override
   void initState() {
@@ -40,6 +42,76 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     );
     if (updatedItem != null && mounted) {
       setState(() => _itemFuture = Future.value(updatedItem));
+    }
+  }
+
+  Future<void> _deleteItem(ItemModel item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this listing?'),
+        content: const Text(
+          'It will be removed from browse results. Existing trade, report, review, and audit records are retained.',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('delete_cancel_button'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: const Key('delete_confirm_button'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Delete listing'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final token = context.read<AuthProvider>().jwtToken;
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please log in again to delete this item.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isDeleting = true);
+    try {
+      await context.read<ListingProvider>().deleteItem(
+        id: item.id,
+        token: token,
+      );
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/home');
+      }
+      messenger.showSnackBar(const SnackBar(content: Text('Listing deleted.')));
+    } on ItemRepositoryException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This listing could not be deleted. Check your connection and try again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
     }
   }
 
@@ -103,6 +175,8 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         return ItemDetailScreen(
           item: item,
           onEdit: isOwner ? () => _editItem(item) : null,
+          onDelete: isOwner ? () => _deleteItem(item) : null,
+          isDeleting: _isDeleting,
         );
       },
     );

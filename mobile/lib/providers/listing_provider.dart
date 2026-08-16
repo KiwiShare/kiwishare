@@ -37,6 +37,12 @@ class ListingProvider extends ChangeNotifier {
     return updated;
   }
 
+  Future<void> deleteItem({required String id, required String token}) async {
+    await itemRepository.deleteItem(id: id, token: token);
+    _cachedPopularItems?.removeWhere((item) => item.id == id);
+    notifyListeners();
+  }
+
   Future<List<ItemModel>> searchListingItems(
     String query,
     String category,

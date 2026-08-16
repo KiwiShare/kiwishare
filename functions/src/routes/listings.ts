@@ -169,6 +169,36 @@ router.put('/listings/:id', authenticateToken, async (ctx) => {
   ctx.body = { status: 'updated', item: formatListing(item) };
 });
 
+router.delete('/listings/:id', authenticateToken, async (ctx) => {
+  const { id } = ctx.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Listing item not found.' };
+    return;
+  }
+
+  const item = await Item.findById(id);
+  if (!item || !['active', 'reserved'].includes(item.status)) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Listing item not found.' };
+    return;
+  }
+
+  const currentOwnerId = item.sellerId?.toString() || item.ownerId;
+  if (currentOwnerId !== ctx.state.user.id) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'You can only delete your own listing.' };
+    return;
+  }
+
+  item.status = 'deleted';
+  item.deletedAt = new Date();
+  await item.save();
+
+  ctx.status = 200;
+  ctx.body = { status: 'deleted', message: 'Listing deleted successfully.' };
+});
+
 router.post('/listings', authenticateToken, async (ctx) => {
   const { title, priceNzd, location, imageUrl, isSustainable, category } = ctx.request.body as any;
   const ownerId = ctx.state.user.id;

@@ -10,6 +10,7 @@ abstract class ItemRepository {
     required ItemModel item,
     required String token,
   });
+  Future<void> deleteItem({required String id, required String token});
   Stream<List<ItemModel>> searchItems({String? query, String? category});
   Future<List<ItemModel>> fetchMyItems({
     required bool sold,
@@ -123,6 +124,14 @@ class MockItemRepository implements ItemRepository {
   }
 
   @override
+  Future<void> deleteItem({required String id, required String token}) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final exists = _allMockItems.any((item) => item.id == id);
+    if (!exists) throw const ItemNotFoundException();
+    _allMockItems.removeWhere((item) => item.id == id);
+  }
+
+  @override
   Future<List<ItemModel>> fetchMyItems({
     required bool sold,
     required String token,
@@ -182,6 +191,25 @@ class MockItemRepository implements ItemRepository {
 }
 
 class RestItemRepository implements ItemRepository {
+  @override
+  Future<void> deleteItem({required String id, required String token}) async {
+    final response = await http.delete(
+      Uri.parse('${ApiConfig.baseUrl}/api/listings/$id'),
+      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 404) throw const ItemNotFoundException();
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw const ItemAuthorizationException(
+        'You can only delete your own listing.',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw const ItemRepositoryException(
+        'This listing could not be deleted. Check your connection and try again.',
+      );
+    }
+  }
+
   @override
   Future<ItemModel> fetchItemById(String id) async {
     final response = await http.get(

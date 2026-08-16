@@ -6,10 +6,18 @@ import '../../providers/favorites_provider.dart';
 import '../../theme/app_theme.dart';
 
 class ItemDetailScreen extends StatelessWidget {
-  const ItemDetailScreen({super.key, required this.item, this.onEdit});
+  const ItemDetailScreen({
+    super.key,
+    required this.item,
+    this.onEdit,
+    this.onDelete,
+    this.isDeleting = false,
+  });
 
   final ItemModel item;
   final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final bool isDeleting;
 
   @override
   Widget build(BuildContext context) {
@@ -22,16 +30,6 @@ class ItemDetailScreen extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         title: const Text('Item details'),
         actions: [
-          if (onEdit != null)
-            IconButton(
-              key: const Key('detail_edit_button'),
-              tooltip: 'Edit listing',
-              onPressed: onEdit,
-              icon: const Icon(
-                Icons.edit_outlined,
-                color: AppColors.brandPrimary,
-              ),
-            ),
           IconButton(
             key: const Key('detail_favorite_button'),
             tooltip: isFavorite ? 'Remove from saved items' : 'Save item',
@@ -95,6 +93,14 @@ class ItemDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.xl),
                     _SellerSection(item: item),
+                    if (onEdit != null || onDelete != null) ...[
+                      const SizedBox(height: AppSpacing.xl),
+                      _OwnerActions(
+                        onEdit: onEdit,
+                        onDelete: onDelete,
+                        isDeleting: isDeleting,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -116,6 +122,62 @@ class ItemDetailScreen extends StatelessWidget {
         )
         .join(' ');
   }
+}
+
+class _OwnerActions extends StatelessWidget {
+  const _OwnerActions({
+    required this.onEdit,
+    required this.onDelete,
+    required this.isDeleting,
+  });
+
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final bool isDeleting;
+
+  @override
+  Widget build(BuildContext context) => _DetailSection(
+    title: 'Manage listing',
+    child: Column(
+      children: [
+        if (onEdit != null)
+          OutlinedButton.icon(
+            key: const Key('detail_edit_button'),
+            onPressed: isDeleting ? null : onEdit,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+              ),
+            ),
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text('Edit listing'),
+          ),
+        if (onEdit != null && onDelete != null)
+          const SizedBox(height: AppSpacing.md),
+        if (onDelete != null)
+          OutlinedButton.icon(
+            key: const Key('detail_delete_button'),
+            onPressed: isDeleting ? null : onDelete,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: AppColors.error),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+              ),
+            ),
+            icon: isDeleting
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_outline),
+            label: Text(isDeleting ? 'Deleting listing' : 'Delete listing'),
+          ),
+      ],
+    ),
+  );
 }
 
 class _ItemImageGallery extends StatefulWidget {
