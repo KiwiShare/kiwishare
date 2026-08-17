@@ -57,6 +57,7 @@ void main() async {
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+        ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(
@@ -94,18 +95,11 @@ class KiwiShareApp extends StatelessWidget {
           routes: [
             GoRoute(
               path: '/home',
-              builder: (context, state) => HomeScreen(
-                onNavigateToSearch: () {
-                  context.go('/search');
-                },
-              ),
+              builder: (context, state) => const HomeScreen(),
             ),
             GoRoute(
               path: '/search',
-              builder: (context, state) => SearchScreen(
-                requestNearby: state.uri.queryParameters['nearby'] == 'true',
-                openMap: state.uri.queryParameters['map'] == 'true',
-              ),
+              builder: (context, state) => const SearchScreen(),
             ),
             GoRoute(
               path: '/post',
@@ -214,7 +208,7 @@ class KiwiShareShell extends StatelessWidget {
 
     final activeIndex = _getSelectedIndex(context);
     final authProvider = Provider.of<AuthProvider>(context);
-    final searchProvider = context.watch<SearchProvider>();
+    final homeDiscovery = context.watch<HomeDiscoveryProvider>();
 
     final shell = Scaffold(
       body: child,
@@ -333,14 +327,14 @@ class KiwiShareShell extends StatelessWidget {
       ),
     );
 
-    return BackButtonListener(
-      onBackButtonPressed: () async {
-        if (location.startsWith('/search') &&
-            searchProvider.previewItemId != null) {
-          searchProvider.selectPreview(null);
-          return true;
+    final shouldDismissHomePreview =
+        location.startsWith('/home') && homeDiscovery.previewItemId != null;
+    return PopScope<void>(
+      canPop: !shouldDismissHomePreview,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && shouldDismissHomePreview) {
+          homeDiscovery.selectPreview(null);
         }
-        return false;
       },
       child: shell,
     );

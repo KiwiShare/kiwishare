@@ -75,11 +75,13 @@ class DeviceProductLocationService implements ProductLocationService {
     }).key;
     return ProductLocationContext(
       city: city,
-      latitude: position.latitude,
-      longitude: position.longitude,
+      latitude: _toApproximateCoordinate(position.latitude),
+      longitude: _toApproximateCoordinate(position.longitude),
     );
   }
 }
+
+double _toApproximateCoordinate(double value) => (value * 100).round() / 100;
 
 double _distanceSquared(double lat1, double lng1, double lat2, double lng2) {
   final latitudeDifference = lat1 - lat2;

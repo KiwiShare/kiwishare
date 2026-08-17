@@ -15,11 +15,7 @@ void main() {
     final router = GoRouter(
       initialLocation: '/home',
       routes: [
-        GoRoute(
-          path: '/home',
-          builder: (context, state) =>
-              HomeScreen(onNavigateToSearch: () => context.go('/search')),
-        ),
+        GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/items/:itemId',
           builder: (context, state) =>
@@ -40,6 +36,7 @@ void main() {
             create: (_) => AuthProvider(userRepository: MockUserRepository()),
           ),
           ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+          ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
           ChangeNotifierProvider(create: (_) => SearchProvider()),
           ChangeNotifierProvider(
             create: (_) =>
@@ -55,13 +52,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 850));
     await tester.pump();
 
-    expect(find.byKey(const Key('home-search-bar')), findsOneWidget);
+    expect(find.byKey(const Key('home-search-field')), findsOneWidget);
     expect(find.byKey(const Key('home-location-button')), findsOneWidget);
     expect(find.byIcon(Icons.notifications_outlined), findsNothing);
     expect(find.textContaining('Kia ora'), findsNothing);
-    for (final category in SearchProvider.categories) {
+    for (final category in HomeDiscoveryProvider.categories) {
       expect(find.byKey(Key('home-category-$category')), findsOneWidget);
     }
+
+    await tester.tap(find.byKey(const Key('home-category-Plants')));
+    await tester.pumpAndSettle();
+    expect(find.text('Monstera Plant'), findsOneWidget);
+    expect(find.text('Armchair'), findsNothing);
+    expect(router.routeInformationProvider.value.uri.path, '/home');
 
     await tester.ensureVisible(find.text('Monstera Plant'));
     await tester.pumpAndSettle();
