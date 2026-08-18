@@ -11,7 +11,7 @@
 
 ## 🏗️ System Layers & Infrastructure Affected
 - [ ] **`mobile/`**: Flutter Frontend (UI, state management, providers, repositories)
-- [ ] **`functions/`**: Backend Cloud API (Koa, routes, controllers, MongoDB models, middlewares)
+- [ ] **`server/`**: Backend RESTful Server (Koa, routes, controllers, MongoDB models, middlewares)
 - [ ] **`infra/ & CI/CD`**: Infrastructure (`.github/workflows/`, Render deploy, Docker, Firebase, scripts, Husky)
 - [ ] **`docs/`**: Documentation, design guidelines, architecture specs
 

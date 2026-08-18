@@ -160,7 +160,7 @@ class RestItemRepository implements ItemRepository {
     required String token,
   }) async {
     final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/api/users/me/listings',
+      '${ApiConfig.baseUrl}/api/users/me/usedItems',
     ).replace(queryParameters: {'status': sold ? 'sold' : 'active,reserved'});
     final response = await http.get(
       uri,
@@ -178,7 +178,7 @@ class RestItemRepository implements ItemRepository {
   @override
   Future<List<ItemModel>> fetchPopularItems() async {
     final response = await http.get(
-      Uri.parse('${ApiConfig.baseUrl}/api/listings'),
+      Uri.parse('${ApiConfig.baseUrl}/api/usedItems'),
       headers: {'Accept': 'application/json'},
     );
 
@@ -207,7 +207,7 @@ class RestItemRepository implements ItemRepository {
     }
 
     final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/api/listings',
+      '${ApiConfig.baseUrl}/api/usedItems',
     ).replace(queryParameters: queryParams);
 
     final response = await http.get(

@@ -4,12 +4,12 @@ on:
   push:
     branches: [ main, pre ]
     paths:
-      - 'functions/**'
+      - 'server/**'
       - '.github/workflows/backend.yml'
   pull_request:
     branches: [ main, pre ]
     paths:
-      - 'functions/**'
+      - 'server/**'
       - '.github/workflows/backend.yml'
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: functions
+        working-directory: server
 
     steps:
       - name: Checkout repository
