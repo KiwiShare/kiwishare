@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentUser = authProvider.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF7F2), // Off-White app background
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
