@@ -151,7 +151,7 @@ async function startServer() {
 
     app.listen(PORT, HOST, () => {
       console.log(`\n🚀 [KiwiShare Koa Server] Running on http://${HOST}:${PORT}`);
-      console.log(`👋 Local: http://localhost:${PORT}/api/listings\n`);
+      console.log(`👋 Local: http://localhost:${PORT}/api/usedItems\n`);
     });
   } catch (error) {
     console.error('❌ Failed to start the server:', error);

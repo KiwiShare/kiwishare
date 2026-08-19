@@ -1,7 +1,8 @@
 import Router from 'koa-router';
 import authRouter from './auth';
-import listingsRouter from './listings';
+import usedItemsRouter from './usedItems';
 import transactionsRouter from './transactions';
+import usersRouter from './users';
 
 const router = new Router({ prefix: '/api' });
 
@@ -9,8 +10,11 @@ const router = new Router({ prefix: '/api' });
 router.use(authRouter.routes());
 router.use(authRouter.allowedMethods());
 
-router.use(listingsRouter.routes());
-router.use(listingsRouter.allowedMethods());
+router.use(usedItemsRouter.routes());
+router.use(usedItemsRouter.allowedMethods());
+
+router.use(usersRouter.routes());
+router.use(usersRouter.allowedMethods());
 
 router.use(transactionsRouter.routes());
 router.use(transactionsRouter.allowedMethods());
