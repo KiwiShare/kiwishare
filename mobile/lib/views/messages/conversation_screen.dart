@@ -12,12 +12,14 @@ class ConversationScreen extends StatelessWidget {
     required this.participantName,
     required this.chatId,
     required this.reportedUserId,
+    required this.tradeId,
     required this.itemTitle,
   });
 
   final String participantName;
   final String chatId;
   final String reportedUserId;
+  final String tradeId;
   final String itemTitle;
 
   void _openReport(BuildContext context, ReportContext reportContext) {
@@ -38,6 +40,18 @@ class ConversationScreen extends StatelessWidget {
       contextType: ReportContextType.chat,
       contextId: chatId,
       contextLabel: 'Conversation about $itemTitle',
+    ),
+  );
+
+  void _reportTrade(BuildContext context) => _openReport(
+    context,
+    ReportContext(
+      targetType: ReportTargetType.user,
+      targetId: reportedUserId,
+      targetLabel: participantName,
+      contextType: ReportContextType.transaction,
+      contextId: tradeId,
+      contextLabel: 'Trade for $itemTitle',
     ),
   );
 
@@ -86,7 +100,10 @@ class ConversationScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            _TradeContextCard(itemTitle: itemTitle),
+            _TradeContextCard(
+              itemTitle: itemTitle,
+              onReport: () => _reportTrade(context),
+            ),
             const Expanded(child: _ConversationMessages()),
             const _MessageComposer(),
           ],
@@ -97,9 +114,10 @@ class ConversationScreen extends StatelessWidget {
 }
 
 class _TradeContextCard extends StatelessWidget {
-  const _TradeContextCard({required this.itemTitle});
+  const _TradeContextCard({required this.itemTitle, required this.onReport});
 
   final String itemTitle;
+  final VoidCallback onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -141,6 +159,15 @@ class _TradeContextCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+          TextButton.icon(
+            key: const Key('report_trade_button'),
+            onPressed: onReport,
+            icon: const Icon(Icons.report_outlined, size: 20),
+            label: const Text('Report'),
+            style: TextButton.styleFrom(
+              foregroundColor: colors.onPrimaryContainer,
             ),
           ),
         ],

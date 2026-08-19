@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/listing_provider.dart';
+import '../item_detail/item_detail_screen.dart';
 import '../shared/widgets/item_card.dart';
 
 enum UserListingsMode { selling, sold }
@@ -63,7 +64,13 @@ class UserListingsScreen extends StatelessWidget {
                     childAspectRatio: 0.76,
                   ),
                   itemCount: items.length,
-                  itemBuilder: (context, index) => ItemCard(item: items[index]),
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return ItemCard(
+                      item: item,
+                      onTap: () => openItemDetail(context, item),
+                    );
+                  },
                 );
               },
             ),

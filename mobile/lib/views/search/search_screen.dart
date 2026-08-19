@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../providers/providers.dart';
 import '../../models/item_model.dart';
 import '../../services/remote_config_service.dart';
+import '../item_detail/item_detail_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/filter_chip.dart';
@@ -362,7 +363,11 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ),
                             itemCount: items.length,
                             itemBuilder: (context, index) {
-                              return ItemCard(item: items[index]);
+                              final item = items[index];
+                              return ItemCard(
+                                item: item,
+                                onTap: () => openItemDetail(context, item),
+                              );
                             },
                           ),
                         ),

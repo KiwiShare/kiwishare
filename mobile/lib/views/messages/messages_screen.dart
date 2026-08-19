@@ -18,6 +18,7 @@ class MessagesScreen extends StatelessWidget {
         'isOnline': true,
         'chatId': 'chat_jenny_monstera',
         'userId': 'user_jenny_yin',
+        'tradeId': 'trade_jenny_monstera',
         'itemTitle': 'Monstera plant',
       },
       {
@@ -29,6 +30,7 @@ class MessagesScreen extends StatelessWidget {
         'isOnline': false,
         'chatId': 'chat_rui_armchair',
         'userId': 'user_rui_wang',
+        'tradeId': 'trade_rui_armchair',
         'itemTitle': 'Retro armchair',
       },
       {
@@ -39,6 +41,7 @@ class MessagesScreen extends StatelessWidget {
         'isOnline': true,
         'chatId': 'chat_yixuan_meetup',
         'userId': 'user_yixuan_sun',
+        'tradeId': 'trade_yixuan_meetup',
         'itemTitle': 'Desk lamp',
       },
       {
@@ -49,6 +52,7 @@ class MessagesScreen extends StatelessWidget {
         'isOnline': false,
         'chatId': 'chat_xinru_qr',
         'userId': 'user_xinru_cui',
+        'tradeId': 'trade_xinru_qr',
         'itemTitle': 'Camping stove',
       },
     ];
@@ -145,6 +149,7 @@ class MessagesScreen extends StatelessWidget {
                           participantName: chat['name'] as String,
                           chatId: chat['chatId'] as String,
                           reportedUserId: chat['userId'] as String,
+                          tradeId: chat['tradeId'] as String,
                           itemTitle: chat['itemTitle'] as String,
                         ),
                       ),

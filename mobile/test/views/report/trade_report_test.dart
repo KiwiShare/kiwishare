@@ -4,7 +4,7 @@ import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/messages/conversation_screen.dart';
 
 void main() {
-  testWidgets('chat menu opens a contextual user report', (tester) async {
+  testWidgets('trade card opens a contextual trade report', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildKiwiShareTheme(),
@@ -18,13 +18,11 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byTooltip('Conversation options'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Report user'));
+    await tester.tap(find.byKey(const Key('report_trade_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Report user'), findsOneWidget);
+    expect(find.text('Report a trade concern'), findsOneWidget);
     expect(find.text('Jenny Yin'), findsOneWidget);
-    expect(find.text('Conversation about Monstera plant'), findsOneWidget);
+    expect(find.text('Trade for Monstera plant'), findsOneWidget);
   });
 }

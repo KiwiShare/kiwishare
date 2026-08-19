@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/remote_config_service.dart';
+import '../item_detail/item_detail_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/category_navigation_button.dart';
@@ -397,7 +398,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                         itemCount: items.length,
                         itemBuilder: (context, index) {
-                          return ItemCard(item: items[index]);
+                          final item = items[index];
+                          return ItemCard(
+                            item: item,
+                            onTap: () => openItemDetail(context, item),
+                          );
                         },
                       );
                     }
