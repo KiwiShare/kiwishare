@@ -29,6 +29,49 @@ final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'shell',
 );
 
+// This router must live longer than a single widget build. ThemeProvider
+// notifies MaterialApp when the user selects Light/Dark/System; recreating a
+// GoRouter in build() made it start again at /splash every time.
+final GoRouter _router = GoRouter(
+  initialLocation: '/splash',
+  navigatorKey: _rootNavigatorKey,
+  routes: [
+    GoRoute(
+      path: '/splash',
+      builder: (context, state) =>
+          SplashScreen(onSplashComplete: () => context.go('/home')),
+    ),
+    ShellRoute(
+      navigatorKey: _shellNavigatorKey,
+      builder: (context, state, child) => KiwiShareShell(child: child),
+      routes: [
+        GoRoute(
+          path: '/home',
+          builder: (context, state) =>
+              HomeScreen(onNavigateToSearch: () => context.go('/search')),
+        ),
+        GoRoute(
+          path: '/search',
+          builder: (context, state) => const SearchScreen(),
+        ),
+        GoRoute(
+          path: '/post',
+          builder: (context, state) =>
+              PostItemScreen(onCancel: () => context.go('/home')),
+        ),
+        GoRoute(
+          path: '/messages',
+          builder: (context, state) => const MessagesScreen(),
+        ),
+        GoRoute(
+          path: '/profile',
+          builder: (context, state) => const ProfileScreen(),
+        ),
+      ],
+    ),
+  ],
+);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (DefaultFirebaseOptions.isConfigured) {
@@ -49,9 +92,9 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => AuthProvider(userRepository: RestUserRepository()),
+          // create: (_) => AuthProvider(userRepository: RestUserRepository()),
           //@@@For mock test: uncomment below code to login with mock user
-          // create: (_) => AuthProvider(userRepository: MockUserRepository()),
+          create: (_) => AuthProvider(userRepository: MockUserRepository()),
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => FavoritesProvider()),
@@ -71,76 +114,15 @@ class KiwiShareApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Declarative GoRouter setup
-    final GoRouter router = GoRouter(
-      initialLocation: '/splash',
-      navigatorKey: _rootNavigatorKey,
-      routes: [
-        GoRoute(
-          path: '/splash',
-          builder: (context, state) => SplashScreen(
-            onSplashComplete: () {
-              context.go('/home');
-            },
-          ),
-        ),
-        ShellRoute(
-          navigatorKey: _shellNavigatorKey,
-          builder: (context, state, child) {
-            return KiwiShareShell(child: child);
-          },
-          routes: [
-            GoRoute(
-              path: '/home',
-              builder: (context, state) => HomeScreen(
-                onNavigateToSearch: () {
-                  context.go('/search');
-                },
-              ),
-            ),
-            GoRoute(
-              path: '/search',
-              builder: (context, state) => const SearchScreen(),
-            ),
-            GoRoute(
-              path: '/post',
-              builder: (context, state) => PostItemScreen(
-                onCancel: () {
-                  context.go('/home');
-                },
-              ),
-            ),
-            GoRoute(
-              path: '/messages',
-              builder: (context, state) => const MessagesScreen(),
-            ),
-            GoRoute(
-              path: '/profile',
-              builder: (context, state) => const ProfileScreen(),
-            ),
-          ],
-        ),
-      ],
-    );
-
     final themeMode = context.watch<ThemeProvider>().themeMode;
-    final darkScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF4E8878),
-      brightness: Brightness.dark,
-    );
 
     return MaterialApp.router(
       title: 'KiwiShare - Buy. Sell. Share. Sustain.',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
       theme: buildKiwiShareTheme(),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: darkScheme,
-        scaffoldBackgroundColor: darkScheme.surface,
-        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-      ),
-      routerConfig: router,
+      darkTheme: buildKiwiShareDarkTheme(),
+      routerConfig: _router,
     );
   }
 }
@@ -171,8 +153,8 @@ class KiwiShareShell extends StatelessWidget {
             bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
           child: Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFFAF7F2), // Off-White surface
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
             child: SafeArea(
@@ -209,7 +191,7 @@ class KiwiShareShell extends StatelessWidget {
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1F1F1F).withOpacity(0.08),
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.08),
               blurRadius: 12,
               offset: const Offset(0, -4),
             ),
@@ -244,11 +226,11 @@ class KiwiShareShell extends StatelessWidget {
             }
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: const Color(0xFFFAF7F2), // Off-White Surface
-          selectedItemColor: const Color(0xFF2E5E4E), // Sage Green Active
-          unselectedItemColor: const Color(
-            0xFF1F1F1F,
-          ).withOpacity(0.5), // Charcoal Inactive
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          unselectedItemColor: Theme.of(
+            context,
+          ).colorScheme.onSurface.withOpacity(0.5),
           selectedLabelStyle: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
             fontSize: 12,
