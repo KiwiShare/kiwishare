@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'conversation_screen.dart';
 import 'widgets/chat_list_tile.dart';
 
 class MessagesScreen extends StatelessWidget {
@@ -15,6 +16,9 @@ class MessagesScreen extends StatelessWidget {
         'time': '10:30 AM',
         'unreadCount': 2,
         'isOnline': true,
+        'chatId': 'chat_jenny_monstera',
+        'userId': 'user_jenny_yin',
+        'itemTitle': 'Monstera plant',
       },
       {
         'name': 'Rui Wang',
@@ -23,6 +27,9 @@ class MessagesScreen extends StatelessWidget {
         'time': 'Yesterday',
         'unreadCount': 0,
         'isOnline': false,
+        'chatId': 'chat_rui_armchair',
+        'userId': 'user_rui_wang',
+        'itemTitle': 'Retro armchair',
       },
       {
         'name': 'Yixuan Sun',
@@ -30,6 +37,9 @@ class MessagesScreen extends StatelessWidget {
         'time': '2 days ago',
         'unreadCount': 0,
         'isOnline': true,
+        'chatId': 'chat_yixuan_meetup',
+        'userId': 'user_yixuan_sun',
+        'itemTitle': 'Desk lamp',
       },
       {
         'name': 'Xinru Cui',
@@ -37,6 +47,9 @@ class MessagesScreen extends StatelessWidget {
         'time': '3 days ago',
         'unreadCount': 0,
         'isOnline': false,
+        'chatId': 'chat_xinru_qr',
+        'userId': 'user_xinru_cui',
+        'itemTitle': 'Camping stove',
       },
     ];
 
@@ -125,7 +138,17 @@ class MessagesScreen extends StatelessWidget {
                     time: chat['time'] as String,
                     unreadCount: chat['unreadCount'] as int,
                     isOnline: chat['isOnline'] as bool,
-                    onTap: () {},
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => ConversationScreen(
+                          participantName: chat['name'] as String,
+                          chatId: chat['chatId'] as String,
+                          reportedUserId: chat['userId'] as String,
+                          itemTitle: chat['itemTitle'] as String,
+                        ),
+                      ),
+                    ),
                   );
                 },
               ),
