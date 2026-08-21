@@ -13,15 +13,16 @@ class ItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final favorites = context.watch<FavoritesProvider>();
     final isFavorite = favorites.isFavorite(item.id);
 
     return Semantics(
       button: onTap != null,
       label:
-          '${item.title}, \$${item.priceNzd} NZD, ${item.location}, ${item.category}',
+          '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.location}, category: ${item.category}',
       child: Material(
-        color: AppColors.surface,
+        color: colors.surface,
         elevation: 1,
         borderRadius: BorderRadius.circular(AppRadius.medium),
         clipBehavior: Clip.antiAlias,
@@ -36,16 +37,15 @@ class ItemCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     ColoredBox(
-                      color: AppColors.surfaceMuted,
+                      color: colors.surfaceContainerHighest,
                       child: Image.network(
                         item.imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                              Icons.image_not_supported_outlined,
-                              color: AppColors.brandPrimary,
-                              size: 40,
-                            ),
+                        errorBuilder: (context, error, stackTrace) => Icon(
+                          Icons.image_not_supported_outlined,
+                          color: colors.primary,
+                          size: 40,
+                        ),
                       ),
                     ),
                     if (item.isSustainable)
@@ -58,21 +58,25 @@ class ItemCard extends StatelessWidget {
                             vertical: AppSpacing.xs,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.brandPrimaryContainer,
+                            color: colors.primaryContainer,
                             borderRadius: BorderRadius.circular(
                               AppRadius.small,
                             ),
+                            border: Border.all(color: colors.primary),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
                                 Icons.eco_outlined,
                                 size: 16,
-                                color: AppColors.brandPrimary,
+                                color: colors.primary,
                               ),
-                              SizedBox(width: AppSpacing.xs),
-                              Text('Sustainable'),
+                              const SizedBox(width: AppSpacing.xs),
+                              Text(
+                                'Sustainable',
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
                             ],
                           ),
                         ),
@@ -107,23 +111,24 @@ class ItemCard extends StatelessWidget {
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       '\$${item.priceNzd} NZD',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppColors.textBrand,
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleMedium?.copyWith(color: colors.primary),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.location_on_outlined,
                           size: 16,
-                          color: AppColors.textSecondary,
+                          color: colors.onSurfaceVariant,
                         ),
                         const SizedBox(width: AppSpacing.xs),
                         Expanded(
                           child: Text(
                             item.location,
-                            style: Theme.of(context).textTheme.labelSmall,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: colors.onSurfaceVariant),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

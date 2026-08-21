@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/product_location_service.dart';
@@ -24,7 +27,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _searchController;
   late final ProductLocationService _locationService;
+  late HomeDiscoveryProvider _discovery;
   Future<List<ItemModel>>? _itemsFuture;
+  Timer? _filterDebounce;
+  Object? _optionsError;
+  bool _optionsLoading = true;
+  DiscoveryQuery? _lastRequestedQuery;
   bool _initialized = false;
 
   @override
@@ -38,25 +46,77 @@ class _HomeScreenState extends State<HomeScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_initialized) return;
-    final discovery = context.read<HomeDiscoveryProvider>();
-    _searchController.text = discovery.query;
-    _itemsFuture = context.read<ListingProvider>().getDiscoveryItems();
+    _discovery = context.read<HomeDiscoveryProvider>();
+    _searchController.text = _discovery.query;
+    _lastRequestedQuery = _discovery.discoveryQuery;
+    _itemsFuture = context.read<ListingProvider>().getDiscoveryItems(
+      query: _discovery.discoveryQuery,
+    );
+    _discovery.addListener(_onDiscoveryChanged);
     _initialized = true;
+    unawaited(_loadDiscoveryOptions());
   }
 
   @override
   void dispose() {
+    _filterDebounce?.cancel();
+    if (_initialized) _discovery.removeListener(_onDiscoveryChanged);
     _searchController.dispose();
     super.dispose();
   }
 
+  Future<void> _loadDiscoveryOptions({bool forceRefresh = false}) async {
+    if (mounted) {
+      setState(() {
+        _optionsLoading = true;
+        _optionsError = null;
+      });
+    }
+    try {
+      final options = await context.read<ListingProvider>().getDiscoveryOptions(
+        forceRefresh: forceRefresh,
+      );
+      if (!mounted) return;
+      _discovery.applyOptions(options);
+      setState(() => _optionsLoading = false);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _optionsLoading = false;
+        _optionsError = error;
+      });
+    }
+  }
+
+  void _onDiscoveryChanged() {
+    final query = _discovery.discoveryQuery;
+    if (query == _lastRequestedQuery) return;
+    _filterDebounce?.cancel();
+    _filterDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _lastRequestedQuery = query;
+      setState(() {
+        _itemsFuture = context.read<ListingProvider>().getDiscoveryItems(
+          query: query,
+        );
+      });
+    });
+  }
+
   Future<void> _retryFetch() async {
+    _filterDebounce?.cancel();
+    final query = _discovery.discoveryQuery;
+    _lastRequestedQuery = query;
     setState(() {
       _itemsFuture = context.read<ListingProvider>().getDiscoveryItems(
+        query: query,
         forceRefresh: true,
       );
     });
-    await _itemsFuture;
+    await Future.wait([
+      _itemsFuture!,
+      _loadDiscoveryOptions(forceRefresh: true),
+    ]);
   }
 
   void _openProduct(ItemModel item) {
@@ -143,23 +203,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
               const Divider(),
-              for (final location in HomeDiscoveryProvider.locations)
+              ListTile(
+                key: const Key('home-location-All NZ'),
+                minTileHeight: 52,
+                leading: const Icon(Icons.public),
+                title: const Text(HomeDiscoveryProvider.allLocationsLabel),
+                trailing:
+                    filters.selectedLocation ==
+                            HomeDiscoveryProvider.allLocationsLabel &&
+                        !filters.isNearYou
+                    ? const Icon(Icons.check, color: AppColors.brandPrimary)
+                    : null,
+                onTap: () {
+                  filters
+                    ..setLocation(HomeDiscoveryProvider.allLocationsLabel)
+                    ..setView(HomeProductView.map);
+                  Navigator.pop(sheetContext);
+                },
+              ),
+              for (final option in filters.locations)
                 ListTile(
-                  key: Key('home-location-$location'),
+                  key: Key('home-location-${option.value}'),
                   minTileHeight: 52,
-                  leading: Icon(
-                    location == 'All NZ'
-                        ? Icons.public
-                        : Icons.location_city_outlined,
+                  leading: const Icon(Icons.location_city_outlined),
+                  title: Text(option.value),
+                  subtitle: Text(
+                    '${option.count} ${option.count == 1 ? 'item' : 'items'}',
                   ),
-                  title: Text(location),
                   trailing:
-                      filters.selectedLocation == location && !filters.isNearYou
+                      filters.selectedLocation == option.value &&
+                          !filters.isNearYou
                       ? const Icon(Icons.check, color: AppColors.brandPrimary)
                       : null,
                   onTap: () {
                     filters
-                      ..setLocation(location)
+                      ..setLocation(option.value)
                       ..setView(HomeProductView.map);
                     Navigator.pop(sheetContext);
                   },
@@ -195,6 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final filters = context.watch<HomeDiscoveryProvider>();
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _retryFetch,
@@ -250,23 +329,32 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final category
-                        in HomeDiscoveryProvider.categories) ...[
-                      _HomeCategoryChip(
-                        key: Key('home-category-$category'),
-                        label: category,
-                        selected: filters.selectedCategory == category,
-                        onTap: () => filters.toggleCategory(category),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
+              if (_optionsLoading)
+                const LinearProgressIndicator(
+                  key: Key('home-discovery-options-loading'),
+                  minHeight: 2,
+                )
+              else if (_optionsError != null)
+                _DiscoveryOptionsError(
+                  onRetry: () => _loadDiscoveryOptions(forceRefresh: true),
+                )
+              else
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final category in filters.categories) ...[
+                        _HomeCategoryChip(
+                          key: Key('home-category-${category.value}'),
+                          label: category.value,
+                          selected: filters.selectedCategory == category.value,
+                          onTap: () => filters.toggleCategory(category.value),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
               const SizedBox(height: AppSpacing.xl),
               FutureBuilder<List<ItemModel>>(
                 future: _itemsFuture,
@@ -277,9 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (snapshot.hasError) {
                     return _HomeErrorState(onRetry: _retryFetch);
                   }
-                  final products = filters.filterAndSort(
-                    snapshot.data ?? const <ItemModel>[],
-                  );
+                  final products = snapshot.data ?? const <ItemModel>[];
                   ItemModel? selectedItem;
                   for (final product in products) {
                     if (product.id == filters.previewItemId) {
@@ -373,6 +459,28 @@ class _HomeCategoryChip extends StatelessWidget {
       labelStyle: Theme.of(
         context,
       ).textTheme.labelLarge?.copyWith(color: AppColors.textPrimary),
+    );
+  }
+}
+
+class _DiscoveryOptionsError extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _DiscoveryOptionsError({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(
+          child: Text('Categories and locations could not be loaded.'),
+        ),
+        TextButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh, size: 20),
+          label: const Text('Retry'),
+        ),
+      ],
     );
   }
 }

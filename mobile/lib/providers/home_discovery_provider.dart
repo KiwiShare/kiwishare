@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../models/item_model.dart';
+import '../models/discovery_options_model.dart';
 
 enum HomeProductSort { recommended, priceLowToHigh, priceHighToLow }
 
@@ -13,6 +13,12 @@ extension HomeProductSortLabel on HomeProductSort {
     HomeProductSort.recommended => 'Recommended',
     HomeProductSort.priceLowToHigh => 'Price: low to high',
     HomeProductSort.priceHighToLow => 'Price: high to low',
+  };
+
+  String get apiValue => switch (this) {
+    HomeProductSort.recommended => 'recommended',
+    HomeProductSort.priceLowToHigh => 'price_asc',
+    HomeProductSort.priceHighToLow => 'price_desc',
   };
 }
 
@@ -28,28 +34,17 @@ extension HomePriceRangeLabel on HomePriceRange {
 }
 
 class HomeDiscoveryProvider extends ChangeNotifier {
-  static const categories = ['Camping', 'Plants', 'Furniture', 'Transport'];
+  static const allCategoriesLabel = 'All';
+  static const allLocationsLabel = 'All NZ';
+  static const nearbyRadiusKm = 50.0;
 
-  static const locations = [
-    'All NZ',
-    'Auckland',
-    'Wellington',
-    'Hamilton',
-    'Christchurch',
-    'Dunedin',
-  ];
-
-  static const locationCoordinates = <String, (double, double)>{
-    'Auckland': (-36.8485, 174.7633),
-    'Wellington': (-41.2866, 174.7756),
-    'Hamilton': (-37.7870, 175.2793),
-    'Christchurch': (-43.5321, 172.6362),
-    'Dunedin': (-45.8788, 170.5028),
-  };
-
+  List<DiscoveryCategoryOption> _categories = const [];
+  List<DiscoveryLocationOption> _locations = const [];
+  double? _availableMinimumPrice;
+  double? _availableMaximumPrice;
   String _query = '';
-  String _selectedCategory = 'All';
-  String _selectedLocation = 'All NZ';
+  String _selectedCategory = allCategoriesLabel;
+  String _selectedLocation = allLocationsLabel;
   HomeProductSort _selectedSort = HomeProductSort.recommended;
   HomePriceRange _selectedPriceRange = HomePriceRange.any;
   bool _sustainableOnly = false;
@@ -61,6 +56,10 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   HomeProductView _view = HomeProductView.grid;
   String? _previewItemId;
 
+  List<DiscoveryCategoryOption> get categories => _categories;
+  List<DiscoveryLocationOption> get locations => _locations;
+  double? get availableMinimumPrice => _availableMinimumPrice;
+  double? get availableMaximumPrice => _availableMaximumPrice;
   String get query => _query;
   String get selectedCategory => _selectedCategory;
   String get selectedLocation => _selectedLocation;
@@ -75,11 +74,48 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   HomeProductView get view => _view;
   String? get previewItemId => _previewItemId;
 
+  DiscoveryQuery get discoveryQuery => DiscoveryQuery(
+    query: _query,
+    category: _selectedCategory == allCategoriesLabel
+        ? null
+        : _selectedCategory,
+    location: _selectedLocation == allLocationsLabel || _isNearYou
+        ? null
+        : _selectedLocation,
+    minimumPrice: _minimumPrice,
+    maximumPrice: _maximumPrice,
+    sustainableOnly: _sustainableOnly,
+    sort: _selectedSort.apiValue,
+    latitude: _isNearYou ? _userLatitude : null,
+    longitude: _isNearYou ? _userLongitude : null,
+    radiusKm: _isNearYou ? nearbyRadiusKm : null,
+  );
+
   int get activeFilterCount => [
     _selectedPriceRange != HomePriceRange.any,
     _sustainableOnly,
     _selectedSort != HomeProductSort.recommended,
   ].where((active) => active).length;
+
+  void applyOptions(DiscoveryOptionsModel options) {
+    _categories = options.categories;
+    _locations = options.locations;
+    _availableMinimumPrice = options.minimumPrice;
+    _availableMaximumPrice = options.maximumPrice;
+
+    if (_selectedCategory != allCategoriesLabel &&
+        !_categories.any((option) => option.value == _selectedCategory)) {
+      _selectedCategory = allCategoriesLabel;
+    }
+    if (!_isNearYou &&
+        _selectedLocation != allLocationsLabel &&
+        !_locations.any((option) => option.value == _selectedLocation)) {
+      _selectedLocation = allLocationsLabel;
+      _userLatitude = null;
+      _userLongitude = null;
+    }
+    notifyListeners();
+  }
 
   void setQuery(String value) {
     final normalized = value.trimLeft();
@@ -90,7 +126,7 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   }
 
   void toggleCategory(String category) {
-    final next = _selectedCategory == category ? 'All' : category;
+    final next = _selectedCategory == category ? allCategoriesLabel : category;
     if (_selectedCategory == next) return;
     _selectedCategory = next;
     _previewItemId = null;
@@ -103,13 +139,18 @@ class HomeDiscoveryProvider extends ChangeNotifier {
     double? latitude,
     double? longitude,
   }) {
-    final manualCoordinates = locationCoordinates[location];
-    final nextLatitude = location == 'All NZ'
+    DiscoveryLocationOption? option;
+    for (final candidate in _locations) {
+      if (candidate.value == location) {
+        option = candidate;
+        break;
+      }
+    }
+    final isAllLocations = location == allLocationsLabel;
+    final nextLatitude = isAllLocations ? null : latitude ?? option?.latitude;
+    final nextLongitude = isAllLocations
         ? null
-        : latitude ?? manualCoordinates?.$1;
-    final nextLongitude = location == 'All NZ'
-        ? null
-        : longitude ?? manualCoordinates?.$2;
+        : longitude ?? option?.longitude;
     if (_selectedLocation == location &&
         _isNearYou == nearYou &&
         _userLatitude == nextLatitude &&
@@ -191,8 +232,8 @@ class HomeDiscoveryProvider extends ChangeNotifier {
 
   void resetFilters() {
     _query = '';
-    _selectedCategory = 'All';
-    _selectedLocation = 'All NZ';
+    _selectedCategory = allCategoriesLabel;
+    _selectedLocation = allLocationsLabel;
     _selectedSort = HomeProductSort.recommended;
     _selectedPriceRange = HomePriceRange.any;
     _sustainableOnly = false;
@@ -204,42 +245,5 @@ class HomeDiscoveryProvider extends ChangeNotifier {
     _view = HomeProductView.grid;
     _previewItemId = null;
     notifyListeners();
-  }
-
-  List<ItemModel> filterAndSort(List<ItemModel> source) {
-    final normalizedQuery = _query.trim().toLowerCase();
-    final products = source.where((item) {
-      final queryMatches =
-          normalizedQuery.isEmpty ||
-          item.title.toLowerCase().contains(normalizedQuery) ||
-          item.category.toLowerCase().contains(normalizedQuery);
-      final normalizedCategory = item.category.toLowerCase();
-      final categoryMatches =
-          _selectedCategory == 'All' ||
-          normalizedCategory == _selectedCategory.toLowerCase() ||
-          (_selectedCategory == 'Transport' && normalizedCategory == 'vehicle');
-      final locationMatches =
-          _selectedLocation == 'All NZ' ||
-          item.location.toLowerCase().contains(_selectedLocation.toLowerCase());
-      final priceMatches =
-          (_minimumPrice == null || item.numericPrice >= _minimumPrice!) &&
-          (_maximumPrice == null || item.numericPrice <= _maximumPrice!);
-      final sustainableMatches = !_sustainableOnly || item.isSustainable;
-      return queryMatches &&
-          categoryMatches &&
-          locationMatches &&
-          priceMatches &&
-          sustainableMatches;
-    }).toList();
-
-    switch (_selectedSort) {
-      case HomeProductSort.recommended:
-        break;
-      case HomeProductSort.priceLowToHigh:
-        products.sort((a, b) => a.numericPrice.compareTo(b.numericPrice));
-      case HomeProductSort.priceHighToLow:
-        products.sort((a, b) => b.numericPrice.compareTo(a.numericPrice));
-    }
-    return products;
   }
 }

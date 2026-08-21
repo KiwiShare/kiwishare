@@ -54,7 +54,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void _showCategoryPicker() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFFFAF7F2), // Off-White sheet background
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -71,7 +71,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final activeCategory = searchProvider.selectedCategory;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF7F2), // Off-White Scaffold background
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [

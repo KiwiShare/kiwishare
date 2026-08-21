@@ -39,7 +39,7 @@ The backend Koa server is deployed to [Render.com](https://render.com) as a Web 
      - **Region**: Select a region close to your users (e.g., `Singapore` or `Oregon`).
      - **Branch**: `main`
      - **Auto-Deploy**: `Yes` *(Render will automatically redeploy on every merge to main)*
-     - **Root Directory**: `functions` *(Crucial: Isolates the Node/Koa app package from the monorepo root)*
+     - **Root Directory**: `server` *(Crucial: Isolates the Node/Koa app package from the monorepo root)*
      - **Runtime**: `Node`
      - **Build Command**:
        ```bash
