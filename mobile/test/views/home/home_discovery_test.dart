@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:kiwishare/main.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/providers.dart';
-import 'package:kiwishare/repositories/item_repository.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/product_location_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
@@ -13,6 +12,8 @@ import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/home/widgets/home_product_map.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
 import 'package:provider/provider.dart';
+
+import '../../support/test_item_repository.dart';
 
 class _AucklandLocationService implements ProductLocationService {
   @override
@@ -42,7 +43,7 @@ Widget _homeApp({
     ChangeNotifierProvider.value(value: discovery ?? HomeDiscoveryProvider()),
     ChangeNotifierProvider(create: (_) => FavoritesProvider()),
     ChangeNotifierProvider(
-      create: (_) => ListingProvider(itemRepository: MockItemRepository()),
+      create: (_) => ListingProvider(itemRepository: TestItemRepository()),
     ),
   ],
   child: MaterialApp(
@@ -72,6 +73,7 @@ void main() {
 
     expect(find.text('7 items'), findsOneWidget);
     await tester.tap(find.byKey(const Key('home-category-Plants')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
 
     expect(find.text('1 items'), findsOneWidget);
@@ -90,6 +92,7 @@ void main() {
       find.byKey(const Key('home-search-field')),
       'camping',
     );
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
     expect(find.text('4 items'), findsOneWidget);
 
@@ -219,7 +222,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => FavoritesProvider()),
           ChangeNotifierProvider(
             create: (_) =>
-                ListingProvider(itemRepository: MockItemRepository()),
+                ListingProvider(itemRepository: TestItemRepository()),
           ),
         ],
         child: MaterialApp.router(
@@ -294,7 +297,7 @@ void main() {
             ChangeNotifierProvider(create: (_) => FavoritesProvider()),
             ChangeNotifierProvider(
               create: (_) =>
-                  ListingProvider(itemRepository: MockItemRepository()),
+                  ListingProvider(itemRepository: TestItemRepository()),
             ),
           ],
           child: MaterialApp.router(

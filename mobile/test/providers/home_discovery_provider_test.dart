@@ -1,93 +1,81 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kiwishare/models/item_model.dart';
+import 'package:kiwishare/models/discovery_options_model.dart';
 import 'package:kiwishare/providers/home_discovery_provider.dart';
 
-const _items = [
-  ItemModel(
-    id: 'plant',
-    title: 'Monstera Plant',
-    priceNzd: '25',
-    location: 'Auckland',
-    imageUrl: '',
-    isSustainable: true,
-    category: 'Plants',
-    status: ItemStatus.active,
-  ),
-  ItemModel(
-    id: 'chair',
-    title: 'Armchair',
-    priceNzd: '80',
-    location: 'Wellington',
-    imageUrl: '',
-    isSustainable: false,
-    category: 'Furniture',
-    status: ItemStatus.active,
-  ),
-  ItemModel(
-    id: 'bike',
-    title: 'Commuter Bike',
-    priceNzd: '120',
-    location: 'Hamilton',
-    imageUrl: '',
-    isSustainable: true,
-    category: 'vehicle',
-    status: ItemStatus.active,
-  ),
-];
+const _options = DiscoveryOptionsModel(
+  categories: [
+    DiscoveryCategoryOption(value: 'Furniture', count: 2),
+    DiscoveryCategoryOption(value: 'Plants', count: 1),
+    DiscoveryCategoryOption(value: 'Bicycles', count: 3),
+  ],
+  locations: [
+    DiscoveryLocationOption(
+      value: 'Wellington',
+      count: 2,
+      latitude: -41.2866,
+      longitude: 174.7756,
+    ),
+  ],
+  minimumPrice: 12,
+  maximumPrice: 240,
+);
 
 void main() {
   group('HomeDiscoveryProvider', () {
-    test('category tabs filter Home products and toggle back to all', () {
-      final provider = HomeDiscoveryProvider();
+    test('uses category options supplied by the backend', () {
+      final provider = HomeDiscoveryProvider()..applyOptions(_options);
 
-      provider.toggleCategory('Plants');
-      expect(provider.selectedCategory, 'Plants');
-      expect(provider.filterAndSort(_items).map((item) => item.id), ['plant']);
+      expect(provider.categories.map((option) => option.value), [
+        'Furniture',
+        'Plants',
+        'Bicycles',
+      ]);
+      provider.toggleCategory('Bicycles');
+      expect(provider.discoveryQuery.category, 'Bicycles');
 
-      provider.toggleCategory('Plants');
-      expect(provider.selectedCategory, 'All');
-      expect(provider.filterAndSort(_items), hasLength(3));
+      provider.toggleCategory('Bicycles');
+      expect(provider.discoveryQuery.category, isNull);
     });
 
-    test('supports manual and approximate nearby location context', () {
-      final provider = HomeDiscoveryProvider();
+    test('manual locations use coordinates supplied by the backend', () {
+      final provider = HomeDiscoveryProvider()..applyOptions(_options);
 
       provider.setLocation('Wellington');
+
       expect(provider.selectedLocation, 'Wellington');
       expect(provider.isNearYou, isFalse);
       expect(provider.userLatitude, -41.2866);
-
-      provider.setLocation(
-        'Auckland',
-        nearYou: true,
-        latitude: -36.85,
-        longitude: 174.76,
-      );
-      expect(provider.selectedLocation, 'Auckland');
-      expect(provider.isNearYou, isTrue);
-      expect(provider.userLongitude, 174.76);
+      expect(provider.discoveryQuery.location, 'Wellington');
     });
 
-    test('price presets and sort work together', () {
+    test('current location creates an approximate nearby server query', () {
+      final provider = HomeDiscoveryProvider()
+        ..setLocation(
+          'Auckland',
+          nearYou: true,
+          latitude: -36.85,
+          longitude: 174.76,
+        );
+
+      expect(provider.discoveryQuery.location, isNull);
+      expect(provider.discoveryQuery.latitude, -36.85);
+      expect(provider.discoveryQuery.longitude, 174.76);
+      expect(provider.discoveryQuery.radiusKm, 50);
+    });
+
+    test('price presets and sort are passed to the server', () {
       final provider = HomeDiscoveryProvider()
         ..setPriceRange(HomePriceRange.from25To50)
         ..setSort(HomeProductSort.priceHighToLow);
 
-      final results = provider.filterAndSort(_items);
-
-      expect(results.map((item) => item.id), ['plant']);
-      expect(provider.minimumPrice, 25);
-      expect(provider.maximumPrice, 50);
-    });
-
-    test('transport pilot category includes legacy vehicle data', () {
-      final provider = HomeDiscoveryProvider()..toggleCategory('Transport');
-
-      expect(provider.filterAndSort(_items).map((item) => item.id), ['bike']);
+      expect(provider.discoveryQuery.minimumPrice, 25);
+      expect(provider.discoveryQuery.maximumPrice, 50);
+      expect(provider.discoveryQuery.sort, 'price_desc');
     });
 
     test('keeps Home map state while a detail route is open', () {
       final provider = HomeDiscoveryProvider()
+        ..applyOptions(_options)
         ..setQuery('monstera')
         ..toggleCategory('Plants')
         ..setCustomPriceRange(minimum: 20, maximum: 80)
@@ -104,16 +92,23 @@ void main() {
 
     test('reset restores the default Home discovery view', () {
       final provider = HomeDiscoveryProvider()
+        ..applyOptions(_options)
         ..toggleCategory('Furniture')
-        ..setLocation('Dunedin')
+        ..setLocation('Wellington')
         ..setSort(HomeProductSort.priceHighToLow)
         ..setSustainableOnly(true)
         ..setView(HomeProductView.map);
 
       provider.resetFilters();
 
-      expect(provider.selectedCategory, 'All');
-      expect(provider.selectedLocation, 'All NZ');
+      expect(
+        provider.selectedCategory,
+        HomeDiscoveryProvider.allCategoriesLabel,
+      );
+      expect(
+        provider.selectedLocation,
+        HomeDiscoveryProvider.allLocationsLabel,
+      );
       expect(provider.selectedSort, HomeProductSort.recommended);
       expect(provider.selectedPriceRange, HomePriceRange.any);
       expect(provider.sustainableOnly, isFalse);

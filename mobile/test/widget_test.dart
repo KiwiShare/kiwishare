@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+
+import 'support/test_item_repository.dart';
 import 'package:kiwishare/models/user_model.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/providers.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
-import 'package:kiwishare/repositories/item_repository.dart';
 import 'package:kiwishare/main.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -128,7 +129,7 @@ void main() {
             ChangeNotifierProvider(create: (_) => ThemeProvider()),
             ChangeNotifierProvider(
               create: (_) =>
-                  ListingProvider(itemRepository: MockItemRepository()),
+                  ListingProvider(itemRepository: TestItemRepository()),
             ),
           ],
           child: const KiwiShareApp(),

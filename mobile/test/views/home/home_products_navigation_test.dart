@@ -3,12 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/providers.dart';
-import 'package:kiwishare/repositories/item_repository.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
 import 'package:provider/provider.dart';
+
+import '../../support/test_item_repository.dart';
 
 void main() {
   testWidgets('Home product card opens Product details', (tester) async {
@@ -40,7 +41,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => SearchProvider()),
           ChangeNotifierProvider(
             create: (_) =>
-                ListingProvider(itemRepository: MockItemRepository()),
+                ListingProvider(itemRepository: TestItemRepository()),
           ),
         ],
         child: MaterialApp.router(
@@ -56,7 +57,8 @@ void main() {
     expect(find.byKey(const Key('home-location-button')), findsOneWidget);
     expect(find.byIcon(Icons.notifications_outlined), findsNothing);
     expect(find.textContaining('Kia ora'), findsNothing);
-    for (final category in HomeDiscoveryProvider.categories) {
+    for (final category
+        in testCatalogItems.map((item) => item.category).toSet()) {
       expect(find.byKey(Key('home-category-$category')), findsOneWidget);
     }
 
