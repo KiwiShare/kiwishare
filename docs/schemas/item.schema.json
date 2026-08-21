@@ -32,8 +32,20 @@
     },
     "category": {
       "type": "string",
-      "enum": ["All NZ", "Camping", "Plants", "Furniture", "Transport"],
-      "description": "Marketplace category filter index."
+      "minLength": 1,
+      "description": "Marketplace category value exposed by the discovery-options endpoint."
+    },
+    "latitude": {
+      "type": ["number", "null"],
+      "minimum": -90,
+      "maximum": 90,
+      "description": "Approximate listing latitude when supplied."
+    },
+    "longitude": {
+      "type": ["number", "null"],
+      "minimum": -180,
+      "maximum": 180,
+      "description": "Approximate listing longitude when supplied."
     },
     "status": {
       "type": "string",
