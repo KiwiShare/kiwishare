@@ -2,6 +2,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import app from '../src/app';
+import Item from '../src/models/Item';
 
 jest.setTimeout(60000);
 
@@ -12,10 +13,49 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri);
-    
-    // Seed initial mock listings
-    const { seedInitialData } = require('../src/index');
-    await seedInitialData();
+
+    await Item.create([
+      {
+        sellerId: new mongoose.Types.ObjectId(),
+        title: 'Retro Armchair',
+        description: 'Comfortable vintage armchair.',
+        category: 'Furniture',
+        condition: 'good',
+        price: 4500,
+        currency: 'NZD',
+        images: [{ url: 'https://example.com/armchair.jpg', sortOrder: 0 }],
+        location: {
+          city: 'Auckland',
+          suburb: 'Central',
+          coordinates: { type: 'Point', coordinates: [174.7633, -36.8485] }
+        },
+        status: 'active',
+        imageUrl: 'https://example.com/armchair.jpg',
+        priceNzd: '45',
+        isSustainable: true,
+        ownerId: 'fixture-owner-1'
+      },
+      {
+        sellerId: new mongoose.Types.ObjectId(),
+        title: 'Monstera Deliciosa',
+        description: 'Healthy indoor plant.',
+        category: 'Plants',
+        condition: 'good',
+        price: 1500,
+        currency: 'NZD',
+        images: [{ url: 'https://example.com/plant.jpg', sortOrder: 0 }],
+        location: {
+          city: 'Wellington',
+          suburb: 'Te Aro',
+          coordinates: { type: 'Point', coordinates: [174.7762, -41.2865] }
+        },
+        status: 'active',
+        imageUrl: 'https://example.com/plant.jpg',
+        priceNzd: '15',
+        isSustainable: true,
+        ownerId: 'fixture-owner-2'
+      }
+    ]);
   });
 
   afterAll(async () => {
@@ -98,6 +138,70 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body.every((item: any) =>
+      typeof item.latitude === 'number' && typeof item.longitude === 'number'
+    )).toBe(true);
+  });
+
+  test('GET /api/usedItems/discovery-options - derives filters from MongoDB', async () => {
+    const res = await request(app.callback())
+      .get('/api/usedItems/discovery-options');
+
+    expect(res.status).toBe(200);
+    expect(res.body.categories).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: 'Furniture', count: 1 }),
+      expect.objectContaining({ value: 'Plants', count: 1 })
+    ]));
+    expect(res.body.locations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        value: 'Auckland',
+        latitude: expect.any(Number),
+        longitude: expect.any(Number)
+      })
+    ]));
+    expect(res.body.priceRange).toEqual({ minimum: 15, maximum: 45 });
+  });
+
+  test('GET /api/usedItems - filters and sorts against stored fields', async () => {
+    const res = await request(app.callback())
+      .get('/api/usedItems')
+      .query({
+        category: 'Furniture',
+        location: 'Auckland',
+        minPrice: '40',
+        maxPrice: '50',
+        sustainable: 'true',
+        sort: 'price_asc'
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].title).toBe('Retro Armchair');
+  });
+
+  test('GET /api/listings - does not invent coordinates for legacy records', async () => {
+    const legacyItem = await Item.create({
+      sellerId: new mongoose.Types.ObjectId(),
+      title: 'Legacy Dunedin Chair',
+      category: 'Furniture',
+      price: 2000,
+      currency: 'NZD',
+      negotiable: false,
+      images: [{ url: 'https://example.com/chair.jpg', sortOrder: 0 }],
+      location: { city: 'Dunedin', suburb: 'North Dunedin' },
+      status: 'active',
+      imageUrl: 'https://example.com/chair.jpg',
+      priceNzd: '20',
+      isSustainable: true,
+      ownerId: 'legacy-user'
+    });
+
+    const res = await request(app.callback()).get('/api/listings');
+    const listing = res.body.find((item: any) => item.id === legacyItem.id);
+
+    expect(listing).toBeDefined();
+    expect(listing.latitude).toBeNull();
+    expect(listing.longitude).toBeNull();
   });
 
   test('POST /api/usedItems - rejects unauthenticated calls', async () => {
@@ -124,7 +228,12 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
       .send({
         title: 'Organic Fertilizer',
         priceNzd: '12',
-        location: 'Hamilton',
+        location: {
+          city: 'Hamilton',
+          suburb: 'Hamilton Central',
+          latitude: -37.7870,
+          longitude: 175.2793
+        },
         imageUrl: 'https://images.unsplash.com/photo-1545241047-6083a3684587',
         isSustainable: true,
         category: 'Plants',
@@ -134,6 +243,8 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('created');
     expect(res.body.item.title).toBe('Organic Fertilizer');
+    expect(res.body.item.latitude).toBeCloseTo(-37.7870, 1);
+    expect(res.body.item.longitude).toBeCloseTo(175.2793, 1);
     createdItemId = res.body.item.id;
   });
 

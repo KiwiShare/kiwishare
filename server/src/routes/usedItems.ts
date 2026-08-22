@@ -12,7 +12,14 @@ export function formatItem(itemDoc: any) {
   const city = itemObj.location?.city || '';
   const locationStr = typeof itemObj.location === 'string'
     ? itemObj.location
-    : [suburb, city].filter(Boolean).join(', ') || 'Auckland';
+    : [suburb, city].filter(Boolean).join(', ') || 'Location not supplied';
+  const coordinates = itemObj.location?.coordinates?.coordinates;
+  const longitude = Array.isArray(coordinates) && coordinates.length === 2
+    ? Number(coordinates[0])
+    : undefined;
+  const latitude = Array.isArray(coordinates) && coordinates.length === 2
+    ? Number(coordinates[1])
+    : undefined;
 
   const priceNzd = itemObj.priceNzd || (itemObj.price != null ? (itemObj.price / 100).toString() : '0');
   const imageUrl = itemObj.images?.[0]?.url || itemObj.imageUrl || '';
@@ -25,37 +32,80 @@ export function formatItem(itemDoc: any) {
     location: locationStr,
     priceNzd,
     ownerId,
-    sellerId: ownerId
+    sellerId: ownerId,
+    latitude: Number.isFinite(latitude) ? latitude : null,
+    longitude: Number.isFinite(longitude) ? longitude : null
   };
 }
 
 // Helper to parse location string into structured location object
 function parseLocation(location: string | any) {
-  if (typeof location !== 'string') {
-    return location || { city: 'Auckland', suburb: '' };
-  }
-  const parts = location.split(',').map((s: string) => s.trim());
-  const city = parts[parts.length - 1] || 'Auckland';
-  const suburb = parts.length > 1 ? parts[0] : '';
-  return {
-    city,
-    suburb,
-    coordinates: {
-      type: 'Point' as const,
-      coordinates: [174.7633, -36.8485]
+  if (location && typeof location === 'object') {
+    const city = typeof location.city === 'string' ? location.city.trim() : '';
+    const suburb = typeof location.suburb === 'string' ? location.suburb.trim() : '';
+    const suppliedCoordinates = location.coordinates?.coordinates;
+    const longitude = Array.isArray(suppliedCoordinates)
+      ? Number(suppliedCoordinates[0])
+      : Number(location.longitude);
+    const latitude = Array.isArray(suppliedCoordinates)
+      ? Number(suppliedCoordinates[1])
+      : Number(location.latitude);
+    const parsed: any = { city, suburb };
+
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)
+      && latitude >= -90 && latitude <= 90
+      && longitude >= -180 && longitude <= 180) {
+      parsed.coordinates = {
+        type: 'Point' as const,
+        coordinates: [longitude, latitude]
+      };
     }
-  };
+    return parsed;
+  }
+
+  if (typeof location !== 'string') return { city: '', suburb: '' };
+  const parts = location.split(',').map((s: string) => s.trim());
+  const city = parts[parts.length - 1] || '';
+  const suburb = parts.length > 1 ? parts[0] : '';
+  return { city, suburb };
+}
+
+function queryText(value: unknown) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function parseOptionalNumber(value: unknown) {
+  const parsed = Number(queryText(value));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // --- RESTful Used Items Endpoints ---
 
 // 1. GET /usedItems (and GET /listings) - List & filter used items
 async function getUsedItemsHandler(ctx: any) {
-  const { category, query, status, ownerId, sellerId } = ctx.query;
+  const {
+    category,
+    query,
+    status,
+    ownerId,
+    sellerId,
+    location,
+    minPrice,
+    maxPrice,
+    sustainable,
+    sort,
+    latitude,
+    longitude,
+    radiusKm
+  } = ctx.query;
   const filter: any = {};
 
   if (category && category !== 'All NZ' && category !== 'All') {
-    filter.category = category;
+    filter.category = new RegExp(`^${escapeRegExp(String(queryText(category)))}$`, 'i');
   }
 
   if (status) {
@@ -65,8 +115,23 @@ async function getUsedItemsHandler(ctx: any) {
       filter.status = status;
     }
   } else {
-    filter.status = { $ne: 'deleted' };
+    filter.status = 'active';
   }
+
+  const locationText = queryText(location);
+  if (typeof locationText === 'string' && locationText.trim() !== '' && locationText !== 'All NZ') {
+    filter['location.city'] = new RegExp(`^${escapeRegExp(locationText.trim())}$`, 'i');
+  }
+
+  const minimumPrice = parseOptionalNumber(minPrice);
+  const maximumPrice = parseOptionalNumber(maxPrice);
+  if (minimumPrice !== undefined || maximumPrice !== undefined) {
+    filter.price = {};
+    if (minimumPrice !== undefined) filter.price.$gte = Math.round(minimumPrice * 100);
+    if (maximumPrice !== undefined) filter.price.$lte = Math.round(maximumPrice * 100);
+  }
+
+  if (queryText(sustainable) === 'true') filter.isSustainable = true;
 
   const filterOwner = sellerId || ownerId;
   if (filterOwner) {
@@ -80,8 +145,9 @@ async function getUsedItemsHandler(ctx: any) {
     }
   }
 
-  if (query && typeof query === 'string' && query.trim() !== '') {
-    const searchRegex = new RegExp(query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const searchText = queryText(query);
+  if (typeof searchText === 'string' && searchText.trim() !== '') {
+    const searchRegex = new RegExp(escapeRegExp(searchText.trim()), 'i');
     filter.$or = [
       { title: searchRegex },
       { category: searchRegex },
@@ -91,9 +157,112 @@ async function getUsedItemsHandler(ctx: any) {
     ];
   }
 
-  const items = await Item.find(filter).sort({ createdAt: -1 });
+  const nearbyLatitude = parseOptionalNumber(latitude);
+  const nearbyLongitude = parseOptionalNumber(longitude);
+  const nearbyRadiusKm = parseOptionalNumber(radiusKm) ?? 50;
+  const hasNearbyFilter = nearbyLatitude !== undefined && nearbyLongitude !== undefined;
+  if (hasNearbyFilter) {
+    filter['location.coordinates'] = {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [nearbyLongitude, nearbyLatitude]
+        },
+        $maxDistance: Math.max(1, nearbyRadiusKm) * 1000
+      }
+    };
+  }
+
+  let itemQuery = Item.find(filter);
+  const sortValue = queryText(sort);
+  if (sortValue === 'price_asc') {
+    itemQuery = itemQuery.sort({ price: 1, createdAt: -1 });
+  } else if (sortValue === 'price_desc') {
+    itemQuery = itemQuery.sort({ price: -1, createdAt: -1 });
+  } else if (!hasNearbyFilter) {
+    itemQuery = itemQuery.sort({ favouriteCount: -1, viewCount: -1, createdAt: -1 });
+  }
+
+  const items = await itemQuery;
   ctx.status = 200;
   ctx.body = items.map(formatItem);
+}
+
+async function getDiscoveryOptionsHandler(ctx: any) {
+  const [facets] = await Item.aggregate([
+    { $match: { status: 'active' } },
+    {
+      $facet: {
+        categories: [
+          { $match: { category: { $type: 'string', $ne: '' } } },
+          {
+            $group: {
+              _id: { $toLower: '$category' },
+              value: { $first: '$category' },
+              count: { $sum: 1 }
+            }
+          },
+          { $sort: { value: 1 } }
+        ],
+        locations: [
+          { $match: { 'location.city': { $type: 'string', $ne: '' } } },
+          {
+            $group: {
+              _id: { $toLower: '$location.city' },
+              value: { $first: '$location.city' },
+              count: { $sum: 1 },
+              coordinates: { $push: '$location.coordinates.coordinates' }
+            }
+          },
+          { $sort: { value: 1 } }
+        ],
+        prices: [
+          { $match: { price: { $type: 'number' } } },
+          {
+            $group: {
+              _id: null,
+              minimum: { $min: '$price' },
+              maximum: { $max: '$price' }
+            }
+          }
+        ]
+      }
+    }
+  ]);
+
+  const locations = (facets?.locations || []).map((entry: any) => {
+    const points = (entry.coordinates || []).filter((coordinates: unknown) =>
+      Array.isArray(coordinates)
+      && coordinates.length === 2
+      && coordinates.every((coordinate) => Number.isFinite(Number(coordinate)))
+    );
+    const longitude = points.length === 0
+      ? null
+      : points.reduce((sum: number, point: number[]) => sum + Number(point[0]), 0) / points.length;
+    const latitude = points.length === 0
+      ? null
+      : points.reduce((sum: number, point: number[]) => sum + Number(point[1]), 0) / points.length;
+    return {
+      value: entry.value,
+      count: entry.count,
+      latitude,
+      longitude
+    };
+  });
+  const prices = facets?.prices?.[0];
+
+  ctx.status = 200;
+  ctx.body = {
+    categories: (facets?.categories || []).map((entry: any) => ({
+      value: entry.value,
+      count: entry.count
+    })),
+    locations,
+    priceRange: {
+      minimum: prices ? prices.minimum / 100 : null,
+      maximum: prices ? prices.maximum / 100 : null
+    }
+  };
 }
 
 // 2. GET /usedItems/:id (and GET /listings/:id) - Get item by ID
@@ -237,6 +406,7 @@ async function deleteUsedItemHandler(ctx: any) {
 
 // Register RESTful routes under /usedItems
 router.get('/usedItems', getUsedItemsHandler);
+router.get('/usedItems/discovery-options', getDiscoveryOptionsHandler);
 router.get('/usedItems/:id', getUsedItemByIdHandler);
 router.post('/usedItems', authenticateToken, createUsedItemHandler);
 router.put('/usedItems/:id', authenticateToken, updateUsedItemHandler);
@@ -245,6 +415,7 @@ router.delete('/usedItems/:id', authenticateToken, deleteUsedItemHandler);
 
 // Maintain backwards compatibility with /listings
 router.get('/listings', getUsedItemsHandler);
+router.get('/listings/discovery-options', getDiscoveryOptionsHandler);
 router.get('/listings/:id', getUsedItemByIdHandler);
 router.post('/listings', authenticateToken, createUsedItemHandler);
 router.put('/listings/:id', authenticateToken, updateUsedItemHandler);

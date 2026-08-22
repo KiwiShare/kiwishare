@@ -11,6 +11,8 @@ import 'views/post/post_item_screen.dart';
 import 'views/messages/messages_screen.dart';
 import 'views/profile/profile_screen.dart';
 import 'views/auth/login_view.dart';
+import 'views/products/product_detail_screen.dart';
+import 'models/item_model.dart';
 
 // State and Repositories
 import 'providers/providers.dart';
@@ -45,11 +47,7 @@ final GoRouter _router = GoRouter(
       navigatorKey: _shellNavigatorKey,
       builder: (context, state, child) => KiwiShareShell(child: child),
       routes: [
-        GoRoute(
-          path: '/home',
-          builder: (context, state) =>
-              HomeScreen(onNavigateToSearch: () => context.go('/search')),
-        ),
+        GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/search',
           builder: (context, state) => const SearchScreen(),
@@ -68,6 +66,13 @@ final GoRouter _router = GoRouter(
           builder: (context, state) => const ProfileScreen(),
         ),
       ],
+    ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: '/items/:itemId',
+      builder: (context, state) => ProductDetailScreen(
+        item: state.extra is ItemModel ? state.extra as ItemModel : null,
+      ),
     ),
   ],
 );
@@ -98,6 +103,7 @@ void main() async {
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+        ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(
@@ -184,8 +190,9 @@ class KiwiShareShell extends StatelessWidget {
 
     final activeIndex = _getSelectedIndex(context);
     final authProvider = Provider.of<AuthProvider>(context);
+    final homeDiscovery = context.watch<HomeDiscoveryProvider>();
 
-    return Scaffold(
+    final shell = Scaffold(
       body: child,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -300,6 +307,18 @@ class KiwiShareShell extends StatelessWidget {
           ],
         ),
       ),
+    );
+
+    final shouldDismissHomePreview =
+        location.startsWith('/home') && homeDiscovery.previewItemId != null;
+    return PopScope<void>(
+      canPop: !shouldDismissHomePreview,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && shouldDismissHomePreview) {
+          homeDiscovery.selectPreview(null);
+        }
+      },
+      child: shell,
     );
   }
 }

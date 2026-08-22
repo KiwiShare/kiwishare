@@ -36,7 +36,7 @@ graph TD
 
     MobileApp -->|RESTful HTTPS / JSON| KoaApp
     WebApp -->|RESTful HTTPS / JSON| KoaApp
-    
+
     KoaApp --> AuthRouter
     KoaApp --> UsedItemsRouter
     KoaApp --> TxRouter
