@@ -122,7 +122,9 @@ class ItemModel {
       title: (map['title'] ?? '').toString(),
       priceNzd: (map['priceNzd'] ?? map['price'] ?? '0').toString(),
       location: (map['location'] ?? 'Location not supplied').toString(),
-      imageUrl: singleImageUrl.isNotEmpty ? singleImageUrl : (imagesList.isNotEmpty ? imagesList.first : ''),
+      imageUrl: singleImageUrl.isNotEmpty
+          ? singleImageUrl
+          : (imagesList.isNotEmpty ? imagesList.first : ''),
       images: imagesList,
       isSustainable: map['isSustainable'] == true,
       category: (map['category'] ?? '').toString(),
