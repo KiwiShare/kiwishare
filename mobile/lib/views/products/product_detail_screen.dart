@@ -5,14 +5,34 @@ import '../../models/item_model.dart';
 import '../../providers/watchlist_provider.dart';
 import '../../theme/app_theme.dart';
 
-class ProductDetailScreen extends StatelessWidget {
+class ProductDetailScreen extends StatefulWidget {
   final ItemModel? item;
 
   const ProductDetailScreen({super.key, required this.item});
 
   @override
+  State<ProductDetailScreen> createState() => _ProductDetailScreenState();
+}
+
+class _ProductDetailScreenState extends State<ProductDetailScreen> {
+  int _activePhotoIndex = 0;
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final product = item;
+    final product = widget.item;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -121,20 +141,14 @@ class ProductDetailScreen extends StatelessWidget {
           : ListView(
               padding: const EdgeInsets.only(bottom: AppSpacing.xl),
               children: [
-                AspectRatio(
-                  aspectRatio: 4 / 3,
-                  child: ColoredBox(
-                    color: AppColors.surfaceMuted,
-                    child: Image.network(
-                      product.imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                        Icons.image_not_supported_outlined,
-                        size: 56,
-                        color: AppColors.brandPrimary,
-                      ),
-                    ),
-                  ),
+                // Swipeable Multi-Image Gallery
+                _ProductImageGallery(
+                  images: product.allImages,
+                  activePage: _activePhotoIndex,
+                  pageController: _pageController,
+                  onPageChanged: (index) {
+                    setState(() => _activePhotoIndex = index);
+                  },
                 ),
                 Padding(
                   padding: const EdgeInsets.all(AppSpacing.lg),
@@ -154,7 +168,7 @@ class ProductDetailScreen extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: AppSpacing.sm,
-                                vertical: 3,
+                                vertical: 4,
                               ),
                               decoration: BoxDecoration(
                                 color: AppColors.brandPrimaryContainer,
@@ -234,6 +248,89 @@ class ProductDetailScreen extends StatelessWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _ProductImageGallery extends StatelessWidget {
+  final List<String> images;
+  final int activePage;
+  final PageController pageController;
+  final ValueChanged<int> onPageChanged;
+
+  const _ProductImageGallery({
+    required this.images,
+    required this.activePage,
+    required this.pageController,
+    required this.onPageChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (images.isEmpty) {
+      return const AspectRatio(
+        aspectRatio: 4 / 3,
+        child: ColoredBox(
+          color: AppColors.surfaceMuted,
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            size: 56,
+            color: AppColors.brandPrimary,
+          ),
+        ),
+      );
+    }
+
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          PageView.builder(
+            controller: pageController,
+            onPageChanged: onPageChanged,
+            itemCount: images.length,
+            itemBuilder: (context, index) {
+              return ColoredBox(
+                color: AppColors.surfaceMuted,
+                child: Image.network(
+                  images[index],
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.image_not_supported_outlined,
+                    size: 56,
+                    color: AppColors.brandPrimary,
+                  ),
+                ),
+              );
+            },
+          ),
+          if (images.length > 1)
+            Positioned(
+              bottom: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${activePage + 1} / ${images.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

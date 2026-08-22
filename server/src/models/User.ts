@@ -30,6 +30,10 @@ export interface IUser extends Document {
   trustScore: number;
   isVerified: boolean;
   authProvider: string;
+  role: 'user' | 'admin';
+  registrationPlatform: 'web' | 'mobile_ios' | 'mobile_android' | 'mobile' | 'unknown';
+  lastUsedPlatform: 'web' | 'mobile_ios' | 'mobile_android' | 'mobile' | 'unknown';
+  lastActiveAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +47,7 @@ const UserSchema = new Schema<IUser>(
     displayName: { type: String, required: true },
     avatarUrl: { type: String, default: null },
     status: { type: String, enum: ['active', 'suspended', 'deleted'], default: 'active' },
+    role: { type: String, enum: ['user', 'admin'], default: 'user' },
     location: {
       city: { type: String },
       suburb: { type: String },
@@ -58,6 +63,17 @@ const UserSchema = new Schema<IUser>(
     rating: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
     lastLoginAt: { type: Date },
+    lastActiveAt: { type: Date },
+    registrationPlatform: { 
+      type: String, 
+      enum: ['web', 'mobile_ios', 'mobile_android', 'mobile', 'unknown'], 
+      default: 'unknown' 
+    },
+    lastUsedPlatform: { 
+      type: String, 
+      enum: ['web', 'mobile_ios', 'mobile_android', 'mobile', 'unknown'], 
+      default: 'unknown' 
+    },
     deletedAt: { type: Date },
 
     // Compatibility fields

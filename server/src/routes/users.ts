@@ -29,9 +29,13 @@ router.get('/users/me', authenticateToken, async (ctx) => {
       email: user.email,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      role: user.role || 'user',
       trustScore: user.trustScore,
       isVerified: user.isVerified,
-      authProvider: user.authProvider
+      authProvider: user.authProvider,
+      registrationPlatform: user.registrationPlatform,
+      lastUsedPlatform: user.lastUsedPlatform,
+      lastActiveAt: user.lastActiveAt
     }
   };
 });

@@ -6,6 +6,7 @@ class ItemModel {
   final String priceNzd;
   final String location;
   final String imageUrl;
+  final List<String> images;
   final bool isSustainable;
   final String category;
   final ItemStatus status;
@@ -21,6 +22,7 @@ class ItemModel {
     required this.priceNzd,
     required this.location,
     required this.imageUrl,
+    this.images = const [],
     required this.isSustainable,
     required this.category,
     required this.status,
@@ -35,6 +37,13 @@ class ItemModel {
 
   bool get hasMapLocation => latitude != null && longitude != null;
 
+  /// Returns the complete list of images, falling back to imageUrl
+  List<String> get allImages {
+    if (images.isNotEmpty) return images;
+    if (imageUrl.isNotEmpty) return [imageUrl];
+    return const [];
+  }
+
   /// Create a copy of this ItemModel with updated fields.
   ItemModel copyWith({
     String? id,
@@ -42,6 +51,7 @@ class ItemModel {
     String? priceNzd,
     String? location,
     String? imageUrl,
+    List<String>? images,
     bool? isSustainable,
     String? category,
     ItemStatus? status,
@@ -57,6 +67,7 @@ class ItemModel {
       priceNzd: priceNzd ?? this.priceNzd,
       location: location ?? this.location,
       imageUrl: imageUrl ?? this.imageUrl,
+      images: images ?? this.images,
       isSustainable: isSustainable ?? this.isSustainable,
       category: category ?? this.category,
       status: status ?? this.status,
@@ -76,6 +87,7 @@ class ItemModel {
       'priceNzd': priceNzd,
       'location': location,
       'imageUrl': imageUrl,
+      'images': images,
       'isSustainable': isSustainable,
       'category': category,
       'status': status.name,
@@ -89,12 +101,29 @@ class ItemModel {
 
   /// Create from Map.
   factory ItemModel.fromMap(Map<String, dynamic> map) {
+    final rawImages = map['images'];
+    final imagesList = <String>[];
+    if (rawImages is List) {
+      for (final item in rawImages) {
+        if (item is String && item.isNotEmpty) {
+          imagesList.add(item);
+        } else if (item is Map && item['url'] != null) {
+          imagesList.add(item['url'].toString());
+        }
+      }
+    }
+    final singleImageUrl = (map['imageUrl'] ?? '').toString();
+    if (imagesList.isEmpty && singleImageUrl.isNotEmpty) {
+      imagesList.add(singleImageUrl);
+    }
+
     return ItemModel(
       id: (map['id'] ?? map['_id'] ?? '').toString(),
       title: (map['title'] ?? '').toString(),
       priceNzd: (map['priceNzd'] ?? map['price'] ?? '0').toString(),
       location: (map['location'] ?? 'Location not supplied').toString(),
-      imageUrl: (map['imageUrl'] ?? '').toString(),
+      imageUrl: singleImageUrl.isNotEmpty ? singleImageUrl : (imagesList.isNotEmpty ? imagesList.first : ''),
+      images: imagesList,
       isSustainable: map['isSustainable'] == true,
       category: (map['category'] ?? '').toString(),
       status: _parseStatus(map['status']),

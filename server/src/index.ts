@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import app from './app';
 import connectDB from './config/db';
+import seedDatabase from './config/seed';
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -13,6 +14,9 @@ async function startServer() {
     const connectionUri = process.env.NODE_ENV === 'production' ? MONGODB_URI : MONGODB_URI_TEST;
     await connectDB(connectionUri);
     console.log('✅ Connected to MongoDB successfully.');
+
+    // Seed default categories, admin user, and sample items if empty
+    await seedDatabase();
 
     app.listen(PORT, HOST, () => {
       console.log(`\n🚀 [KiwiShare Koa Server] Running on http://${HOST}:${PORT}`);
