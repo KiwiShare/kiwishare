@@ -4,6 +4,9 @@ import usedItemsRouter from './usedItems';
 import transactionsRouter from './transactions';
 import usersRouter from './users';
 import watchlistRouter from './watchlist';
+import categoriesRouter from './categories';
+import adminRouter from './admin';
+import uploadRouter from './upload';
 
 const router = new Router({ prefix: '/api' });
 
@@ -22,5 +25,14 @@ router.use(transactionsRouter.allowedMethods());
 
 router.use(watchlistRouter.routes());
 router.use(watchlistRouter.allowedMethods());
+
+router.use(categoriesRouter.routes());
+router.use(categoriesRouter.allowedMethods());
+
+router.use(adminRouter.routes());
+router.use(adminRouter.allowedMethods());
+
+router.use(uploadRouter.routes());
+router.use(uploadRouter.allowedMethods());
 
 export default router;

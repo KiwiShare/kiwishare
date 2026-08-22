@@ -29,7 +29,15 @@ export interface IUser extends Document {
   googleId?: string;
   trustScore: number;
   isVerified: boolean;
+  isStudentVerified: boolean;
+  studentInstitution?: string;
+  studentIdNumber?: string;
+  isBanned?: boolean;
   authProvider: string;
+  role: 'user' | 'admin';
+  registrationPlatform: 'web' | 'mobile_ios' | 'mobile_android' | 'mobile' | 'unknown';
+  lastUsedPlatform: 'web' | 'mobile_ios' | 'mobile_android' | 'mobile' | 'unknown';
+  lastActiveAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,7 +50,8 @@ const UserSchema = new Schema<IUser>(
     username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     displayName: { type: String, required: true },
     avatarUrl: { type: String, default: null },
-    status: { type: String, enum: ['active', 'suspended', 'deleted'], default: 'active' },
+    status: { type: String, enum: ['active', 'suspended', 'deleted', 'banned'], default: 'active' },
+    role: { type: String, enum: ['user', 'admin'], default: 'user' },
     location: {
       city: { type: String },
       suburb: { type: String },
@@ -58,12 +67,27 @@ const UserSchema = new Schema<IUser>(
     rating: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
     lastLoginAt: { type: Date },
+    lastActiveAt: { type: Date },
+    registrationPlatform: { 
+      type: String, 
+      enum: ['web', 'mobile_ios', 'mobile_android', 'mobile', 'unknown'], 
+      default: 'unknown' 
+    },
+    lastUsedPlatform: { 
+      type: String, 
+      enum: ['web', 'mobile_ios', 'mobile_android', 'mobile', 'unknown'], 
+      default: 'unknown' 
+    },
     deletedAt: { type: Date },
 
     // Compatibility fields
     googleId: { type: String, unique: true, sparse: true },
     trustScore: { type: Number, default: 100 },
     isVerified: { type: Boolean, default: false },
+    isStudentVerified: { type: Boolean, default: false },
+    studentInstitution: { type: String, default: 'University of Auckland' },
+    studentIdNumber: { type: String },
+    isBanned: { type: Boolean, default: false },
     authProvider: { type: String, required: true, default: 'email_otp' }
   },
   {

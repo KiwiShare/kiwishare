@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/providers.dart';
 
+enum AuthMode { password, otp }
+
 class LoginView extends StatefulWidget {
   final VoidCallback? onLoginSuccess;
   final bool isSignUp;
@@ -18,11 +20,14 @@ class _LoginViewState extends State<LoginView> {
   final _formKey = GlobalKey<FormState>();
   final _displayNameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _codeController = TextEditingController();
 
   bool _isSignUp = false;
+  AuthMode _authMode = AuthMode.password;
   bool _codeSent = false;
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   Timer? _cooldownTimer;
   int _cooldownSeconds = 0;
@@ -38,6 +43,7 @@ class _LoginViewState extends State<LoginView> {
     _cooldownTimer?.cancel();
     _displayNameController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
     _codeController.dispose();
     super.dispose();
   }
@@ -66,57 +72,122 @@ class _LoginViewState extends State<LoginView> {
     });
   }
 
-  void _sendOtp() async {
-    if (_formKey.currentState!.validate()) {
-      if (_cooldownSeconds > 0) {
+  void _submitPasswordAuth() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final displayName = _displayNameController.text.trim();
+
+    try {
+      if (_isSignUp) {
+        await authProvider.register(email, password, displayName);
+      } else {
+        await authProvider.login(email, password);
+      }
+
+      final loggedInName =
+          authProvider.currentUser?.displayName ??
+          (displayName.isNotEmpty ? displayName : 'User');
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Please wait $_cooldownSeconds seconds before requesting a new code.',
-            ),
+            content: Text('Kia ora, $loggedInName! Welcome to KiwiShare.'),
+            backgroundColor: const Color(0xFF2E5E4E),
+          ),
+        );
+
+        if (widget.onLoginSuccess != null) {
+          widget.onLoginSuccess!();
+        } else {
+          Navigator.of(context).maybePop();
+        }
+      }
+    } catch (e) {
+      final errorMsg = e.toString().replaceAll('Exception: ', '');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
             backgroundColor: const Color(0xFFC96B4A),
           ),
         );
-        return;
       }
-
-      setState(() {
-        _isLoading = true;
-      });
-
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final email = _emailController.text.trim();
-
-      try {
-        await authProvider.sendOtp(email);
-        _startCooldown(60);
+    } finally {
+      if (mounted) {
         setState(() {
-          _codeSent = true;
+          _isLoading = false;
         });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Verification code sent! Please check your email.'),
-              backgroundColor: Color(0xFF2E5E4E), // Sage Green
-            ),
-          );
-        }
-      } catch (e) {
-        final errorMsg = e.toString().replaceAll('Exception: ', '');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(errorMsg),
-              backgroundColor: const Color(0xFFC96B4A), // Terracotta
-            ),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+      }
+    }
+  }
+
+  void _sendOtp() async {
+    if (_emailController.text.trim().isEmpty ||
+        !_emailController.text.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid email address first.'),
+          backgroundColor: Color(0xFFC96B4A),
+        ),
+      );
+      return;
+    }
+
+    if (_cooldownSeconds > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Please wait $_cooldownSeconds seconds before requesting a new code.',
+          ),
+          backgroundColor: const Color(0xFFC96B4A),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final email = _emailController.text.trim();
+
+    try {
+      await authProvider.sendOtp(email);
+      _startCooldown(60);
+      setState(() {
+        _codeSent = true;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Verification code sent! Please check your email.'),
+            backgroundColor: Color(0xFF2E5E4E),
+          ),
+        );
+      }
+    } catch (e) {
+      final errorMsg = e.toString().replaceAll('Exception: ', '');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: const Color(0xFFC96B4A),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -255,7 +326,7 @@ class _LoginViewState extends State<LoginView> {
             children: [
               // Header Text
               Text(
-                _codeSent
+                _authMode == AuthMode.otp && _codeSent
                     ? 'Enter Verification Code'
                     : (_isSignUp
                           ? 'Create your Account'
@@ -269,20 +340,117 @@ class _LoginViewState extends State<LoginView> {
               ),
               const SizedBox(height: 6),
               Text(
-                _codeSent
+                _authMode == AuthMode.otp && _codeSent
                     ? 'We sent a 6-digit code to ${_emailController.text}'
                     : (_isSignUp
-                          ? 'Enter your username and email to register.'
-                          : 'Enter your email to receive a login verification code.'),
+                          ? 'Fill in your details to create a new KiwiShare account.'
+                          : 'Sign in with your email and password.'),
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: const Color(0xFF1F1F1F).withOpacity(0.6),
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
+              // Auth Method Segmented Tabs (Password vs OTP)
               if (!_codeSent) ...[
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF2E8DB).withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _authMode = AuthMode.password;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _authMode == AuthMode.password
+                                  ? Colors.white
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: _authMode == AuthMode.password
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Text(
+                              'Password',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: _authMode == AuthMode.password
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: _authMode == AuthMode.password
+                                    ? const Color(0xFF2E5E4E)
+                                    : const Color(0xFF1F1F1F).withOpacity(0.6),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _authMode = AuthMode.otp;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _authMode == AuthMode.otp
+                                  ? Colors.white
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: _authMode == AuthMode.otp
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Text(
+                              'Email Code (OTP)',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: _authMode == AuthMode.otp
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: _authMode == AuthMode.otp
+                                    ? const Color(0xFF2E5E4E)
+                                    : const Color(0xFF1F1F1F).withOpacity(0.6),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // 1. Password Mode or Pre-OTP fields
+              if (_authMode == AuthMode.password || !_codeSent) ...[
                 // Username / Display Name Input Field (Only in Sign Up mode)
                 if (_isSignUp) ...[
                   TextFormField(
@@ -290,8 +458,8 @@ class _LoginViewState extends State<LoginView> {
                     textCapitalization: TextCapitalization.words,
                     style: GoogleFonts.inter(color: const Color(0xFF1F1F1F)),
                     decoration: InputDecoration(
-                      labelText: 'User Name',
-                      hintText: 'e.g. Sam',
+                      labelText: 'Username',
+                      hintText: 'e.g. Sam Yao',
                       labelStyle: GoogleFonts.inter(
                         color: const Color(0xFF1F1F1F).withOpacity(0.6),
                       ),
@@ -326,10 +494,10 @@ class _LoginViewState extends State<LoginView> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                 ],
 
-                // Email Input State
+                // Email Input
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -370,45 +538,141 @@ class _LoginViewState extends State<LoginView> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
 
-                // Send OTP Button
-                ElevatedButton(
-                  onPressed: (_isLoading || _cooldownSeconds > 0)
-                      ? null
-                      : _sendOtp,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFC96B4A), // Terracotta
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: const Color(
-                      0xFFC96B4A,
-                    ).withOpacity(0.5),
-                    disabledForegroundColor: Colors.white.withOpacity(0.8),
-                    minimumSize: const Size(double.infinity, 48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          _cooldownSeconds > 0
-                              ? 'Resend in ${_cooldownSeconds}s'
-                              : 'Send Verification Code',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                // Password Input Field (Only in Password mode)
+                if (_authMode == AuthMode.password) ...[
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    style: GoogleFonts.inter(color: const Color(0xFF1F1F1F)),
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      hintText: '••••••••',
+                      labelStyle: GoogleFonts.inter(
+                        color: const Color(0xFF1F1F1F).withOpacity(0.6),
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.lock_outline,
+                        color: Color(0xFF2E5E4E),
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: const Color(0xFF2E5E4E).withOpacity(0.7),
                         ),
-                ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF2E8DB).withOpacity(0.3),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: const Color(0xFF2E5E4E).withOpacity(0.2),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF2E5E4E),
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    validator: (value) {
+                      if (_authMode != AuthMode.password) return null;
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your password';
+                      }
+                      if (_isSignUp && value.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Password Auth Submit Button
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _submitPasswordAuth,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFC96B4A), // Terracotta
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(
+                        0xFFC96B4A,
+                      ).withOpacity(0.5),
+                      disabledForegroundColor: Colors.white.withOpacity(0.8),
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            _isSignUp ? 'Create Account' : 'Log In',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ],
+
+                // Send OTP Button (When in OTP mode and code not sent yet)
+                if (_authMode == AuthMode.otp) ...[
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: (_isLoading || _cooldownSeconds > 0)
+                        ? null
+                        : _sendOtp,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFC96B4A),
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(
+                        0xFFC96B4A,
+                      ).withOpacity(0.5),
+                      disabledForegroundColor: Colors.white.withOpacity(0.8),
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            _cooldownSeconds > 0
+                                ? 'Resend in ${_cooldownSeconds}s'
+                                : 'Send Verification Code',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ],
               ] else ...[
                 // OTP Code Input State
                 TextFormField(
@@ -535,7 +799,7 @@ class _LoginViewState extends State<LoginView> {
                         },
                   child: Text(
                     _isSignUp
-                        ? 'Change Email or User Name'
+                        ? 'Change Email or Username'
                         : 'Change Email Address',
                     style: GoogleFonts.inter(
                       color: const Color(0xFF2E5E4E),
@@ -547,7 +811,7 @@ class _LoginViewState extends State<LoginView> {
 
               // Switch Mode Link (when not codeSent)
               if (!_codeSent) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -580,7 +844,7 @@ class _LoginViewState extends State<LoginView> {
                 ),
               ],
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Divider
               Row(
@@ -611,7 +875,7 @@ class _LoginViewState extends State<LoginView> {
                 ],
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Google Sign-In Button
               OutlinedButton(

@@ -166,13 +166,16 @@ void main() {
           home: Scaffold(
             body: ChangeNotifierProvider(
               create: (_) => AuthProvider(userRepository: MockUserRepository()),
-              child: const LoginView(),
+              child: const LoginView(isSignUp: true),
             ),
           ),
         ),
       );
 
-      expect(find.text('Send Verification Code'), findsOneWidget);
+      expect(find.text('Username'), findsOneWidget);
+      expect(find.text('Email Address'), findsOneWidget);
+      expect(find.text('Password'), findsWidgets);
+      expect(find.text('Create Account'), findsOneWidget);
     });
 
     testWidgets('ProfileScreen shows Kia ora greeting when logged in', (

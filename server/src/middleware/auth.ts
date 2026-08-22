@@ -21,9 +21,11 @@ export async function authenticateToken(ctx: Context, next: Next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
     ctx.state.user = decoded; // Store identity in Koa state context
-    await next();
   } catch (err) {
     ctx.status = 403;
     ctx.body = { status: 'error', message: 'Invalid or expired authorization token.' };
+    return;
   }
+
+  await next();
 }

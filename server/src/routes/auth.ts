@@ -5,6 +5,7 @@ import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import User from '../models/User';
 import Otp from '../models/Otp';
+import { resolveClientPlatform } from '../middleware/logger';
 
 const router = new Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'kiwishare_super_secret_key_123_abc';
@@ -12,7 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'kiwishare_super_secret_key_123_abc
 // --- 1. Authentication Endpoints ---
 
 router.post('/auth/register', async (ctx) => {
-  const { email, password, displayName } = ctx.request.body as any;
+  const { email, password, displayName, platform: bodyPlatform } = ctx.request.body as any;
 
   if (!email || !password || !displayName) {
     ctx.status = 400;
@@ -29,13 +30,22 @@ router.post('/auth/register', async (ctx) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  const platform = bodyPlatform || ctx.state.clientPlatform || resolveClientPlatform(ctx);
+  const now = new Date();
+
+  const role = email.toLowerCase() === 'admin@kiwishare.online' ? 'admin' : 'user';
 
   const newUser = await User.create({
     email,
     displayName,
+    role,
     trustScore: 100,
     isVerified: false,
     authProvider: 'email_password',
+    registrationPlatform: platform,
+    lastUsedPlatform: platform,
+    lastActiveAt: now,
+    lastLoginAt: now,
     passwordHash
   });
 
@@ -47,15 +57,19 @@ router.post('/auth/register', async (ctx) => {
     token,
     user: {
       id: newUser._id.toString(),
+      email: newUser.email,
       displayName: newUser.displayName,
+      role: newUser.role,
       trustScore: newUser.trustScore,
-      isVerified: newUser.isVerified
+      isVerified: newUser.isVerified,
+      registrationPlatform: newUser.registrationPlatform,
+      lastUsedPlatform: newUser.lastUsedPlatform
     }
   };
 });
 
 router.post('/auth/login', async (ctx) => {
-  const { email, password } = ctx.request.body as any;
+  const { email, password, platform: bodyPlatform } = ctx.request.body as any;
 
   if (!email || !password) {
     ctx.status = 400;
@@ -71,6 +85,16 @@ router.post('/auth/login', async (ctx) => {
     return;
   }
 
+  if (email.toLowerCase() === 'admin@kiwishare.online' && user.role !== 'admin') {
+    user.role = 'admin';
+  }
+
+  const platform = bodyPlatform || ctx.state.clientPlatform || resolveClientPlatform(ctx);
+  user.lastUsedPlatform = platform;
+  user.lastLoginAt = new Date();
+  user.lastActiveAt = new Date();
+  await user.save();
+
   const token = jwt.sign({ id: user._id.toString(), email: user.email }, JWT_SECRET, { expiresIn: '2h' });
 
   ctx.status = 200;
@@ -79,9 +103,13 @@ router.post('/auth/login', async (ctx) => {
     token,
     user: {
       id: user._id.toString(),
+      email: user.email,
       displayName: user.displayName,
+      role: user.role,
       trustScore: user.trustScore,
-      isVerified: user.isVerified
+      isVerified: user.isVerified,
+      registrationPlatform: user.registrationPlatform,
+      lastUsedPlatform: user.lastUsedPlatform
     }
   };
 });
@@ -272,6 +300,8 @@ router.post('/auth/verify-otp', async (ctx) => {
   // Find or create user
   let user = await User.findOne({ email: normalizedEmail });
   const trimmedName = displayName?.toString().trim();
+  const platform = ctx.state.clientPlatform || resolveClientPlatform(ctx);
+  const now = new Date();
 
   if (!user) {
     user = await User.create({
@@ -280,10 +310,19 @@ router.post('/auth/verify-otp', async (ctx) => {
       avatarUrl: null,
       trustScore: 100,
       isVerified: false,
-      authProvider: 'email_otp'
+      authProvider: 'email_otp',
+      registrationPlatform: platform,
+      lastUsedPlatform: platform,
+      lastActiveAt: now,
+      lastLoginAt: now
     });
-  } else if (trimmedName && trimmedName.length >= 2 && user.displayName !== trimmedName) {
-    user.displayName = trimmedName;
+  } else {
+    user.lastUsedPlatform = platform;
+    user.lastLoginAt = now;
+    user.lastActiveAt = now;
+    if (trimmedName && trimmedName.length >= 2 && user.displayName !== trimmedName) {
+      user.displayName = trimmedName;
+    }
     await user.save();
   }
 
@@ -299,7 +338,9 @@ router.post('/auth/verify-otp', async (ctx) => {
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       trustScore: user.trustScore,
-      isVerified: user.isVerified
+      isVerified: user.isVerified,
+      registrationPlatform: user.registrationPlatform,
+      lastUsedPlatform: user.lastUsedPlatform
     }
   };
 });
@@ -347,6 +388,8 @@ router.post('/auth/google', async (ctx) => {
     }
   }
 
+  const platform = ctx.state.clientPlatform || resolveClientPlatform(ctx);
+  const now = new Date();
   let user = await User.findOne({ $or: [{ googleId: googleUid }, { email: googleEmail }] });
 
   if (user) {
@@ -354,6 +397,9 @@ router.post('/auth/google', async (ctx) => {
     user.avatarUrl = user.avatarUrl || googlePicture || null;
     user.displayName = user.displayName || googleName || googleEmail.split('@')[0];
     user.authProvider = 'google';
+    user.lastUsedPlatform = platform;
+    user.lastLoginAt = now;
+    user.lastActiveAt = now;
     await user.save();
   } else {
     // Create new user profile matching schema using Google UID as googleId
@@ -364,7 +410,11 @@ router.post('/auth/google', async (ctx) => {
       avatarUrl: googlePicture || null,
       trustScore: 100,
       isVerified: true, // Pre-verified via Google
-      authProvider: 'google'
+      authProvider: 'google',
+      registrationPlatform: platform,
+      lastUsedPlatform: platform,
+      lastActiveAt: now,
+      lastLoginAt: now
     });
   }
 
@@ -380,7 +430,9 @@ router.post('/auth/google', async (ctx) => {
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       trustScore: user.trustScore,
-      isVerified: user.isVerified
+      isVerified: user.isVerified,
+      registrationPlatform: user.registrationPlatform,
+      lastUsedPlatform: user.lastUsedPlatform
     }
   };
 });
