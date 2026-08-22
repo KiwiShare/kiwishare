@@ -137,7 +137,7 @@ class _HomeProductMapState extends State<HomeProductMap> {
                   TileLayer(
                     urlTemplate: HomeProductMap.tileUrl,
                     subdomains: const ['a', 'b', 'c', 'd'],
-                    userAgentPackageName: 'com.example.kiwishare',
+                    userAgentPackageName: 'com.kiwishare.app',
                   ),
                   MarkerLayer(
                     markers: [

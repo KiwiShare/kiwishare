@@ -4,7 +4,7 @@ import { itemsApi, UsedItem } from '../api/client';
 import { JumboCarousel } from '../components/JumboCarousel';
 import { CategoryFilter } from '../components/CategoryFilter';
 import { ProductCard } from '../components/ProductCard';
-import { Sparkles, SlidersHorizontal, Loader2, PackageOpen } from 'lucide-react';
+import { Sparkles, Loader2, PackageOpen } from 'lucide-react';
 
 export const HomePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();

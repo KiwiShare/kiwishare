@@ -32,14 +32,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.setItem('kiwishare_user', JSON.stringify(newUser));
   };
 
-  const clearAuth = () => {
+  const clearAuth = React.useCallback(() => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('kiwishare_token');
     localStorage.removeItem('kiwishare_user');
-  };
+  }, []);
 
-  const refreshUser = async () => {
+  const refreshUser = React.useCallback(async () => {
     if (!token) return;
     try {
       const res = await authApi.getMe();
@@ -51,7 +51,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Token might be expired
       clearAuth();
     }
-  };
+  }, [token, clearAuth]);
 
   useEffect(() => {
     if (token) {
@@ -59,7 +59,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } else {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, refreshUser]);
 
   const login = async (email: string, password?: string) => {
     const res = await authApi.login({ email, password, platform: 'web' });

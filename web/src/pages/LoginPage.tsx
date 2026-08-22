@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authApi } from '../api/client';
-import { Sparkles, Mail, Lock, KeyRound, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
+import { Sparkles, Mail, Lock, KeyRound, AlertCircle, Loader2 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { login, loginWithOtp } = useAuth();

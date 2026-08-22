@@ -4,14 +4,11 @@ import { useAuth } from '../context/AuthContext';
 import { apiRequest, UsedItem } from '../api/client';
 import { ProductCard } from '../components/ProductCard';
 import { 
-  User, 
   ShieldCheck, 
   Globe, 
   Smartphone, 
-  Clock, 
   LogOut, 
   Package, 
-  PlusCircle, 
   Loader2 
 } from 'lucide-react';
 

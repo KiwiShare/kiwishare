@@ -6,12 +6,10 @@ import {
   PlusCircle, 
   Image as ImageIcon, 
   UploadCloud, 
-  Check, 
   DollarSign, 
   Loader2, 
   AlertCircle, 
   Cloud,
-  Trash2,
   Layers,
   User
 } from 'lucide-react';
@@ -49,7 +47,7 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
       categoriesApi.getCategories().then((res) => {
         if (res.categories && res.categories.length > 0) {
           setCategories(res.categories);
-          if (!category) setCategory(res.categories[0].name);
+          setCategory((prev) => prev || res.categories[0].name);
         }
       });
     }

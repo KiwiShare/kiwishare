@@ -19,7 +19,7 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [watchlistItems, setWatchlistItems] = useState<UsedItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const refreshWatchlist = async () => {
+  const refreshWatchlist = React.useCallback(async () => {
     if (!isLoggedIn) {
       setWatchlistIds(new Set());
       setWatchlistItems([]);
@@ -44,11 +44,11 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isLoggedIn]);
 
   useEffect(() => {
     refreshWatchlist();
-  }, [isLoggedIn]);
+  }, [refreshWatchlist]);
 
   const isWatched = (itemId: string): boolean => {
     return watchlistIds.has(itemId);

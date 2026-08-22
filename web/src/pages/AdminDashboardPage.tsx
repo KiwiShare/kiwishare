@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
@@ -22,14 +22,12 @@ import {
   Trash2, 
   EyeOff, 
   CheckCircle, 
-  AlertTriangle, 
   Loader2, 
   TrendingUp,
   Search,
   GraduationCap,
   Ban,
   UserCheck,
-  Star,
   PlusCircle,
   MinusCircle
 } from 'lucide-react';
@@ -60,7 +58,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [userSearch, setUserSearch] = useState('');
   const [userStatusFilter, setUserStatusFilter] = useState('all');
 
-  const checkAdminAndFetch = async () => {
+  const checkAdminAndFetch = useCallback(async () => {
     if (!isLoggedIn) {
       navigate('/login');
       return;
@@ -88,11 +86,11 @@ export const AdminDashboardPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isLoggedIn, user, navigate, itemStatusFilter, itemSearch, userStatusFilter, userSearch]);
 
   useEffect(() => {
     checkAdminAndFetch();
-  }, [isLoggedIn, user]);
+  }, [checkAdminAndFetch]);
 
   useEffect(() => {
     if (activeTab === 'items') {

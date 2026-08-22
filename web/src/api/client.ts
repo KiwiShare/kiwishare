@@ -88,7 +88,20 @@ export interface AdminStats {
   recentItems: UsedItem[];
 }
 
-const API_BASE = '/api';
+/**
+ * Resolves the backend API base URL.
+ * Supports environment variables VITE_API_URL / VITE_API_BASE_URL
+ * (e.g. https://kiwishare.onrender.com or https://kiwishare.onrender.com/api).
+ * Falls back to relative '/api' for Vite dev proxy.
+ */
+export function getApiBaseUrl(): string {
+  const envUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '') as string;
+  if (envUrl && envUrl.trim() !== '') {
+    const clean = envUrl.trim().replace(/\/+$/, '');
+    return clean.endsWith('/api') ? clean : `${clean}/api`;
+  }
+  return '/api';
+}
 
 function getAuthToken(): string | null {
   return localStorage.getItem('kiwishare_token');
@@ -108,7 +121,9 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const apiBase = getApiBaseUrl();
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+  const url = endpoint.startsWith('http') ? endpoint : `${apiBase}/${cleanEndpoint}`;
 
   const res = await fetch(url, {
     ...options,
