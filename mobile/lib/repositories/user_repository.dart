@@ -51,9 +51,12 @@ class RestUserRepository implements UserRepository {
     } else {
       try {
         final error = jsonDecode(response.body);
-        throw Exception(error['message'] ?? 'Login failed. Please check your credentials.');
+        throw Exception(
+          error['message'] ?? 'Login failed. Please check your credentials.',
+        );
       } catch (e) {
-        if (e is Exception && !e.toString().startsWith('Exception: FormatException')) {
+        if (e is Exception &&
+            !e.toString().startsWith('Exception: FormatException')) {
           rethrow;
         }
         throw Exception('Login failed. Please check your credentials.');
@@ -88,7 +91,8 @@ class RestUserRepository implements UserRepository {
         final error = jsonDecode(response.body);
         throw Exception(error['message'] ?? 'Registration failed.');
       } catch (e) {
-        if (e is Exception && !e.toString().startsWith('Exception: FormatException')) {
+        if (e is Exception &&
+            !e.toString().startsWith('Exception: FormatException')) {
           rethrow;
         }
         throw Exception('Registration failed.');
@@ -236,7 +240,9 @@ class MockUserRepository implements UserRepository {
     await Future.delayed(const Duration(milliseconds: 300));
     final user = UserModel(
       id: 'mock_user_1',
-      displayName: displayName.trim().isNotEmpty ? displayName.trim() : email.split('@')[0],
+      displayName: displayName.trim().isNotEmpty
+          ? displayName.trim()
+          : email.split('@')[0],
       avatarUrl: null,
       trustScore: 100,
       isVerified: true,

@@ -27,7 +27,9 @@ class SellerInfo {
       displayName: (map['displayName'] ?? 'Kiwi Member').toString(),
       email: map['email']?.toString(),
       avatarUrl: map['avatarUrl']?.toString(),
-      trustScore: (map['trustScore'] is num) ? (map['trustScore'] as num).toInt() : 100,
+      trustScore: (map['trustScore'] is num)
+          ? (map['trustScore'] as num).toInt()
+          : 100,
       isVerified: map['isVerified'] == true,
       isStudentVerified: map['isStudentVerified'] == true,
       studentInstitution: map['studentInstitution']?.toString(),

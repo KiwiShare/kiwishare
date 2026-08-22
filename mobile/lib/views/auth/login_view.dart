@@ -91,7 +91,8 @@ class _LoginViewState extends State<LoginView> {
         await authProvider.login(email, password);
       }
 
-      final loggedInName = authProvider.currentUser?.displayName ??
+      final loggedInName =
+          authProvider.currentUser?.displayName ??
           (displayName.isNotEmpty ? displayName : 'User');
 
       if (mounted) {
@@ -128,7 +129,8 @@ class _LoginViewState extends State<LoginView> {
   }
 
   void _sendOtp() async {
-    if (_emailController.text.trim().isEmpty || !_emailController.text.contains('@')) {
+    if (_emailController.text.trim().isEmpty ||
+        !_emailController.text.contains('@')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter a valid email address first.'),
@@ -141,7 +143,9 @@ class _LoginViewState extends State<LoginView> {
     if (_cooldownSeconds > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Please wait $_cooldownSeconds seconds before requesting a new code.'),
+          content: Text(
+            'Please wait $_cooldownSeconds seconds before requesting a new code.',
+          ),
           backgroundColor: const Color(0xFFC96B4A),
         ),
       );
@@ -215,7 +219,8 @@ class _LoginViewState extends State<LoginView> {
         displayName: (_isSignUp && displayName.isNotEmpty) ? displayName : null,
       );
 
-      final loggedInName = authProvider.currentUser?.displayName ??
+      final loggedInName =
+          authProvider.currentUser?.displayName ??
           (displayName.isNotEmpty ? displayName : 'User');
 
       if (mounted) {
@@ -323,7 +328,9 @@ class _LoginViewState extends State<LoginView> {
               Text(
                 _authMode == AuthMode.otp && _codeSent
                     ? 'Enter Verification Code'
-                    : (_isSignUp ? 'Create your Account' : 'Log in to KiwiShare'),
+                    : (_isSignUp
+                          ? 'Create your Account'
+                          : 'Log in to KiwiShare'),
                 style: GoogleFonts.inter(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -336,8 +343,8 @@ class _LoginViewState extends State<LoginView> {
                 _authMode == AuthMode.otp && _codeSent
                     ? 'We sent a 6-digit code to ${_emailController.text}'
                     : (_isSignUp
-                        ? 'Fill in your details to create a new KiwiShare account.'
-                        : 'Sign in with your email and password.'),
+                          ? 'Fill in your details to create a new KiwiShare account.'
+                          : 'Sign in with your email and password.'),
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: const Color(0xFF1F1F1F).withOpacity(0.6),
@@ -366,7 +373,9 @@ class _LoginViewState extends State<LoginView> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
-                              color: _authMode == AuthMode.password ? Colors.white : Colors.transparent,
+                              color: _authMode == AuthMode.password
+                                  ? Colors.white
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: _authMode == AuthMode.password
                                   ? [
@@ -383,7 +392,9 @@ class _LoginViewState extends State<LoginView> {
                               textAlign: TextAlign.center,
                               style: GoogleFonts.inter(
                                 fontSize: 13,
-                                fontWeight: _authMode == AuthMode.password ? FontWeight.w700 : FontWeight.w500,
+                                fontWeight: _authMode == AuthMode.password
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                                 color: _authMode == AuthMode.password
                                     ? const Color(0xFF2E5E4E)
                                     : const Color(0xFF1F1F1F).withOpacity(0.6),
@@ -402,7 +413,9 @@ class _LoginViewState extends State<LoginView> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
-                              color: _authMode == AuthMode.otp ? Colors.white : Colors.transparent,
+                              color: _authMode == AuthMode.otp
+                                  ? Colors.white
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: _authMode == AuthMode.otp
                                   ? [
@@ -419,7 +432,9 @@ class _LoginViewState extends State<LoginView> {
                               textAlign: TextAlign.center,
                               style: GoogleFonts.inter(
                                 fontSize: 13,
-                                fontWeight: _authMode == AuthMode.otp ? FontWeight.w700 : FontWeight.w500,
+                                fontWeight: _authMode == AuthMode.otp
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                                 color: _authMode == AuthMode.otp
                                     ? const Color(0xFF2E5E4E)
                                     : const Color(0xFF1F1F1F).withOpacity(0.6),
@@ -543,7 +558,9 @@ class _LoginViewState extends State<LoginView> {
                       ),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
                           color: const Color(0xFF2E5E4E).withOpacity(0.7),
                         ),
                         onPressed: () {
@@ -587,7 +604,9 @@ class _LoginViewState extends State<LoginView> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFC96B4A), // Terracotta
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFFC96B4A).withOpacity(0.5),
+                      disabledBackgroundColor: const Color(
+                        0xFFC96B4A,
+                      ).withOpacity(0.5),
                       disabledForegroundColor: Colors.white.withOpacity(0.8),
                       minimumSize: const Size(double.infinity, 48),
                       shape: RoundedRectangleBorder(
@@ -618,11 +637,15 @@ class _LoginViewState extends State<LoginView> {
                 if (_authMode == AuthMode.otp) ...[
                   const SizedBox(height: 8),
                   ElevatedButton(
-                    onPressed: (_isLoading || _cooldownSeconds > 0) ? null : _sendOtp,
+                    onPressed: (_isLoading || _cooldownSeconds > 0)
+                        ? null
+                        : _sendOtp,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFC96B4A),
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFFC96B4A).withOpacity(0.5),
+                      disabledBackgroundColor: const Color(
+                        0xFFC96B4A,
+                      ).withOpacity(0.5),
                       disabledForegroundColor: Colors.white.withOpacity(0.8),
                       minimumSize: const Size(double.infinity, 48),
                       shape: RoundedRectangleBorder(
@@ -707,13 +730,17 @@ class _LoginViewState extends State<LoginView> {
                       ),
                     ),
                     TextButton(
-                      onPressed: (_isLoading || _cooldownSeconds > 0) ? null : _sendOtp,
+                      onPressed: (_isLoading || _cooldownSeconds > 0)
+                          ? null
+                          : _sendOtp,
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         visualDensity: VisualDensity.compact,
                       ),
                       child: Text(
-                        _cooldownSeconds > 0 ? 'Resend (${_cooldownSeconds}s)' : 'Resend Code',
+                        _cooldownSeconds > 0
+                            ? 'Resend (${_cooldownSeconds}s)'
+                            : 'Resend Code',
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -740,7 +767,7 @@ class _LoginViewState extends State<LoginView> {
                     elevation: 0,
                   ),
                   child: _isLoading
-                        ? const SizedBox(
+                      ? const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
@@ -749,7 +776,9 @@ class _LoginViewState extends State<LoginView> {
                           ),
                         )
                       : Text(
-                          _isSignUp ? 'Verify & Create Account' : 'Verify & Log In',
+                          _isSignUp
+                              ? 'Verify & Create Account'
+                              : 'Verify & Log In',
                           style: GoogleFonts.inter(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -769,7 +798,9 @@ class _LoginViewState extends State<LoginView> {
                           });
                         },
                   child: Text(
-                    _isSignUp ? 'Change Email or Username' : 'Change Email Address',
+                    _isSignUp
+                        ? 'Change Email or Username'
+                        : 'Change Email Address',
                     style: GoogleFonts.inter(
                       color: const Color(0xFF2E5E4E),
                       fontWeight: FontWeight.bold,
@@ -785,7 +816,9 @@ class _LoginViewState extends State<LoginView> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      _isSignUp ? 'Already have an account? ' : "Don't have an account? ",
+                      _isSignUp
+                          ? 'Already have an account? '
+                          : "Don't have an account? ",
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         color: const Color(0xFF1F1F1F).withOpacity(0.7),

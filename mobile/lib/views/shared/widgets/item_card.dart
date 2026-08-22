@@ -118,10 +118,11 @@ class ItemCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             '\$${item.priceNzd} NZD',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: colors.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: colors.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -144,23 +145,28 @@ class ItemCard extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 7,
-                          backgroundColor: item.seller?.isStudentVerified == true
+                          backgroundColor:
+                              item.seller?.isStudentVerified == true
                               ? const Color(0xFFDBEAFE)
                               : colors.primaryContainer,
-                          backgroundImage: item.seller?.avatarUrl != null &&
+                          backgroundImage:
+                              item.seller?.avatarUrl != null &&
                                   item.seller!.avatarUrl!.isNotEmpty
                               ? NetworkImage(item.seller!.avatarUrl!)
                               : null,
-                          child: item.seller?.avatarUrl == null ||
+                          child:
+                              item.seller?.avatarUrl == null ||
                                   item.seller!.avatarUrl!.isEmpty
                               ? Text(
                                   (item.seller?.displayName.isNotEmpty == true)
-                                      ? item.seller!.displayName[0].toUpperCase()
+                                      ? item.seller!.displayName[0]
+                                            .toUpperCase()
                                       : 'K',
                                   style: TextStyle(
                                     fontSize: 7,
                                     fontWeight: FontWeight.w700,
-                                    color: item.seller?.isStudentVerified == true
+                                    color:
+                                        item.seller?.isStudentVerified == true
                                         ? const Color(0xFF1D4ED8)
                                         : colors.primary,
                                   ),
@@ -171,10 +177,11 @@ class ItemCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             item.seller?.displayName ?? item.location,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: colors.onSurfaceVariant,
-                              fontSize: 11,
-                            ),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

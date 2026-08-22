@@ -410,7 +410,8 @@ class _SellerProfileCard extends StatelessWidget {
             backgroundColor: seller.isStudentVerified
                 ? const Color(0xFFDBEAFE)
                 : AppColors.brandPrimaryContainer,
-            backgroundImage: seller.avatarUrl != null && seller.avatarUrl!.isNotEmpty
+            backgroundImage:
+                seller.avatarUrl != null && seller.avatarUrl!.isNotEmpty
                 ? NetworkImage(seller.avatarUrl!)
                 : null,
             child: seller.avatarUrl == null || seller.avatarUrl!.isEmpty
