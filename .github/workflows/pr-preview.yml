@@ -40,8 +40,6 @@ jobs:
         run: |
           cd mobile
           flutter pub get
-          cd ios
-          pod install --repo-update
 
       - name: Build Android APK
         run: |
