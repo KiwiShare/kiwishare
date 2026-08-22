@@ -1,4 +1,4 @@
-package com.example.kiwishare
+package com.kiwishare.andriod
 
 import io.flutter.embedding.android.FlutterActivity
 
