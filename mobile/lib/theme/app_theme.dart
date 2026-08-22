@@ -56,6 +56,23 @@ const kiwiShareColorScheme = ColorScheme.light(
   outline: AppColors.border,
 );
 
+// Keep the brand recognisable in dark mode, but use proper dark surfaces and
+// high-contrast text. Screens should read colours from Theme.of(context)
+// rather than hard-coding the light palette.
+const kiwiShareDarkColorScheme = ColorScheme.dark(
+  primary: Color(0xFF92D4B3),
+  onPrimary: Color(0xFF003827),
+  primaryContainer: Color(0xFF0A5941),
+  onPrimaryContainer: Color(0xFFD6F6E3),
+  secondary: Color(0xFFAFCFC0),
+  onSecondary: Color(0xFF19362B),
+  surface: Color(0xFF101B17),
+  onSurface: Color(0xFFE1EAE4),
+  error: Color(0xFFFFB4AB),
+  onError: Color(0xFF690005),
+  outline: Color(0xFF8DA79A),
+);
+
 ThemeData buildKiwiShareTheme() {
   final baseTheme = ThemeData(
     useMaterial3: true,
@@ -142,6 +159,48 @@ ThemeData buildKiwiShareTheme() {
         borderRadius: BorderRadius.all(Radius.circular(AppRadius.medium)),
         borderSide: BorderSide(color: AppColors.error, width: 2),
       ),
+    ),
+  );
+}
+
+ThemeData buildKiwiShareDarkTheme() {
+  final baseTheme = ThemeData(
+    useMaterial3: true,
+    colorScheme: kiwiShareDarkColorScheme,
+    scaffoldBackgroundColor: const Color(0xFF0B120F),
+  );
+  final baseTextTheme = GoogleFonts.interTextTheme(baseTheme.textTheme);
+
+  return baseTheme.copyWith(
+    textTheme: baseTextTheme.apply(
+      bodyColor: kiwiShareDarkColorScheme.onSurface,
+      displayColor: kiwiShareDarkColorScheme.onSurface,
+    ),
+    dividerColor: const Color(0xFF2B3B33),
+    inputDecorationTheme: const InputDecorationTheme(
+      filled: true,
+      fillColor: Color(0xFF16231D),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.md,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.medium)),
+        borderSide: BorderSide(color: Color(0xFF496358)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.medium)),
+        borderSide: BorderSide(color: Color(0xFF496358)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.medium)),
+        borderSide: BorderSide(color: Color(0xFF92D4B3), width: 2),
+      ),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: Color(0xFF16231D),
+      selectedItemColor: Color(0xFF92D4B3),
+      unselectedItemColor: Color(0xFFB6C6BD),
     ),
   );
 }

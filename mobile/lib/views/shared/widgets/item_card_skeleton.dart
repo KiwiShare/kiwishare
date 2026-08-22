@@ -6,12 +6,13 @@ class ItemCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Shimmer.fromColors(
-      baseColor: const Color(0xFFF2E8DB), // Warm Beige
-      highlightColor: const Color(0xFFFAF7F2), // Off-White
+      baseColor: colors.surfaceContainerHighest,
+      highlightColor: colors.surface,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colors.surface,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
@@ -20,8 +21,8 @@ class ItemCardSkeleton extends StatelessWidget {
             // Image area skeleton
             Expanded(
               child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
+                decoration: BoxDecoration(
+                  color: colors.surface,
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(20),
                     topRight: Radius.circular(20),
@@ -35,11 +36,11 @@ class ItemCardSkeleton extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(width: 100, height: 14, color: Colors.white),
+                  Container(width: 100, height: 14, color: colors.surface),
                   const SizedBox(height: 8),
-                  Container(width: 50, height: 14, color: Colors.white),
+                  Container(width: 50, height: 14, color: colors.surface),
                   const SizedBox(height: 8),
-                  Container(width: 80, height: 10, color: Colors.white),
+                  Container(width: 80, height: 10, color: colors.surface),
                 ],
               ),
             ),

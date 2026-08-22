@@ -30,6 +30,8 @@
 	<string>KiwiShare uses the camera so you can photograph items you want to list.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>KiwiShare accesses your photo library so you can add listing photos.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>KiwiShare uses your approximate location only when you request nearby items.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -70,5 +72,14 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>KiwiShare needs local network access to communicate with the development server.</string>
 </dict>
 </plist>

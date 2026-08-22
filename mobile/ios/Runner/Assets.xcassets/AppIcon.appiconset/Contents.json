@@ -113,6 +113,29 @@
       "idiom" : "ios-marketing",
       "filename" : "Icon-App-1024x1024@1x.png",
       "scale" : "1x"
+    },
+    {
+      "size" : "1024x1024",
+      "idiom" : "ios-marketing",
+      "filename" : "Icon-App-Dark-1024.png",
+      "scale" : "1x",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "size" : "1024x1024",
+      "idiom" : "ios-marketing",
+      "filename" : "Icon-App-Tinted-1024.png",
+      "scale" : "1x",
+      "appearances": [
+        {
+          "appearance": "tint"
+        }
+      ]
     }
   ],
   "info" : {
