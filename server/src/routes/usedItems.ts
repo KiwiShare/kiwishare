@@ -404,22 +404,65 @@ async function deleteUsedItemHandler(ctx: any) {
   };
 }
 
+// 1b. GET /usedItems/recommended - Get recommended used items
+async function getRecommendedItemsHandler(ctx: any) {
+  const { limit = '10', category, excludeId } = ctx.query;
+  const maxItems = Math.min(Math.max(1, parseInt(queryText(limit) || '10', 10) || 10), 50);
+
+  const filter: any = { status: 'active' };
+
+  const categoryText = queryText(category);
+  if (typeof categoryText === 'string' && categoryText.trim() !== '' && categoryText !== 'All' && categoryText !== 'All NZ') {
+    filter.category = new RegExp(`^${escapeRegExp(categoryText.trim())}$`, 'i');
+  }
+
+  const exclude = queryText(excludeId);
+  if (typeof exclude === 'string' && exclude.trim() !== '') {
+    if (mongoose.Types.ObjectId.isValid(exclude)) {
+      filter._id = { $ne: new mongoose.Types.ObjectId(exclude) };
+    }
+  }
+
+  const items = await Item.find(filter);
+  const now = Date.now();
+
+  // Multi-factor Recommendation Scoring Algorithm:
+  // 1. Popularity score: favouriteCount * 3 + viewCount * 1
+  // 2. Freshness decay: 20 * exp(-ageInDays / 14)
+  // 3. Sustainability boost: +10 points
+  // 4. Condition quality boost: new (+6), like_new (+4), good (+2)
+  const scoredItems = items.map((item) => {
+    const favScore = (item.favouriteCount || 0) * 3;
+    const viewScore = (item.viewCount || 0) * 1;
+    const createdAtTime = item.createdAt ? new Date(item.createdAt).getTime() : now;
+    const ageInDays = Math.max(0, (now - createdAtTime) / (1000 * 60 * 60 * 24));
+    const freshnessScore = 20 * Math.exp(-ageInDays / 14);
+    const sustainabilityScore = item.isSustainable ? 10 : 0;
+
+    let conditionScore = 0;
+    if (item.condition === 'new') conditionScore = 6;
+    else if (item.condition === 'like_new') conditionScore = 4;
+    else if (item.condition === 'good') conditionScore = 2;
+
+    const totalScore = favScore + viewScore + freshnessScore + sustainabilityScore + conditionScore;
+    return { item, score: totalScore };
+  });
+
+  scoredItems.sort((a, b) => b.score - a.score);
+  const recommended = scoredItems.slice(0, maxItems).map((entry) => formatItem(entry.item));
+
+  ctx.status = 200;
+  ctx.body = recommended;
+}
+
 // Register RESTful routes under /usedItems
 router.get('/usedItems', getUsedItemsHandler);
 router.get('/usedItems/discovery-options', getDiscoveryOptionsHandler);
+router.get('/usedItems/recommended', getRecommendedItemsHandler);
 router.get('/usedItems/:id', getUsedItemByIdHandler);
 router.post('/usedItems', authenticateToken, createUsedItemHandler);
 router.put('/usedItems/:id', authenticateToken, updateUsedItemHandler);
 router.patch('/usedItems/:id', authenticateToken, updateUsedItemHandler);
 router.delete('/usedItems/:id', authenticateToken, deleteUsedItemHandler);
-
-// Maintain backwards compatibility with /listings
-router.get('/listings', getUsedItemsHandler);
-router.get('/listings/discovery-options', getDiscoveryOptionsHandler);
-router.get('/listings/:id', getUsedItemByIdHandler);
-router.post('/listings', authenticateToken, createUsedItemHandler);
-router.put('/listings/:id', authenticateToken, updateUsedItemHandler);
-router.patch('/listings/:id', authenticateToken, updateUsedItemHandler);
-router.delete('/listings/:id', authenticateToken, deleteUsedItemHandler);
 
 export default router;

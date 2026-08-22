@@ -347,4 +347,38 @@ void main() {
     expect(find.byKey(const Key('home-category-Camping')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Home displays bold KiwiShare header, category icons, jumbo carousel, and recommendations',
+    (tester) async {
+      ItemModel? openedItem;
+      await _loadHome(
+        tester,
+        _homeApp(onOpenItem: (item) => openedItem = item),
+      );
+
+      // 1. Header
+      expect(find.text('KiwiShare'), findsOneWidget);
+      expect(find.text('Share & Reuse in NZ'), findsOneWidget);
+
+      // 2. Category Chips with Icons
+      expect(find.byKey(const Key('home-category-Plants')), findsOneWidget);
+      expect(find.byIcon(Icons.yard_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.forest_outlined), findsOneWidget);
+
+      // 3. Featured Highlights Jumbo Carousel
+      expect(find.text('Featured Highlights'), findsOneWidget);
+      expect(find.text('HOT PICK'), findsWidgets);
+
+      // 4. Recommended for You Section
+      expect(find.text('Recommended for You'), findsOneWidget);
+      expect(find.text('Top 10'), findsOneWidget);
+
+      // 5. Open item by tapping recommended card
+      await tester.tap(find.text('Monstera Plant').first);
+      await tester.pump();
+      expect(openedItem, isNotNull);
+      expect(openedItem!.title, 'Monstera Plant');
+    },
+  );
 }

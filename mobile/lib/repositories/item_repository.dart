@@ -8,6 +8,7 @@ import '../models/item_model.dart';
 
 abstract class ItemRepository {
   Future<List<ItemModel>> fetchPopularItems();
+  Future<List<ItemModel>> fetchRecommendedItems({int limit = 10});
   Future<DiscoveryOptionsModel> fetchDiscoveryOptions();
   Future<List<ItemModel>> fetchDiscoveryItems(DiscoveryQuery query);
   Stream<List<ItemModel>> searchItems({String? query, String? category});
@@ -37,6 +38,21 @@ class RestItemRepository implements ItemRepository {
   Future<List<ItemModel>> fetchPopularItems() async {
     final items = await fetchDiscoveryItems(const DiscoveryQuery());
     return items.take(3).toList(growable: false);
+  }
+
+  @override
+  Future<List<ItemModel>> fetchRecommendedItems({int limit = 10}) async {
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/usedItems/recommended',
+    ).replace(queryParameters: {'limit': limit.toString()});
+    final response = await http.get(
+      uri,
+      headers: {'Accept': 'application/json'},
+    );
+    return _parseItemsResponse(
+      response,
+      'Failed to fetch recommended listings from server.',
+    );
   }
 
   @override

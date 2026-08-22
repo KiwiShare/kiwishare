@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'views/splash/splash_screen.dart';
 import 'views/home/home_screen.dart';
 import 'views/search/search_screen.dart';
+import 'views/watchlist/watchlist_screen.dart';
 import 'views/post/post_item_screen.dart';
 import 'views/messages/messages_screen.dart';
 import 'views/profile/profile_screen.dart';
@@ -18,6 +19,7 @@ import 'models/item_model.dart';
 import 'providers/providers.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
+import 'repositories/watchlist_repository.dart';
 import 'services/remote_config_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -48,6 +50,10 @@ final GoRouter _router = GoRouter(
       builder: (context, state, child) => KiwiShareShell(child: child),
       routes: [
         GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
+        GoRoute(
+          path: '/watchlist',
+          builder: (context, state) => const WatchlistScreen(),
+        ),
         GoRoute(
           path: '/search',
           builder: (context, state) => const SearchScreen(),
@@ -102,7 +108,10 @@ void main() async {
           create: (_) => AuthProvider(userRepository: MockUserRepository()),
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
-        ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+        ChangeNotifierProvider(
+          create: (_) =>
+              WatchlistProvider(repository: RestWatchlistRepository()),
+        ),
         ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
@@ -141,7 +150,9 @@ class KiwiShareShell extends StatelessWidget {
   int _getSelectedIndex(BuildContext context) {
     final String location = GoRouterState.of(context).uri.toString();
     if (location.startsWith('/home')) return 0;
-    if (location.startsWith('/search')) return 1;
+    if (location.startsWith('/watchlist') || location.startsWith('/search')) {
+      return 1;
+    }
     if (location.startsWith('/post')) return 2;
     if (location.startsWith('/messages')) return 3;
     if (location.startsWith('/profile')) return 4;
@@ -161,7 +172,9 @@ class KiwiShareShell extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
             ),
             child: SafeArea(
               child: Padding(
@@ -219,7 +232,7 @@ class KiwiShareShell extends StatelessWidget {
                 context.go('/home');
                 break;
               case 1:
-                context.go('/search');
+                context.go('/watchlist');
                 break;
               case 2:
                 context.go('/post');
@@ -247,27 +260,27 @@ class KiwiShareShell extends StatelessWidget {
             fontSize: 11,
           ),
           items: [
-            BottomNavigationBarItem(
-              icon: const Padding(
+            const BottomNavigationBarItem(
+              icon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
                 child: Icon(Icons.home_outlined, size: 24),
               ),
-              activeIcon: const Padding(
+              activeIcon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
                 child: Icon(Icons.home, size: 26),
               ),
               label: 'Home',
             ),
-            BottomNavigationBarItem(
-              icon: const Padding(
+            const BottomNavigationBarItem(
+              icon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
-                child: Icon(Icons.search, size: 24),
+                child: Icon(Icons.bookmark_outline, size: 24),
               ),
-              activeIcon: const Padding(
+              activeIcon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
-                child: Icon(Icons.search, size: 26),
+                child: Icon(Icons.bookmark, size: 26),
               ),
-              label: 'Search',
+              label: 'Watchlist',
             ),
             BottomNavigationBarItem(
               icon: Container(

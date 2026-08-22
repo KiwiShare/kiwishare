@@ -10,6 +10,8 @@ class ListingProvider extends ChangeNotifier {
 
   List<ItemModel>? _cachedPopularItems;
   List<ItemModel>? get cachedPopularItems => _cachedPopularItems;
+  List<ItemModel>? _cachedRecommendedItems;
+  List<ItemModel>? get cachedRecommendedItems => _cachedRecommendedItems;
   DiscoveryOptionsModel? _cachedDiscoveryOptions;
   final Map<DiscoveryQuery, List<ItemModel>> _cachedDiscoveryItems = {};
 
@@ -19,6 +21,18 @@ class ListingProvider extends ChangeNotifier {
     }
     final items = await itemRepository.fetchPopularItems();
     _cachedPopularItems = items;
+    return items;
+  }
+
+  Future<List<ItemModel>> getRecommendedItems({
+    bool forceRefresh = false,
+    int limit = 10,
+  }) async {
+    if (_cachedRecommendedItems != null && !forceRefresh) {
+      return _cachedRecommendedItems!;
+    }
+    final items = await itemRepository.fetchRecommendedItems(limit: limit);
+    _cachedRecommendedItems = items;
     return items;
   }
 

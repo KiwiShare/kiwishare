@@ -170,16 +170,17 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.length).toBeGreaterThan(0);
   });
 
-  test('GET /api/listings - returns listings array (backwards compatible)', async () => {
+  test('GET /api/usedItems/recommended - returns recommended items scored by popularity and sustainability', async () => {
     const res = await request(app.callback())
-      .get('/api/listings');
+      .get('/api/usedItems/recommended')
+      .query({ limit: '10' });
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(0);
-    expect(res.body.every((item: any) =>
-      typeof item.latitude === 'number' && typeof item.longitude === 'number'
-    )).toBe(true);
+    expect(res.body.length).toBeLessThanOrEqual(10);
+    // Sustainable items and items with views/favourites should be included
+    expect(res.body.every((item: any) => item.status === 'active')).toBe(true);
   });
 
   test('GET /api/usedItems/discovery-options - derives filters from MongoDB', async () => {
@@ -218,7 +219,7 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body[0].title).toBe('Retro Armchair');
   });
 
-  test('GET /api/listings - does not invent coordinates for legacy records', async () => {
+  test('GET /api/usedItems - does not invent coordinates for legacy records', async () => {
     const legacyItem = await Item.create({
       sellerId: new mongoose.Types.ObjectId(),
       title: 'Legacy Dunedin Chair',
@@ -235,7 +236,7 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
       ownerId: 'legacy-user'
     });
 
-    const res = await request(app.callback()).get('/api/listings');
+    const res = await request(app.callback()).get('/api/usedItems');
     const listing = res.body.find((item: any) => item.id === legacyItem.id);
 
     expect(listing).toBeDefined();
@@ -356,6 +357,66 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
     expect(res.body.newOwnerId).toBe(clRegister.body.user.id);
+  });
+
+  test('Watchlist CRUD - add, list, ids, check, and delete items from watchlist', async () => {
+    // 1. Check initial watch status
+    const checkBefore = await request(app.callback())
+      .get(`/api/watchlist/check/${createdItemId}`)
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(checkBefore.status).toBe(200);
+    expect(checkBefore.body.isWatched).toBe(false);
+
+    // 2. Add item to watchlist
+    const addRes = await request(app.callback())
+      .post(`/api/watchlist/${createdItemId}`)
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(addRes.status).toBe(200);
+    expect(addRes.body.status).toBe('success');
+    expect(addRes.body.isWatched).toBe(true);
+
+    // 3. Verify favouriteCount on Item increased
+    const itemAfterAdd = await Item.findById(createdItemId);
+    expect(itemAfterAdd?.favouriteCount).toBeGreaterThanOrEqual(1);
+
+    // 4. Retrieve watchlist list
+    const listRes = await request(app.callback())
+      .get('/api/watchlist')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.status).toBe('success');
+    expect(listRes.body.count).toBeGreaterThanOrEqual(1);
+    expect(listRes.body.data.some((i: any) => i.id === createdItemId)).toBe(true);
+
+    // 5. Retrieve watchlist IDs array
+    const idsRes = await request(app.callback())
+      .get('/api/watchlist/ids')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(idsRes.status).toBe(200);
+    expect(idsRes.body.status).toBe('success');
+    expect(idsRes.body.itemIds).toContain(createdItemId);
+
+    // 6. Check watch status is now true
+    const checkAfter = await request(app.callback())
+      .get(`/api/watchlist/check/${createdItemId}`)
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(checkAfter.status).toBe(200);
+    expect(checkAfter.body.isWatched).toBe(true);
+
+    // 7. Remove item from watchlist
+    const delRes = await request(app.callback())
+      .delete(`/api/watchlist/${createdItemId}`)
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(delRes.status).toBe(200);
+    expect(delRes.body.status).toBe('success');
+    expect(delRes.body.isWatched).toBe(false);
+
+    // 8. Verify status is false again
+    const checkFinal = await request(app.callback())
+      .get(`/api/watchlist/check/${createdItemId}`)
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(checkFinal.status).toBe(200);
+    expect(checkFinal.body.isWatched).toBe(false);
   });
 
   test('DELETE /api/usedItems/:id - deletes item', async () => {
