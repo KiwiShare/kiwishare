@@ -49,7 +49,7 @@ jobs:
       - name: Build iOS Simulator App (For Appetize.io)
         run: |
           cd mobile
-          flutter build ios --simulator --release
+          flutter build ios --simulator
           cd build/ios/iphonesimulator
           zip -r ../../../Runner-Simulator.zip Runner.app
 
