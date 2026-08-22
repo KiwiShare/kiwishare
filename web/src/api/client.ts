@@ -1,14 +1,22 @@
 export interface UserProfile {
   id: string;
+  _id?: string;
   email: string;
   displayName: string;
   avatarUrl?: string | null;
   role?: 'admin' | 'user';
   trustScore: number;
   isVerified: boolean;
+  isStudentVerified?: boolean;
+  studentInstitution?: string;
+  studentIdNumber?: string;
+  isBanned?: boolean;
+  status?: string;
+  itemsCount?: number;
   registrationPlatform?: string;
   lastUsedPlatform?: string;
   lastActiveAt?: string;
+  createdAt?: string;
 }
 
 export interface CategoryItem {
@@ -44,6 +52,17 @@ export interface UsedItem {
   };
   sellerId?: string;
   ownerId?: string;
+  seller?: {
+    id: string;
+    displayName: string;
+    email?: string;
+    avatarUrl?: string | null;
+    trustScore?: number;
+    isVerified?: boolean;
+    isStudentVerified?: boolean;
+    studentInstitution?: string;
+    role?: string;
+  };
   status: string;
   isSustainable?: boolean;
   viewCount?: number;
@@ -206,6 +225,9 @@ export const itemsApi = {
     images?: Array<{ url: string; sortOrder?: number }>;
     imageUrls?: string[];
     isSustainable?: boolean;
+    targetUserEmail?: string;
+    targetUserId?: string;
+    sellerId?: string;
   }) => {
     let imagesPayload: Array<{ url: string; sortOrder: number }> = [];
     if (Array.isArray(body.images) && body.images.length > 0) {
@@ -244,6 +266,27 @@ export const itemsApi = {
 export const adminApi = {
   getStats: () =>
     apiRequest<{ status: string; stats: AdminStats }>('/admin/stats'),
+
+  getUsers: (params?: { search?: string; role?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.role) query.set('role', params.role);
+    if (params?.status) query.set('status', params.status);
+    const qStr = query.toString();
+    return apiRequest<{ status: string; count: number; users: UserProfile[] }>(`/admin/users${qStr ? `?${qStr}` : ''}`);
+  },
+
+  updateUserTrustScore: (id: string, body: { trustScore?: number; isStudentVerified?: boolean; studentInstitution?: string }) =>
+    apiRequest<{ status: string; message: string; user: any }>(`/admin/users/${id}/trust-score`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  updateUserStatus: (id: string, body: { isBanned?: boolean; status?: string }) =>
+    apiRequest<{ status: string; message: string; user: any }>(`/admin/users/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
 
   getItems: (params?: { status?: string; search?: string }) => {
     const query = new URLSearchParams();

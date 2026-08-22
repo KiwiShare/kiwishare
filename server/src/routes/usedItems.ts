@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { authenticateToken } from '../middleware/auth';
 import Item from '../models/Item';
 import Category from '../models/Category';
+import User from '../models/User';
 
 const router = new Router();
 
@@ -27,7 +28,25 @@ export function formatItem(itemDoc: any) {
     ? itemObj.images
     : (itemObj.imageUrl ? [{ url: itemObj.imageUrl, sortOrder: 0 }] : []);
   const imageUrl = rawImages[0]?.url || itemObj.imageUrl || '';
-  const ownerId = itemObj.sellerId ? itemObj.sellerId.toString() : (itemObj.ownerId || '');
+  
+  let sellerInfo: any = null;
+  let ownerId = itemObj.ownerId || '';
+  if (itemObj.sellerId && typeof itemObj.sellerId === 'object' && itemObj.sellerId.displayName) {
+    ownerId = itemObj.sellerId._id?.toString() || itemObj.sellerId.id || ownerId;
+    sellerInfo = {
+      id: ownerId,
+      displayName: itemObj.sellerId.displayName || 'Kiwi Member',
+      email: itemObj.sellerId.email,
+      avatarUrl: itemObj.sellerId.avatarUrl,
+      trustScore: itemObj.sellerId.trustScore ?? 100,
+      isVerified: Boolean(itemObj.sellerId.isVerified),
+      isStudentVerified: Boolean(itemObj.sellerId.isStudentVerified),
+      studentInstitution: itemObj.sellerId.studentInstitution || 'University of Auckland',
+      role: itemObj.sellerId.role || 'user'
+    };
+  } else if (itemObj.sellerId) {
+    ownerId = itemObj.sellerId.toString();
+  }
 
   return {
     ...itemObj,
@@ -38,6 +57,7 @@ export function formatItem(itemDoc: any) {
     priceNzd,
     ownerId,
     sellerId: ownerId,
+    seller: sellerInfo,
     latitude: Number.isFinite(latitude) ? latitude : null,
     longitude: Number.isFinite(longitude) ? longitude : null
   };
@@ -178,7 +198,7 @@ async function getUsedItemsHandler(ctx: any) {
     };
   }
 
-  let itemQuery = Item.find(filter);
+  let itemQuery = Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
   const sortValue = queryText(sort);
   if (sortValue === 'price_asc') {
     itemQuery = itemQuery.sort({ price: 1, createdAt: -1 });
@@ -288,8 +308,8 @@ async function getDiscoveryOptionsHandler(ctx: any) {
 async function getUsedItemByIdHandler(ctx: any) {
   const { id } = ctx.params;
   const item = mongoose.Types.ObjectId.isValid(id)
-    ? await Item.findById(id)
-    : await Item.findOne({ id });
+    ? await Item.findById(id).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role')
+    : await Item.findOne({ id }).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
 
   if (!item || item.status === 'deleted') {
     ctx.status = 404;
@@ -309,8 +329,28 @@ async function getUsedItemByIdHandler(ctx: any) {
 // 3. POST /usedItems (and POST /listings) - Create new used item
 async function createUsedItemHandler(ctx: any) {
   const body = ctx.request.body as any;
-  const { title, priceNzd, price, location, city, suburb, imageUrl, images, isSustainable, category, description, condition } = body;
-  const ownerId = ctx.state.user.id;
+  const { title, priceNzd, price, location, city, suburb, imageUrl, images, isSustainable, category, description, condition, sellerId, targetUserId, targetUserEmail } = body;
+  let ownerId = ctx.state.user.id;
+
+  // Support binding item to specific user if specified
+  const target = targetUserId || sellerId;
+  if (target && target !== ownerId) {
+    let boundUser = null;
+    if (mongoose.Types.ObjectId.isValid(target)) {
+      boundUser = await User.findById(target);
+    }
+    if (!boundUser) {
+      boundUser = await User.findOne({ email: String(target).toLowerCase() });
+    }
+    if (boundUser) {
+      ownerId = boundUser._id.toString();
+    }
+  } else if (targetUserEmail) {
+    const boundUser = await User.findOne({ email: targetUserEmail.toLowerCase() });
+    if (boundUser) {
+      ownerId = boundUser._id.toString();
+    }
+  }
 
   if (!title || (priceNzd == null && price == null) || !category) {
     ctx.status = 400;
@@ -474,7 +514,7 @@ async function getRecommendedItemsHandler(ctx: any) {
     }
   }
 
-  const items = await Item.find(filter);
+  const items = await Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
   const now = Date.now();
 
   // Multi-factor Recommendation Scoring Algorithm:

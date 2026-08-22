@@ -204,7 +204,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         style: Theme.of(context).textTheme.headlineMedium
                             ?.copyWith(color: AppColors.textBrand),
                       ),
-                      const SizedBox(height: AppSpacing.xl),
+                      const SizedBox(height: AppSpacing.lg),
+                      if (product.seller != null) ...[
+                        _SellerProfileCard(seller: product.seller!),
+                        const SizedBox(height: AppSpacing.lg),
+                      ],
                       Text(
                         'Description',
                         style: Theme.of(context).textTheme.headlineMedium,
@@ -376,6 +380,120 @@ class _DetailRow extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _SellerProfileCard extends StatelessWidget {
+  final SellerInfo seller;
+
+  const _SellerProfileCard({required this.seller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: seller.isStudentVerified
+            ? const Color(0xFFEFF6FF)
+            : AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: seller.isStudentVerified
+              ? const Color(0xFFBFDBFE)
+              : AppColors.border,
+          width: 1.2,
+        ),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: seller.isStudentVerified
+                ? const Color(0xFFDBEAFE)
+                : AppColors.brandPrimaryContainer,
+            backgroundImage: seller.avatarUrl != null && seller.avatarUrl!.isNotEmpty
+                ? NetworkImage(seller.avatarUrl!)
+                : null,
+            child: seller.avatarUrl == null || seller.avatarUrl!.isEmpty
+                ? Text(
+                    seller.displayName.isNotEmpty
+                        ? seller.displayName[0].toUpperCase()
+                        : 'K',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: seller.isStudentVerified
+                          ? const Color(0xFF1D4ED8)
+                          : AppColors.brandPrimary,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        seller.displayName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (seller.isStudentVerified) ...[
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.school,
+                        size: 16,
+                        color: Color(0xFF2563EB),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  seller.isStudentVerified
+                      ? '${seller.studentInstitution ?? "University of Auckland"} Student'
+                      : 'Community Member',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: seller.isStudentVerified
+                        ? const Color(0xFF1E40AF)
+                        : AppColors.textSecondary,
+                    fontWeight: seller.isStudentVerified
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text(
+                'Trust Score',
+                style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${seller.trustScore}/100',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: AppColors.brandPrimary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _UnavailableProduct extends StatelessWidget {

@@ -1,5 +1,51 @@
 enum ItemStatus { active, reserved, sold }
 
+class SellerInfo {
+  final String id;
+  final String displayName;
+  final String? email;
+  final String? avatarUrl;
+  final int trustScore;
+  final bool isVerified;
+  final bool isStudentVerified;
+  final String? studentInstitution;
+
+  const SellerInfo({
+    required this.id,
+    required this.displayName,
+    this.email,
+    this.avatarUrl,
+    this.trustScore = 100,
+    this.isVerified = false,
+    this.isStudentVerified = false,
+    this.studentInstitution,
+  });
+
+  factory SellerInfo.fromMap(Map<String, dynamic> map) {
+    return SellerInfo(
+      id: (map['id'] ?? map['_id'] ?? '').toString(),
+      displayName: (map['displayName'] ?? 'Kiwi Member').toString(),
+      email: map['email']?.toString(),
+      avatarUrl: map['avatarUrl']?.toString(),
+      trustScore: (map['trustScore'] is num) ? (map['trustScore'] as num).toInt() : 100,
+      isVerified: map['isVerified'] == true,
+      isStudentVerified: map['isStudentVerified'] == true,
+      studentInstitution: map['studentInstitution']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'displayName': displayName,
+    'email': email,
+    'avatarUrl': avatarUrl,
+    'trustScore': trustScore,
+    'isVerified': isVerified,
+    'isStudentVerified': isStudentVerified,
+    'studentInstitution': studentInstitution,
+  };
+}
+
 class ItemModel {
   final String id;
   final String title;
@@ -13,6 +59,7 @@ class ItemModel {
   final String description;
   final String? condition;
   final String ownerId;
+  final SellerInfo? seller;
   final double? latitude;
   final double? longitude;
 
@@ -29,6 +76,7 @@ class ItemModel {
     this.description = '',
     this.condition,
     this.ownerId = '',
+    this.seller,
     this.latitude,
     this.longitude,
   });
@@ -94,6 +142,7 @@ class ItemModel {
       'description': description,
       'condition': condition,
       'ownerId': ownerId,
+      'seller': seller?.toMap(),
       'latitude': latitude,
       'longitude': longitude,
     };
@@ -117,6 +166,14 @@ class ItemModel {
       imagesList.add(singleImageUrl);
     }
 
+    final rawSeller = map['seller'];
+    SellerInfo? sellerInfo;
+    if (rawSeller is Map<String, dynamic>) {
+      sellerInfo = SellerInfo.fromMap(rawSeller);
+    } else if (rawSeller is Map) {
+      sellerInfo = SellerInfo.fromMap(Map<String, dynamic>.from(rawSeller));
+    }
+
     return ItemModel(
       id: (map['id'] ?? map['_id'] ?? '').toString(),
       title: (map['title'] ?? '').toString(),
@@ -132,6 +189,7 @@ class ItemModel {
       description: (map['description'] ?? '').toString(),
       condition: map['condition']?.toString(),
       ownerId: (map['ownerId'] ?? '').toString(),
+      seller: sellerInfo,
       latitude: _asDouble(map['latitude']),
       longitude: _asDouble(map['longitude']),
     );

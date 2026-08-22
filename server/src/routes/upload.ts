@@ -1,15 +1,12 @@
 import Router from 'koa-router';
-import fs from 'fs';
-import path from 'path';
 import { uploadToR2, getPresignedUploadUrl, getR2ObjectStream, R2_CONFIG } from '../config/r2';
 import { authenticateToken } from '../middleware/auth';
 
 const router = new Router();
-const UPLOAD_DIR = path.join(__dirname, '../../public/uploads/images');
 
 /**
  * POST /api/upload
- * Uploads an image to Cloudflare R2 bucket `kiwishare`
+ * Uploads an image directly to Cloudflare R2 bucket `kiwishare`
  */
 router.post('/upload', authenticateToken, async (ctx) => {
   const { imageBase64, fileName, contentType } = ctx.request.body as any;
@@ -35,7 +32,7 @@ router.post('/upload', authenticateToken, async (ctx) => {
     ctx.status = 201;
     ctx.body = {
       status: 'success',
-      message: 'Image uploaded successfully.',
+      message: 'Image uploaded successfully to Cloudflare R2.',
       url: result.url,
       key: result.key,
       bucket: result.bucket,
@@ -83,30 +80,13 @@ router.post('/upload/presign', authenticateToken, async (ctx) => {
 
 /**
  * GET /api/images/:filename
- * Serves image files from high-speed local cache or Cloudflare R2 stream
+ * Streams image files directly from Cloudflare R2
  */
 router.get('/images/:filename+', async (ctx) => {
   const rawParam = ctx.params.filename || '';
   const filename = rawParam.replace(/^images\//, '');
   if (!filename) {
     ctx.status = 404;
-    return;
-  }
-
-  const localFilePath = path.join(UPLOAD_DIR, filename);
-  if (fs.existsSync(localFilePath)) {
-    const ext = path.extname(filename).toLowerCase();
-    const mimeMap: Record<string, string> = {
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.webp': 'image/webp',
-      '.gif': 'image/gif',
-      '.svg': 'image/svg+xml'
-    };
-    ctx.type = mimeMap[ext] || 'image/jpeg';
-    ctx.set('Cache-Control', 'public, max-age=31536000');
-    ctx.body = fs.createReadStream(localFilePath);
     return;
   }
 
@@ -119,7 +99,7 @@ router.get('/images/:filename+', async (ctx) => {
       return;
     }
   } catch (err) {
-    // Proceed to 404
+    // Return 404
   }
 
   ctx.status = 404;

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { UsedItem } from '../api/client';
 import { useWatchlist } from '../context/WatchlistContext';
 import { useAuth } from '../context/AuthContext';
-import { Heart, MapPin, Sparkles, Tag } from 'lucide-react';
+import { Heart, MapPin, Sparkles, Tag, GraduationCap, ShieldCheck } from 'lucide-react';
 
 interface ProductCardProps {
   item: UsedItem;
@@ -33,6 +33,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item }) => {
       : '$0';
 
   const imageUrl = item.imageUrl || (item.images && item.images.length > 0 ? item.images[0].url : null) || 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=500&auto=format&fit=crop&q=60';
+
+  const seller = item.seller;
+  const sellerName = seller?.displayName || 'Kiwi Community Member';
+  const isStudent = seller?.isStudentVerified;
 
   return (
     <Link
@@ -93,46 +97,120 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item }) => {
           />
         </button>
 
-        {/* Sustainable Badge */}
-        {item.isSustainable && (
-          <div
-            className="badge badge-sustainable"
-            style={{ position: 'absolute', bottom: '10px', left: '10px', backdropFilter: 'blur(4px)' }}
-          >
-            <Sparkles size={12} /> Sustainable
-          </div>
-        )}
+        {/* Badges Container */}
+        <div style={{ position: 'absolute', bottom: '10px', left: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {/* Sustainable Badge */}
+          {item.isSustainable && (
+            <div
+              className="badge badge-sustainable"
+              style={{ backdropFilter: 'blur(4px)' }}
+            >
+              <Sparkles size={11} /> Sustainable
+            </div>
+          )}
+
+          {/* Student Verified Badge on Photo */}
+          {isStudent && (
+            <div
+              style={{
+                backgroundColor: 'rgba(30, 58, 138, 0.85)',
+                backdropFilter: 'blur(4px)',
+                color: '#ffffff',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                padding: '3px 8px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+              }}
+            >
+              <GraduationCap size={12} color="#93c5fd" /> Student Verified
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Content Section */}
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-          <h3
-            style={{
-              fontSize: '1.05rem',
-              fontWeight: 700,
-              lineHeight: 1.3,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-            }}
-          >
-            {item.title}
-          </h3>
-        </div>
+        <h3
+          style={{
+            fontSize: '1.05rem',
+            fontWeight: 700,
+            lineHeight: 1.3,
+            marginBottom: '6px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+          }}
+        >
+          {item.title}
+        </h3>
 
         {/* Price Tag */}
-        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary-700)', marginBottom: '10px' }}>
+        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary-700)', marginBottom: '12px' }}>
           {displayPrice} <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>NZD</span>
+        </div>
+
+        {/* Seller Info Row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          {seller?.avatarUrl ? (
+            <img
+              src={seller.avatarUrl}
+              alt={sellerName}
+              style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }}
+            />
+          ) : (
+            <div
+              style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--primary-100)',
+                color: 'var(--primary-700)',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              {sellerName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <span
+            style={{
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              color: 'var(--text-main)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: '140px'
+            }}
+          >
+            {sellerName}
+          </span>
+          {isStudent && (
+            <span title="Verified Student Seller">
+              <GraduationCap size={14} color="#2563eb" />
+            </span>
+          )}
+          {seller?.isVerified && !isStudent && (
+            <span title="Verified KiwiShare Seller">
+              <ShieldCheck size={14} color="var(--primary-600)" />
+            </span>
+          )}
         </div>
 
         {/* Metadata Footer */}
         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <MapPin size={14} color="var(--primary-600)" />
-            <span>{item.location?.city || 'Auckland'}</span>
+            <span>{typeof item.location === 'string' ? item.location : item.location?.city || 'Auckland'}</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

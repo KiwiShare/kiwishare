@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { categoriesApi, itemsApi, uploadApi, CategoryItem } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { 
   X, 
   PlusCircle, 
@@ -11,7 +12,8 @@ import {
   AlertCircle, 
   Cloud,
   Trash2,
-  Layers
+  Layers,
+  User
 } from 'lucide-react';
 
 interface PostItemModalProps {
@@ -21,6 +23,7 @@ interface PostItemModalProps {
 }
 
 export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, onItemCreated }) => {
+  const { user } = useAuth();
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
@@ -28,6 +31,7 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
   const [condition, setCondition] = useState('good');
   const [city, setCity] = useState('Auckland');
   const [suburb, setSuburb] = useState('');
+  const [targetUserEmail, setTargetUserEmail] = useState('demo@example.com');
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [customImageUrl, setCustomImageUrl] = useState('');
   const [description, setDescription] = useState('');
@@ -117,6 +121,7 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
         imageUrls: finalImages,
         imageUrl: finalImages[0],
         isSustainable,
+        targetUserEmail: user?.role === 'admin' && targetUserEmail.trim() ? targetUserEmail.trim() : undefined,
       });
 
       onItemCreated();
@@ -210,6 +215,27 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
+          {/* Admin Feature: Bind to User */}
+          {user?.role === 'admin' && (
+            <div style={{ backgroundColor: '#f0fdf4', padding: '12px 16px', borderRadius: 'var(--radius-md)', border: '1px solid #bbf7d0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 700, color: '#15803d', marginBottom: '6px' }}>
+                <User size={15} />
+                <span>Admin: Assign Listing to User Account</span>
+              </label>
+              <input
+                type="email"
+                placeholder="demo@example.com"
+                value={targetUserEmail}
+                onChange={(e) => setTargetUserEmail(e.target.value)}
+                className="form-input"
+                style={{ backgroundColor: '#ffffff' }}
+              />
+              <div style={{ fontSize: '0.75rem', color: '#166534', marginTop: '4px' }}>
+                This product will be publicly listed under this member's profile & student verification badge.
+              </div>
+            </div>
+          )}
+
           {/* Title */}
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>Item Title *</label>

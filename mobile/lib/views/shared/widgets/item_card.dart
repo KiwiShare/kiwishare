@@ -32,7 +32,7 @@ class ItemCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AspectRatio(
-                aspectRatio: 4 / 3,
+                aspectRatio: 1.4,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -98,9 +98,13 @@ class ItemCard extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.sm,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       item.title,
@@ -108,27 +112,69 @@ class ItemCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      '\$${item.priceNzd} NZD',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.titleMedium?.copyWith(color: colors.primary),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
+                    const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(
-                          Icons.location_on_outlined,
-                          size: 16,
-                          color: colors.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
                         Expanded(
                           child: Text(
-                            item.location,
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(color: colors.onSurfaceVariant),
+                            '\$${item.priceNzd} NZD',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: colors.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (item.seller?.isStudentVerified == true) ...[
+                          const SizedBox(width: 4),
+                          const Tooltip(
+                            message: 'Student Verified',
+                            child: Icon(
+                              Icons.school,
+                              size: 14,
+                              color: Color(0xFF2563EB),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 7,
+                          backgroundColor: item.seller?.isStudentVerified == true
+                              ? const Color(0xFFDBEAFE)
+                              : colors.primaryContainer,
+                          backgroundImage: item.seller?.avatarUrl != null &&
+                                  item.seller!.avatarUrl!.isNotEmpty
+                              ? NetworkImage(item.seller!.avatarUrl!)
+                              : null,
+                          child: item.seller?.avatarUrl == null ||
+                                  item.seller!.avatarUrl!.isEmpty
+                              ? Text(
+                                  (item.seller?.displayName.isNotEmpty == true)
+                                      ? item.seller!.displayName[0].toUpperCase()
+                                      : 'K',
+                                  style: TextStyle(
+                                    fontSize: 7,
+                                    fontWeight: FontWeight.w700,
+                                    color: item.seller?.isStudentVerified == true
+                                        ? const Color(0xFF1D4ED8)
+                                        : colors.primary,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            item.seller?.displayName ?? item.location,
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                              fontSize: 11,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

@@ -1,36 +1,39 @@
+import 'dotenv/config';
+import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import connectDB from '../config/db';
 import Category from '../models/Category';
 import User from '../models/User';
 import Item from '../models/Item';
+import { DEFAULT_CATEGORIES } from '../config/seed';
 
-export const DEFAULT_CATEGORIES = [
-  { name: 'Furniture', slug: 'furniture', icon: 'Armchair', description: 'Chairs, desks, sofas, and home furnishings', sortOrder: 1 },
-  { name: 'Electronics', slug: 'electronics', icon: 'Tv', description: 'Computers, screens, audio, and gadgets', sortOrder: 2 },
-  { name: 'Outdoor', slug: 'outdoor', icon: 'Tent', description: 'Camping, hiking, tents, and adventure gear', sortOrder: 3 },
-  { name: 'Clothing', slug: 'clothing', icon: 'Shirt', description: 'Vintage, jackets, shoes, and apparel', sortOrder: 4 },
-  { name: 'Tools', slug: 'tools', icon: 'Wrench', description: 'Power tools, hand tools, and DIY equipment', sortOrder: 5 },
-  { name: 'Kitchen', slug: 'kitchen', icon: 'Utensils', description: 'Cookware, appliances, and dining essentials', sortOrder: 6 },
-  { name: 'Plants', slug: 'plants', icon: 'Flower2', description: 'Indoor plants, cuttings, pots, and garden tools', sortOrder: 7 },
-  { name: 'Sports', slug: 'sports', icon: 'Trophy', description: 'Bikes, surfboards, rackets, and fitness items', sortOrder: 8 },
-  { name: 'Books', slug: 'books', icon: 'BookOpen', description: 'Novels, textbooks, puzzles, and board games', sortOrder: 9 },
-  { name: 'Other', slug: 'other', icon: 'Package', description: 'Miscellaneous community treasures', sortOrder: 10 },
-];
+async function seedProductionDatabase() {
+  const prodUri = process.env.MONGODB_URI;
+  if (!prodUri) {
+    console.error('❌ MONGODB_URI not defined in .env');
+    process.exit(1);
+  }
 
-export async function seedDatabase() {
+  console.log(`🔄 Connecting to Production MongoDB (${prodUri.split('@')[1] || prodUri})...`);
+  await connectDB(prodUri);
+  console.log('✅ Connected to Production MongoDB.');
+
   try {
-    // 1. Seed Categories if empty
+    // 1. Seed Categories
     const categoryCount = await Category.countDocuments();
     if (categoryCount === 0) {
-      console.log('🌱 [Seeding] Populating default Categories in MongoDB...');
+      console.log('🌱 Populating default Categories in Production MongoDB...');
       await Category.insertMany(DEFAULT_CATEGORIES);
-      console.log(`✅ [Seeding] Inserted ${DEFAULT_CATEGORIES.length} default categories.`);
+      console.log(`✅ Inserted ${DEFAULT_CATEGORIES.length} default categories.`);
+    } else {
+      console.log(`ℹ️ Categories already present (${categoryCount} categories found).`);
     }
 
-    // 2. Seed Default Admin User if not present
+    // 2. Admin User
     const adminEmail = 'admin@kiwishare.online';
     let adminUser = await User.findOne({ email: adminEmail });
     if (!adminUser) {
-      console.log(`🌱 [Seeding] Creating default Admin account (${adminEmail})...`);
+      console.log(`🌱 Creating Admin account (${adminEmail})...`);
       const passwordHash = await bcrypt.hash('password123', 12);
       adminUser = await User.create({
         email: adminEmail,
@@ -43,20 +46,23 @@ export async function seedDatabase() {
         lastUsedPlatform: 'web',
         passwordHash
       });
-      console.log(`✅ [Seeding] Admin account created: ${adminEmail} / password123`);
-    } else if (adminUser.role !== 'admin') {
-      adminUser.role = 'admin';
-      await adminUser.save();
+      console.log(`✅ Admin account created: ${adminEmail}`);
+    } else {
+      if (adminUser.role !== 'admin') {
+        adminUser.role = 'admin';
+        await adminUser.save();
+      }
+      console.log(`ℹ️ Admin account verified: ${adminEmail}`);
     }
 
-    // 3. Ensure User demo@example.com exists with verified student credentials
-    const targetEmail = 'demo@example.com';
-    let moviegoerUser = await User.findOne({ email: targetEmail });
+    // 3. MovieGoer24 User
+    const moviegoerEmail = 'demo@example.com';
+    let moviegoerUser = await User.findOne({ email: moviegoerEmail });
     if (!moviegoerUser) {
-      console.log(`🌱 [Seeding] Creating user account (${targetEmail})...`);
+      console.log(`🌱 Creating MovieGoer24 student account (${moviegoerEmail})...`);
       const passwordHash = await bcrypt.hash('password123', 12);
       moviegoerUser = await User.create({
-        email: targetEmail,
+        email: moviegoerEmail,
         displayName: 'MovieGoer24',
         role: 'user',
         trustScore: 100,
@@ -70,13 +76,22 @@ export async function seedDatabase() {
         lastUsedPlatform: 'web',
         passwordHash
       });
-      console.log(`✅ [Seeding] User account created: ${targetEmail}`);
+      console.log(`✅ MovieGoer24 user created: ${moviegoerEmail}`);
+    } else {
+      moviegoerUser.isStudentVerified = true;
+      moviegoerUser.isVerified = true;
+      moviegoerUser.studentInstitution = moviegoerUser.studentInstitution || 'University of Auckland';
+      if (!moviegoerUser.avatarUrl) {
+        moviegoerUser.avatarUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
+      }
+      await moviegoerUser.save();
+      console.log(`ℹ️ MovieGoer24 student status verified: ${moviegoerEmail}`);
     }
 
-    // 4. Seed Demo Pre-Loved Items if collection is empty
+    // 4. Seed / Rebind Items
     const itemCount = await Item.countDocuments();
     if (itemCount === 0) {
-      console.log('🌱 [Seeding] Populating initial community used items in MongoDB...');
+      console.log('🌱 Populating initial pre-loved items for MovieGoer24...');
       const demoSellerId = moviegoerUser._id;
 
       const sampleItems = [
@@ -203,11 +218,23 @@ export async function seedDatabase() {
       ];
 
       await Item.insertMany(sampleItems);
-      console.log(`✅ [Seeding] Inserted ${sampleItems.length} demo community items.`);
+      console.log(`✅ Inserted ${sampleItems.length} demo community items.`);
+    } else {
+      const res = await Item.updateMany(
+        {},
+        { $set: { sellerId: moviegoerUser._id, ownerId: moviegoerUser._id.toString() } }
+      );
+      console.log(`ℹ️ Production Items count: ${itemCount} (rebound ${res.modifiedCount} items to ${moviegoerEmail}).`);
     }
-  } catch (error) {
-    console.error('❌ [Seeding Error] Failed to seed initial database:', error);
+
+    console.log('🎉 Production database seeding finished successfully!');
+    await mongoose.disconnect();
+    process.exit(0);
+  } catch (err) {
+    console.error('❌ Failed to seed Production MongoDB:', err);
+    await mongoose.disconnect();
+    process.exit(1);
   }
 }
 
-export default seedDatabase;
+seedProductionDatabase();

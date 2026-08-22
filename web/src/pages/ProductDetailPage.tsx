@@ -321,6 +321,85 @@ export const ProductDetailPage: React.FC = () => {
             <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>NZD</span>
           </div>
 
+          {/* Seller Profile Card */}
+          <div
+            className="glass-card"
+            style={{
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              marginBottom: '20px',
+              backgroundColor: '#f8fafc',
+              border: item.seller?.isStudentVerified ? '1.5px solid #bfdbfe' : '1px solid var(--border-subtle)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {item.seller?.avatarUrl ? (
+                <img
+                  src={item.seller.avatarUrl}
+                  alt={item.seller.displayName}
+                  style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    backgroundColor: item.seller?.isStudentVerified ? '#dbeafe' : 'var(--primary-100)',
+                    color: item.seller?.isStudentVerified ? '#1d4ed8' : 'var(--primary-700)',
+                    fontSize: '1.2rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {(item.seller?.displayName || 'K').charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>
+                    {item.seller?.displayName || 'Kiwi Community Member'}
+                  </span>
+                  {item.seller?.isStudentVerified && (
+                    <span
+                      style={{
+                        backgroundColor: '#dbeafe',
+                        color: '#1d4ed8',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      🎓 Student Verified
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {item.seller?.isStudentVerified
+                    ? `${item.seller.studentInstitution || 'University of Auckland'} Student`
+                    : 'Verified Community Member'}
+                </div>
+              </div>
+            </div>
+
+            {/* Trust Score Badge */}
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Trust Score</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--primary-600)' }}>
+                {item.seller?.trustScore ?? 100} / 100
+              </div>
+            </div>
+          </div>
+
           {/* Location & Trust info */}
           <div
             className="glass-card"

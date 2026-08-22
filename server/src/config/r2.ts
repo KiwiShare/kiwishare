@@ -2,14 +2,6 @@ import 'dotenv/config';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
-
-// Local storage directory for zero-downtime serving & dev fallback
-const UPLOAD_DIR = path.join(__dirname, '../../public/uploads/images');
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
 
 export const R2_CONFIG = {
   get accountId() { return process.env.R2_ACCOUNT_ID || 'cdc04de9bc4c6a41b5003758e505a0d1'; },
@@ -34,7 +26,7 @@ export function getS3Client(): S3Client {
 export const r2S3Client = getS3Client();
 
 /**
- * Uploads a file buffer to Cloudflare R2 bucket `kiwishare` with local caching
+ * Uploads a file buffer directly to Cloudflare R2 bucket `kiwishare`
  */
 export async function uploadToR2(
   fileBuffer: Buffer,
@@ -45,15 +37,7 @@ export async function uploadToR2(
   const fileBasename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
   const uniqueKey = `images/${fileBasename}`;
 
-  // 1. Save local copy for direct high-speed serving
-  try {
-    const localFilePath = path.join(UPLOAD_DIR, fileBasename);
-    await fs.promises.writeFile(localFilePath, fileBuffer);
-  } catch (err: any) {
-    console.warn(`[Local Cache Warning] ${err.message}`);
-  }
-
-  // 2. Upload to Cloudflare R2 S3 bucket if credentials configured
+  // Upload directly to Cloudflare R2 S3 bucket
   if (R2_CONFIG.accessKeyId && R2_CONFIG.secretAccessKey) {
     try {
       const client = getS3Client();

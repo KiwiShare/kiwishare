@@ -43,6 +43,63 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> login(String email, String password) async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      final result = await userRepository.loginWithPassword(
+        email: email,
+        password: password,
+      );
+      final token = result['token'] as String;
+      final user = result['user'] as UserModel;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', token);
+      await prefs.setString('current_user', jsonEncode(user.toJson()));
+
+      _jwtToken = token;
+      _currentUser = user;
+      _isLoggedIn = true;
+    } catch (e) {
+      _currentUser = null;
+      _isLoggedIn = false;
+      rethrow;
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> register(String email, String password, String displayName) async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      final result = await userRepository.registerWithPassword(
+        email: email,
+        password: password,
+        displayName: displayName,
+      );
+      final token = result['token'] as String;
+      final user = result['user'] as UserModel;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', token);
+      await prefs.setString('current_user', jsonEncode(user.toJson()));
+
+      _jwtToken = token;
+      _currentUser = user;
+      _isLoggedIn = true;
+    } catch (e) {
+      _currentUser = null;
+      _isLoggedIn = false;
+      rethrow;
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> sendOtp(String email) async {
     _isLoggingIn = true;
     notifyListeners();
