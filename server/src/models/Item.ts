@@ -22,7 +22,7 @@ export interface IItem extends Document {
       coordinates: number[]; // [longitude, latitude]
     };
   };
-  status: 'draft' | 'active' | 'reserved' | 'sold' | 'hidden' | 'deleted';
+  status: 'draft' | 'active' | 'reserved' | 'sold' | 'hidden' | 'revoked' | 'deleted';
   reservedOrderId?: mongoose.Types.ObjectId;
   publishedAt?: Date;
   soldAt?: Date;
@@ -66,7 +66,7 @@ const ItemSchema = new Schema<IItem>(
     },
     status: {
       type: String,
-      enum: ['draft', 'active', 'reserved', 'sold', 'hidden', 'deleted'],
+      enum: ['draft', 'active', 'reserved', 'sold', 'hidden', 'revoked', 'deleted'],
       default: 'active',
       index: true
     },

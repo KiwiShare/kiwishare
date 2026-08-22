@@ -2,6 +2,8 @@ import Router from 'koa-router';
 import mongoose from 'mongoose';
 import { authenticateToken } from '../middleware/auth';
 import Item from '../models/Item';
+import Category from '../models/Category';
+import User from '../models/User';
 
 const router = new Router();
 
@@ -22,17 +24,40 @@ export function formatItem(itemDoc: any) {
     : undefined;
 
   const priceNzd = itemObj.priceNzd || (itemObj.price != null ? (itemObj.price / 100).toString() : '0');
-  const imageUrl = itemObj.images?.[0]?.url || itemObj.imageUrl || '';
-  const ownerId = itemObj.sellerId ? itemObj.sellerId.toString() : (itemObj.ownerId || '');
+  const rawImages = Array.isArray(itemObj.images) && itemObj.images.length > 0
+    ? itemObj.images
+    : (itemObj.imageUrl ? [{ url: itemObj.imageUrl, sortOrder: 0 }] : []);
+  const imageUrl = rawImages[0]?.url || itemObj.imageUrl || '';
+  
+  let sellerInfo: any = null;
+  let ownerId = itemObj.ownerId || '';
+  if (itemObj.sellerId && typeof itemObj.sellerId === 'object' && itemObj.sellerId.displayName) {
+    ownerId = itemObj.sellerId._id?.toString() || itemObj.sellerId.id || ownerId;
+    sellerInfo = {
+      id: ownerId,
+      displayName: itemObj.sellerId.displayName || 'Kiwi Member',
+      email: itemObj.sellerId.email,
+      avatarUrl: itemObj.sellerId.avatarUrl,
+      trustScore: itemObj.sellerId.trustScore ?? 100,
+      isVerified: Boolean(itemObj.sellerId.isVerified),
+      isStudentVerified: Boolean(itemObj.sellerId.isStudentVerified),
+      studentInstitution: itemObj.sellerId.studentInstitution || 'University of Auckland',
+      role: itemObj.sellerId.role || 'user'
+    };
+  } else if (itemObj.sellerId) {
+    ownerId = itemObj.sellerId.toString();
+  }
 
   return {
     ...itemObj,
     id: itemObj.id || itemObj._id?.toString(),
     imageUrl,
+    images: rawImages,
     location: locationStr,
     priceNzd,
     ownerId,
     sellerId: ownerId,
+    seller: sellerInfo,
     latitude: Number.isFinite(latitude) ? latitude : null,
     longitude: Number.isFinite(longitude) ? longitude : null
   };
@@ -173,7 +198,7 @@ async function getUsedItemsHandler(ctx: any) {
     };
   }
 
-  let itemQuery = Item.find(filter);
+  let itemQuery = Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
   const sortValue = queryText(sort);
   if (sortValue === 'price_asc') {
     itemQuery = itemQuery.sort({ price: 1, createdAt: -1 });
@@ -251,12 +276,26 @@ async function getDiscoveryOptionsHandler(ctx: any) {
   });
   const prices = facets?.prices?.[0];
 
+  // Retrieve active categories from Category model
+  const dbCategories = await Category.find({ isActive: true }).sort({ sortOrder: 1, name: 1 });
+  const facetCatMap = new Map<string, number>();
+  (facets?.categories || []).forEach((c: any) => {
+    if (c.value) facetCatMap.set(c.value.toLowerCase(), c.count);
+  });
+
+  const categories = dbCategories.length > 0
+    ? dbCategories.map((cat) => ({
+        value: cat.name,
+        count: facetCatMap.get(cat.name.toLowerCase()) || 0
+      }))
+    : (facets?.categories || []).map((entry: any) => ({
+        value: entry.value,
+        count: entry.count
+      }));
+
   ctx.status = 200;
   ctx.body = {
-    categories: (facets?.categories || []).map((entry: any) => ({
-      value: entry.value,
-      count: entry.count
-    })),
+    categories,
     locations,
     priceRange: {
       minimum: prices ? prices.minimum / 100 : null,
@@ -269,8 +308,8 @@ async function getDiscoveryOptionsHandler(ctx: any) {
 async function getUsedItemByIdHandler(ctx: any) {
   const { id } = ctx.params;
   const item = mongoose.Types.ObjectId.isValid(id)
-    ? await Item.findById(id)
-    : await Item.findOne({ id });
+    ? await Item.findById(id).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role')
+    : await Item.findOne({ id }).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
 
   if (!item || item.status === 'deleted') {
     ctx.status = 404;
@@ -278,23 +317,75 @@ async function getUsedItemByIdHandler(ctx: any) {
     return;
   }
 
+  const formatted = formatItem(item);
   ctx.status = 200;
-  ctx.body = formatItem(item);
+  ctx.body = {
+    ...formatted,
+    status: 'success',
+    item: formatted
+  };
 }
 
 // 3. POST /usedItems (and POST /listings) - Create new used item
 async function createUsedItemHandler(ctx: any) {
-  const { title, priceNzd, location, imageUrl, isSustainable, category, description, condition } = ctx.request.body as any;
-  const ownerId = ctx.state.user.id;
+  const body = ctx.request.body as any;
+  const { title, priceNzd, price, location, city, suburb, imageUrl, images, isSustainable, category, description, condition, sellerId, targetUserId, targetUserEmail } = body;
+  let ownerId = ctx.state.user.id;
 
-  if (!title || priceNzd == null || !location || !imageUrl || isSustainable === undefined || !category) {
+  // Support binding item to specific user if specified
+  const target = targetUserId || sellerId;
+  if (target && target !== ownerId) {
+    let boundUser = null;
+    if (mongoose.Types.ObjectId.isValid(target)) {
+      boundUser = await User.findById(target);
+    }
+    if (!boundUser) {
+      boundUser = await User.findOne({ email: String(target).toLowerCase() });
+    }
+    if (boundUser) {
+      ownerId = boundUser._id.toString();
+    }
+  } else if (targetUserEmail) {
+    const boundUser = await User.findOne({ email: targetUserEmail.toLowerCase() });
+    if (boundUser) {
+      ownerId = boundUser._id.toString();
+    }
+  }
+
+  if (!title || (priceNzd == null && price == null) || !category) {
     ctx.status = 400;
-    ctx.body = { status: 'error', message: 'Missing product listing fields.' };
+    ctx.body = { status: 'error', message: 'Missing product listing fields (title, price, category).' };
     return;
   }
 
-  const parsedLoc = parseLocation(location);
-  const priceCents = Math.round(parseFloat(priceNzd.toString()) * 100);
+  const rawLocation = location || (city ? { city, suburb } : 'Auckland');
+  const parsedLoc = parseLocation(rawLocation);
+  
+  const finalPriceNzd = priceNzd != null 
+    ? priceNzd.toString() 
+    : (price != null ? (price / 100).toString() : '0');
+  const priceCents = price != null 
+    ? Number(price) 
+    : Math.round(parseFloat(finalPriceNzd) * 100);
+
+  const rawImageList = Array.isArray(images) && images.length > 0
+    ? images.map((img: any, idx: number) => {
+        if (typeof img === 'string') {
+          return { url: img, thumbnailUrl: img, sortOrder: idx };
+        }
+        return {
+          url: img.url || img.thumbnailUrl || '',
+          thumbnailUrl: img.thumbnailUrl || img.url || '',
+          sortOrder: img.sortOrder ?? idx
+        };
+      }).filter((im) => Boolean(im.url))
+    : [];
+
+  const finalImageUrl = imageUrl || (rawImageList.length > 0 ? rawImageList[0].url : 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800');
+
+  const finalImages = rawImageList.length > 0
+    ? rawImageList
+    : [{ url: finalImageUrl, thumbnailUrl: finalImageUrl, sortOrder: 0 }];
 
   const newItem = await Item.create({
     sellerId: mongoose.Types.ObjectId.isValid(ownerId) ? new mongoose.Types.ObjectId(ownerId) : undefined,
@@ -304,13 +395,13 @@ async function createUsedItemHandler(ctx: any) {
     price: priceCents,
     currency: 'NZD',
     negotiable: false,
-    images: [{ url: imageUrl, thumbnailUrl: imageUrl, sortOrder: 0 }],
+    images: finalImages,
     location: parsedLoc,
     category,
     status: 'active',
-    imageUrl,
-    priceNzd: priceNzd.toString(),
-    isSustainable: Boolean(isSustainable),
+    imageUrl: finalImageUrl,
+    priceNzd: finalPriceNzd,
+    isSustainable: isSustainable !== undefined ? Boolean(isSustainable) : true,
     ownerId
   });
 
@@ -423,7 +514,7 @@ async function getRecommendedItemsHandler(ctx: any) {
     }
   }
 
-  const items = await Item.find(filter);
+  const items = await Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
   const now = Date.now();
 
   // Multi-factor Recommendation Scoring Algorithm:
