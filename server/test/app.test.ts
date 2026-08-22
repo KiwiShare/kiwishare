@@ -100,6 +100,45 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     userToken = res.body.token; // Save token for authenticated requests
   });
 
+  test('POST /api/auth/send-otp and verify-otp flow with rate limiting', async () => {
+    const otpEmail = `otp_user_${Date.now()}@kiwishare.co.nz`;
+
+    // 1. Send OTP first time -> success
+    const sendRes1 = await request(app.callback())
+      .post('/api/auth/send-otp')
+      .send({ email: otpEmail });
+
+    expect(sendRes1.status).toBe(200);
+    expect(sendRes1.body.status).toBe('success');
+    const devCode = sendRes1.body.devCode;
+    expect(devCode).toBeDefined();
+
+    // 2. Send OTP second time immediately -> 429 Cooldown
+    const sendRes2 = await request(app.callback())
+      .post('/api/auth/send-otp')
+      .send({ email: otpEmail });
+
+    expect(sendRes2.status).toBe(429);
+    expect(sendRes2.body.message).toContain('Please wait');
+
+    // 3. Verify OTP with wrong code -> 401
+    const verifyWrong = await request(app.callback())
+      .post('/api/auth/verify-otp')
+      .send({ email: otpEmail, code: '000000', displayName: 'Kia User' });
+
+    expect(verifyWrong.status).toBe(401);
+
+    // 4. Verify OTP with correct code -> 200 and registers/logs in
+    const verifySuccess = await request(app.callback())
+      .post('/api/auth/verify-otp')
+      .send({ email: otpEmail, code: devCode, displayName: 'Kia User' });
+
+    expect(verifySuccess.status).toBe(200);
+    expect(verifySuccess.body.status).toBe('success');
+    expect(verifySuccess.body.token).toBeDefined();
+    expect(verifySuccess.body.user.displayName).toBe('Kia User');
+  });
+
   test('GET /api/users/me - returns authenticated user profile', async () => {
     const res = await request(app.callback())
       .get('/api/users/me')

@@ -54,11 +54,19 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> verifyOtp(String email, String code) async {
+  Future<void> verifyOtp(
+    String email,
+    String code, {
+    String? displayName,
+  }) async {
     _isLoggingIn = true;
     notifyListeners();
     try {
-      final result = await userRepository.verifyOtp(email, code);
+      final result = await userRepository.verifyOtp(
+        email,
+        code,
+        displayName: displayName,
+      );
       final token = result['token'] as String;
       final user = result['user'] as UserModel;
 

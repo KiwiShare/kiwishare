@@ -97,19 +97,57 @@ router.post('/auth/send-otp', async (ctx) => {
     return;
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const now = Date.now();
+  const sixtySecondsAgo = new Date(now - 60 * 1000);
+  const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
+
+  // 1. Check daily limit (max 10 requests per 24 hours per email)
+  const dailyCount = await Otp.countDocuments({
+    email: normalizedEmail,
+    createdAt: { $gte: twentyFourHoursAgo }
+  });
+
+  if (dailyCount >= 10) {
+    ctx.status = 429;
+    ctx.body = {
+      status: 'error',
+      message: 'Daily verification code limit reached (max 10 requests per day). Please try again tomorrow.'
+    };
+    return;
+  }
+
+  // 2. Check 60-second cooldown
+  const recentOtp = await Otp.findOne({
+    email: normalizedEmail,
+    createdAt: { $gte: sixtySecondsAgo }
+  }).sort({ createdAt: -1 });
+
+  if (recentOtp) {
+    const elapsedSeconds = Math.floor((now - recentOtp.createdAt.getTime()) / 1000);
+    const waitSeconds = Math.max(1, 60 - elapsedSeconds);
+    ctx.status = 429;
+    ctx.body = {
+      status: 'error',
+      message: `Please wait ${waitSeconds}s before requesting a new verification code.`,
+      cooldownSeconds: waitSeconds
+    };
+    return;
+  }
+
   const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes validity
+  const expiresAt = new Date(now + 10 * 60 * 1000); // 10 minutes validity
 
   // Save OTP in MongoDB
   await Otp.create({
-    email,
+    email: normalizedEmail,
     code,
     expiresAt,
     used: false
   });
 
   // Developer logging for local testing without SMTP server
-  console.log(`\n📬 [OTP Sent] Email: ${email} | Code: ${code} (Expires in 10 minutes)\n`);
+  console.log(`\n📬 [OTP Sent] Email: ${normalizedEmail} | Code: ${code} (Expires in 10 minutes)\n`);
 
   // Attempt to send email via Resend API if configured
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -122,7 +160,7 @@ router.post('/auth/send-otp', async (ctx) => {
       const resend = new Resend(resendApiKey);
       await resend.emails.send({
         from: resendFrom,
-        to: email,
+        to: normalizedEmail,
         subject: 'KiwiShare Verification Code',
         text: `Kia ora!\n\nYour KiwiShare verification code is: ${code}\n\nThis code will expire in 10 minutes. Please do not share this code with anyone.\n\nNgā mihi,\nThe KiwiShare Team`,
         html: `
@@ -139,7 +177,7 @@ router.post('/auth/send-otp', async (ctx) => {
           </div>
         `
       });
-      console.log(`✉️ [Resend Email Sent] Real OTP sent via Resend API to: ${email}`);
+      console.log(`✉️ [Resend Email Sent] Real OTP sent via Resend API to: ${normalizedEmail}`);
       mailSent = true;
     } catch (error: any) {
       console.error(`❌ [Resend Email Error] Failed to send email via Resend: ${error.message || error}`);
@@ -169,7 +207,7 @@ router.post('/auth/send-otp', async (ctx) => {
 
         await transporter.sendMail({
           from: smtpFrom,
-          to: email,
+          to: normalizedEmail,
           subject: 'KiwiShare Verification Code',
           text: `Kia ora!\n\nYour KiwiShare verification code is: ${code}\n\nThis code will expire in 10 minutes. Please do not share this code with anyone.\n\nNgā mihi,\nThe KiwiShare Team`,
           html: `
@@ -186,7 +224,7 @@ router.post('/auth/send-otp', async (ctx) => {
             </div>
           `
         });
-        console.log(`✉️ [SMTP Email Sent] Real OTP sent via SMTP to: ${email}`);
+        console.log(`✉️ [SMTP Email Sent] Real OTP sent via SMTP to: ${normalizedEmail}`);
         mailSent = true;
       } catch (error: any) {
         console.error(`❌ [SMTP Email Error] Failed to send email via SMTP: ${error.message || error}`);
@@ -212,10 +250,12 @@ router.post('/auth/verify-otp', async (ctx) => {
     return;
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
+
   // Find the OTP document in MongoDB
   const otp = await Otp.findOne({
-    email,
-    code,
+    email: normalizedEmail,
+    code: code.toString().trim(),
     used: false
   }).sort({ expiresAt: -1 });
 
@@ -230,16 +270,21 @@ router.post('/auth/verify-otp', async (ctx) => {
   await otp.save();
 
   // Find or create user
-  let user = await User.findOne({ email });
+  let user = await User.findOne({ email: normalizedEmail });
+  const trimmedName = displayName?.toString().trim();
+
   if (!user) {
     user = await User.create({
-      email,
-      displayName: displayName || email.split('@')[0],
+      email: normalizedEmail,
+      displayName: trimmedName || normalizedEmail.split('@')[0],
       avatarUrl: null,
       trustScore: 100,
       isVerified: false,
       authProvider: 'email_otp'
     });
+  } else if (trimmedName && trimmedName.length >= 2 && user.displayName !== trimmedName) {
+    user.displayName = trimmedName;
+    await user.save();
   }
 
   const token = jwt.sign({ id: user._id.toString(), email: user.email }, JWT_SECRET, { expiresIn: '7d' });
