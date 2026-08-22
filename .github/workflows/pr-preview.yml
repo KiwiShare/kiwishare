@@ -48,8 +48,9 @@ jobs:
 
       - name: Build iOS Simulator App (For Appetize.io)
         run: |
+          flutter config --no-enable-swift-package-manager
           cd mobile
-          flutter build ios --simulator
+          flutter build ios --simulator --no-codesign
           cd build/ios/iphonesimulator
           zip -r ../../../Runner-Simulator.zip Runner.app
 
