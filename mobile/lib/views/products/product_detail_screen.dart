@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/item_model.dart';
-import '../../providers/favorites_provider.dart';
+import '../../providers/watchlist_provider.dart';
 import '../../theme/app_theme.dart';
 
 class ProductDetailScreen extends StatelessWidget {
@@ -22,22 +22,100 @@ class ProductDetailScreen extends StatelessWidget {
         actions: product == null
             ? null
             : [
-                Consumer<FavoritesProvider>(
-                  builder: (context, favorites, _) {
-                    final saved = favorites.isFavorite(product.id);
+                Consumer<WatchlistProvider>(
+                  builder: (context, watchlist, _) {
+                    final isWatched = watchlist.isWatched(product.id);
                     return IconButton(
                       key: const Key('detail-favorite-button'),
-                      tooltip: saved ? 'Remove from saved items' : 'Save item',
-                      onPressed: () => favorites.toggleFavorite(product.id),
+                      tooltip: isWatched
+                          ? 'Remove from Watchlist'
+                          : 'Add to Watchlist',
+                      onPressed: () =>
+                          watchlist.toggleWatch(product.id, item: product),
                       icon: Icon(
-                        saved ? Icons.favorite : Icons.favorite_border,
-                        color: saved ? AppColors.error : null,
+                        isWatched ? Icons.bookmark : Icons.bookmark_outline,
+                        color: isWatched ? AppColors.brandPrimary : null,
+                        size: 26,
                       ),
                     );
                   },
                 ),
               ],
       ),
+      bottomNavigationBar: product == null
+          ? null
+          : Consumer<WatchlistProvider>(
+              builder: (context, watchlist, _) {
+                final isWatched = watchlist.isWatched(product.id);
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 10,
+                        offset: const Offset(0, -4),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const Key('detail-watch-action-button'),
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: isWatched
+                                  ? AppColors.brandPrimaryContainer
+                                  : Colors.transparent,
+                              side: BorderSide(
+                                color: isWatched
+                                    ? AppColors.brandPrimary
+                                    : AppColors.border,
+                                width: 1.5,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: AppSpacing.md,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.medium,
+                                ),
+                              ),
+                            ),
+                            onPressed: () => watchlist.toggleWatch(
+                              product.id,
+                              item: product,
+                            ),
+                            icon: Icon(
+                              isWatched
+                                  ? Icons.bookmark
+                                  : Icons.bookmark_outline,
+                              color: isWatched
+                                  ? AppColors.brandPrimary
+                                  : AppColors.textPrimary,
+                            ),
+                            label: Text(
+                              isWatched ? 'Watching' : 'Watch Item',
+                              style: TextStyle(
+                                color: isWatched
+                                    ? AppColors.brandPrimary
+                                    : AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
       body: product == null
           ? const _UnavailableProduct()
           : ListView(
@@ -63,9 +141,48 @@ class ProductDetailScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        product.title,
-                        style: Theme.of(context).textTheme.headlineMedium,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              product.title,
+                              style: Theme.of(context).textTheme.headlineMedium,
+                            ),
+                          ),
+                          if (product.isSustainable)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.sm,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.brandPrimaryContainer,
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.small,
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.eco,
+                                    size: 14,
+                                    color: AppColors.brandPrimary,
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Eco',
+                                    style: TextStyle(
+                                      color: AppColors.brandPrimary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       Text(

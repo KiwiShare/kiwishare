@@ -3,6 +3,7 @@ import authRouter from './auth';
 import usedItemsRouter from './usedItems';
 import transactionsRouter from './transactions';
 import usersRouter from './users';
+import watchlistRouter from './watchlist';
 
 const router = new Router({ prefix: '/api' });
 
@@ -18,5 +19,8 @@ router.use(usersRouter.allowedMethods());
 
 router.use(transactionsRouter.routes());
 router.use(transactionsRouter.allowedMethods());
+
+router.use(watchlistRouter.routes());
+router.use(watchlistRouter.allowedMethods());
 
 export default router;

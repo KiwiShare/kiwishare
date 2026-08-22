@@ -70,7 +70,7 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
   };
 });
 
-// GET /users/me/usedItems and GET /users/me/listings - Retrieve items owned by authenticated user
+// GET /users/me/usedItems - Retrieve items owned by authenticated user
 async function getMyItemsHandler(ctx: any) {
   const userId = ctx.state.user.id;
   const { status } = ctx.query;
@@ -101,6 +101,5 @@ async function getMyItemsHandler(ctx: any) {
 }
 
 router.get('/users/me/usedItems', authenticateToken, getMyItemsHandler);
-router.get('/users/me/listings', authenticateToken, getMyItemsHandler);
 
 export default router;

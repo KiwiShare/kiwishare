@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final ProductLocationService _locationService;
   late HomeDiscoveryProvider _discovery;
   Future<List<ItemModel>>? _itemsFuture;
+  Future<List<ItemModel>>? _recommendedFuture;
   Timer? _filterDebounce;
   Object? _optionsError;
   bool _optionsLoading = true;
@@ -46,12 +47,14 @@ class _HomeScreenState extends State<HomeScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_initialized) return;
+    final listingProvider = context.read<ListingProvider>();
     _discovery = context.read<HomeDiscoveryProvider>();
     _searchController.text = _discovery.query;
     _lastRequestedQuery = _discovery.discoveryQuery;
-    _itemsFuture = context.read<ListingProvider>().getDiscoveryItems(
+    _itemsFuture = listingProvider.getDiscoveryItems(
       query: _discovery.discoveryQuery,
     );
+    _recommendedFuture = listingProvider.getRecommendedItems(limit: 10);
     _discovery.addListener(_onDiscoveryChanged);
     _initialized = true;
     unawaited(_loadDiscoveryOptions());
@@ -106,15 +109,21 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _retryFetch() async {
     _filterDebounce?.cancel();
     final query = _discovery.discoveryQuery;
+    final listingProvider = context.read<ListingProvider>();
     _lastRequestedQuery = query;
     setState(() {
-      _itemsFuture = context.read<ListingProvider>().getDiscoveryItems(
+      _itemsFuture = listingProvider.getDiscoveryItems(
         query: query,
+        forceRefresh: true,
+      );
+      _recommendedFuture = listingProvider.getRecommendedItems(
+        limit: 10,
         forceRefresh: true,
       );
     });
     await Future.wait([
       _itemsFuture!,
+      _recommendedFuture!,
       _loadDiscoveryOptions(forceRefresh: true),
     ]);
   }
@@ -272,12 +281,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final filters = context.watch<HomeDiscoveryProvider>();
+    final isDefaultHome =
+        filters.selectedCategory == HomeDiscoveryProvider.allCategoriesLabel &&
+        filters.query.isEmpty &&
+        filters.activeFilterCount == 0;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _retryFetch,
-          child: ListView(
+          child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg,
@@ -285,111 +299,209 @@ class _HomeScreenState extends State<HomeScreen> {
               AppSpacing.lg,
               AppSpacing.xl,
             ),
-            children: [
-              _HomeHeader(
-                location: filters.selectedLocation,
-                nearYou: filters.isNearYou,
-                onChooseLocation: _showLocationPicker,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextField(
-                key: const Key('home-search-field'),
-                controller: _searchController,
-                onChanged: filters.setQuery,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Search by item name or category',
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: AppColors.brandPrimary,
-                  ),
-                  suffixIconConstraints: const BoxConstraints(minWidth: 48),
-                  suffixIcon: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_searchController.text.isNotEmpty)
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _HomeHeader(
+                  location: filters.selectedLocation,
+                  nearYou: filters.isNearYou,
+                  onChooseLocation: _showLocationPicker,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  key: const Key('home-search-field'),
+                  controller: _searchController,
+                  onChanged: filters.setQuery,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: 'Search by item name or category',
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: AppColors.brandPrimary,
+                    ),
+                    suffixIconConstraints: const BoxConstraints(minWidth: 48),
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_searchController.text.isNotEmpty)
+                          IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: _clearSearch,
+                            icon: const Icon(Icons.close),
+                          ),
                         IconButton(
-                          tooltip: 'Clear search',
-                          onPressed: _clearSearch,
-                          icon: const Icon(Icons.close),
+                          key: const Key('home-filter-button'),
+                          tooltip: 'Sort and filter products',
+                          onPressed: _showFilters,
+                          color: AppColors.brandPrimary,
+                          icon: Badge(
+                            isLabelVisible: filters.activeFilterCount > 0,
+                            label: Text('${filters.activeFilterCount}'),
+                            child: const Icon(Icons.tune),
+                          ),
                         ),
-                      IconButton(
-                        key: const Key('home-filter-button'),
-                        tooltip: 'Sort and filter products',
-                        onPressed: _showFilters,
-                        color: AppColors.brandPrimary,
-                        icon: Badge(
-                          isLabelVisible: filters.activeFilterCount > 0,
-                          label: Text('${filters.activeFilterCount}'),
-                          child: const Icon(Icons.tune),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              if (_optionsLoading)
-                const LinearProgressIndicator(
-                  key: Key('home-discovery-options-loading'),
-                  minHeight: 2,
-                )
-              else if (_optionsError != null)
-                _DiscoveryOptionsError(
-                  onRetry: () => _loadDiscoveryOptions(forceRefresh: true),
-                )
-              else
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (final category in filters.categories) ...[
-                        _HomeCategoryChip(
-                          key: Key('home-category-${category.value}'),
-                          label: category.value,
-                          selected: filters.selectedCategory == category.value,
-                          onTap: () => filters.toggleCategory(category.value),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              const SizedBox(height: AppSpacing.xl),
-              FutureBuilder<List<ItemModel>>(
-                future: _itemsFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const _HomeLoadingState();
-                  }
-                  if (snapshot.hasError) {
-                    return _HomeErrorState(onRetry: _retryFetch);
-                  }
-                  final products = snapshot.data ?? const <ItemModel>[];
-                  ItemModel? selectedItem;
-                  for (final product in products) {
-                    if (product.id == filters.previewItemId) {
-                      selectedItem = product;
-                      break;
+                const SizedBox(height: AppSpacing.md),
+                if (_optionsLoading)
+                  const LinearProgressIndicator(
+                    key: Key('home-discovery-options-loading'),
+                    minHeight: 2,
+                  )
+                else if (_optionsError != null)
+                  _DiscoveryOptionsError(
+                    onRetry: () => _loadDiscoveryOptions(forceRefresh: true),
+                  )
+                else
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final category in filters.categories) ...[
+                          _HomeCategoryChip(
+                            key: Key('home-category-${category.value}'),
+                            label: category.value,
+                            selected:
+                                filters.selectedCategory == category.value,
+                            onTap: () => filters.toggleCategory(category.value),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                        ],
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: AppSpacing.lg),
+                if (isDefaultHome)
+                  FutureBuilder<List<ItemModel>>(
+                    future: _recommendedFuture,
+                    builder: (context, snapshot) {
+                      final recommended = snapshot.data ?? const <ItemModel>[];
+                      if (recommended.isEmpty) return const SizedBox.shrink();
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _HomeJumboCarousel(
+                            items: recommended,
+                            onOpen: _openProduct,
+                          ),
+                          const SizedBox(height: AppSpacing.xl),
+                          _HomeRecommendedSection(
+                            items: recommended,
+                            onOpen: _openProduct,
+                          ),
+                          const SizedBox(height: AppSpacing.xl),
+                        ],
+                      );
+                    },
+                  ),
+                FutureBuilder<List<ItemModel>>(
+                  future: _itemsFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const _HomeLoadingState();
                     }
-                  }
-                  return _HomeDiscoveryResults(
-                    products: products,
-                    selectedItem: selectedItem,
-                    filters: filters,
-                    onShowFilters: _showFilters,
-                    onOpenProduct: _openProduct,
-                  );
-                },
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              const _SustainabilityBanner(),
-            ],
+                    if (snapshot.hasError) {
+                      return _HomeErrorState(onRetry: _retryFetch);
+                    }
+                    final products = snapshot.data ?? const <ItemModel>[];
+                    ItemModel? selectedItem;
+                    for (final product in products) {
+                      if (product.id == filters.previewItemId) {
+                        selectedItem = product;
+                        break;
+                      }
+                    }
+                    return _HomeDiscoveryResults(
+                      products: products,
+                      selectedItem: selectedItem,
+                      filters: filters,
+                      onShowFilters: _showFilters,
+                      onOpenProduct: _openProduct,
+                    );
+                  },
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                const _SustainabilityBanner(),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+IconData _getCategoryIcon(String category) {
+  final normalized = category.toLowerCase().trim();
+  if (normalized.contains('furnitur') ||
+      normalized.contains('chair') ||
+      normalized.contains('table') ||
+      normalized.contains('desk')) {
+    return Icons.chair_outlined;
+  }
+  if (normalized.contains('plant') ||
+      normalized.contains('garden') ||
+      normalized.contains('flower') ||
+      normalized.contains('tree')) {
+    return Icons.yard_outlined;
+  }
+  if (normalized.contains('camp') ||
+      normalized.contains('outdoor') ||
+      normalized.contains('tent') ||
+      normalized.contains('hike')) {
+    return Icons.forest_outlined;
+  }
+  if (normalized.contains('elect') ||
+      normalized.contains('device') ||
+      normalized.contains('phone') ||
+      normalized.contains('tech') ||
+      normalized.contains('comput')) {
+    return Icons.devices_outlined;
+  }
+  if (normalized.contains('transp') ||
+      normalized.contains('bike') ||
+      normalized.contains('car') ||
+      normalized.contains('vehicle') ||
+      normalized.contains('scooter')) {
+    return Icons.directions_car_outlined;
+  }
+  if (normalized.contains('book') ||
+      normalized.contains('read') ||
+      normalized.contains('manga')) {
+    return Icons.menu_book_outlined;
+  }
+  if (normalized.contains('home') ||
+      normalized.contains('kitchen') ||
+      normalized.contains('appliance')) {
+    return Icons.home_outlined;
+  }
+  if (normalized.contains('sport') ||
+      normalized.contains('fitness') ||
+      normalized.contains('ball')) {
+    return Icons.sports_basketball_outlined;
+  }
+  if (normalized.contains('kid') ||
+      normalized.contains('baby') ||
+      normalized.contains('toy')) {
+    return Icons.child_care_outlined;
+  }
+  if (normalized.contains('fashion') ||
+      normalized.contains('cloth') ||
+      normalized.contains('wear') ||
+      normalized.contains('shoe')) {
+    return Icons.checkroom_outlined;
+  }
+  if (normalized.contains('tool') ||
+      normalized.contains('diy') ||
+      normalized.contains('hardware')) {
+    return Icons.build_outlined;
+  }
+  if (normalized == 'all' || normalized == 'all nz') {
+    return Icons.explore_outlined;
+  }
+  return Icons.category_outlined;
 }
 
 class _HomeHeader extends StatelessWidget {
@@ -406,25 +518,83 @@ class _HomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.xs + 2),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.brandPrimary, AppColors.brandPrimaryAlt],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.brandPrimary.withValues(alpha: 0.25),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.eco_rounded, color: Colors.white, size: 22),
+        ),
+        const SizedBox(width: AppSpacing.sm + 2),
         Expanded(
-          child: Text(
-            'KiwiShare',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineLarge?.copyWith(color: AppColors.textBrand),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'KiwiShare',
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  color: AppColors.textBrand,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 24,
+                  letterSpacing: -0.6,
+                ),
+              ),
+              Text(
+                'Share & Reuse in NZ',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.brandSecondary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
           ),
         ),
         TextButton.icon(
           key: const Key('home-location-button'),
           onPressed: onChooseLocation,
-          icon: Icon(nearYou ? Icons.my_location : Icons.location_on_outlined),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: AppSpacing.xs,
+            ),
+            backgroundColor: AppColors.surfaceMuted,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.full),
+              side: const BorderSide(color: AppColors.border),
+            ),
+          ),
+          icon: Icon(
+            nearYou ? Icons.my_location : Icons.location_on_outlined,
+            size: 18,
+            color: AppColors.brandPrimary,
+          ),
           label: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 120),
+            constraints: const BoxConstraints(maxWidth: 110),
             child: Text(
               nearYou ? 'Near you' : location,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: AppColors.brandPrimary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ),
@@ -447,7 +617,13 @@ class _HomeCategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final iconData = _getCategoryIcon(label);
     return ChoiceChip(
+      avatar: Icon(
+        iconData,
+        size: 16,
+        color: selected ? AppColors.brandPrimary : AppColors.textSecondary,
+      ),
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
@@ -455,10 +631,530 @@ class _HomeCategoryChip extends StatelessWidget {
       backgroundColor: AppColors.surface,
       side: BorderSide(
         color: selected ? AppColors.brandPrimary : AppColors.border,
+        width: selected ? 1.5 : 1.0,
       ),
-      labelStyle: Theme.of(
-        context,
-      ).textTheme.labelLarge?.copyWith(color: AppColors.textPrimary),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.full),
+      ),
+      labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+        color: selected ? AppColors.brandPrimary : AppColors.textPrimary,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      ),
+    );
+  }
+}
+
+class _HomeJumboCarousel extends StatelessWidget {
+  final List<ItemModel> items;
+  final ValueChanged<ItemModel> onOpen;
+
+  const _HomeJumboCarousel({required this.items, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.auto_awesome,
+                color: AppColors.brandAccent,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                'Featured Highlights',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 180,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: items.length > 5 ? 5 : items.length,
+            separatorBuilder: (context, index) =>
+                const SizedBox(width: AppSpacing.md),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return _HomeJumboCard(item: item, onTap: () => onOpen(item));
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeJumboCard extends StatelessWidget {
+  final ItemModel item;
+  final VoidCallback onTap;
+
+  const _HomeJumboCard({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 290,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.large),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.large),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                item.imageUrl.isNotEmpty
+                    ? Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: AppColors.brandPrimaryAlt,
+                          child: const Icon(
+                            Icons.image_not_supported_outlined,
+                            color: Colors.white70,
+                            size: 40,
+                          ),
+                        ),
+                      )
+                    : Container(
+                        color: AppColors.brandPrimaryAlt,
+                        child: const Icon(
+                          Icons.local_florist_rounded,
+                          color: Colors.white70,
+                          size: 40,
+                        ),
+                      ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.25),
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.85),
+                      ],
+                      stops: const [0.0, 0.4, 1.0],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: AppSpacing.sm,
+                  left: AppSpacing.sm,
+                  right: AppSpacing.sm,
+                  child: Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: 4,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: AppSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandAccent,
+                          borderRadius: BorderRadius.circular(AppRadius.small),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.local_fire_department,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            SizedBox(width: 2),
+                            Text(
+                              'HOT PICK',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (item.isSustainable)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: AppSpacing.xs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.brandPrimaryContainer,
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small,
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.eco,
+                                size: 14,
+                                color: AppColors.brandPrimary,
+                              ),
+                              SizedBox(width: 2),
+                              Text(
+                                'ECO',
+                                style: TextStyle(
+                                  color: AppColors.brandPrimary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: AppSpacing.md,
+                  right: AppSpacing.md,
+                  bottom: AppSpacing.md,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          shadows: [
+                            Shadow(color: Colors.black54, blurRadius: 4),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 13,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: Text(
+                              item.location,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.brandPrimary,
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.small,
+                              ),
+                              border: Border.all(color: Colors.white30),
+                            ),
+                            child: Text(
+                              '\$${item.priceNzd} NZD',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeRecommendedSection extends StatelessWidget {
+  final List<ItemModel> items;
+  final ValueChanged<ItemModel> onOpen;
+
+  const _HomeRecommendedSection({required this.items, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
+    final cardHeight = 205.0 + (textScale - 1.0) * 45.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: 4,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.recommend,
+                  color: AppColors.brandPrimary,
+                  size: 22,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Text(
+                  'Recommended for You',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.brandSecondaryContainer,
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+              child: Text(
+                'Top 10',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.brandPrimaryAlt,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Curated based on popularity, freshness & sustainability',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        SizedBox(
+          height: cardHeight,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: items.length > 10 ? 10 : items.length,
+            separatorBuilder: (context, index) =>
+                const SizedBox(width: AppSpacing.md),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return _RecommendedProductCard(
+                item: item,
+                rank: index + 1,
+                onTap: () => onOpen(item),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecommendedProductCard extends StatelessWidget {
+  final ItemModel item;
+  final int rank;
+  final VoidCallback onTap;
+
+  const _RecommendedProductCard({
+    required this.item,
+    required this.rank,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
+    final cardWidth = 155.0 + (textScale - 1.0) * 35.0;
+
+    return Container(
+      width: cardWidth,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 95,
+                  width: double.infinity,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      item.imageUrl.isNotEmpty
+                          ? Image.network(
+                              item.imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                    color: AppColors.surfaceMuted,
+                                    child: const Icon(
+                                      Icons.image_not_supported_outlined,
+                                      color: AppColors.brandSecondary,
+                                    ),
+                                  ),
+                            )
+                          : Container(
+                              color: AppColors.surfaceMuted,
+                              child: const Icon(
+                                Icons.eco_outlined,
+                                color: AppColors.brandPrimary,
+                              ),
+                            ),
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.brandPrimary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '#$rank',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (item.isSustainable)
+                        const Positioned(
+                          top: 6,
+                          right: 6,
+                          child: CircleAvatar(
+                            radius: 11,
+                            backgroundColor: AppColors.brandPrimaryContainer,
+                            child: Icon(
+                              Icons.eco,
+                              size: 13,
+                              color: AppColors.brandPrimary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                item.location,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 11,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '\$${item.priceNzd}',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: AppColors.brandPrimary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

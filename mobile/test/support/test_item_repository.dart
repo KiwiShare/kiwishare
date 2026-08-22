@@ -203,6 +203,21 @@ class TestItemRepository implements ItemRepository {
   }
 
   @override
+  Future<List<ItemModel>> fetchRecommendedItems({int limit = 10}) async {
+    final active = items
+        .where((item) => item.status == ItemStatus.active)
+        .toList();
+    // Sort with sustainable items first, then by title
+    active.sort((a, b) {
+      if (a.isSustainable != b.isSustainable) {
+        return a.isSustainable ? -1 : 1;
+      }
+      return a.title.compareTo(b.title);
+    });
+    return active.take(limit).toList(growable: false);
+  }
+
+  @override
   Stream<List<ItemModel>> searchItems({
     String? query,
     String? category,
