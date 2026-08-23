@@ -1,8 +1,12 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import bcrypt from 'bcryptjs';
 import app from '../src/app';
 import Item from '../src/models/Item';
+import User from '../src/models/User';
+import Category from '../src/models/Category';
+import { DEFAULT_CATEGORIES } from '../src/config/seed';
 
 jest.setTimeout(60000);
 
@@ -13,6 +17,21 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri);
+
+    // Seed categories and admin user
+    await Category.insertMany(DEFAULT_CATEGORIES);
+    const passwordHash = await bcrypt.hash('password123', 12);
+    await User.create({
+      email: 'admin@kiwishare.online',
+      displayName: 'Kiwi Admin',
+      role: 'admin',
+      trustScore: 100,
+      isVerified: true,
+      authProvider: 'email_password',
+      registrationPlatform: 'web',
+      lastUsedPlatform: 'web',
+      passwordHash
+    });
 
     await Item.create([
       {
@@ -73,9 +92,10 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     displayName: 'Test User'
   };
 
-  test('POST /api/auth/register - success registers user', async () => {
+  test('POST /api/auth/register - success registers user with web platform header', async () => {
     const res = await request(app.callback())
       .post('/api/auth/register')
+      .set('x-client-platform', 'web')
       .send(testUser);
 
     expect(res.status).toBe(201);
@@ -83,12 +103,15 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.token).toBeDefined();
     expect(res.body.user.displayName).toBe(testUser.displayName);
     expect(res.body.user.trustScore).toBe(100);
+    expect(res.body.user.registrationPlatform).toBe('web');
+    expect(res.body.user.lastUsedPlatform).toBe('web');
     userId = res.body.user.id;
   });
 
-  test('POST /api/auth/login - success authenticates user', async () => {
+  test('POST /api/auth/login - success authenticates user and updates lastUsedPlatform', async () => {
     const res = await request(app.callback())
       .post('/api/auth/login')
+      .set('x-client-platform', 'web')
       .send({
         email: testUser.email,
         password: testUser.password
@@ -97,6 +120,7 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
     expect(res.body.token).toBeDefined();
+    expect(res.body.user.lastUsedPlatform).toBe('web');
     userToken = res.body.token; // Save token for authenticated requests
   });
 
@@ -443,5 +467,111 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     const res = await request(app.callback()).get('/health');
     expect(res.status).toBe(200);
     expect(res.text).toBe('OK');
+  });
+
+  test('GET /api/categories - returns seeded and dynamic categories', async () => {
+    const res = await request(app.callback()).get('/api/categories');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.categories.length).toBeGreaterThan(0);
+    expect(res.body.categories.some((c: any) => c.name === 'Furniture')).toBe(true);
+  });
+
+  test('POST /api/categories - allows authenticated users to create category', async () => {
+    const res = await request(app.callback())
+      .post('/api/categories')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        name: 'Art & Crafts',
+        icon: 'Sparkles',
+        description: 'Handmade paintings, pottery, and art'
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('success');
+    expect(res.body.category.slug).toBe('art-crafts');
+  });
+
+  test('GET /api/admin/stats and PATCH /api/admin/items/:id/status - admin controls', async () => {
+    // 1. Log in as admin
+    const adminLoginRes = await request(app.callback())
+      .post('/api/auth/login')
+      .send({
+        email: 'admin@kiwishare.online',
+        password: 'password123'
+      });
+
+    expect(adminLoginRes.status).toBe(200);
+    expect(adminLoginRes.body.user.role).toBe('admin');
+    const adminToken = adminLoginRes.body.token;
+
+    // 2. Fetch admin dashboard stats
+    const statsRes = await request(app.callback())
+      .get('/api/admin/stats')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(statsRes.status).toBe(200);
+    expect(statsRes.body.status).toBe('success');
+    expect(statsRes.body.stats.totalUsers).toBeGreaterThanOrEqual(1);
+    expect(statsRes.body.stats.activeItems).toBeGreaterThanOrEqual(1);
+    expect(statsRes.body.stats.platformStats).toBeDefined();
+
+    // 3. Takedown / Revoke an item as admin
+    const itemsRes = await request(app.callback()).get('/api/usedItems');
+    const itemsList = Array.isArray(itemsRes.body) ? itemsRes.body : itemsRes.body.items;
+    const targetItem = itemsList && itemsList[0];
+    if (targetItem) {
+      const revokeRes = await request(app.callback())
+        .patch(`/api/admin/items/${targetItem.id}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'revoked' });
+
+      expect(revokeRes.status).toBe(200);
+      expect(revokeRes.body.item.status).toBe('revoked');
+    }
+  });
+
+  test('POST /api/upload and GET /api/images/:filename - uploads image to Cloudflare R2 and serves it', async () => {
+    // 1. Rejects unauthenticated upload
+    const unauthRes = await request(app.callback())
+      .post('/api/upload')
+      .send({ imageBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
+    expect(unauthRes.status).toBe(401);
+
+    // 2. Uploads 1x1 png pixel via base64
+    const res = await request(app.callback())
+      .post('/api/upload')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        imageBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        fileName: 'test_pixel.png',
+        contentType: 'image/png'
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('success');
+    expect(res.body.bucket).toBe('kiwishare');
+    expect(res.body.key).toMatch(/^images\//);
+
+    // 3. Fetch the image via /api/images/ (200 when R2 credentials configured, 404 in mock CI)
+    const filename = res.body.key.replace(/^images\//, '');
+    const imgGetRes = await request(app.callback()).get(`/api/images/${filename}`);
+    expect([200, 404]).toContain(imgGetRes.status);
+  });
+
+  test('POST /api/upload/presign - generates S3 presigned upload URL for Cloudflare R2', async () => {
+    const res = await request(app.callback())
+      .post('/api/upload/presign')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        fileName: 'sample.jpg',
+        contentType: 'image/jpeg'
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.bucket).toBe('kiwishare');
+    expect(res.body.uploadUrl).toBeDefined();
+    expect(res.body.publicUrl).toBeDefined();
   });
 });

@@ -1,5 +1,7 @@
 packages:
   - 'server'
+  - 'web'
 allowBuilds:
+  esbuild: true
   mongodb-memory-server: true
   protobufjs: true

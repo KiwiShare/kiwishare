@@ -10,6 +10,15 @@ abstract class UserRepository {
     String code, {
     String? displayName,
   });
+  Future<Map<String, dynamic>> loginWithPassword({
+    required String email,
+    required String password,
+  });
+  Future<Map<String, dynamic>> registerWithPassword({
+    required String email,
+    required String password,
+    required String displayName,
+  });
   Future<Map<String, dynamic>> loginWithGoogle(String idToken);
   Future<UserModel> updateProfile({
     required String token,
@@ -19,6 +28,78 @@ abstract class UserRepository {
 }
 
 class RestUserRepository implements UserRepository {
+  @override
+  Future<Map<String, dynamic>> loginWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    final response = await http.post(
+      Uri.parse(ApiConfig.loginUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email.trim().toLowerCase(),
+        'password': password,
+        'platform': 'mobile',
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final token = data['token'] as String;
+      final user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
+      return {'token': token, 'user': user};
+    } else {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(
+          error['message'] ?? 'Login failed. Please check your credentials.',
+        );
+      } catch (e) {
+        if (e is Exception &&
+            !e.toString().startsWith('Exception: FormatException')) {
+          rethrow;
+        }
+        throw Exception('Login failed. Please check your credentials.');
+      }
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> registerWithPassword({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final response = await http.post(
+      Uri.parse(ApiConfig.registerUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email.trim().toLowerCase(),
+        'password': password,
+        'displayName': displayName.trim(),
+        'platform': 'mobile',
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      final data = jsonDecode(response.body);
+      final token = data['token'] as String;
+      final user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
+      return {'token': token, 'user': user};
+    } else {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Registration failed.');
+      } catch (e) {
+        if (e is Exception &&
+            !e.toString().startsWith('Exception: FormatException')) {
+          rethrow;
+        }
+        throw Exception('Registration failed.');
+      }
+    }
+  }
+
   @override
   Future<UserModel> updateProfile({
     required String token,
@@ -134,6 +215,41 @@ class RestUserRepository implements UserRepository {
 }
 
 class MockUserRepository implements UserRepository {
+  @override
+  Future<Map<String, dynamic>> loginWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final user = UserModel(
+      id: 'mock_user_1',
+      displayName: email.split('@')[0],
+      avatarUrl: null,
+      trustScore: 100,
+      isVerified: true,
+    );
+    return {'token': 'mock_jwt_token', 'user': user};
+  }
+
+  @override
+  Future<Map<String, dynamic>> registerWithPassword({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final user = UserModel(
+      id: 'mock_user_1',
+      displayName: displayName.trim().isNotEmpty
+          ? displayName.trim()
+          : email.split('@')[0],
+      avatarUrl: null,
+      trustScore: 100,
+      isVerified: true,
+    );
+    return {'token': 'mock_jwt_token', 'user': user};
+  }
+
   @override
   Future<UserModel> updateProfile({
     required String token,
