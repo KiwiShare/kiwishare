@@ -17,6 +17,7 @@ jobs:
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -53,17 +54,15 @@ jobs:
           zip -r ../../../Runner-Simulator.zip Runner.app
 
       - name: Upload to Appetize.io (iOS)
-        if: ${{ secrets.APPETIZE_API_TOKEN != '' }}
+        if: ${{ env.APPETIZE_API_TOKEN != '' }}
         id: appetize_upload_ios
-        env:
-          APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
         run: |
           RESPONSE=$(curl -s -X POST https://api.appetize.io/v1/apps \
             -F "file=@mobile/Runner-Simulator.zip" \
             -F "platform=ios" \
             -F "token=$APPETIZE_API_TOKEN")
           echo "Response: $RESPONSE"
-          PUBLIC_KEY=$(echo "$RESPONSE" | grep -o '"publicKey":"[^"]*' | cut -d'"' -f4)
+          PUBLIC_KEY=$(echo "$RESPONSE" | grep -o '"publicKey":"[^"]*' | cut -d'"' -f4 || echo "")
           if [ -n "$PUBLIC_KEY" ]; then
             echo "public_key=$PUBLIC_KEY" >> $GITHUB_OUTPUT
             echo "preview_url=https://appetize.io/app/$PUBLIC_KEY?device=iphone15pro&osVersion=17.5" >> $GITHUB_OUTPUT
