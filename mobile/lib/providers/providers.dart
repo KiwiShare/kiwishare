@@ -1,6 +1,8 @@
 export 'auth_provider.dart';
 export 'navigation_provider.dart';
 export 'favorites_provider.dart';
+export 'watchlist_provider.dart';
+export 'home_discovery_provider.dart';
 export 'search_provider.dart';
 export 'listing_provider.dart';
 export 'theme_provider.dart';

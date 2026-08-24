@@ -5,13 +5,13 @@ WORKDIR /app
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-COPY functions/package.json ./functions/package.json
+COPY server/package.json ./server/package.json
 
 RUN pnpm install --frozen-lockfile
 
-COPY functions ./functions
+COPY server ./server
 
-RUN pnpm --filter functions run build
+RUN pnpm --filter server run build
 
 
 FROM node:22-alpine AS runner
@@ -23,12 +23,12 @@ ENV NODE_ENV=production
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-COPY functions/package.json ./functions/package.json
+COPY server/package.json ./server/package.json
 
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/functions/dist ./functions/dist
+COPY --from=builder /app/server/dist ./server/dist
 
 EXPOSE 3000
 
-CMD ["pnpm", "--filter", "functions", "run", "start"]
+CMD ["pnpm", "--filter", "server", "run", "start"]

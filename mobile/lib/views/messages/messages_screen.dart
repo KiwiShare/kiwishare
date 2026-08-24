@@ -135,7 +135,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final chats = _visibleChats;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFBFAF6),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

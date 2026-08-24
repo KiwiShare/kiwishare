@@ -1,0 +1,104 @@
+name: PR Preview & Interactive Test
+
+on:
+  pull_request:
+    branches: [ main, pre ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  build_and_preview:
+    name: Build & Deploy Preview
+    runs-on: macos-latest
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          cd mobile
+          flutter pub get
+
+      - name: Build Android APK
+        run: |
+          cd mobile
+          flutter build apk --release
+
+      - name: Build iOS Simulator App (For Appetize.io)
+        run: |
+          flutter config --no-enable-swift-package-manager
+          cd mobile
+          flutter build ios --simulator --no-codesign
+          cd build/ios/iphonesimulator
+          zip -r ../../../Runner-Simulator.zip Runner.app
+
+      - name: Upload to Appetize.io (iOS)
+        if: ${{ secrets.APPETIZE_API_TOKEN != '' }}
+        id: appetize_upload_ios
+        env:
+          APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+        run: |
+          RESPONSE=$(curl -s -X POST https://api.appetize.io/v1/apps \
+            -F "file=@mobile/Runner-Simulator.zip" \
+            -F "platform=ios" \
+            -F "token=$APPETIZE_API_TOKEN")
+          echo "Response: $RESPONSE"
+          PUBLIC_KEY=$(echo "$RESPONSE" | grep -o '"publicKey":"[^"]*' | cut -d'"' -f4)
+          if [ -n "$PUBLIC_KEY" ]; then
+            echo "public_key=$PUBLIC_KEY" >> $GITHUB_OUTPUT
+            echo "preview_url=https://appetize.io/app/$PUBLIC_KEY?device=iphone15pro&osVersion=17.5" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-build-artifacts
+          path: |
+            mobile/build/app/outputs/flutter-apk/app-release.apk
+            mobile/Runner-Simulator.zip
+
+      - name: Find PR Preview Comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: 'KiwiShare Mobile PR Preview'
+
+      - name: Post or Update PR Preview Comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            ### 📱 KiwiShare Mobile PR Preview
+
+            | Platform | Preview / Status | Direct Link |
+            | :--- | :--- | :--- |
+            | 🍏 **iOS (Web Simulator)** | ${{ steps.appetize_upload_ios.outputs.public_key != '' && '🟢 Ready to Test' || '⚠️ Appetize Token Not Configured' }} | ${{ steps.appetize_upload_ios.outputs.public_key != '' && format('[👉 Click to Test in Browser]({0})', steps.appetize_upload_ios.outputs.preview_url) || 'Configure `APPETIZE_API_TOKEN` in GitHub Secrets' }} |
+            | 🤖 **Android APK** | 📦 Built Successfully | Downloadable from Workflow Artifacts |
+
+            > 💡 **Tip for Reviewers**: Click the iOS preview link above to interact with and test this PR in your web browser without downloading or compiling anything!
+            >
+            > *Commit: `${{ github.event.pull_request.head.sha }}` | Built by GitHub Actions*
