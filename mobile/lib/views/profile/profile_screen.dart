@@ -14,8 +14,34 @@ class ProfileScreen extends StatelessWidget {
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) =>
-        const Padding(padding: EdgeInsets.all(16), child: LoginView()),
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.all(16),
+      child: LoginView(
+        isSignUp: false,
+        onLoginSuccess: () {
+          if (sheetContext.mounted) {
+            Navigator.pop(sheetContext);
+          }
+        },
+      ),
+    ),
+  );
+
+  Future<void> _showSignUp(BuildContext context) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.all(16),
+      child: LoginView(
+        isSignUp: true,
+        onLoginSuccess: () {
+          if (sheetContext.mounted) {
+            Navigator.pop(sheetContext);
+          }
+        },
+      ),
+    ),
   );
 
   Future<void> _editName(BuildContext context, UserModel user) async {
@@ -88,7 +114,10 @@ class ProfileScreen extends StatelessWidget {
                   user: user,
                   onEdit: () => _editName(context, user),
                 )
-              : _GuestHeader(onLogin: () => _showLogin(context)),
+              : _GuestHeader(
+                  onLogin: () => _showLogin(context),
+                  onSignUp: () => _showSignUp(context),
+                ),
           const SizedBox(height: 24),
           if (signedIn) ...[
             const _SectionTitle('My marketplace'),
@@ -250,7 +279,7 @@ class _ProfileHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    user.displayName,
+                    'Kia ora, ${user.displayName}',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 8),
@@ -290,8 +319,10 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 class _GuestHeader extends StatelessWidget {
-  const _GuestHeader({required this.onLogin});
+  const _GuestHeader({required this.onLogin, required this.onSignUp});
   final VoidCallback onLogin;
+  final VoidCallback onSignUp;
+
   @override
   Widget build(BuildContext context) => Card(
     child: Padding(
@@ -308,7 +339,15 @@ class _GuestHeader extends StatelessWidget {
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(48),
             ),
-            child: const Text('Log in or create account'),
+            child: const Text('Log in'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: onSignUp,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
+            child: const Text('Create account'),
           ),
         ],
       ),

@@ -5,7 +5,8 @@
 .pub-cache/
 .pub/
 build/
-functions/dist
+server/dist
+dist/
 .idea/
 *.iml
 *.iws
@@ -34,6 +35,8 @@ node_modules/
 .eslintcache
 node_modules
 
-# Firebase Secrets
-functions/firebase-adminsdk.json
-functions/.env
+# Server & Secrets
+server/firebase-adminsdk.json
+server/.env
+.env
+.env.local
