@@ -304,7 +304,7 @@ class KiwiShareShell extends StatelessWidget {
                 padding: EdgeInsets.only(bottom: 2.0),
                 child: Icon(Icons.chat_bubble, size: 24),
               ),
-              label: 'Messages',
+              label: 'Chat',
             ),
             BottomNavigationBarItem(
               icon: const Padding(
