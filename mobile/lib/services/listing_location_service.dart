@@ -4,15 +4,18 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 class ListingLocation {
-  const ListingLocation({
-    required this.label,
-    required this.latitude,
-    required this.longitude,
-  });
+  const ListingLocation({required this.label, this.latitude, this.longitude});
 
   final String label;
-  final double latitude;
-  final double longitude;
+  final double? latitude;
+  final double? longitude;
+}
+
+/// Formats a deliberately approximate coordinate label for cases where reverse
+/// geocoding cannot provide a suburb or city name.
+String approximateListingLocationLabel(double latitude, double longitude) {
+  return 'Approx. ${latitude.toStringAsFixed(2)}, '
+      '${longitude.toStringAsFixed(2)}';
 }
 
 enum ListingLocationErrorCode {
@@ -103,8 +106,10 @@ class DeviceListingLocationService implements ListingLocationService {
       // Coordinates remain useful when the platform geocoder is unavailable.
     }
 
-    return '${position.latitude.toStringAsFixed(4)}, '
-        '${position.longitude.toStringAsFixed(4)}';
+    return approximateListingLocationLabel(
+      position.latitude,
+      position.longitude,
+    );
   }
 
   String _areaLabel(Placemark placemark) {

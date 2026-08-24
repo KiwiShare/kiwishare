@@ -10,6 +10,13 @@ import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/post/post_item_screen.dart';
 
 void main() {
+  test('coordinate fallback only exposes an approximate area', () {
+    expect(
+      approximateListingLocationLabel(-36.8485, 174.7633),
+      'Approx. -36.85, 174.76',
+    );
+  });
+
   Widget buildTestApp({
     required VoidCallback onCancel,
     TextScaler textScaler = TextScaler.noScaling,
@@ -325,6 +332,61 @@ void main() {
     );
     await tester.tap(find.text('Settings'));
     expect(locationService.appSettingsRequests, 1);
+  });
+
+  testWidgets('manual suburb entry works when GPS permission is denied', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final locationService = FakeListingLocationService.failure(
+      ListingLocationErrorCode.permissionDenied,
+    );
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, locationService: locationService),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_location_field')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.tap(find.byKey(const Key('post_location_field')));
+    await tester.pumpAndSettle();
+    expect(locationService.locationRequests, 1);
+
+    await tester.tap(find.byKey(const Key('post_manual_location_button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('post_manual_location_input')),
+      '  Mount Eden  ',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('post_manual_location_save')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mount Eden'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_submit_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('post_location_field')),
+        matching: find.text('Required'),
+      ),
+      findsNothing,
+    );
   });
 }
 

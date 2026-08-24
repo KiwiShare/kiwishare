@@ -875,6 +875,73 @@ class _CurrentLocationFormField extends StatelessWidget {
   final Future<ListingLocation?> Function() onLocate;
   final ValueChanged<ListingLocation> onChanged;
 
+  Future<String?> _requestManualLocation(BuildContext context) async {
+    var location = '';
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                MediaQuery.viewInsetsOf(context).bottom + AppSpacing.lg,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Enter location',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Enter a suburb or city. Do not include a street address.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    key: const Key('post_manual_location_input'),
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.done,
+                    maxLength: 80,
+                    decoration: const InputDecoration(
+                      labelText: 'Suburb or city',
+                      hintText: 'e.g. Auckland Central',
+                    ),
+                    onChanged: (value) {
+                      setSheetState(() => location = value.trim());
+                    },
+                    onSubmitted: (value) {
+                      final trimmedValue = value.trim();
+                      if (trimmedValue.isNotEmpty) {
+                        Navigator.of(sheetContext).pop(trimmedValue);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FilledButton(
+                    key: const Key('post_manual_location_save'),
+                    onPressed: location.isEmpty
+                        ? null
+                        : () => Navigator.of(sheetContext).pop(location),
+                    child: const Text('Use this location'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FormField<ListingLocation>(
@@ -882,44 +949,64 @@ class _CurrentLocationFormField extends StatelessWidget {
       validator: (value) => value == null ? 'Required' : null,
       autovalidateMode: AutovalidateMode.onUserInteraction,
       builder: (field) {
-        return Semantics(
-          button: true,
-          label: field.value == null
-              ? 'Use current location'
-              : 'Current location: ${field.value!.label}',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.medium),
-            onTap: isLocating
-                ? null
-                : () async {
-                    final location = await onLocate();
-                    if (location == null || !context.mounted) {
-                      return;
-                    }
-                    field.didChange(location);
-                    onChanged(location);
-                  },
-            child: InputDecorator(
-              isEmpty: field.value == null,
-              decoration: InputDecoration(
-                hintText: isLocating
-                    ? 'Finding your location…'
-                    : 'Use current location',
-                helperText: 'Uses your suburb or city, not your street address',
-                errorText: field.errorText,
-                suffixIcon: isLocating
-                    ? const Padding(
-                        padding: EdgeInsets.all(14),
-                        child: SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : const Icon(Icons.my_location_rounded),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              button: true,
+              label: field.value == null
+                  ? 'Use current location'
+                  : 'Listing location: ${field.value!.label}',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                onTap: isLocating
+                    ? null
+                    : () async {
+                        final location = await onLocate();
+                        if (location == null || !context.mounted) {
+                          return;
+                        }
+                        field.didChange(location);
+                        onChanged(location);
+                      },
+                child: InputDecorator(
+                  isEmpty: field.value == null,
+                  decoration: InputDecoration(
+                    hintText: isLocating
+                        ? 'Finding your location…'
+                        : 'Use current location',
+                    helperText:
+                        'Uses your suburb or city, not your street address',
+                    errorText: field.errorText,
+                    suffixIcon: isLocating
+                        ? const Padding(
+                            padding: EdgeInsets.all(14),
+                            child: SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : const Icon(Icons.my_location_rounded),
+                  ),
+                  child: Text(field.value?.label ?? ''),
+                ),
               ),
-              child: Text(field.value?.label ?? ''),
             ),
-          ),
+            TextButton.icon(
+              key: const Key('post_manual_location_button'),
+              onPressed: () async {
+                final label = await _requestManualLocation(context);
+                if (label == null || !context.mounted) {
+                  return;
+                }
+                final location = ListingLocation(label: label);
+                field.didChange(location);
+                onChanged(location);
+              },
+              icon: const Icon(Icons.edit_location_alt_outlined),
+              label: const Text('Enter suburb or city manually'),
+            ),
+          ],
         );
       },
     );
