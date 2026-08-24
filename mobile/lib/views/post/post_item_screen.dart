@@ -3,9 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 
+import '../../providers/auth_provider.dart';
+import '../../providers/listing_provider.dart';
 import '../../services/listing_image_picker.dart';
 import '../../services/listing_location_service.dart';
+import '../../services/listing_publish_service.dart';
 import '../../theme/app_theme.dart';
 
 class PostItemScreen extends StatefulWidget {
@@ -13,6 +17,8 @@ class PostItemScreen extends StatefulWidget {
   final VoidCallback? onPostItem;
   final ListingImagePicker? imagePicker;
   final ListingLocationService? locationService;
+  final ListingPublishService? publishService;
+  final String? authToken;
 
   const PostItemScreen({
     super.key,
@@ -20,6 +26,8 @@ class PostItemScreen extends StatefulWidget {
     this.onPostItem,
     this.imagePicker,
     this.locationService,
+    this.publishService,
+    this.authToken,
   });
 
   @override
@@ -46,6 +54,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
   final _descriptionController = TextEditingController();
   late final ListingImagePicker _imagePicker;
   late final ListingLocationService _locationService;
+  late final ListingPublishService _publishService;
 
   String? _category;
   ListingLocation? _location;
@@ -53,12 +62,14 @@ class _PostItemScreenState extends State<PostItemScreen> {
   final List<_SelectedPhoto> _photos = [];
   bool _isPickingPhotos = false;
   bool _isLocating = false;
+  bool _isPublishing = false;
 
   @override
   void initState() {
     super.initState();
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _locationService = widget.locationService ?? DeviceListingLocationService();
+    _publishService = widget.publishService ?? RestListingPublishService();
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhotos());
   }
 
@@ -333,20 +344,91 @@ class _PostItemScreenState extends State<PostItemScreen> {
     );
   }
 
-  void _postItem() {
+  Future<void> _postItem() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    if (!_validateForm(requirePhoto: true)) {
+    if (_isPublishing || !_validateForm(requirePhoto: true)) {
       return;
     }
 
-    if (widget.onPostItem != null) {
-      widget.onPostItem!();
+    final authToken =
+        widget.authToken ?? context.read<AuthProvider?>()?.jwtToken;
+    if (authToken == null || authToken.trim().isEmpty) {
+      _showPhotoMessage('Please sign in before publishing an item.');
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Your listing is ready to publish.')),
-    );
+    setState(() => _isPublishing = true);
+    try {
+      await _publishService.publish(
+        authToken: authToken,
+        draft: ListingDraft(
+          title: _titleController.text,
+          priceNzd: _priceController.text,
+          locationLabel: _location!.label,
+          latitude: _location!.latitude,
+          longitude: _location!.longitude,
+          category: _category!,
+          condition: _condition!,
+          description: _descriptionController.text,
+          photos: [
+            for (var index = 0; index < _photos.length; index++)
+              ListingPhotoDraft(
+                bytes: _photos[index].bytes,
+                fileName: _photoFileName(_photos[index].file, index),
+                contentType: _photoContentType(_photos[index].file),
+              ),
+          ],
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      context.read<ListingProvider?>()?.invalidateCaches();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Your listing is live.')));
+      widget.onPostItem?.call();
+    } on ListingPublishException catch (error) {
+      _showPhotoMessage(error.message);
+    } catch (_) {
+      _showPhotoMessage('Your item could not be published. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _isPublishing = false);
+      }
+    }
+  }
+
+  String _photoContentType(XFile file) {
+    final mimeType = file.mimeType;
+    if (mimeType != null && mimeType.startsWith('image/')) {
+      return mimeType;
+    }
+    final lowerName = file.name.toLowerCase();
+    if (lowerName.endsWith('.png')) {
+      return 'image/png';
+    }
+    if (lowerName.endsWith('.webp')) {
+      return 'image/webp';
+    }
+    if (lowerName.endsWith('.heic') || lowerName.endsWith('.heif')) {
+      return 'image/heic';
+    }
+    return 'image/jpeg';
+  }
+
+  String _photoFileName(XFile file, int index) {
+    final name = file.name.trim();
+    if (name.isNotEmpty) {
+      return name;
+    }
+    final extension = switch (_photoContentType(file)) {
+      'image/png' => 'png',
+      'image/webp' => 'webp',
+      'image/heic' => 'heic',
+      _ => 'jpg',
+    };
+    return 'listing_photo_${index + 1}.$extension';
   }
 
   String? _requiredTextValidator(String? value) {
@@ -495,14 +577,19 @@ class _PostItemScreenState extends State<PostItemScreen> {
                     const SizedBox(height: AppSpacing.xl),
                     FilledButton(
                       key: const Key('post_submit_button'),
-                      onPressed: _postItem,
+                      onPressed: _isPublishing ? null : _postItem,
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppRadius.medium),
                         ),
                       ),
-                      child: const Text('Post item'),
+                      child: _isPublishing
+                          ? const SizedBox.square(
+                              dimension: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Post item'),
                     ),
                   ],
                 ),

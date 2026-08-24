@@ -1,52 +1,111 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:http/http.dart' as http;
+
 import '../config/api_config.dart';
 
-/// Cloudflare R2 S3 Upload Service for KiwiShare
-class R2UploadService {
-  static const String publicDomain = 'https://assets.kiwishare.online';
-  static const String r2Endpoint =
-      'https://cdc04de9bc4c6a41b5003758e505a0d1.r2.cloudflarestorage.com/kiwishare';
-  static const String r2Bucket = 'kiwishare';
+abstract interface class ListingPhotoUploader {
+  Future<String> uploadImage({
+    required Uint8List bytes,
+    required String fileName,
+    String contentType = 'image/jpeg',
+    required String authToken,
+  });
+}
 
+class ListingPhotoUploadException implements Exception {
+  const ListingPhotoUploadException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Cloudflare R2 S3 Upload Service for KiwiShare
+class R2UploadService implements ListingPhotoUploader {
   final http.Client _client;
 
   R2UploadService({http.Client? client}) : _client = client ?? http.Client();
 
   /// Uploads image bytes to Cloudflare R2 bucket `kiwishare`
+  @override
   Future<String> uploadImage({
     required Uint8List bytes,
     required String fileName,
     String contentType = 'image/jpeg',
-    String? authToken,
+    required String authToken,
   }) async {
-    final base64Image = base64Encode(bytes);
-
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/upload');
-    final response = await _client.post(
-      uri,
+    final presignResponse = await _client.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/upload/presign'),
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         'x-client-platform': 'mobile',
-        if (authToken != null) 'Authorization': 'Bearer $authToken',
+        'Authorization': 'Bearer $authToken',
       },
-      body: jsonEncode({
-        'imageBase64': base64Image,
-        'fileName': fileName,
-        'contentType': contentType,
-      }),
+      body: jsonEncode({'fileName': fileName, 'contentType': contentType}),
     );
 
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final url = data['url'] as String?;
-      if (url != null && url.isNotEmpty) {
-        return url;
-      }
+    if (presignResponse.statusCode != 200) {
+      throw ListingPhotoUploadException(
+        _errorMessage(
+          presignResponse.body,
+          fallback: 'A photo upload could not be started. Please try again.',
+        ),
+      );
     }
 
-    // Fallback direct formatted public R2 URL
-    return '$publicDomain/images/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+    try {
+      final data = jsonDecode(presignResponse.body);
+      if (data is! Map<String, dynamic>) {
+        throw const FormatException();
+      }
+      final uploadUrl = data['uploadUrl'] as String?;
+      final publicUrl = data['publicUrl'] as String?;
+      if (uploadUrl == null ||
+          uploadUrl.isEmpty ||
+          publicUrl == null ||
+          publicUrl.isEmpty) {
+        throw const FormatException();
+      }
+
+      final uploadResponse = await _client.put(
+        Uri.parse(uploadUrl),
+        headers: {'Content-Type': contentType},
+        body: bytes,
+      );
+      if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
+        throw ListingPhotoUploadException(
+          _errorMessage(
+            uploadResponse.body,
+            fallback: 'A photo could not be uploaded. Please try again.',
+          ),
+        );
+      }
+      return publicUrl;
+    } on ListingPhotoUploadException {
+      rethrow;
+    } catch (_) {
+      throw const ListingPhotoUploadException(
+        'The upload service returned an invalid response. Please try again.',
+      );
+    }
+  }
+
+  String _errorMessage(String responseBody, {required String fallback}) {
+    try {
+      final data = jsonDecode(responseBody);
+      if (data is Map<String, dynamic> && data['message'] is String) {
+        final serverMessage = (data['message'] as String).trim();
+        if (serverMessage.isNotEmpty) {
+          return serverMessage;
+        }
+      }
+    } catch (_) {
+      // Keep the user-safe fallback when the server does not return JSON.
+    }
+    return fallback;
   }
 }

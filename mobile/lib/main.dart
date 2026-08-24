@@ -60,8 +60,10 @@ final GoRouter _router = GoRouter(
         ),
         GoRoute(
           path: '/post',
-          builder: (context, state) =>
-              PostItemScreen(onCancel: () => context.go('/home')),
+          builder: (context, state) => PostItemScreen(
+            onCancel: () => context.go('/home'),
+            onPostItem: () => context.go('/home'),
+          ),
         ),
         GoRoute(
           path: '/messages',
@@ -103,9 +105,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          // create: (_) => AuthProvider(userRepository: RestUserRepository()),
-          //@@@For mock test: uncomment below code to login with mock user
-          create: (_) => AuthProvider(userRepository: MockUserRepository()),
+          create: (_) => AuthProvider(userRepository: RestUserRepository()),
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(

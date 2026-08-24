@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/services/listing_image_picker.dart';
 import 'package:kiwishare/services/listing_location_service.dart';
+import 'package:kiwishare/services/listing_publish_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/post/post_item_screen.dart';
 
@@ -22,6 +25,9 @@ void main() {
     TextScaler textScaler = TextScaler.noScaling,
     ListingImagePicker? imagePicker,
     ListingLocationService? locationService,
+    ListingPublishService? publishService,
+    String? authToken,
+    VoidCallback? onPostItem,
     ThemeMode themeMode = ThemeMode.light,
     EdgeInsets safeAreaPadding = EdgeInsets.zero,
   }) {
@@ -48,6 +54,9 @@ void main() {
           imagePicker: imagePicker ?? FakeListingImagePicker(),
           locationService:
               locationService ?? FakeListingLocationService.success(),
+          publishService: publishService,
+          authToken: authToken,
+          onPostItem: onPostItem,
         ),
       ),
     );
@@ -388,6 +397,185 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('publishes a complete listing through the real submit boundary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final publishService = FakeListingPublishService();
+    var completed = false;
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        onPostItem: () => completed = true,
+        authToken: 'valid-token',
+        publishService: publishService,
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pumpAndSettle();
+
+    expect(completed, isTrue);
+    expect(find.text('Your listing is live.'), findsOneWidget);
+    expect(publishService.authToken, 'valid-token');
+    expect(publishService.draft?.title, 'Solid wood desk');
+    expect(publishService.draft?.category, 'Furniture');
+    expect(publishService.draft?.condition, 'Good');
+    expect(publishService.draft?.photos.single.fileName, 'listing_photo_1.png');
+    expect(publishService.draft?.latitude, -36.8485);
+    expect(publishService.draft?.longitude, 174.7633);
+  });
+
+  testWidgets('keeps the form open and explains a publish failure', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final publishService = FakeListingPublishService(
+      failure: const ListingPublishException('Upload service unavailable.'),
+    );
+    var completed = false;
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        onPostItem: () => completed = true,
+        authToken: 'valid-token',
+        publishService: publishService,
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pumpAndSettle();
+
+    expect(completed, isFalse);
+    expect(find.text('Upload service unavailable.'), findsOneWidget);
+    expect(find.byKey(const Key('post_item_form')), findsOneWidget);
+  });
+
+  testWidgets('disables duplicate submissions while publishing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final publishService = PendingListingPublishService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authToken: 'valid-token',
+        publishService: publishService,
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pump();
+
+    final button = tester.widget<FilledButton>(
+      find.byKey(const Key('post_submit_button')),
+    );
+    expect(button.onPressed, isNull);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(publishService.publishCalls, 1);
+
+    publishService.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Post item'), findsOneWidget);
+  });
+
+  testWidgets('requires a signed-in session before publishing', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final publishService = FakeListingPublishService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        publishService: publishService,
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pump();
+
+    expect(
+      find.text('Please sign in before publishing an item.'),
+      findsOneWidget,
+    );
+    expect(publishService.draft, isNull);
+  });
+}
+
+Future<void> completeValidListing(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('post_add_photos_button')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('post_choose_gallery_option')));
+  await tester.pumpAndSettle();
+
+  await tester.enterText(
+    find.byKey(const Key('post_title_field')),
+    'Solid wood desk',
+  );
+  await tester.tap(find.byKey(const Key('post_category_field')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('post_selection_option_Furniture')));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byKey(const Key('post_price_field')), '120');
+
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('post_location_field')),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(find.byKey(const Key('post_location_field')));
+  await tester.pumpAndSettle();
+
+  await tester.tap(find.byKey(const Key('post_condition_field')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('post_selection_option_Good')));
+  await tester.pumpAndSettle();
+
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('post_description_field')),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.enterText(
+    find.byKey(const Key('post_description_field')),
+    'A sturdy study desk.',
+  );
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('post_submit_button')),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
 }
 
 class FakeListingImagePicker implements ListingImagePicker {
@@ -452,6 +640,69 @@ class FakeListingLocationService implements ListingLocationService {
   Future<bool> openLocationSettings() async {
     locationSettingsRequests += 1;
     return true;
+  }
+}
+
+class FakeListingPublishService implements ListingPublishService {
+  FakeListingPublishService({this.failure});
+
+  final ListingPublishException? failure;
+  ListingDraft? draft;
+  String? authToken;
+
+  @override
+  Future<ItemModel> publish({
+    required ListingDraft draft,
+    required String authToken,
+  }) async {
+    this.draft = draft;
+    this.authToken = authToken;
+    if (failure != null) {
+      throw failure!;
+    }
+    return ItemModel(
+      id: 'published-item',
+      title: draft.title,
+      priceNzd: draft.priceNzd,
+      location: draft.locationLabel,
+      imageUrl: 'https://assets.kiwishare.online/images/desk.png',
+      isSustainable: true,
+      category: draft.category,
+      status: ItemStatus.active,
+      description: draft.description,
+      condition: draft.condition,
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+    );
+  }
+}
+
+class PendingListingPublishService implements ListingPublishService {
+  final Completer<ItemModel> _completer = Completer<ItemModel>();
+  int publishCalls = 0;
+
+  @override
+  Future<ItemModel> publish({
+    required ListingDraft draft,
+    required String authToken,
+  }) {
+    publishCalls += 1;
+    return _completer.future;
+  }
+
+  void complete() {
+    _completer.complete(
+      const ItemModel(
+        id: 'published-item',
+        title: 'Solid wood desk',
+        priceNzd: '120',
+        location: 'Auckland Central, Auckland',
+        imageUrl: 'https://assets.kiwishare.online/images/desk.png',
+        isSustainable: true,
+        category: 'Furniture',
+        status: ItemStatus.active,
+      ),
+    );
   }
 }
 
