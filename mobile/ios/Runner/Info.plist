@@ -31,7 +31,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>KiwiShare accesses your photo library so you can add listing photos.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>KiwiShare uses your approximate location only when you request nearby items.</string>
+	<string>KiwiShare uses your approximate location when you request nearby items or choose a pickup area for a listing.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,19 +1,19 @@
-name: Backend CI Pipeline
+name: Web CI Pipeline
 
 on:
   push:
     branches: [ main, pre ]
     paths:
-      - 'server/**'
-      - '.github/workflows/backend.yml'
+      - 'web/**'
+      - '.github/workflows/web.yml'
   pull_request:
     branches: [ main, pre ]
     paths:
-      - 'server/**'
-      - '.github/workflows/backend.yml'
+      - 'web/**'
+      - '.github/workflows/web.yml'
 
 jobs:
-  backend_ci:
+  web_ci:
     runs-on: ubuntu-latest
 
     steps:
@@ -33,11 +33,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Run ESLint
-        run: pnpm --filter server run lint
+      - name: Run Web ESLint & TypeScript Check
+        run: pnpm --filter web run lint
 
-      - name: Build TypeScript
-        run: pnpm --filter server run build
-
-      - name: Run Jest tests
-        run: pnpm --filter server run test
+      - name: Build Web Application
+        run: pnpm --filter web run build
