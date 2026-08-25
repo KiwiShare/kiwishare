@@ -23,6 +23,11 @@ class ListingPhotoUploadException implements Exception {
   String toString() => message;
 }
 
+class ListingPhotoAuthenticationException extends ListingPhotoUploadException {
+  const ListingPhotoAuthenticationException()
+    : super('Your session has expired. Please sign in again.');
+}
+
 /// Cloudflare R2 S3 Upload Service for KiwiShare
 class R2UploadService implements ListingPhotoUploader {
   final http.Client _client;
@@ -55,6 +60,10 @@ class R2UploadService implements ListingPhotoUploader {
       }),
     );
 
+    if (presignResponse.statusCode == 401 ||
+        presignResponse.statusCode == 403) {
+      throw const ListingPhotoAuthenticationException();
+    }
     if (presignResponse.statusCode != 200) {
       throw ListingPhotoUploadException(
         _errorMessage(

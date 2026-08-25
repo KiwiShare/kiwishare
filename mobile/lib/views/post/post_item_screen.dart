@@ -388,6 +388,13 @@ class _PostItemScreenState extends State<PostItemScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Your listing is live.')));
       widget.onPostItem?.call();
+    } on ListingAuthenticationException catch (error) {
+      await context.read<AuthProvider?>()?.clearSession();
+      if (!mounted) {
+        return;
+      }
+      _showPhotoMessage(error.message);
+      widget.onCancel();
     } on ListingPublishException catch (error) {
       _showPhotoMessage(error.message);
     } catch (_) {
@@ -458,7 +465,10 @@ class _PostItemScreenState extends State<PostItemScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _PostHeader(onCancel: widget.onCancel, onPreview: _showPreview),
+            _PostHeader(
+              onCancel: _isPublishing ? null : widget.onCancel,
+              onPreview: _isPublishing ? null : _showPreview,
+            ),
             const Divider(key: Key('post_header_divider'), height: 1),
             Expanded(
               child: Form(
@@ -605,8 +615,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
 class _PostHeader extends StatelessWidget {
   const _PostHeader({required this.onCancel, required this.onPreview});
 
-  final VoidCallback onCancel;
-  final VoidCallback onPreview;
+  final VoidCallback? onCancel;
+  final VoidCallback? onPreview;
 
   @override
   Widget build(BuildContext context) {

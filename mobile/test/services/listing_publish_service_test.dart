@@ -103,12 +103,24 @@ void main() {
     await expectLater(
       service.publish(draft: draft(), authToken: token),
       throwsA(
-        isA<ListingPublishException>().having(
+        isA<ListingAuthenticationException>().having(
           (error) => error.message,
           'message',
           'Your session has expired. Please sign in again.',
         ),
       ),
+    );
+  });
+
+  test('preserves an expired session reported by photo upload', () async {
+    final service = RestListingPublishService(
+      client: MockClient((_) async => http.Response('{}', 201)),
+      photoUploader: AuthenticationFailurePhotoUploader(),
+    );
+
+    await expectLater(
+      service.publish(draft: draft(), authToken: token),
+      throwsA(isA<ListingAuthenticationException>()),
     );
   });
 
@@ -159,6 +171,25 @@ void main() {
       ),
     );
   });
+
+  test(
+    'R2 preserves authentication failures from the presign endpoint',
+    () async {
+      final uploader = R2UploadService(
+        client: MockClient((_) async => http.Response('{}', 403)),
+      );
+
+      await expectLater(
+        uploader.uploadImage(
+          bytes: photo.bytes,
+          fileName: photo.fileName,
+          contentType: photo.contentType,
+          authToken: token,
+        ),
+        throwsA(isA<ListingPhotoAuthenticationException>()),
+      );
+    },
+  );
 
   test('R2 uploads raw bytes through a server-issued presigned URL', () async {
     final requests = <http.Request>[];
@@ -218,5 +249,17 @@ class FakePhotoUploader implements ListingPhotoUploader {
       throw ListingPhotoUploadException(failure!);
     }
     return urls[_nextUrl++];
+  }
+}
+
+class AuthenticationFailurePhotoUploader implements ListingPhotoUploader {
+  @override
+  Future<String> uploadImage({
+    required Uint8List bytes,
+    required String fileName,
+    String contentType = 'image/jpeg',
+    required String authToken,
+  }) {
+    throw const ListingPhotoAuthenticationException();
   }
 }

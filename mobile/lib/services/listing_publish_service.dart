@@ -52,6 +52,11 @@ class ListingPublishException implements Exception {
   String toString() => message;
 }
 
+class ListingAuthenticationException extends ListingPublishException {
+  const ListingAuthenticationException()
+    : super('Your session has expired. Please sign in again.');
+}
+
 abstract interface class ListingPublishService {
   Future<ItemModel> publish({
     required ListingDraft draft,
@@ -92,6 +97,8 @@ class RestListingPublishService implements ListingPublishService {
           ),
         );
       }
+    } on ListingPhotoAuthenticationException {
+      throw const ListingAuthenticationException();
     } on ListingPhotoUploadException catch (error) {
       throw ListingPublishException(error.message);
     } catch (_) {
@@ -128,9 +135,7 @@ class RestListingPublishService implements ListingPublishService {
 
     final data = _decodeResponse(response.body);
     if (response.statusCode == 401 || response.statusCode == 403) {
-      throw const ListingPublishException(
-        'Your session has expired. Please sign in again.',
-      );
+      throw const ListingAuthenticationException();
     }
     if (response.statusCode != 201) {
       throw ListingPublishException(

@@ -6,11 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/item_model.dart';
+import 'package:kiwishare/providers/auth_provider.dart';
+import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/listing_image_picker.dart';
 import 'package:kiwishare/services/listing_location_service.dart';
 import 'package:kiwishare/services/listing_publish_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/post/post_item_screen.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   test('coordinate fallback only exposes an approximate area', () {
@@ -30,12 +33,13 @@ void main() {
     VoidCallback? onPostItem,
     ThemeMode themeMode = ThemeMode.light,
     EdgeInsets safeAreaPadding = EdgeInsets.zero,
+    AuthProvider? authProvider,
   }) {
     final darkScheme = ColorScheme.fromSeed(
       seedColor: AppColors.brandSecondary,
       brightness: Brightness.dark,
     );
-    return MaterialApp(
+    final app = MaterialApp(
       themeMode: themeMode,
       theme: buildKiwiShareTheme(),
       darkTheme: ThemeData(
@@ -60,6 +64,12 @@ void main() {
         ),
       ),
     );
+    return authProvider == null
+        ? app
+        : ChangeNotifierProvider<AuthProvider>.value(
+            value: authProvider,
+            child: app,
+          );
   }
 
   testWidgets('renders the Figma listing form and photo slots', (tester) async {
@@ -477,9 +487,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final publishService = PendingListingPublishService();
+    var cancelled = false;
     await tester.pumpWidget(
       buildTestApp(
-        onCancel: () {},
+        onCancel: () => cancelled = true,
         authToken: 'valid-token',
         publishService: publishService,
         imagePicker: FakeListingImagePicker(
@@ -498,10 +509,53 @@ void main() {
     expect(button.onPressed, isNull);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(publishService.publishCalls, 1);
+    final cancelButton = tester.widget<TextButton>(
+      find.byKey(const Key('post_cancel_button')),
+    );
+    expect(cancelButton.onPressed, isNull);
+    expect(cancelled, isFalse);
 
     publishService.complete();
     await tester.pumpAndSettle();
     expect(find.text('Post item'), findsOneWidget);
+  });
+
+  testWidgets('clears an expired session and exits the publish form', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final authProvider = TrackingAuthProvider();
+    var cancelled = false;
+
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () => cancelled = true,
+        authProvider: authProvider,
+        authToken: 'expired-token',
+        publishService: FakeListingPublishService(
+          failure: const ListingAuthenticationException(),
+        ),
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(authProvider.sessionCleared, isTrue);
+    expect(cancelled, isTrue);
+    expect(
+      find.text('Your session has expired. Please sign in again.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('requires a signed-in session before publishing', (tester) async {
@@ -703,6 +757,17 @@ class PendingListingPublishService implements ListingPublishService {
         status: ItemStatus.active,
       ),
     );
+  }
+}
+
+class TrackingAuthProvider extends AuthProvider {
+  TrackingAuthProvider() : super(userRepository: MockUserRepository());
+
+  bool sessionCleared = false;
+
+  @override
+  Future<void> clearSession() async {
+    sessionCleared = true;
   }
 }
 
