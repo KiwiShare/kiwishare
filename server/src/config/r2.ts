@@ -25,17 +25,41 @@ export function getS3Client(): S3Client {
 
 export const r2S3Client = getS3Client();
 
+export function normalizeR2Folder(folder?: unknown): string {
+  if (folder == null || folder === '') {
+    return 'images';
+  }
+  if (typeof folder !== 'string') {
+    throw new Error('Invalid R2 upload folder.');
+  }
+
+  const normalized = folder.trim().replace(/^\/+|\/+$/g, '');
+  const root = normalized.split('/')[0];
+  if (
+    !/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(normalized) ||
+    !['images', 'test'].includes(root)
+  ) {
+    throw new Error('Invalid R2 upload folder.');
+  }
+  return normalized;
+}
+
+function createR2ObjectKey(fileName: string, folder?: unknown): string {
+  const ext = fileName.split('.').pop()?.replace(/[^A-Za-z0-9]/g, '') || 'jpg';
+  const fileBasename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+  return `${normalizeR2Folder(folder)}/${fileBasename}`;
+}
+
 /**
  * Uploads a file buffer directly to Cloudflare R2 bucket `kiwishare`
  */
 export async function uploadToR2(
   fileBuffer: Buffer,
   fileName: string,
-  contentType: string = 'image/jpeg'
+  contentType: string = 'image/jpeg',
+  folder?: unknown
 ): Promise<{ url: string; key: string; bucket: string }> {
-  const ext = fileName.split('.').pop() || 'jpg';
-  const fileBasename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
-  const uniqueKey = `images/${fileBasename}`;
+  const uniqueKey = createR2ObjectKey(fileName, folder);
 
   // Upload directly to Cloudflare R2 S3 bucket
   if (R2_CONFIG.accessKeyId && R2_CONFIG.secretAccessKey) {
@@ -61,7 +85,7 @@ export async function uploadToR2(
   const isAbsolute = R2_CONFIG.publicUrlBase.startsWith('http');
   const url = isAbsolute
     ? `${R2_CONFIG.publicUrlBase.replace(/\/$/, '')}/${uniqueKey}`
-    : `/api/images/${fileBasename}`;
+    : `/api/images/${uniqueKey}`;
 
   return {
     url,
@@ -76,11 +100,10 @@ export async function uploadToR2(
 export async function getPresignedUploadUrl(
   fileName: string,
   contentType: string = 'image/jpeg',
-  expiresInSeconds: number = 3600
+  expiresInSeconds: number = 3600,
+  folder?: unknown
 ): Promise<{ uploadUrl: string; publicUrl: string; key: string }> {
-  const ext = fileName.split('.').pop() || 'jpg';
-  const fileBasename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
-  const uniqueKey = `images/${fileBasename}`;
+  const uniqueKey = createR2ObjectKey(fileName, folder);
 
   const command = new PutObjectCommand({
     Bucket: R2_CONFIG.bucketName,
@@ -100,7 +123,7 @@ export async function getPresignedUploadUrl(
   const isAbsolute = R2_CONFIG.publicUrlBase.startsWith('http');
   const publicUrl = isAbsolute
     ? `${R2_CONFIG.publicUrlBase.replace(/\/$/, '')}/${uniqueKey}`
-    : `/api/images/${fileBasename}`;
+    : `/api/images/${uniqueKey}`;
 
   return {
     uploadUrl,
