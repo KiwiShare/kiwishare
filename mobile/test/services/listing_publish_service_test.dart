@@ -163,6 +163,7 @@ void main() {
   test('R2 uploads raw bytes through a server-issued presigned URL', () async {
     final requests = <http.Request>[];
     final uploader = R2UploadService(
+      uploadFolder: 'test/pr-171',
       client: MockClient((request) async {
         requests.add(request);
         if (request.method == 'POST') {
@@ -190,6 +191,7 @@ void main() {
     expect(requests.first.method, 'POST');
     expect(requests.first.url.path, '/api/upload/presign');
     expect(requests.first.headers['Authorization'], 'Bearer $token');
+    expect(jsonDecode(requests.first.body)['folder'], 'test/pr-171');
     expect(requests.last.method, 'PUT');
     expect(requests.last.bodyBytes, photo.bytes);
     expect(requests.last.headers['Content-Type'], 'image/png');

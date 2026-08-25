@@ -8,6 +8,12 @@ class ApiConfig {
   /// `--dart-define=API_BASE_URL=https://kiwishare.onrender.com` or `--dart-define=API_BASE_URL=local`
   static const String _customBaseUrl = String.fromEnvironment('API_BASE_URL');
 
+  /// Optional R2 object prefix used by controlled local integration tests.
+  /// Production builds leave this empty and use the backend's `images/` prefix.
+  static const String r2UploadFolder = String.fromEnvironment(
+    'R2_UPLOAD_FOLDER',
+  );
+
   /// Resolves the Koa backend server URL dynamically depending on platform and configuration
   static String get baseUrl {
     if (_customBaseUrl.isNotEmpty) {

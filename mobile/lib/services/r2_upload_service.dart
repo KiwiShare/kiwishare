@@ -26,8 +26,11 @@ class ListingPhotoUploadException implements Exception {
 /// Cloudflare R2 S3 Upload Service for KiwiShare
 class R2UploadService implements ListingPhotoUploader {
   final http.Client _client;
+  final String _uploadFolder;
 
-  R2UploadService({http.Client? client}) : _client = client ?? http.Client();
+  R2UploadService({http.Client? client, String? uploadFolder})
+    : _client = client ?? http.Client(),
+      _uploadFolder = uploadFolder ?? ApiConfig.r2UploadFolder;
 
   /// Uploads image bytes to Cloudflare R2 bucket `kiwishare`
   @override
@@ -45,7 +48,11 @@ class R2UploadService implements ListingPhotoUploader {
         'x-client-platform': 'mobile',
         'Authorization': 'Bearer $authToken',
       },
-      body: jsonEncode({'fileName': fileName, 'contentType': contentType}),
+      body: jsonEncode({
+        'fileName': fileName,
+        'contentType': contentType,
+        if (_uploadFolder.trim().isNotEmpty) 'folder': _uploadFolder.trim(),
+      }),
     );
 
     if (presignResponse.statusCode != 200) {

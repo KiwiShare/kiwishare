@@ -565,7 +565,8 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
       .set('Authorization', `Bearer ${userToken}`)
       .send({
         fileName: 'sample.jpg',
-        contentType: 'image/jpeg'
+        contentType: 'image/jpeg',
+        folder: 'test/pr-171'
       });
 
     expect(res.status).toBe(200);
@@ -573,5 +574,35 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.bucket).toBe('kiwishare');
     expect(res.body.uploadUrl).toBeDefined();
     expect(res.body.publicUrl).toBeDefined();
+    expect(res.body.key).toMatch(/^test\/pr-171\//);
+  });
+
+  test('POST /api/upload/presign - rejects unsafe R2 folders', async () => {
+    const res = await request(app.callback())
+      .post('/api/upload/presign')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        fileName: 'sample.jpg',
+        contentType: 'image/jpeg',
+        folder: '../production'
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.status).toBe('error');
+    expect(res.body.message).toBe('Invalid R2 upload folder.');
+  });
+
+  test('POST /api/upload/presign - rejects unapproved R2 folder roots', async () => {
+    const res = await request(app.callback())
+      .post('/api/upload/presign')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        fileName: 'sample.jpg',
+        contentType: 'image/jpeg',
+        folder: 'production'
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.status).toBe('error');
   });
 });
