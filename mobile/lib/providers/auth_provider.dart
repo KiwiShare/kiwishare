@@ -190,6 +190,14 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await clearSession();
+
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+  }
+
+  Future<void> clearSession() async {
     _isLoggedIn = false;
     _currentUser = null;
     _jwtToken = null;
@@ -197,10 +205,6 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     await prefs.remove('current_user');
-
-    try {
-      await _googleSignIn.signOut();
-    } catch (_) {}
 
     notifyListeners();
   }
