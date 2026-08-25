@@ -96,17 +96,63 @@ class TestItemRepository implements ItemRepository {
   final List<ItemModel> items;
 
   TestItemRepository({List<ItemModel>? items})
-    : items = List.unmodifiable(items ?? testCatalogItems);
+    : items = List.of(items ?? testCatalogItems);
+
+  @override
+  Future<ItemModel> fetchItemById(String itemId) async {
+    return items.firstWhere(
+      (item) => item.id == itemId,
+      orElse: () => throw const ItemNotFoundException(),
+    );
+  }
+
+  @override
+  Future<ItemModel> updateItem({
+    required String itemId,
+    required String token,
+    required ItemUpdateDraft draft,
+  }) async {
+    final index = items.indexWhere((item) => item.id == itemId);
+    if (index < 0) throw const ItemNotFoundException();
+    final updated = items[index].copyWith(
+      title: draft.title.trim(),
+      description: draft.description.trim(),
+      category: draft.category,
+      condition: draft.condition,
+      priceNzd: draft.priceNzd,
+      location: draft.location,
+      negotiable: draft.negotiable,
+      isSustainable: draft.isSustainable,
+    );
+    items[index] = updated;
+    return updated;
+  }
+
+  @override
+  Future<void> deleteItem({
+    required String itemId,
+    required String token,
+  }) async {
+    final before = items.length;
+    items.removeWhere((item) => item.id == itemId);
+    if (before == items.length) throw const ItemNotFoundException();
+  }
 
   @override
   Future<DiscoveryOptionsModel> fetchDiscoveryOptions() async {
     final categories = <String, int>{};
     final locations = <String, List<ItemModel>>{};
+    final conditions = <String, int>{};
     for (final item in items.where(
       (item) => item.status == ItemStatus.active,
     )) {
       categories.update(item.category, (count) => count + 1, ifAbsent: () => 1);
       locations.putIfAbsent(item.location, () => []).add(item);
+      if (item.condition case final condition?) {
+        if (condition.isNotEmpty) {
+          conditions.update(condition, (count) => count + 1, ifAbsent: () => 1);
+        }
+      }
     }
 
     final categoryOptions =
@@ -137,6 +183,12 @@ class TestItemRepository implements ItemRepository {
     return DiscoveryOptionsModel(
       categories: categoryOptions,
       locations: locationOptions,
+      conditions: conditions.entries
+          .map(
+            (entry) =>
+                DiscoveryConditionOption(value: entry.key, count: entry.value),
+          )
+          .toList(growable: false),
       minimumPrice: prices.isEmpty ? null : prices.reduce(math.min),
       maximumPrice: prices.isEmpty ? null : prices.reduce(math.max),
     );

@@ -223,6 +223,9 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
         longitude: expect.any(Number)
       })
     ]));
+    expect(res.body.conditions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: 'good', count: 2 })
+    ]));
     expect(res.body.priceRange).toEqual({ minimum: 15, maximum: 45 });
   });
 
@@ -319,18 +322,31 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(createdItemId);
     expect(res.body.title).toBe('Organic Fertilizer');
+    expect(res.body.item.id).toBe(createdItemId);
+    expect(res.body.item.currency).toBe('NZD');
+    expect(res.body.item.seller.displayName).toBe('Updated User Name');
+    expect(res.body.item.viewCount).toBeGreaterThanOrEqual(1);
   });
 
-  test('PATCH /api/usedItems/:id - updates item price and status', async () => {
+  test('PATCH /api/usedItems/:id - updates owner-editable listing fields', async () => {
     const res = await request(app.callback())
       .patch(`/api/usedItems/${createdItemId}`)
       .set('Authorization', `Bearer ${userToken}`)
-      .send({ priceNzd: '10', description: 'Updated discount description' });
+      .send({
+        priceNzd: '10',
+        description: 'Updated discount description',
+        category: 'Furniture',
+        condition: 'refurbished',
+        negotiable: true
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
     expect(res.body.item.priceNzd).toBe('10');
     expect(res.body.item.description).toBe('Updated discount description');
+    expect(res.body.item.category).toBe('Furniture');
+    expect(res.body.item.condition).toBe('refurbished');
+    expect(res.body.item.negotiable).toBe(true);
   });
 
   test('GET /api/users/me/usedItems - returns user created items', async () => {
@@ -443,7 +459,7 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(checkFinal.body.isWatched).toBe(false);
   });
 
-  test('DELETE /api/usedItems/:id - deletes item', async () => {
+  test('DELETE /api/usedItems/:id - soft-deletes the listing', async () => {
     const res = await request(app.callback())
       .delete(`/api/usedItems/${createdItemId}`)
       .set('Authorization', `Bearer ${userToken}`);
@@ -454,6 +470,10 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     // Confirm it returns 404 when fetched
     const fetchRes = await request(app.callback()).get(`/api/usedItems/${createdItemId}`);
     expect(fetchRes.status).toBe(404);
+    const retainedItem = await Item.findById(createdItemId);
+    expect(retainedItem).not.toBeNull();
+    expect(retainedItem?.status).toBe('deleted');
+    expect(retainedItem?.deletedAt).toBeInstanceOf(Date);
   });
 
   test('GET / - returns homepage status', async () => {

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/providers.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
+import 'package:kiwishare/repositories/watchlist_repository.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
@@ -19,8 +20,10 @@ void main() {
         GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/items/:itemId',
-          builder: (context, state) =>
-              ProductDetailScreen(item: state.extra as ItemModel?),
+          builder: (context, state) => ProductDetailScreen(
+            itemId: state.pathParameters['itemId']!,
+            initialItem: state.extra as ItemModel?,
+          ),
         ),
         GoRoute(
           path: '/search',
@@ -39,6 +42,10 @@ void main() {
           ChangeNotifierProvider(create: (_) => FavoritesProvider()),
           ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
           ChangeNotifierProvider(create: (_) => SearchProvider()),
+          ChangeNotifierProvider(
+            create: (_) =>
+                WatchlistProvider(repository: TestWatchlistRepository()),
+          ),
           ChangeNotifierProvider(
             create: (_) =>
                 ListingProvider(itemRepository: TestItemRepository()),
@@ -77,6 +84,6 @@ void main() {
     final detailScreen = tester.widget<ProductDetailScreen>(
       find.byType(ProductDetailScreen),
     );
-    expect(detailScreen.item?.title, 'Monstera Plant');
+    expect(detailScreen.initialItem?.title, 'Monstera Plant');
   });
 }

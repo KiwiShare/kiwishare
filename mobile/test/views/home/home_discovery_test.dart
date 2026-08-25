@@ -6,6 +6,7 @@ import 'package:kiwishare/main.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/providers.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
+import 'package:kiwishare/repositories/watchlist_repository.dart';
 import 'package:kiwishare/services/product_location_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
@@ -209,8 +210,10 @@ void main() {
         ),
         GoRoute(
           path: '/items/:itemId',
-          builder: (context, state) =>
-              ProductDetailScreen(item: state.extra as ItemModel?),
+          builder: (context, state) => ProductDetailScreen(
+            itemId: state.pathParameters['itemId']!,
+            initialItem: state.extra as ItemModel?,
+          ),
         ),
       ],
     );
@@ -219,7 +222,14 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: discovery),
+          ChangeNotifierProvider(
+            create: (_) => AuthProvider(userRepository: MockUserRepository()),
+          ),
           ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+          ChangeNotifierProvider(
+            create: (_) =>
+                WatchlistProvider(repository: TestWatchlistRepository()),
+          ),
           ChangeNotifierProvider(
             create: (_) =>
                 ListingProvider(itemRepository: TestItemRepository()),
@@ -281,8 +291,10 @@ void main() {
           GoRoute(
             parentNavigatorKey: rootKey,
             path: '/items/:itemId',
-            builder: (context, state) =>
-                ProductDetailScreen(item: state.extra as ItemModel?),
+            builder: (context, state) => ProductDetailScreen(
+              itemId: state.pathParameters['itemId']!,
+              initialItem: state.extra as ItemModel?,
+            ),
           ),
         ],
       );
@@ -295,6 +307,10 @@ void main() {
               create: (_) => AuthProvider(userRepository: MockUserRepository()),
             ),
             ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+            ChangeNotifierProvider(
+              create: (_) =>
+                  WatchlistProvider(repository: TestWatchlistRepository()),
+            ),
             ChangeNotifierProvider(
               create: (_) =>
                   ListingProvider(itemRepository: TestItemRepository()),
