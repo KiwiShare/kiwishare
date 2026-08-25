@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/discovery_options_model.dart';
 import '../models/item_model.dart';
 import '../repositories/item_repository.dart';
 
@@ -9,6 +10,10 @@ class ListingProvider extends ChangeNotifier {
 
   List<ItemModel>? _cachedPopularItems;
   List<ItemModel>? get cachedPopularItems => _cachedPopularItems;
+  List<ItemModel>? _cachedRecommendedItems;
+  List<ItemModel>? get cachedRecommendedItems => _cachedRecommendedItems;
+  DiscoveryOptionsModel? _cachedDiscoveryOptions;
+  final Map<DiscoveryQuery, List<ItemModel>> _cachedDiscoveryItems = {};
 
   Future<List<ItemModel>> getPopularItems({bool forceRefresh = false}) async {
     if (_cachedPopularItems != null && !forceRefresh) {
@@ -19,28 +24,38 @@ class ListingProvider extends ChangeNotifier {
     return items;
   }
 
-  Future<ItemModel> getItemById(String id) => itemRepository.fetchItemById(id);
-
-  Future<ItemModel> updateItem({
-    required ItemModel item,
-    required String token,
+  Future<List<ItemModel>> getRecommendedItems({
+    bool forceRefresh = false,
+    int limit = 10,
   }) async {
-    final updated = await itemRepository.updateItem(item: item, token: token);
-    final cachedItems = _cachedPopularItems;
-    if (cachedItems != null) {
-      final index = cachedItems.indexWhere(
-        (candidate) => candidate.id == item.id,
-      );
-      if (index != -1) cachedItems[index] = updated;
+    if (_cachedRecommendedItems != null && !forceRefresh) {
+      return _cachedRecommendedItems!;
     }
-    notifyListeners();
-    return updated;
+    final items = await itemRepository.fetchRecommendedItems(limit: limit);
+    _cachedRecommendedItems = items;
+    return items;
   }
 
-  Future<void> deleteItem({required String id, required String token}) async {
-    await itemRepository.deleteItem(id: id, token: token);
-    _cachedPopularItems?.removeWhere((item) => item.id == id);
-    notifyListeners();
+  Future<DiscoveryOptionsModel> getDiscoveryOptions({
+    bool forceRefresh = false,
+  }) async {
+    if (_cachedDiscoveryOptions != null && !forceRefresh) {
+      return _cachedDiscoveryOptions!;
+    }
+    final options = await itemRepository.fetchDiscoveryOptions();
+    _cachedDiscoveryOptions = options;
+    return options;
+  }
+
+  Future<List<ItemModel>> getDiscoveryItems({
+    DiscoveryQuery query = const DiscoveryQuery(),
+    bool forceRefresh = false,
+  }) async {
+    final cached = _cachedDiscoveryItems[query];
+    if (cached != null && !forceRefresh) return cached;
+    final items = await itemRepository.fetchDiscoveryItems(query);
+    _cachedDiscoveryItems[query] = items;
+    return items;
   }
 
   Future<List<ItemModel>> searchListingItems(

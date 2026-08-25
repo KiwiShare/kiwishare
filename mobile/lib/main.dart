@@ -7,16 +7,19 @@ import 'package:google_fonts/google_fonts.dart';
 import 'views/splash/splash_screen.dart';
 import 'views/home/home_screen.dart';
 import 'views/search/search_screen.dart';
+import 'views/watchlist/watchlist_screen.dart';
 import 'views/post/post_item_screen.dart';
 import 'views/messages/messages_screen.dart';
 import 'views/profile/profile_screen.dart';
 import 'views/auth/login_view.dart';
-import 'views/item_detail/item_detail_page.dart';
+import 'views/products/product_detail_screen.dart';
+import 'models/item_model.dart';
 
 // State and Repositories
 import 'providers/providers.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
+import 'repositories/watchlist_repository.dart';
 import 'services/remote_config_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -28,6 +31,56 @@ final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
 );
 final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'shell',
+);
+
+// This router must live longer than a single widget build. ThemeProvider
+// notifies MaterialApp when the user selects Light/Dark/System; recreating a
+// GoRouter in build() made it start again at /splash every time.
+final GoRouter _router = GoRouter(
+  initialLocation: '/splash',
+  navigatorKey: _rootNavigatorKey,
+  routes: [
+    GoRoute(
+      path: '/splash',
+      builder: (context, state) =>
+          SplashScreen(onSplashComplete: () => context.go('/home')),
+    ),
+    ShellRoute(
+      navigatorKey: _shellNavigatorKey,
+      builder: (context, state, child) => KiwiShareShell(child: child),
+      routes: [
+        GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
+        GoRoute(
+          path: '/watchlist',
+          builder: (context, state) => const WatchlistScreen(),
+        ),
+        GoRoute(
+          path: '/search',
+          builder: (context, state) => const SearchScreen(),
+        ),
+        GoRoute(
+          path: '/post',
+          builder: (context, state) =>
+              PostItemScreen(onCancel: () => context.go('/home')),
+        ),
+        GoRoute(
+          path: '/messages',
+          builder: (context, state) => const MessagesScreen(),
+        ),
+        GoRoute(
+          path: '/profile',
+          builder: (context, state) => const ProfileScreen(),
+        ),
+      ],
+    ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: '/items/:itemId',
+      builder: (context, state) => ProductDetailScreen(
+        item: state.extra is ItemModel ? state.extra as ItemModel : null,
+      ),
+    ),
+  ],
 );
 
 void main() async {
@@ -50,12 +103,16 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => AuthProvider(userRepository: RestUserRepository()),
+          // create: (_) => AuthProvider(userRepository: RestUserRepository()),
           //@@@For mock test: uncomment below code to login with mock user
-          // create: (_) => AuthProvider(userRepository: MockUserRepository()),
+          create: (_) => AuthProvider(userRepository: MockUserRepository()),
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
-        ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+        ChangeNotifierProvider(
+          create: (_) =>
+              WatchlistProvider(repository: RestWatchlistRepository()),
+        ),
+        ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(
@@ -72,81 +129,15 @@ class KiwiShareApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Declarative GoRouter setup
-    final GoRouter router = GoRouter(
-      initialLocation: '/splash',
-      navigatorKey: _rootNavigatorKey,
-      routes: [
-        GoRoute(
-          path: '/splash',
-          builder: (context, state) => SplashScreen(
-            onSplashComplete: () {
-              context.go('/home');
-            },
-          ),
-        ),
-        GoRoute(
-          path: '/items/:itemId',
-          builder: (context, state) =>
-              ItemDetailPage(itemId: state.pathParameters['itemId']!),
-        ),
-        ShellRoute(
-          navigatorKey: _shellNavigatorKey,
-          builder: (context, state, child) {
-            return KiwiShareShell(child: child);
-          },
-          routes: [
-            GoRoute(
-              path: '/home',
-              builder: (context, state) => HomeScreen(
-                onNavigateToSearch: () {
-                  context.go('/search');
-                },
-              ),
-            ),
-            GoRoute(
-              path: '/search',
-              builder: (context, state) => const SearchScreen(),
-            ),
-            GoRoute(
-              path: '/post',
-              builder: (context, state) => PostItemScreen(
-                onCancel: () {
-                  context.go('/home');
-                },
-              ),
-            ),
-            GoRoute(
-              path: '/messages',
-              builder: (context, state) => const MessagesScreen(),
-            ),
-            GoRoute(
-              path: '/profile',
-              builder: (context, state) => const ProfileScreen(),
-            ),
-          ],
-        ),
-      ],
-    );
-
     final themeMode = context.watch<ThemeProvider>().themeMode;
-    final darkScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF4E8878),
-      brightness: Brightness.dark,
-    );
 
     return MaterialApp.router(
       title: 'KiwiShare - Buy. Sell. Share. Sustain.',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
       theme: buildKiwiShareTheme(),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: darkScheme,
-        scaffoldBackgroundColor: darkScheme.surface,
-        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-      ),
-      routerConfig: router,
+      darkTheme: buildKiwiShareDarkTheme(),
+      routerConfig: _router,
     );
   }
 }
@@ -159,7 +150,9 @@ class KiwiShareShell extends StatelessWidget {
   int _getSelectedIndex(BuildContext context) {
     final String location = GoRouterState.of(context).uri.toString();
     if (location.startsWith('/home')) return 0;
-    if (location.startsWith('/search')) return 1;
+    if (location.startsWith('/watchlist') || location.startsWith('/search')) {
+      return 1;
+    }
     if (location.startsWith('/post')) return 2;
     if (location.startsWith('/messages')) return 3;
     if (location.startsWith('/profile')) return 4;
@@ -177,9 +170,11 @@ class KiwiShareShell extends StatelessWidget {
             bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
           child: Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFFAF7F2), // Off-White surface
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
             ),
             child: SafeArea(
               child: Padding(
@@ -208,14 +203,15 @@ class KiwiShareShell extends StatelessWidget {
 
     final activeIndex = _getSelectedIndex(context);
     final authProvider = Provider.of<AuthProvider>(context);
+    final homeDiscovery = context.watch<HomeDiscoveryProvider>();
 
-    return Scaffold(
+    final shell = Scaffold(
       body: child,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1F1F1F).withOpacity(0.08),
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.08),
               blurRadius: 12,
               offset: const Offset(0, -4),
             ),
@@ -236,7 +232,7 @@ class KiwiShareShell extends StatelessWidget {
                 context.go('/home');
                 break;
               case 1:
-                context.go('/search');
+                context.go('/watchlist');
                 break;
               case 2:
                 context.go('/post');
@@ -250,11 +246,11 @@ class KiwiShareShell extends StatelessWidget {
             }
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: const Color(0xFFFAF7F2), // Off-White Surface
-          selectedItemColor: const Color(0xFF2E5E4E), // Sage Green Active
-          unselectedItemColor: const Color(
-            0xFF1F1F1F,
-          ).withOpacity(0.5), // Charcoal Inactive
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          unselectedItemColor: Theme.of(
+            context,
+          ).colorScheme.onSurface.withOpacity(0.5),
           selectedLabelStyle: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
             fontSize: 12,
@@ -264,27 +260,27 @@ class KiwiShareShell extends StatelessWidget {
             fontSize: 11,
           ),
           items: [
-            BottomNavigationBarItem(
-              icon: const Padding(
+            const BottomNavigationBarItem(
+              icon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
                 child: Icon(Icons.home_outlined, size: 24),
               ),
-              activeIcon: const Padding(
+              activeIcon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
                 child: Icon(Icons.home, size: 26),
               ),
               label: 'Home',
             ),
-            BottomNavigationBarItem(
-              icon: const Padding(
+            const BottomNavigationBarItem(
+              icon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
-                child: Icon(Icons.search, size: 24),
+                child: Icon(Icons.bookmark_outline, size: 24),
               ),
-              activeIcon: const Padding(
+              activeIcon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
-                child: Icon(Icons.search, size: 26),
+                child: Icon(Icons.bookmark, size: 26),
               ),
-              label: 'Search',
+              label: 'Watchlist',
             ),
             BottomNavigationBarItem(
               icon: Container(
@@ -308,7 +304,7 @@ class KiwiShareShell extends StatelessWidget {
                 padding: EdgeInsets.only(bottom: 2.0),
                 child: Icon(Icons.chat_bubble, size: 24),
               ),
-              label: 'Messages',
+              label: 'Chat',
             ),
             BottomNavigationBarItem(
               icon: const Padding(
@@ -324,6 +320,18 @@ class KiwiShareShell extends StatelessWidget {
           ],
         ),
       ),
+    );
+
+    final shouldDismissHomePreview =
+        location.startsWith('/home') && homeDiscovery.previewItemId != null;
+    return PopScope<void>(
+      canPop: !shouldDismissHomePreview,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && shouldDismissHomePreview) {
+          homeDiscovery.selectPreview(null);
+        }
+      },
+      child: shell,
     );
   }
 }

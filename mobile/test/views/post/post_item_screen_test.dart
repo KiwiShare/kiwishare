@@ -5,22 +5,49 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/services/listing_image_picker.dart';
+import 'package:kiwishare/services/listing_location_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/post/post_item_screen.dart';
 
 void main() {
+  test('coordinate fallback only exposes an approximate area', () {
+    expect(
+      approximateListingLocationLabel(-36.8485, 174.7633),
+      'Approx. -36.85, 174.76',
+    );
+  });
+
   Widget buildTestApp({
     required VoidCallback onCancel,
     TextScaler textScaler = TextScaler.noScaling,
     ListingImagePicker? imagePicker,
+    ListingLocationService? locationService,
+    ThemeMode themeMode = ThemeMode.light,
+    EdgeInsets safeAreaPadding = EdgeInsets.zero,
   }) {
+    final darkScheme = ColorScheme.fromSeed(
+      seedColor: AppColors.brandSecondary,
+      brightness: Brightness.dark,
+    );
     return MaterialApp(
+      themeMode: themeMode,
       theme: buildKiwiShareTheme(),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: darkScheme,
+        scaffoldBackgroundColor: darkScheme.surface,
+      ),
       home: MediaQuery(
-        data: MediaQueryData(textScaler: textScaler),
+        data: MediaQueryData(
+          textScaler: textScaler,
+          padding: safeAreaPadding,
+          viewPadding: safeAreaPadding,
+        ),
         child: PostItemScreen(
           onCancel: onCancel,
           imagePicker: imagePicker ?? FakeListingImagePicker(),
+          locationService:
+              locationService ?? FakeListingLocationService.success(),
         ),
       ),
     );
@@ -194,6 +221,173 @@ void main() {
     expect(find.text('Post an item'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('keeps Photos content below the iOS safe-area header', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        safeAreaPadding: const EdgeInsets.only(top: 59, bottom: 34),
+      ),
+    );
+
+    final headerRect = tester.getRect(find.byKey(const Key('post_header')));
+    final dividerRect = tester.getRect(
+      find.byKey(const Key('post_header_divider')),
+    );
+    final photosRect = tester.getRect(
+      find.byKey(const Key('post_photos_section')),
+    );
+
+    expect(headerRect.top, greaterThanOrEqualTo(59));
+    expect(photosRect.top, greaterThan(dividerRect.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('uses readable adaptive colours in iOS dark mode', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, themeMode: ThemeMode.dark),
+    );
+
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    final photosText = tester.widget<Text>(find.text('Photos'));
+    final background = scaffold.backgroundColor!;
+    final foreground = photosText.style!.color!;
+
+    expect(background.computeLuminance(), lessThan(0.2));
+    expect(foreground.computeLuminance(), greaterThan(0.5));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'detects the current area instead of using a hardcoded location',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final locationService = FakeListingLocationService.success(
+        label: 'Auckland Central, Auckland',
+      );
+      await tester.pumpWidget(
+        buildTestApp(onCancel: () {}, locationService: locationService),
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('post_location_field')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      await tester.tap(find.byKey(const Key('post_location_field')));
+      await tester.pumpAndSettle();
+
+      expect(locationService.locationRequests, 1);
+      expect(find.text('Auckland Central, Auckland'), findsOneWidget);
+      expect(find.text('Auckland CBD'), findsNothing);
+    },
+  );
+
+  testWidgets('explains how to recover when location permission is blocked', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final locationService = FakeListingLocationService.failure(
+      ListingLocationErrorCode.permissionDeniedForever,
+    );
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, locationService: locationService),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_location_field')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.tap(find.byKey(const Key('post_location_field')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Location permission is blocked. Enable it in Settings and try again.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Settings'));
+    expect(locationService.appSettingsRequests, 1);
+  });
+
+  testWidgets('manual suburb entry works when GPS permission is denied', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final locationService = FakeListingLocationService.failure(
+      ListingLocationErrorCode.permissionDenied,
+    );
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, locationService: locationService),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_location_field')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.tap(find.byKey(const Key('post_location_field')));
+    await tester.pumpAndSettle();
+    expect(locationService.locationRequests, 1);
+
+    await tester.tap(find.byKey(const Key('post_manual_location_button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('post_manual_location_input')),
+      '  Mount Eden  ',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('post_manual_location_save')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mount Eden'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_submit_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('post_location_field')),
+        matching: find.text('Required'),
+      ),
+      findsNothing,
+    );
+  });
 }
 
 class FakeListingImagePicker implements ListingImagePicker {
@@ -219,6 +413,46 @@ class FakeListingImagePicker implements ListingImagePicker {
 
   @override
   Future<XFile?> takePhoto() async => cameraPhoto;
+}
+
+class FakeListingLocationService implements ListingLocationService {
+  FakeListingLocationService.success({
+    String label = 'Auckland Central, Auckland',
+  }) : location = ListingLocation(
+         label: label,
+         latitude: -36.8485,
+         longitude: 174.7633,
+       ),
+       errorCode = null;
+
+  FakeListingLocationService.failure(this.errorCode) : location = null;
+
+  final ListingLocation? location;
+  final ListingLocationErrorCode? errorCode;
+  int locationRequests = 0;
+  int appSettingsRequests = 0;
+  int locationSettingsRequests = 0;
+
+  @override
+  Future<ListingLocation> getCurrentLocation() async {
+    locationRequests += 1;
+    if (errorCode != null) {
+      throw ListingLocationException(errorCode!);
+    }
+    return location!;
+  }
+
+  @override
+  Future<bool> openAppSettings() async {
+    appSettingsRequests += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> openLocationSettings() async {
+    locationSettingsRequests += 1;
+    return true;
+  }
 }
 
 XFile testPhoto(String name) {

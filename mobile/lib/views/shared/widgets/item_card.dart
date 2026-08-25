@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../../../models/item_model.dart';
 import '../../../providers/providers.dart';
+import '../../../theme/app_theme.dart';
 
 class ItemCard extends StatelessWidget {
   final ItemModel item;
@@ -12,211 +13,185 @@ class ItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final favoritesProvider = Provider.of<FavoritesProvider>(context);
-    final isFav = favoritesProvider.isFavorite(item.id);
-
-    // Seed mock ratings based on item titles to match screenshots
-    String rating = '4.9';
-    if (item.title.contains('Desk')) rating = '4.9';
-    if (item.title.contains('Chair')) rating = '4.8';
-    if (item.title.contains('Lamp')) rating = '4.9';
-    if (item.title.contains('Bookcase')) rating = '4.7';
+    final colors = Theme.of(context).colorScheme;
+    final favorites = context.watch<FavoritesProvider>();
+    final isFavorite = favorites.isFavorite(item.id);
 
     return Semantics(
-      label:
-          '${item.title}, price: \$${item.priceNzd} NZD, location: ${item.location}',
       button: onTap != null,
+      label:
+          '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.location}, category: ${item.category}',
       child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
+        color: colors.surface,
+        elevation: 1,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          key: Key('item_card_${item.id}'),
           onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFAF7F2), // Off-White card body
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(
-                    0xFF1F1F1F,
-                  ).withOpacity(0.06), // Charcoal shadow
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              children: [
-                // Item details
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AspectRatio(
+                aspectRatio: 1.4,
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    // Product Image
-                    Expanded(
-                      child: Container(
-                        width: double.infinity,
-                        height: double.infinity,
-                        color: const Color(
-                          0xFFF2E8DB,
-                        ), // Warm Beige image background
-                        child: Image.network(
-                          item.imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Center(
-                              child: Icon(
-                                Icons.image_not_supported_outlined,
-                                color: Color(
-                                  0xFF2E5E4E,
-                                ), // Sage Green placeholder icon
-                                size: 32,
-                              ),
-                            );
-                          },
+                    ColoredBox(
+                      color: colors.surfaceContainerHighest,
+                      child: Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Icon(
+                          Icons.image_not_supported_outlined,
+                          color: colors.primary,
+                          size: 40,
                         ),
                       ),
                     ),
-                    // Text detail section
-                    Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: const Color(0xFF1F1F1F), // Charcoal
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                    if (item.isSustainable)
+                      Positioned(
+                        left: AppSpacing.sm,
+                        top: AppSpacing.sm,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: AppSpacing.xs,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '\$${item.priceNzd}',
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                              color: const Color(0xFF1F1F1F), // Charcoal
+                          decoration: BoxDecoration(
+                            color: colors.primaryContainer,
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small,
                             ),
+                            border: Border.all(color: colors.primary),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.location,
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: const Color(
-                                0xFF1F1F1F,
-                              ).withOpacity(0.6), // Charcoal opacity
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
-                                Icons.star,
-                                size: 12,
-                                color: Color(0xFFD4A24A), // Muted Gold
+                              Icon(
+                                Icons.eco_outlined,
+                                size: 16,
+                                color: colors.primary,
                               ),
-                              const SizedBox(width: 2),
+                              const SizedBox(width: AppSpacing.xs),
                               Text(
-                                rating,
-                                style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFFD4A24A), // Muted Gold
-                                ),
+                                'Sustainable',
+                                style: Theme.of(context).textTheme.labelSmall,
                               ),
                             ],
                           ),
-                        ],
+                        ),
+                      ),
+                    Positioned(
+                      right: AppSpacing.xs,
+                      top: AppSpacing.xs,
+                      child: IconButton.filledTonal(
+                        tooltip: isFavorite
+                            ? 'Remove from saved items'
+                            : 'Save item',
+                        onPressed: () => favorites.toggleFavorite(item.id),
+                        icon: Icon(
+                          isFavorite ? Icons.favorite : Icons.favorite_border,
+                        ),
                       ),
                     ),
                   ],
                 ),
-
-                // Sustainable Badge (Bottom-left of image area)
-                if (item.isSustainable)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(
-                          0xFFE2F0D9,
-                        ).withOpacity(0.95), // Light Green
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF7BAA7A),
-                        ), // Leaf Green border
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.eco,
-                            size: 12,
-                            color: Color(0xFF2E5E4E),
-                          ), // Sage Green icon
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.sm,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      item.title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '\$${item.priceNzd} NZD',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: colors.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (item.seller?.isStudentVerified == true) ...[
                           const SizedBox(width: 4),
-                          Text(
-                            'Sustainable',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF2E5E4E), // Sage Green text
+                          const Tooltip(
+                            message: 'Student Verified',
+                            child: Icon(
+                              Icons.school,
+                              size: 14,
+                              color: Color(0xFF2563EB),
                             ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                  ),
-
-                // Favorite Button (Top right of image area)
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () {
-                        favoritesProvider.toggleFavorite(item.id);
-                      },
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
-                          shape: BoxShape.circle,
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 7,
+                          backgroundColor:
+                              item.seller?.isStudentVerified == true
+                              ? const Color(0xFFDBEAFE)
+                              : colors.primaryContainer,
+                          backgroundImage:
+                              item.seller?.avatarUrl != null &&
+                                  item.seller!.avatarUrl!.isNotEmpty
+                              ? NetworkImage(item.seller!.avatarUrl!)
+                              : null,
+                          child:
+                              item.seller?.avatarUrl == null ||
+                                  item.seller!.avatarUrl!.isEmpty
+                              ? Text(
+                                  (item.seller?.displayName.isNotEmpty == true)
+                                      ? item.seller!.displayName[0]
+                                            .toUpperCase()
+                                      : 'K',
+                                  style: TextStyle(
+                                    fontSize: 7,
+                                    fontWeight: FontWeight.w700,
+                                    color:
+                                        item.seller?.isStudentVerified == true
+                                        ? const Color(0xFF1D4ED8)
+                                        : colors.primary,
+                                  ),
+                                )
+                              : null,
                         ),
-                        child: AnimatedScale(
-                          scale: isFav ? 1.1 : 1.0,
-                          duration: const Duration(milliseconds: 150),
-                          child: Icon(
-                            isFav ? Icons.favorite : Icons.favorite_border,
-                            color: isFav
-                                ? Colors.red
-                                : const Color(0xFF2E5E4E), // Sage Green outline
-                            size: 20,
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            item.seller?.displayName ?? item.location,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

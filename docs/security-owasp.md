@@ -7,7 +7,7 @@ This document details how KiwiShare's backend architecture and APIs conform to s
 ## 1. A01:2021-Broken Access Control
 * **Vulnerability**: Unauthenticated or unauthorized users accessing gated endpoints (e.g. creating listings or updating trust scores).
 * **Mitigation**:
-  - Gated controllers utilize our custom [auth.ts](file:///Users/samyao/Work/project-implementation-five-guys/functions/src/middleware/auth.ts) middleware.
+  - Gated controllers utilize our custom [auth.ts](file:///Users/samyao/Work/project-implementation-five-guys/server/src/middleware/auth.ts) middleware.
   - The middleware verifies the JWT signature (`jsonwebtoken` library) using a private secret. If signatures do not match, the middleware aborts the request with `401 Unauthorized` or `403 Forbidden` before invoking core business routes.
 
 ---
@@ -15,7 +15,7 @@ This document details how KiwiShare's backend architecture and APIs conform to s
 ## 2. A02:2021-Cryptographic Failures
 * **Vulnerability**: Plaintext storage of sensitive information, such as passwords or session hashes.
 * **Mitigation**:
-  - Passwords are never stored in plaintext inside Firestore database documents.
+  - Passwords are never stored in plaintext inside database documents.
   - The Koa registration endpoint hashes passwords using **bcrypt** with a work factor of 12 rounds (`bcryptjs` module) prior to writing record indices.
   - API transmission enforces HTTPS encryption for all client-to-cloud streams.
 
@@ -33,4 +33,4 @@ This document details how KiwiShare's backend architecture and APIs conform to s
 * **Vulnerability**: Leakage of developer traces and server details (e.g. `X-Powered-By: Koa` headers) or stack traces in error responses.
 * **Mitigation**:
   - Configured custom HTTP headers to disable framework banners.
-  - Implemented a centralized error handler [error.ts](file:///Users/samyao/Work/project-implementation-five-guys/functions/src/middleware/error.ts) that intercepts thrown server errors, records detail reports for internal audit, and returns generic user-friendly strings (e.g. `Internal Server Error`) rather than revealing detailed server debug stack traces.
+  - Implemented a centralized error handler [error.ts](file:///Users/samyao/Work/project-implementation-five-guys/server/src/middleware/error.ts) that intercepts thrown server errors, records detail reports for internal audit, and returns generic user-friendly strings (e.g. `Internal Server Error`) rather than revealing detailed server debug stack traces.
