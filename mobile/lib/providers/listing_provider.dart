@@ -14,6 +14,70 @@ class ListingProvider extends ChangeNotifier {
   List<ItemModel>? get cachedRecommendedItems => _cachedRecommendedItems;
   DiscoveryOptionsModel? _cachedDiscoveryOptions;
   final Map<DiscoveryQuery, List<ItemModel>> _cachedDiscoveryItems = {};
+  final Map<String, ItemModel> _cachedItemDetails = {};
+
+  Future<ItemModel> getItemById(
+    String itemId, {
+    bool forceRefresh = false,
+  }) async {
+    final cached = _cachedItemDetails[itemId];
+    if (cached != null && !forceRefresh) return cached;
+    final item = await itemRepository.fetchItemById(itemId);
+    _cacheItem(item);
+    return item;
+  }
+
+  Future<ItemModel> updateItem({
+    required String itemId,
+    required String token,
+    required ItemUpdateDraft draft,
+  }) async {
+    final item = await itemRepository.updateItem(
+      itemId: itemId,
+      token: token,
+      draft: draft,
+    );
+    _cacheItem(item);
+    notifyListeners();
+    return item;
+  }
+
+  Future<void> deleteItem({
+    required String itemId,
+    required String token,
+  }) async {
+    await itemRepository.deleteItem(itemId: itemId, token: token);
+    _cachedItemDetails.remove(itemId);
+    _cachedPopularItems = _cachedPopularItems
+        ?.where((item) => item.id != itemId)
+        .toList(growable: false);
+    _cachedRecommendedItems = _cachedRecommendedItems
+        ?.where((item) => item.id != itemId)
+        .toList(growable: false);
+    for (final query in _cachedDiscoveryItems.keys.toList()) {
+      _cachedDiscoveryItems[query] = _cachedDiscoveryItems[query]!
+          .where((item) => item.id != itemId)
+          .toList(growable: false);
+    }
+    notifyListeners();
+  }
+
+  void seedItemDetail(ItemModel item) => _cacheItem(item);
+
+  void _cacheItem(ItemModel item) {
+    _cachedItemDetails[item.id] = item;
+    _replaceItem(_cachedPopularItems, item);
+    _replaceItem(_cachedRecommendedItems, item);
+    for (final items in _cachedDiscoveryItems.values) {
+      _replaceItem(items, item);
+    }
+  }
+
+  void _replaceItem(List<ItemModel>? items, ItemModel replacement) {
+    if (items == null) return;
+    final index = items.indexWhere((item) => item.id == replacement.id);
+    if (index >= 0) items[index] = replacement;
+  }
 
   Future<List<ItemModel>> getPopularItems({bool forceRefresh = false}) async {
     if (_cachedPopularItems != null && !forceRefresh) {

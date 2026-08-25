@@ -14,7 +14,7 @@ export function formatItem(itemDoc: any) {
   const city = itemObj.location?.city || '';
   const locationStr = typeof itemObj.location === 'string'
     ? itemObj.location
-    : [suburb, city].filter(Boolean).join(', ') || 'Location not supplied';
+    : [suburb, city].filter(Boolean).join(', ');
   const coordinates = itemObj.location?.coordinates?.coordinates;
   const longitude = Array.isArray(coordinates) && coordinates.length === 2
     ? Number(coordinates[0])
@@ -23,7 +23,7 @@ export function formatItem(itemDoc: any) {
     ? Number(coordinates[1])
     : undefined;
 
-  const priceNzd = itemObj.priceNzd || (itemObj.price != null ? (itemObj.price / 100).toString() : '0');
+  const priceNzd = itemObj.priceNzd ?? (itemObj.price != null ? (itemObj.price / 100).toString() : '');
   const rawImages = Array.isArray(itemObj.images) && itemObj.images.length > 0
     ? itemObj.images
     : (itemObj.imageUrl ? [{ url: itemObj.imageUrl, sortOrder: 0 }] : []);
@@ -35,13 +35,14 @@ export function formatItem(itemDoc: any) {
     ownerId = itemObj.sellerId._id?.toString() || itemObj.sellerId.id || ownerId;
     sellerInfo = {
       id: ownerId,
-      displayName: itemObj.sellerId.displayName || 'Kiwi Member',
-      email: itemObj.sellerId.email,
+      displayName: itemObj.sellerId.displayName || '',
       avatarUrl: itemObj.sellerId.avatarUrl,
-      trustScore: itemObj.sellerId.trustScore ?? 100,
+      trustScore: itemObj.sellerId.trustScore ?? null,
+      rating: itemObj.sellerId.rating ?? null,
+      reviewCount: itemObj.sellerId.reviewCount ?? null,
       isVerified: Boolean(itemObj.sellerId.isVerified),
       isStudentVerified: Boolean(itemObj.sellerId.isStudentVerified),
-      studentInstitution: itemObj.sellerId.studentInstitution || 'University of Auckland',
+      studentInstitution: itemObj.sellerId.studentInstitution || null,
       role: itemObj.sellerId.role || 'user'
     };
   } else if (itemObj.sellerId) {
@@ -198,7 +199,7 @@ async function getUsedItemsHandler(ctx: any) {
     };
   }
 
-  let itemQuery = Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+  let itemQuery = Item.find(filter).populate('sellerId', 'displayName avatarUrl trustScore rating reviewCount isVerified isStudentVerified studentInstitution role');
   const sortValue = queryText(sort);
   if (sortValue === 'price_asc') {
     itemQuery = itemQuery.sort({ price: 1, createdAt: -1 });
@@ -250,6 +251,17 @@ async function getDiscoveryOptionsHandler(ctx: any) {
               maximum: { $max: '$price' }
             }
           }
+        ],
+        conditions: [
+          { $match: { condition: { $type: 'string', $ne: '' } } },
+          {
+            $group: {
+              _id: { $toLower: '$condition' },
+              value: { $first: '$condition' },
+              count: { $sum: 1 }
+            }
+          },
+          { $sort: { value: 1 } }
         ]
       }
     }
@@ -297,6 +309,10 @@ async function getDiscoveryOptionsHandler(ctx: any) {
   ctx.body = {
     categories,
     locations,
+    conditions: (facets?.conditions || []).map((entry: any) => ({
+      value: entry.value,
+      count: entry.count
+    })),
     priceRange: {
       minimum: prices ? prices.minimum / 100 : null,
       maximum: prices ? prices.maximum / 100 : null
@@ -308,8 +324,8 @@ async function getDiscoveryOptionsHandler(ctx: any) {
 async function getUsedItemByIdHandler(ctx: any) {
   const { id } = ctx.params;
   const item = mongoose.Types.ObjectId.isValid(id)
-    ? await Item.findById(id).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role')
-    : await Item.findOne({ id }).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+    ? await Item.findById(id).populate('sellerId', 'displayName avatarUrl trustScore rating reviewCount isVerified isStudentVerified studentInstitution role')
+    : await Item.findOne({ id }).populate('sellerId', 'displayName avatarUrl trustScore rating reviewCount isVerified isStudentVerified studentInstitution role');
 
   if (!item || item.status === 'deleted') {
     ctx.status = 404;
@@ -317,6 +333,8 @@ async function getUsedItemByIdHandler(ctx: any) {
     return;
   }
 
+  item.viewCount = (item.viewCount || 0) + 1;
+  await item.save();
   const formatted = formatItem(item);
   ctx.status = 200;
   ctx.body = {
@@ -435,25 +453,65 @@ async function updateUsedItemHandler(ctx: any) {
     return;
   }
 
-  if (updates.title != null) item.title = updates.title;
-  if (updates.description != null) item.description = updates.description;
-  if (updates.category != null) item.category = updates.category;
-  if (updates.condition != null) item.condition = updates.condition;
-  if (updates.status != null) item.status = updates.status;
+  if (updates.title != null) {
+    const title = String(updates.title).trim();
+    if (title.length < 3 || title.length > 120) {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'Title must be between 3 and 120 characters.' };
+      return;
+    }
+    item.title = title;
+  }
+  if (updates.description != null) {
+    const description = String(updates.description).trim();
+    if (description.length > 2000) {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'Description must be 2000 characters or fewer.' };
+      return;
+    }
+    item.description = description;
+  }
+  if (updates.category != null) {
+    const category = String(updates.category).trim();
+    const storedCategory = await Category.findOne({ name: category, isActive: true });
+    if (!storedCategory) {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'Choose an active category from the database.' };
+      return;
+    }
+    item.category = storedCategory.name;
+  }
+  if (updates.condition != null) {
+    const condition = String(updates.condition).trim();
+    if (condition.length === 0 || condition.length > 60) {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'Condition must be between 1 and 60 characters.' };
+      return;
+    }
+    item.condition = condition;
+  }
   if (updates.isSustainable != null) item.isSustainable = Boolean(updates.isSustainable);
+  if (updates.negotiable != null) item.negotiable = Boolean(updates.negotiable);
   if (updates.imageUrl != null) {
     item.imageUrl = updates.imageUrl;
     item.images = [{ url: updates.imageUrl, thumbnailUrl: updates.imageUrl, sortOrder: 0 }];
   }
   if (updates.priceNzd != null) {
-    item.priceNzd = updates.priceNzd.toString();
-    item.price = Math.round(parseFloat(updates.priceNzd.toString()) * 100);
+    const price = Number(updates.priceNzd);
+    if (!Number.isFinite(price) || price < 0) {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'Price must be a non-negative number.' };
+      return;
+    }
+    item.priceNzd = price.toString();
+    item.price = Math.round(price * 100);
   }
   if (updates.location != null) {
     item.location = parseLocation(updates.location);
   }
 
   await item.save();
+  await item.populate('sellerId', 'displayName avatarUrl trustScore rating reviewCount isVerified isStudentVerified studentInstitution role');
 
   ctx.status = 200;
   ctx.body = {
@@ -514,7 +572,7 @@ async function getRecommendedItemsHandler(ctx: any) {
     }
   }
 
-  const items = await Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+  const items = await Item.find(filter).populate('sellerId', 'displayName avatarUrl trustScore rating reviewCount isVerified isStudentVerified studentInstitution role');
   const now = Date.now();
 
   // Multi-factor Recommendation Scoring Algorithm:

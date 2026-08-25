@@ -5,7 +5,9 @@ class SellerInfo {
   final String displayName;
   final String? email;
   final String? avatarUrl;
-  final int trustScore;
+  final int? trustScore;
+  final double? rating;
+  final int? reviewCount;
   final bool isVerified;
   final bool isStudentVerified;
   final String? studentInstitution;
@@ -15,7 +17,9 @@ class SellerInfo {
     required this.displayName,
     this.email,
     this.avatarUrl,
-    this.trustScore = 100,
+    this.trustScore,
+    this.rating,
+    this.reviewCount,
     this.isVerified = false,
     this.isStudentVerified = false,
     this.studentInstitution,
@@ -24,12 +28,16 @@ class SellerInfo {
   factory SellerInfo.fromMap(Map<String, dynamic> map) {
     return SellerInfo(
       id: (map['id'] ?? map['_id'] ?? '').toString(),
-      displayName: (map['displayName'] ?? 'Kiwi Member').toString(),
+      displayName: (map['displayName'] ?? '').toString(),
       email: map['email']?.toString(),
       avatarUrl: map['avatarUrl']?.toString(),
       trustScore: (map['trustScore'] is num)
           ? (map['trustScore'] as num).toInt()
-          : 100,
+          : null,
+      rating: _asDouble(map['rating']),
+      reviewCount: (map['reviewCount'] is num)
+          ? (map['reviewCount'] as num).toInt()
+          : null,
       isVerified: map['isVerified'] == true,
       isStudentVerified: map['isStudentVerified'] == true,
       studentInstitution: map['studentInstitution']?.toString(),
@@ -42,6 +50,8 @@ class SellerInfo {
     'email': email,
     'avatarUrl': avatarUrl,
     'trustScore': trustScore,
+    'rating': rating,
+    'reviewCount': reviewCount,
     'isVerified': isVerified,
     'isStudentVerified': isStudentVerified,
     'studentInstitution': studentInstitution,
@@ -52,6 +62,7 @@ class ItemModel {
   final String id;
   final String title;
   final String priceNzd;
+  final String currency;
   final String location;
   final String imageUrl;
   final List<String> images;
@@ -60,6 +71,7 @@ class ItemModel {
   final ItemStatus status;
   final String description;
   final String? condition;
+  final bool negotiable;
   final String ownerId;
   final SellerInfo? seller;
   final double? latitude;
@@ -69,6 +81,7 @@ class ItemModel {
     required this.id,
     required this.title,
     required this.priceNzd,
+    this.currency = '',
     required this.location,
     required this.imageUrl,
     this.images = const [],
@@ -77,6 +90,7 @@ class ItemModel {
     required this.status,
     this.description = '',
     this.condition,
+    this.negotiable = false,
     this.ownerId = '',
     this.seller,
     this.latitude,
@@ -99,6 +113,7 @@ class ItemModel {
     String? id,
     String? title,
     String? priceNzd,
+    String? currency,
     String? location,
     String? imageUrl,
     List<String>? images,
@@ -107,7 +122,9 @@ class ItemModel {
     ItemStatus? status,
     String? description,
     String? condition,
+    bool? negotiable,
     String? ownerId,
+    SellerInfo? seller,
     double? latitude,
     double? longitude,
   }) {
@@ -115,6 +132,7 @@ class ItemModel {
       id: id ?? this.id,
       title: title ?? this.title,
       priceNzd: priceNzd ?? this.priceNzd,
+      currency: currency ?? this.currency,
       location: location ?? this.location,
       imageUrl: imageUrl ?? this.imageUrl,
       images: images ?? this.images,
@@ -123,7 +141,9 @@ class ItemModel {
       status: status ?? this.status,
       description: description ?? this.description,
       condition: condition ?? this.condition,
+      negotiable: negotiable ?? this.negotiable,
       ownerId: ownerId ?? this.ownerId,
+      seller: seller ?? this.seller,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
     );
@@ -135,6 +155,7 @@ class ItemModel {
       'id': id,
       'title': title,
       'priceNzd': priceNzd,
+      'currency': currency,
       'location': location,
       'imageUrl': imageUrl,
       'images': images,
@@ -143,6 +164,7 @@ class ItemModel {
       'status': status.name,
       'description': description,
       'condition': condition,
+      'negotiable': negotiable,
       'ownerId': ownerId,
       'seller': seller?.toMap(),
       'latitude': latitude,
@@ -179,8 +201,9 @@ class ItemModel {
     return ItemModel(
       id: (map['id'] ?? map['_id'] ?? '').toString(),
       title: (map['title'] ?? '').toString(),
-      priceNzd: (map['priceNzd'] ?? map['price'] ?? '0').toString(),
-      location: (map['location'] ?? 'Location not supplied').toString(),
+      priceNzd: (map['priceNzd'] ?? '').toString(),
+      currency: (map['currency'] ?? '').toString(),
+      location: (map['location'] ?? '').toString(),
       imageUrl: singleImageUrl.isNotEmpty
           ? singleImageUrl
           : (imagesList.isNotEmpty ? imagesList.first : ''),
@@ -190,6 +213,7 @@ class ItemModel {
       status: _parseStatus(map['status']),
       description: (map['description'] ?? '').toString(),
       condition: map['condition']?.toString(),
+      negotiable: map['negotiable'] == true,
       ownerId: (map['ownerId'] ?? '').toString(),
       seller: sellerInfo,
       latitude: _asDouble(map['latitude']),
@@ -210,6 +234,7 @@ class ItemModel {
         other.id == id &&
         other.title == title &&
         other.priceNzd == priceNzd &&
+        other.currency == currency &&
         other.location == location &&
         other.imageUrl == imageUrl &&
         other.isSustainable == isSustainable &&
@@ -217,6 +242,7 @@ class ItemModel {
         other.status == status &&
         other.description == description &&
         other.condition == condition &&
+        other.negotiable == negotiable &&
         other.ownerId == ownerId &&
         other.latitude == latitude &&
         other.longitude == longitude;
@@ -228,6 +254,7 @@ class ItemModel {
       id,
       title,
       priceNzd,
+      currency,
       location,
       imageUrl,
       isSustainable,
@@ -235,6 +262,7 @@ class ItemModel {
       status,
       description,
       condition,
+      negotiable,
       ownerId,
       latitude,
       longitude,

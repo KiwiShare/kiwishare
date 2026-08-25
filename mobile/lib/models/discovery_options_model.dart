@@ -37,15 +37,31 @@ class DiscoveryLocationOption {
   }
 }
 
+class DiscoveryConditionOption {
+  final String value;
+  final int count;
+
+  const DiscoveryConditionOption({required this.value, required this.count});
+
+  factory DiscoveryConditionOption.fromJson(Map<String, dynamic> json) {
+    return DiscoveryConditionOption(
+      value: (json['value'] ?? '').toString(),
+      count: _asInt(json['count']),
+    );
+  }
+}
+
 class DiscoveryOptionsModel {
   final List<DiscoveryCategoryOption> categories;
   final List<DiscoveryLocationOption> locations;
+  final List<DiscoveryConditionOption> conditions;
   final double? minimumPrice;
   final double? maximumPrice;
 
   const DiscoveryOptionsModel({
     required this.categories,
     required this.locations,
+    this.conditions = const [],
     this.minimumPrice,
     this.maximumPrice,
   });
@@ -58,6 +74,10 @@ class DiscoveryOptionsModel {
         DiscoveryCategoryOption.fromJson,
       ),
       locations: _mapList(json['locations'], DiscoveryLocationOption.fromJson),
+      conditions: _mapList(
+        json['conditions'],
+        DiscoveryConditionOption.fromJson,
+      ),
       minimumPrice: priceRange is Map<String, dynamic>
           ? _asDouble(priceRange['minimum'])
           : null,
@@ -147,6 +167,7 @@ List<T> _mapList<T>(dynamic source, T Function(Map<String, dynamic>) parse) {
         (value) => switch (value) {
           DiscoveryCategoryOption option => option.value.isNotEmpty,
           DiscoveryLocationOption option => option.value.isNotEmpty,
+          DiscoveryConditionOption option => option.value.isNotEmpty,
           _ => true,
         },
       )

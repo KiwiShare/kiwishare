@@ -13,6 +13,7 @@ import 'views/messages/messages_screen.dart';
 import 'views/profile/profile_screen.dart';
 import 'views/auth/login_view.dart';
 import 'views/products/product_detail_screen.dart';
+import 'views/products/product_detail_integrations.dart';
 import 'models/item_model.dart';
 
 // State and Repositories
@@ -79,7 +80,11 @@ final GoRouter _router = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/items/:itemId',
       builder: (context, state) => ProductDetailScreen(
-        item: state.extra is ItemModel ? state.extra as ItemModel : null,
+        itemId: state.pathParameters['itemId']!,
+        initialItem: state.extra is ItemModel ? state.extra as ItemModel : null,
+        integrations: const ProductDetailIntegrations(
+          onReportListing: openListingReport,
+        ),
       ),
     ),
   ],

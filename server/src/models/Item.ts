@@ -5,7 +5,7 @@ export interface IItem extends Document {
   title: string;
   description?: string;
   category: string;
-  condition?: 'new' | 'like_new' | 'good' | 'fair' | 'poor';
+  condition?: string;
   price: number; // in cents
   currency: string;
   negotiable: boolean;
@@ -45,7 +45,7 @@ const ItemSchema = new Schema<IItem>(
     title: { type: String, required: true },
     description: { type: String },
     category: { type: String, required: true, index: true },
-    condition: { type: String, enum: ['new', 'like_new', 'good', 'fair', 'poor'] },
+    condition: { type: String, trim: true },
     price: { type: Number, required: true }, // cents
     currency: { type: String, required: true, default: 'NZD' },
     negotiable: { type: Boolean, default: false },
