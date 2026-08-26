@@ -10,6 +10,30 @@ import { DEFAULT_CATEGORIES } from '../src/config/seed';
 
 jest.setTimeout(60000);
 
+function validPublishPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    title: 'Solid Wood Desk',
+    priceNzd: '120.00',
+    location: {
+      city: 'Auckland',
+      suburb: 'Mount Eden',
+      latitude: -36.8802,
+      longitude: 174.7615
+    },
+    images: [
+      {
+        url: 'https://assets.kiwishare.online/test/desk.jpg',
+        thumbnailUrl: 'https://assets.kiwishare.online/test/desk-thumb.jpg'
+      }
+    ],
+    isSustainable: true,
+    category: 'Furniture',
+    condition: 'like_new',
+    description: 'A sturdy desk ready for another home.',
+    ...overrides
+  };
+}
+
 describe('KiwiShare Backend REST Gateway Tests', () => {
   let mongoServer: MongoMemoryServer;
 
@@ -309,7 +333,118 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.item.title).toBe('Organic Fertilizer');
     expect(res.body.item.latitude).toBeCloseTo(-37.7870, 1);
     expect(res.body.item.longitude).toBeCloseTo(175.2793, 1);
+    expect(res.body.item.ownerId).toBe(userId);
     createdItemId = res.body.item.id;
+  });
+
+  test('POST /api/usedItems - derives ownership only from the authenticated user', async () => {
+    const attemptedOwnerId = new mongoose.Types.ObjectId().toString();
+    const res = await request(app.callback())
+      .post('/api/usedItems')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send(validPublishPayload({
+        sellerId: attemptedOwnerId,
+        targetUserId: attemptedOwnerId,
+        targetUserEmail: 'another-user@example.com'
+      }));
+
+    expect(res.status).toBe(201);
+    expect(res.body.item.ownerId).toBe(userId);
+    expect(res.body.item.sellerId).toBe(userId);
+
+    const storedItem = await Item.findById(res.body.item.id);
+    expect(storedItem?.ownerId).toBe(userId);
+    expect(storedItem?.sellerId.toString()).toBe(userId);
+  });
+
+  test('POST /api/usedItems - accepts a manual suburb and city label', async () => {
+    const res = await request(app.callback())
+      .post('/api/usedItems')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send(validPublishPayload({ location: 'Te Aro, Wellington' }));
+
+    expect(res.status).toBe(201);
+    expect(res.body.item.location).toBe('Te Aro, Wellington');
+    expect(res.body.item.latitude).toBeNull();
+    expect(res.body.item.longitude).toBeNull();
+  });
+
+  test('POST /api/usedItems - keeps the documented imageUrl compatibility field', async () => {
+    const imageUrl = 'https://assets.kiwishare.online/test/legacy-photo.jpg';
+    const res = await request(app.callback())
+      .post('/api/usedItems')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send(validPublishPayload({ images: [], imageUrl }));
+
+    expect(res.status).toBe(201);
+    expect(res.body.item.imageUrl).toBe(imageUrl);
+    expect(res.body.item.images).toEqual([
+      expect.objectContaining({ url: imageUrl, thumbnailUrl: imageUrl, sortOrder: 0 })
+    ]);
+  });
+
+  test.each([
+    ['missing location', { location: undefined }, 'suburb or city'],
+    ['missing images', { images: undefined, imageUrl: undefined }, 'imageUrl'],
+    ['zero price', { priceNzd: '0' }, 'greater than zero'],
+    ['too many decimals', { priceNzd: '12.345' }, 'two decimal places'],
+    ['invalid condition', { condition: 'excellent' }, 'Condition must be one of'],
+    ['blank category', { category: '   ' }, 'Category must be between'],
+    ['invalid image URL', { images: [{ url: 'file:///desk.jpg' }] }, 'valid HTTP(S) URL'],
+    [
+      'too many images',
+      { images: Array.from({ length: 11 }, () => ({ url: 'https://example.com/item.jpg' })) },
+      'at most 10 images'
+    ],
+    [
+      'incomplete coordinates',
+      { location: { city: 'Auckland', latitude: -36.85 } },
+      'supplied together'
+    ],
+    [
+      'out-of-range coordinates',
+      { location: { city: 'Auckland', latitude: -136.85, longitude: 174.76 } },
+      'coordinates are invalid'
+    ],
+    [
+      'empty coordinates',
+      { location: { city: 'Auckland', latitude: ' ', longitude: ' ' } },
+      'coordinates are invalid'
+    ],
+    ['overlong title', { title: 'x'.repeat(121) }, 'between 3 and 120'],
+    [
+      'overlong description',
+      { description: 'x'.repeat(2001) },
+      'between 0 and 2000'
+    ]
+  ])('POST /api/usedItems - rejects %s', async (_caseName, overrides, message) => {
+    const res = await request(app.callback())
+      .post('/api/usedItems')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send(validPublishPayload(overrides));
+
+    expect(res.status).toBe(400);
+    expect(res.body.status).toBe('error');
+    expect(res.body.message).toContain(message);
+  });
+
+  test('POST /api/usedItems - returns a safe server error body', async () => {
+    const createSpy = jest
+      .spyOn(Item, 'create')
+      .mockRejectedValueOnce(new Error('database details must stay private') as never);
+
+    const res = await request(app.callback())
+      .post('/api/usedItems')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send(validPublishPayload());
+    createSpy.mockRestore();
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({
+      status: 'error',
+      message: 'Internal Server Error. Please contact support if this persists.'
+    });
+    expect(JSON.stringify(res.body)).not.toContain('database details');
   });
 
   test('GET /api/usedItems/:id - retrieves specific item details', async () => {

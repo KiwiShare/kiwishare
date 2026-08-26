@@ -7,6 +7,195 @@ import User from '../models/User';
 
 const router = new Router();
 
+const MAX_TITLE_LENGTH = 120;
+const MAX_DESCRIPTION_LENGTH = 2000;
+const MAX_CATEGORY_LENGTH = 50;
+const MAX_IMAGE_COUNT = 10;
+const VALID_CONDITIONS = new Set(['new', 'like_new', 'good', 'fair', 'poor']);
+
+class ListingValidationError extends Error {}
+
+function requireTrimmedText(
+  value: unknown,
+  fieldName: string,
+  { minLength = 1, maxLength }: { minLength?: number; maxLength: number }
+) {
+  if (typeof value !== 'string') {
+    throw new ListingValidationError(`${fieldName} is required.`);
+  }
+  const text = value.trim();
+  if (text.length < minLength || text.length > maxLength) {
+    throw new ListingValidationError(
+      `${fieldName} must be between ${minLength} and ${maxLength} characters.`
+    );
+  }
+  return text;
+}
+
+function parseListingPrice(priceNzd: unknown, priceCents: unknown) {
+  if (priceNzd != null) {
+    const priceText = typeof priceNzd === 'number'
+      ? priceNzd.toString()
+      : typeof priceNzd === 'string'
+        ? priceNzd.trim()
+        : '';
+    if (!/^\d{1,7}(\.\d{1,2})?$/.test(priceText)) {
+      throw new ListingValidationError(
+        'priceNzd must be a positive amount with no more than two decimal places.'
+      );
+    }
+    const amount = Number(priceText);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new ListingValidationError('priceNzd must be greater than zero.');
+    }
+    return {
+      priceCents: Math.round(amount * 100),
+      priceNzd: priceText
+    };
+  }
+
+  const cents = Number(priceCents);
+  if (!Number.isSafeInteger(cents) || cents <= 0) {
+    throw new ListingValidationError(
+      'A positive priceNzd amount or integer price in cents is required.'
+    );
+  }
+  return {
+    priceCents: cents,
+    priceNzd: (cents / 100).toString()
+  };
+}
+
+function parseRequiredLocation(location: unknown) {
+  if (typeof location === 'string') {
+    const label = location.trim();
+    if (label.length < 2 || label.length > 120) {
+      throw new ListingValidationError(
+        'Location must contain a suburb or city between 2 and 120 characters.'
+      );
+    }
+    return parseLocation(label);
+  }
+
+  if (!location || typeof location !== 'object' || Array.isArray(location)) {
+    throw new ListingValidationError('A suburb or city is required.');
+  }
+
+  const value = location as Record<string, unknown>;
+  const city = typeof value.city === 'string' ? value.city.trim() : '';
+  const suburb = typeof value.suburb === 'string' ? value.suburb.trim() : '';
+  if (!city && !suburb) {
+    throw new ListingValidationError('A suburb or city is required.');
+  }
+  if (city.length > 80 || suburb.length > 80) {
+    throw new ListingValidationError(
+      'Location city and suburb must each be 80 characters or fewer.'
+    );
+  }
+
+  const nestedCoordinates = value.coordinates as
+    | { coordinates?: unknown }
+    | undefined;
+  const coordinatePair = nestedCoordinates?.coordinates;
+  const hasNestedCoordinates = nestedCoordinates !== undefined;
+  const hasFlatLatitude = value.latitude !== undefined && value.latitude !== null;
+  const hasFlatLongitude = value.longitude !== undefined && value.longitude !== null;
+  let latitude: number | undefined;
+  let longitude: number | undefined;
+
+  const parseCoordinate = (coordinate: unknown) => {
+    if (typeof coordinate === 'number') return coordinate;
+    if (typeof coordinate === 'string' && coordinate.trim() !== '') {
+      return Number(coordinate);
+    }
+    return Number.NaN;
+  };
+
+  if (hasNestedCoordinates) {
+    if (!Array.isArray(coordinatePair) || coordinatePair.length !== 2) {
+      throw new ListingValidationError(
+        'Location coordinates must contain longitude and latitude.'
+      );
+    }
+    longitude = parseCoordinate(coordinatePair[0]);
+    latitude = parseCoordinate(coordinatePair[1]);
+  } else if (hasFlatLatitude || hasFlatLongitude) {
+    if (!hasFlatLatitude || !hasFlatLongitude) {
+      throw new ListingValidationError(
+        'Location latitude and longitude must be supplied together.'
+      );
+    }
+    latitude = parseCoordinate(value.latitude);
+    longitude = parseCoordinate(value.longitude);
+  }
+
+  const parsed: any = { city, suburb };
+  if (latitude !== undefined || longitude !== undefined) {
+    if (
+      !Number.isFinite(latitude)
+      || !Number.isFinite(longitude)
+      || latitude! < -90
+      || latitude! > 90
+      || longitude! < -180
+      || longitude! > 180
+    ) {
+      throw new ListingValidationError('Location coordinates are invalid.');
+    }
+    parsed.coordinates = {
+      type: 'Point' as const,
+      coordinates: [longitude, latitude]
+    };
+  }
+  return parsed;
+}
+
+function requirePublicImageUrl(value: unknown, fieldName: string) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new ListingValidationError(`${fieldName} must be a public image URL.`);
+  }
+  try {
+    const url = new URL(value.trim());
+    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.href.length > 2048) {
+      throw new Error('Invalid image URL');
+    }
+    return url.href;
+  } catch (_) {
+    throw new ListingValidationError(`${fieldName} must be a valid HTTP(S) URL.`);
+  }
+}
+
+function parseRequiredImages(images: unknown, imageUrl: unknown) {
+  if (Array.isArray(images) && images.length > 0) {
+    if (images.length > MAX_IMAGE_COUNT) {
+      throw new ListingValidationError(
+        `A listing can contain at most ${MAX_IMAGE_COUNT} images.`
+      );
+    }
+    return images.map((image, index) => {
+      const value = typeof image === 'string' ? { url: image } : image;
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new ListingValidationError(`images[${index}] is invalid.`);
+      }
+      const record = value as Record<string, unknown>;
+      const url = requirePublicImageUrl(
+        record.url ?? record.thumbnailUrl,
+        `images[${index}].url`
+      );
+      const thumbnailUrl = record.thumbnailUrl == null
+        ? url
+        : requirePublicImageUrl(record.thumbnailUrl, `images[${index}].thumbnailUrl`);
+      return { url, thumbnailUrl, sortOrder: index };
+    });
+  }
+
+  if (images !== undefined && !Array.isArray(images)) {
+    throw new ListingValidationError('images must be an array of uploaded image URLs.');
+  }
+
+  const url = requirePublicImageUrl(imageUrl, 'imageUrl');
+  return [{ url, thumbnailUrl: url, sortOrder: 0 }];
+}
+
 // Helper to format Item document for client response
 export function formatItem(itemDoc: any) {
   const itemObj = itemDoc.toObject ? itemDoc.toObject({ virtuals: true }) : itemDoc;
@@ -329,79 +518,84 @@ async function getUsedItemByIdHandler(ctx: any) {
 // 3. POST /usedItems (and POST /listings) - Create new used item
 async function createUsedItemHandler(ctx: any) {
   const body = ctx.request.body as any;
-  const { title, priceNzd, price, location, city, suburb, imageUrl, images, isSustainable, category, description, condition, sellerId, targetUserId, targetUserEmail } = body;
-  let ownerId = ctx.state.user.id;
-
-  // Support binding item to specific user if specified
-  const target = targetUserId || sellerId;
-  if (target && target !== ownerId) {
-    let boundUser = null;
-    if (mongoose.Types.ObjectId.isValid(target)) {
-      boundUser = await User.findById(target);
-    }
-    if (!boundUser) {
-      boundUser = await User.findOne({ email: String(target).toLowerCase() });
-    }
-    if (boundUser) {
-      ownerId = boundUser._id.toString();
-    }
-  } else if (targetUserEmail) {
-    const boundUser = await User.findOne({ email: targetUserEmail.toLowerCase() });
-    if (boundUser) {
-      ownerId = boundUser._id.toString();
-    }
-  }
-
-  if (!title || (priceNzd == null && price == null) || !category) {
-    ctx.status = 400;
-    ctx.body = { status: 'error', message: 'Missing product listing fields (title, price, category).' };
+  const ownerId = ctx.state.user.id;
+  if (!mongoose.Types.ObjectId.isValid(ownerId) || !await User.exists({ _id: ownerId })) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'The authenticated user no longer exists.' };
     return;
   }
 
-  const rawLocation = location || (city ? { city, suburb } : 'Auckland');
-  const parsedLoc = parseLocation(rawLocation);
-  
-  const finalPriceNzd = priceNzd != null 
-    ? priceNzd.toString() 
-    : (price != null ? (price / 100).toString() : '0');
-  const priceCents = price != null 
-    ? Number(price) 
-    : Math.round(parseFloat(finalPriceNzd) * 100);
-
-  const rawImageList = Array.isArray(images) && images.length > 0
-    ? images.map((img: any, idx: number) => {
-        if (typeof img === 'string') {
-          return { url: img, thumbnailUrl: img, sortOrder: idx };
-        }
-        return {
-          url: img.url || img.thumbnailUrl || '',
-          thumbnailUrl: img.thumbnailUrl || img.url || '',
-          sortOrder: img.sortOrder ?? idx
-        };
-      }).filter((im) => Boolean(im.url))
-    : [];
-
-  const finalImageUrl = imageUrl || (rawImageList.length > 0 ? rawImageList[0].url : 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800');
-
-  const finalImages = rawImageList.length > 0
-    ? rawImageList
-    : [{ url: finalImageUrl, thumbnailUrl: finalImageUrl, sortOrder: 0 }];
+  let validated: {
+    title: string;
+    description: string;
+    category: string;
+    condition: string;
+    priceCents: number;
+    priceNzd: string;
+    images: Array<{ url: string; thumbnailUrl: string; sortOrder: number }>;
+    location: any;
+    isSustainable: boolean;
+  };
+  try {
+    const title = requireTrimmedText(body.title, 'Title', {
+      minLength: 3,
+      maxLength: MAX_TITLE_LENGTH
+    });
+    const category = requireTrimmedText(body.category, 'Category', {
+      maxLength: MAX_CATEGORY_LENGTH
+    });
+    const description = body.description == null
+      ? ''
+      : requireTrimmedText(body.description, 'Description', {
+          minLength: 0,
+          maxLength: MAX_DESCRIPTION_LENGTH
+        });
+    const condition = body.condition == null ? 'good' : String(body.condition).trim();
+    if (!VALID_CONDITIONS.has(condition)) {
+      throw new ListingValidationError(
+        `Condition must be one of: ${Array.from(VALID_CONDITIONS).join(', ')}.`
+      );
+    }
+    if (body.isSustainable != null && typeof body.isSustainable !== 'boolean') {
+      throw new ListingValidationError('isSustainable must be a boolean.');
+    }
+    const parsedPrice = parseListingPrice(body.priceNzd, body.price);
+    validated = {
+      title,
+      description,
+      category,
+      condition,
+      ...parsedPrice,
+      images: parseRequiredImages(body.images, body.imageUrl),
+      location: parseRequiredLocation(
+        body.location ?? (body.city || body.suburb
+          ? { city: body.city, suburb: body.suburb }
+          : undefined)
+      ),
+      isSustainable: body.isSustainable ?? true
+    };
+  } catch (error) {
+    if (!(error instanceof ListingValidationError)) throw error;
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: error.message };
+    return;
+  }
 
   const newItem = await Item.create({
-    sellerId: mongoose.Types.ObjectId.isValid(ownerId) ? new mongoose.Types.ObjectId(ownerId) : undefined,
-    title,
-    description: description || '',
-    condition: condition || 'good',
-    price: priceCents,
+    sellerId: new mongoose.Types.ObjectId(ownerId),
+    title: validated.title,
+    description: validated.description,
+    condition: validated.condition,
+    price: validated.priceCents,
     currency: 'NZD',
     negotiable: false,
-    images: finalImages,
-    location: parsedLoc,
-    category,
+    images: validated.images,
+    location: validated.location,
+    category: validated.category,
     status: 'active',
-    imageUrl: finalImageUrl,
-    priceNzd: finalPriceNzd,
-    isSustainable: isSustainable !== undefined ? Boolean(isSustainable) : true,
+    imageUrl: validated.images[0].url,
+    priceNzd: validated.priceNzd,
+    isSustainable: validated.isSustainable,
     ownerId
   });
 
