@@ -10,6 +10,7 @@ their own backlog items.
 | Layer | Check | Result |
 |---|---|---|
 | Node API | Authentication, participant isolation, idempotent creation, validation, pagination, unread/read state, and closed conversations | 8 tests passed |
+| Server regression | Full Jest suite run by the required pre-push hook | 52 tests passed |
 | Flutter repository | Authenticated requests, response parsing, pagination, trimmed sends, and safe errors | 4 tests passed |
 | Flutter conversation list | Loading, filters, callbacks, signed-out/empty/error states, retry, account-switch privacy, and 200% text scaling | 7 tests passed |
 | Flutter conversation view | History, read receipt request, send success/failure, draft retention, closed state, and 200% text scaling | 6 tests passed |
@@ -31,11 +32,12 @@ flutter test --no-pub
 flutter build apk --release
 ```
 
-The full server suite is intentionally deferred until the R2-isolation change
-in PR #176 reaches `pre`. The current `pre` test suite still contains a legacy
-upload test that can call the shared Cloudflare R2 bucket when a local `.env`
-contains real credentials. The Issue #83 API suite uses an isolated in-memory
-MongoDB and does not call R2, Resend, Render, or the shared Atlas database.
+The Issue #83 API suite uses an isolated in-memory MongoDB and does not call R2,
+Resend, Render, or the shared Atlas database. The repository's required
+pre-push hook also ran the full server suite. Its legacy upload test used the
+real local R2 credentials once; the exact generated test object was immediately
+deleted and verified absent. Subsequent hook execution must blank the R2
+credentials until the isolation change in PR #176 reaches `pre`.
 
 ## Manual Android acceptance
 
