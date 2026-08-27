@@ -8,6 +8,54 @@ import User from '../src/models/User';
 import Category from '../src/models/Category';
 import { DEFAULT_CATEGORIES } from '../src/config/seed';
 
+jest.mock('../src/config/r2', () => {
+  const actual = jest.requireActual('../src/config/r2');
+  const config = {
+    accountId: 'test-account',
+    bucketName: 'kiwishare-test',
+    endpoint: 'https://r2.test.invalid',
+    accessKeyId: '',
+    secretAccessKey: '',
+    publicUrlBase: 'https://assets.test.invalid'
+  };
+
+  return {
+    ...actual,
+    R2_CONFIG: config,
+    uploadToR2: async (
+      _fileBuffer: Buffer,
+      fileName: string,
+      _contentType: string,
+      folder?: unknown
+    ) => {
+      const root = actual.normalizeR2Folder(folder);
+      const key = `${root}/mock-${fileName}`;
+      return {
+        url: `${config.publicUrlBase}/${key}`,
+        key,
+        bucket: config.bucketName
+      };
+    },
+    getPresignedUploadUrl: async (
+      fileName: string,
+      _contentType: string,
+      _expiresInSeconds: number,
+      folder?: unknown
+    ) => {
+      const root = actual.normalizeR2Folder(folder);
+      const key = `${root}/mock-${fileName}`;
+      return {
+        uploadUrl: `${config.endpoint}/${config.bucketName}/${key}`,
+        publicUrl: `${config.publicUrlBase}/${key}`,
+        key
+      };
+    },
+    getR2ObjectStream: async () => {
+      throw new Error('Object is not present in the isolated R2 test double.');
+    }
+  };
+});
+
 jest.setTimeout(60000);
 
 function validPublishPayload(overrides: Record<string, unknown> = {}) {
@@ -335,6 +383,22 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.item.longitude).toBeCloseTo(175.2793, 1);
     expect(res.body.item.ownerId).toBe(userId);
     createdItemId = res.body.item.id;
+  });
+
+  test('GET /api/usedItems - exposes a newly published item in discovery', async () => {
+    const res = await request(app.callback())
+      .get('/api/usedItems')
+      .query({ query: 'Organic Fertilizer' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      expect.objectContaining({
+        id: createdItemId,
+        title: 'Organic Fertilizer',
+        ownerId: userId,
+        status: 'active'
+      })
+    ]);
   });
 
   test('POST /api/usedItems - derives ownership only from the authenticated user', async () => {
@@ -685,13 +749,13 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('success');
-    expect(res.body.bucket).toBe('kiwishare');
+    expect(res.body.bucket).toBe('kiwishare-test');
     expect(res.body.key).toMatch(/^images\//);
 
-    // 3. Fetch the image via /api/images/ (200 when R2 credentials configured, 404 in mock CI)
+    // 3. The isolated R2 double deliberately returns no stored object.
     const filename = res.body.key.replace(/^images\//, '');
     const imgGetRes = await request(app.callback()).get(`/api/images/${filename}`);
-    expect([200, 404]).toContain(imgGetRes.status);
+    expect(imgGetRes.status).toBe(404);
   });
 
   test('POST /api/upload/presign - generates S3 presigned upload URL for Cloudflare R2', async () => {
@@ -706,7 +770,7 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
-    expect(res.body.bucket).toBe('kiwishare');
+    expect(res.body.bucket).toBe('kiwishare-test');
     expect(res.body.uploadUrl).toBeDefined();
     expect(res.body.publicUrl).toBeDefined();
     expect(res.body.key).toMatch(/^test\/pr-171\//);

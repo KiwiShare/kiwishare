@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
+import 'package:kiwishare/providers/listing_provider.dart';
+import 'package:kiwishare/repositories/item_repository.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/listing_image_picker.dart';
 import 'package:kiwishare/services/listing_location_service.dart';
@@ -34,6 +36,7 @@ void main() {
     ThemeMode themeMode = ThemeMode.light,
     EdgeInsets safeAreaPadding = EdgeInsets.zero,
     AuthProvider? authProvider,
+    ListingProvider? listingProvider,
   }) {
     final darkScheme = ColorScheme.fromSeed(
       seedColor: AppColors.brandSecondary,
@@ -64,12 +67,20 @@ void main() {
         ),
       ),
     );
-    return authProvider == null
-        ? app
-        : ChangeNotifierProvider<AuthProvider>.value(
-            value: authProvider,
-            child: app,
-          );
+    Widget result = app;
+    if (listingProvider != null) {
+      result = ChangeNotifierProvider<ListingProvider>.value(
+        value: listingProvider,
+        child: result,
+      );
+    }
+    if (authProvider != null) {
+      result = ChangeNotifierProvider<AuthProvider>.value(
+        value: authProvider,
+        child: result,
+      );
+    }
+    return result;
   }
 
   testWidgets('renders the Figma listing form and photo slots', (tester) async {
@@ -417,6 +428,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final publishService = FakeListingPublishService();
+    final listingProvider = TrackingListingProvider();
     var completed = false;
     await tester.pumpWidget(
       buildTestApp(
@@ -424,6 +436,7 @@ void main() {
         onPostItem: () => completed = true,
         authToken: 'valid-token',
         publishService: publishService,
+        listingProvider: listingProvider,
         imagePicker: FakeListingImagePicker(
           galleryPhotos: [testPhoto('desk.png')],
         ),
@@ -443,6 +456,7 @@ void main() {
     expect(publishService.draft?.photos.single.fileName, 'listing_photo_1.png');
     expect(publishService.draft?.latitude, -36.8485);
     expect(publishService.draft?.longitude, 174.7633);
+    expect(listingProvider.cachesInvalidated, isTrue);
   });
 
   testWidgets('keeps the form open and explains a publish failure', (
@@ -477,6 +491,56 @@ void main() {
     expect(find.text('Upload service unavailable.'), findsOneWidget);
     expect(find.byKey(const Key('post_item_form')), findsOneWidget);
   });
+
+  testWidgets(
+    'retries after a transient API failure without duplicating the item',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final publishService = FailOnceListingPublishService();
+      var completed = false;
+      await tester.pumpWidget(
+        buildTestApp(
+          onCancel: () {},
+          onPostItem: () => completed = true,
+          authToken: 'valid-token',
+          publishService: publishService,
+          imagePicker: FakeListingImagePicker(
+            galleryPhotos: [testPhoto('desk.png')],
+          ),
+        ),
+      );
+
+      await completeValidListing(tester);
+      await tester.tap(find.byKey(const Key('post_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(completed, isFalse);
+      expect(publishService.publishCalls, 1);
+      expect(find.byKey(const Key('post_item_form')), findsOneWidget);
+      expect(
+        find.text('Temporary server error. Please try again.'),
+        findsOneWidget,
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('post_submit_button')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('post_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(completed, isTrue);
+      expect(publishService.publishCalls, 2);
+      expect(publishService.createdItems, 1);
+    },
+  );
 
   testWidgets('disables duplicate submissions while publishing', (
     tester,
@@ -757,6 +821,51 @@ class PendingListingPublishService implements ListingPublishService {
         status: ItemStatus.active,
       ),
     );
+  }
+}
+
+class FailOnceListingPublishService implements ListingPublishService {
+  int publishCalls = 0;
+  int createdItems = 0;
+
+  @override
+  Future<ItemModel> publish({
+    required ListingDraft draft,
+    required String authToken,
+  }) async {
+    publishCalls += 1;
+    if (publishCalls == 1) {
+      throw const ListingPublishException(
+        'Temporary server error. Please try again.',
+      );
+    }
+    createdItems += 1;
+    return ItemModel(
+      id: 'published-item',
+      title: draft.title,
+      priceNzd: draft.priceNzd,
+      location: draft.locationLabel,
+      imageUrl: 'https://assets.kiwishare.online/test/desk.png',
+      isSustainable: true,
+      category: draft.category,
+      status: ItemStatus.active,
+      description: draft.description,
+      condition: draft.condition,
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+    );
+  }
+}
+
+class TrackingListingProvider extends ListingProvider {
+  TrackingListingProvider() : super(itemRepository: RestItemRepository());
+
+  bool cachesInvalidated = false;
+
+  @override
+  void invalidateCaches() {
+    cachesInvalidated = true;
+    super.invalidateCaches();
   }
 }
 
