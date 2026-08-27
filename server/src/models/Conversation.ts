@@ -35,6 +35,8 @@ const ConversationSchema = new Schema<IConversation>(
 
 // Avoid duplicate chats for same user-item combination
 ConversationSchema.index({ itemId: 1, buyerId: 1, sellerId: 1 }, { unique: true });
+ConversationSchema.index({ buyerId: 1, lastMessageAt: -1, updatedAt: -1 });
+ConversationSchema.index({ sellerId: 1, lastMessageAt: -1, updatedAt: -1 });
 
 ConversationSchema.virtual('id').get(function (this: IConversation) {
   return this._id.toString();

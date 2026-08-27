@@ -1,6 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../../models/chat_conversation_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/chat_provider.dart';
+import '../../theme/app_theme.dart';
 import 'widgets/chat_list_tile.dart';
+
+export '../../models/chat_conversation_model.dart'
+    show ChatConversationModel, ChatDirection;
+
+typedef ChatPreview = ChatConversationModel;
 
 enum ChatFilter {
   all('All'),
@@ -13,127 +24,87 @@ enum ChatFilter {
   final String label;
 }
 
-enum ChatDirection { buying, selling }
-
-class ChatPreview {
-  const ChatPreview({
-    required this.name,
-    required this.itemTitle,
-    required this.lastMessage,
-    required this.time,
-    required this.direction,
-    required this.avatarStyle,
-    this.unreadCount = 0,
-  });
-
-  final String name;
-  final String itemTitle;
-  final String lastMessage;
-  final String time;
-  final ChatDirection direction;
-  final ChatAvatarStyle avatarStyle;
-  final int unreadCount;
-}
-
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({
     super.key,
     this.onComposePressed,
     this.onConversationPressed,
+    this.chatProvider,
+    this.authToken,
   });
 
   final VoidCallback? onComposePressed;
-  final ValueChanged<ChatPreview>? onConversationPressed;
+  final ValueChanged<ChatConversationModel>? onConversationPressed;
+  final ChatProvider? chatProvider;
+  final String? authToken;
 
   @override
   State<MessagesScreen> createState() => _MessagesScreenState();
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
-  static const _chatPreviews = <ChatPreview>[
-    ChatPreview(
-      name: 'Sophie M.',
-      itemTitle: 'Ergonomic Office Chair',
-      lastMessage: 'Hi! Is the chair still available?',
-      time: '9:30 AM',
-      unreadCount: 2,
-      direction: ChatDirection.buying,
-      avatarStyle: ChatAvatarStyle.personWarm,
-    ),
-    ChatPreview(
-      name: 'James K.',
-      itemTitle: 'Giant Escape Bike',
-      lastMessage: 'Great, I can pick it up tomorrow.',
-      time: 'Yesterday',
-      direction: ChatDirection.buying,
-      avatarStyle: ChatAvatarStyle.personCool,
-    ),
-    ChatPreview(
-      name: 'Maya L.',
-      itemTitle: 'Solid Wood Desk',
-      lastMessage: 'Thanks! See you then.',
-      time: 'Yesterday',
-      direction: ChatDirection.selling,
-      avatarStyle: ChatAvatarStyle.item,
-    ),
-    ChatPreview(
-      name: 'Liam R.',
-      itemTitle: 'Marshall Speaker',
-      lastMessage: 'Could you do \$100?',
-      time: 'Tue',
-      direction: ChatDirection.selling,
-      avatarStyle: ChatAvatarStyle.item,
-    ),
-    ChatPreview(
-      name: 'Olivia T.',
-      itemTitle: 'Table Lamp',
-      lastMessage: 'Perfect, thank you!',
-      time: 'Mon',
-      direction: ChatDirection.buying,
-      avatarStyle: ChatAvatarStyle.personWarm,
-    ),
-    ChatPreview(
-      name: 'Noah W.',
-      itemTitle: 'Bookcase',
-      lastMessage: 'Is it okay if I pick it up this weekend?',
-      time: 'Mon',
-      direction: ChatDirection.selling,
-      avatarStyle: ChatAvatarStyle.personCool,
-    ),
-    ChatPreview(
-      name: 'Ava P.',
-      itemTitle: 'Dining Table',
-      lastMessage: 'Got it, thanks!',
-      time: 'Sun',
-      direction: ChatDirection.buying,
-      avatarStyle: ChatAvatarStyle.personWarm,
-    ),
-  ];
-
   ChatFilter _selectedFilter = ChatFilter.all;
+  String? _loadedToken;
+  String? _currentAuthToken;
 
-  List<ChatPreview> get _visibleChats {
+  ChatProvider get _chatProvider =>
+      widget.chatProvider ?? context.read<ChatProvider>();
+
+  void _ensureLoaded(String? token) {
+    _currentAuthToken = token;
+    if (token == null || token.isEmpty) {
+      _loadedToken = null;
+      return;
+    }
+    if (token != _loadedToken) {
+      _loadedToken = token;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _chatProvider.loadConversations(token);
+      });
+    }
+  }
+
+  List<ChatConversationModel> _visibleChats(
+    List<ChatConversationModel> conversations,
+  ) {
     return switch (_selectedFilter) {
-      ChatFilter.all => _chatPreviews,
+      ChatFilter.all => conversations,
       ChatFilter.unread =>
-        _chatPreviews
+        conversations
             .where((chat) => chat.unreadCount > 0)
             .toList(growable: false),
       ChatFilter.buying =>
-        _chatPreviews
+        conversations
             .where((chat) => chat.direction == ChatDirection.buying)
             .toList(growable: false),
       ChatFilter.selling =>
-        _chatPreviews
+        conversations
             .where((chat) => chat.direction == ChatDirection.selling)
             .toList(growable: false),
     };
   }
 
+  Future<void> _refresh() async {
+    final token = _currentAuthToken;
+    if (token != null && token.isNotEmpty) {
+      await _chatProvider.loadConversations(token);
+    }
+  }
+
+  void _openConversation(ChatConversationModel conversation) {
+    final callback = widget.onConversationPressed;
+    if (callback != null) {
+      callback(conversation);
+      return;
+    }
+    context.push('/messages/${conversation.id}', extra: conversation);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final chats = _visibleChats;
-
+    final provider = _chatProvider;
+    final token = widget.authToken ?? context.watch<AuthProvider?>()?.jwtToken;
+    _ensureLoaded(token);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
@@ -148,30 +119,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
               },
             ),
             Expanded(
-              child: ListView.separated(
-                key: const Key('chat_list'),
-                padding: const EdgeInsets.only(top: 8, bottom: 24),
-                itemCount: chats.length,
-                separatorBuilder: (context, index) => const Divider(
-                  height: 1,
-                  thickness: 1,
-                  indent: 82,
-                  endIndent: 28,
-                  color: Color(0xFFE5E6E1),
-                ),
-                itemBuilder: (context, index) {
-                  final chat = chats[index];
-                  return ChatListTile(
-                    key: Key('chat_conversation_${chat.name}'),
-                    name: chat.name,
-                    itemTitle: chat.itemTitle,
-                    lastMessage: chat.lastMessage,
-                    time: chat.time,
-                    unreadCount: chat.unreadCount,
-                    avatarStyle: chat.avatarStyle,
-                    onTap: () => widget.onConversationPressed?.call(chat),
-                  );
-                },
+              child: ListenableBuilder(
+                listenable: provider,
+                builder: (context, _) => _buildContent(provider),
               ),
             ),
           ],
@@ -179,6 +129,104 @@ class _MessagesScreenState extends State<MessagesScreen> {
       ),
     );
   }
+
+  Widget _buildContent(ChatProvider provider) {
+    final token = _currentAuthToken;
+    if (token == null || token.isEmpty) {
+      return const _ChatMessageState(
+        key: Key('chat_signed_out_state'),
+        icon: Icons.lock_outline,
+        title: 'Sign in to view your chats',
+        message: 'Your conversations are kept private to your account.',
+      );
+    }
+
+    if (!provider.ownsSession(token)) {
+      return const Center(
+        child: CircularProgressIndicator(key: Key('chat_loading_indicator')),
+      );
+    }
+
+    if (provider.isLoadingConversations && provider.conversations.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(key: Key('chat_loading_indicator')),
+      );
+    }
+
+    if (provider.conversationError != null && provider.conversations.isEmpty) {
+      return _ChatMessageState(
+        key: const Key('chat_error_state'),
+        icon: Icons.cloud_off_outlined,
+        title: 'Chats could not be loaded',
+        message: provider.conversationError!,
+        actionLabel: 'Try again',
+        onAction: _refresh,
+      );
+    }
+
+    final chats = _visibleChats(provider.conversations);
+    if (chats.isEmpty) {
+      return _ChatMessageState(
+        key: const Key('chat_empty_state'),
+        icon: Icons.forum_outlined,
+        title: _selectedFilter == ChatFilter.all
+            ? 'No conversations yet'
+            : 'No chats match this filter',
+        message: _selectedFilter == ChatFilter.all
+            ? 'Messages with buyers and sellers will appear here.'
+            : 'Choose another filter to see more conversations.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView.separated(
+        key: const Key('chat_list'),
+        padding: const EdgeInsets.only(top: 8, bottom: 24),
+        itemCount: chats.length,
+        separatorBuilder: (context, index) => Divider(
+          height: 1,
+          thickness: 1,
+          indent: 82,
+          endIndent: 28,
+          color: Theme.of(context).dividerColor,
+        ),
+        itemBuilder: (context, index) {
+          final chat = chats[index];
+          return ChatListTile(
+            key: Key('chat_conversation_${chat.id}'),
+            name: chat.participantName,
+            itemTitle: chat.itemTitle,
+            lastMessage: chat.lastMessage.isEmpty
+                ? 'No messages yet'
+                : chat.lastMessage,
+            time: _conversationTime(chat.lastMessageAt),
+            unreadCount: chat.unreadCount,
+            avatarStyle: chat.direction == ChatDirection.buying
+                ? ChatAvatarStyle.personWarm
+                : ChatAvatarStyle.item,
+            onTap: () => _openConversation(chat),
+          );
+        },
+      ),
+    );
+  }
+}
+
+String _conversationTime(DateTime? dateTime) {
+  if (dateTime == null) return '';
+  final local = dateTime.toLocal();
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(local.year, local.month, local.day);
+  final difference = today.difference(day).inDays;
+  if (difference == 0) {
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$hour:$minute ${local.hour >= 12 ? 'PM' : 'AM'}';
+  }
+  if (difference == 1) return 'Yesterday';
+  return '${local.day}/${local.month}';
 }
 
 class _ChatHeader extends StatelessWidget {
@@ -198,18 +246,16 @@ class _ChatHeader extends StatelessWidget {
               key: const Key('chat_title'),
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                 fontSize: 22,
-                color: Color(0xFF17221E),
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
           IconButton(
             key: const Key('chat_compose_button'),
-            onPressed: onComposePressed ?? () {},
+            onPressed: onComposePressed,
             tooltip: 'Start a new chat',
             icon: const Icon(Icons.open_in_new_rounded),
-            color: const Color(0xFF006B4F),
-            iconSize: 22,
-            constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+            color: Theme.of(context).colorScheme.primary,
           ),
         ],
       ),
@@ -227,11 +273,11 @@ class _ChatFilters extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Row(
         children: [
           for (var index = 0; index < ChatFilter.values.length; index++) ...[
-            if (index > 0) const SizedBox(width: 10),
+            if (index > 0) const SizedBox(width: 8),
             _ChatFilterChip(
               filter: ChatFilter.values[index],
               isSelected: ChatFilter.values[index] == selectedFilter,
@@ -260,32 +306,97 @@ class _ChatFilterChip extends StatelessWidget {
     return Semantics(
       selected: isSelected,
       button: true,
-      child: SizedBox(
-        height: 44,
-        child: Center(
-          child: Material(
+      child: Material(
+        color: isSelected
+            ? AppColors.brandPrimaryContainer
+            : Theme.of(context).colorScheme.surface,
+        shape: StadiumBorder(
+          side: BorderSide(
             color: isSelected
-                ? const Color(0xFF006B4F)
-                : const Color(0xFFEEEDE9),
-            borderRadius: BorderRadius.circular(999),
-            child: InkWell(
-              key: Key('chat_filter_${filter.name}'),
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(999),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 7,
-                ),
+                ? AppColors.brandPrimary
+                : Theme.of(context).dividerColor,
+          ),
+        ),
+        child: InkWell(
+          key: Key('chat_filter_${filter.name}'),
+          onTap: onTap,
+          customBorder: const StadiumBorder(),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Center(
                 child: Text(
                   filter.label,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: isSelected ? Colors.white : const Color(0xFF565E5A),
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  style: TextStyle(
+                    color: isSelected
+                        ? AppColors.brandPrimary
+                        : Theme.of(context).colorScheme.onSurface,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatMessageState extends StatelessWidget {
+  const _ChatMessageState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: (constraints.maxHeight - (AppSpacing.xl * 2)).clamp(
+              0,
+              double.infinity,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: AppSpacing.lg),
+                OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+              ],
+            ],
           ),
         ),
       ),

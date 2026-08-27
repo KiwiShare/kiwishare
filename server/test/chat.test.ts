@@ -1,0 +1,251 @@
+import request from 'supertest';
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import app from '../src/app';
+import Conversation from '../src/models/Conversation';
+import Message from '../src/models/Message';
+import Item from '../src/models/Item';
+
+jest.setTimeout(60000);
+
+describe('KiwiShare text chat API', () => {
+  let mongoServer: MongoMemoryServer;
+  let buyerId = '';
+  let sellerId = '';
+  let buyerToken = '';
+  let sellerToken = '';
+  let outsiderToken = '';
+  let itemId = '';
+  let conversationId = '';
+
+  beforeAll(async () => {
+    mongoServer = await MongoMemoryServer.create();
+    await mongoose.connect(mongoServer.getUri());
+
+    const registrations = await Promise.all([
+      request(app.callback()).post('/api/auth/register').send({
+        email: 'chat-buyer@example.com',
+        password: 'password123',
+        displayName: 'Chat Buyer'
+      }),
+      request(app.callback()).post('/api/auth/register').send({
+        email: 'chat-seller@example.com',
+        password: 'password123',
+        displayName: 'Chat Seller'
+      }),
+      request(app.callback()).post('/api/auth/register').send({
+        email: 'chat-outsider@example.com',
+        password: 'password123',
+        displayName: 'Chat Outsider'
+      })
+    ]);
+    const [buyer, seller, outsider] = registrations.map((res) => res.body);
+
+    buyerId = buyer.user.id;
+    sellerId = seller.user.id;
+    buyerToken = buyer.token;
+    sellerToken = seller.token;
+    outsiderToken = outsider.token;
+
+    const item = await Item.create({
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+      ownerId: sellerId,
+      title: 'Chat Test Desk',
+      description: 'An item used by isolated chat integration tests.',
+      category: 'Furniture',
+      condition: 'good',
+      price: 2500,
+      currency: 'NZD',
+      images: [{ url: 'https://example.com/chat-desk.jpg', sortOrder: 0 }],
+      imageUrl: 'https://example.com/chat-desk.jpg',
+      priceNzd: '25',
+      status: 'active'
+    });
+    itemId = item._id.toString();
+  });
+
+  afterAll(async () => {
+    await mongoose.disconnect();
+    await mongoServer.stop();
+  });
+
+  test('requires authentication for conversation history', async () => {
+    const res = await request(app.callback()).get('/api/conversations');
+
+    expect(res.status).toBe(401);
+  });
+
+  test('creates one buyer-seller conversation per item idempotently', async () => {
+    const created = await request(app.callback())
+      .post('/api/conversations')
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ itemId });
+
+    expect(created.status).toBe(201);
+    expect(created.body.status).toBe('created');
+    expect(created.body.conversation).toEqual(
+      expect.objectContaining({
+        direction: 'buying',
+        unreadCount: 0,
+        item: expect.objectContaining({ id: itemId, title: 'Chat Test Desk' }),
+        participant: expect.objectContaining({
+          id: sellerId,
+          displayName: 'Chat Seller'
+        })
+      })
+    );
+    conversationId = created.body.conversation.id;
+
+    const existing = await request(app.callback())
+      .post('/api/conversations')
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ itemId });
+
+    expect(existing.status).toBe(200);
+    expect(existing.body.conversation.id).toBe(conversationId);
+    expect(await Conversation.countDocuments()).toBe(1);
+  });
+
+  test('does not allow a seller to start a conversation with themselves', async () => {
+    const res = await request(app.callback())
+      .post('/api/conversations')
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ itemId });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('cannot message yourself');
+  });
+
+  test('lists only conversations belonging to the authenticated user', async () => {
+    const buyer = await request(app.callback())
+      .get('/api/conversations')
+      .set('Authorization', `Bearer ${buyerToken}`);
+    const seller = await request(app.callback())
+      .get('/api/conversations')
+      .set('Authorization', `Bearer ${sellerToken}`);
+    const outsider = await request(app.callback())
+      .get('/api/conversations')
+      .set('Authorization', `Bearer ${outsiderToken}`);
+
+    expect(buyer.status).toBe(200);
+    expect(buyer.body.conversations).toEqual([
+      expect.objectContaining({ id: conversationId, direction: 'buying' })
+    ]);
+    expect(seller.body.conversations).toEqual([
+      expect.objectContaining({ id: conversationId, direction: 'selling' })
+    ]);
+    expect(outsider.body.conversations).toEqual([]);
+  });
+
+  test('rejects invalid text and prevents outsider access', async () => {
+    const empty = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: '   ' });
+    const overlong = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'x'.repeat(2001) });
+    const outsider = await request(app.callback())
+      .get(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${outsiderToken}`);
+
+    expect(empty.status).toBe(400);
+    expect(overlong.status).toBe(400);
+    expect(outsider.status).toBe(403);
+    expect(await Message.countDocuments()).toBe(0);
+  });
+
+  test('sends and paginates text history while updating unread state', async () => {
+    const first = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: '  Is this desk still available?  ' });
+
+    expect(first.status).toBe(201);
+    expect(first.body.message).toEqual(
+      expect.objectContaining({
+        text: 'Is this desk still available?',
+        senderId: buyerId,
+        receiverId: sellerId,
+        isMine: true,
+        status: 'sent'
+      })
+    );
+
+    await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'I can collect it tomorrow.' });
+
+    const sellerList = await request(app.callback())
+      .get('/api/conversations')
+      .set('Authorization', `Bearer ${sellerToken}`);
+    expect(sellerList.body.conversations[0]).toEqual(
+      expect.objectContaining({
+        unreadCount: 2,
+        lastMessageText: 'I can collect it tomorrow.'
+      })
+    );
+
+    const history = await request(app.callback())
+      .get(`/api/conversations/${conversationId}/messages`)
+      .query({ limit: 1 })
+      .set('Authorization', `Bearer ${sellerToken}`);
+
+    expect(history.status).toBe(200);
+    expect(history.body.messages).toHaveLength(1);
+    expect(history.body.messages[0]).toEqual(
+      expect.objectContaining({
+        text: 'I can collect it tomorrow.',
+        isMine: false
+      })
+    );
+    expect(history.body.pagination.hasMore).toBe(true);
+    expect(history.body.pagination.nextBefore).toBeTruthy();
+  });
+
+  test('marks incoming messages as read and clears only the reader count', async () => {
+    const read = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`);
+
+    expect(read.status).toBe(200);
+    expect(read.body.readCount).toBe(2);
+
+    const storedConversation = await Conversation.findById(conversationId);
+    expect(storedConversation?.sellerUnreadCount).toBe(0);
+    expect(storedConversation?.buyerUnreadCount).toBe(0);
+    expect(
+      await Message.countDocuments({
+        conversationId,
+        receiverId: sellerId,
+        status: 'read'
+      })
+    ).toBe(2);
+
+    const reply = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ text: 'Yes, it is available.' });
+    expect(reply.status).toBe(201);
+    expect(reply.body.message.isMine).toBe(true);
+
+    const buyerList = await request(app.callback())
+      .get('/api/conversations')
+      .set('Authorization', `Bearer ${buyerToken}`);
+    expect(buyerList.body.conversations[0].unreadCount).toBe(1);
+  });
+
+  test('does not send into a closed conversation', async () => {
+    await Conversation.findByIdAndUpdate(conversationId, { status: 'closed' });
+
+    const res = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'This should not be sent.' });
+
+    expect(res.status).toBe(409);
+    expect(await Message.countDocuments({ text: 'This should not be sent.' })).toBe(0);
+  });
+});
