@@ -240,7 +240,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
         itemBuilder: (context, index) {
           final chat = chats[index];
           return Dismissible(
-            key: Key('chat_dismissible_${chat.id}'),
+            key: Key(
+              'chat_dismissible_${chat.id}_'
+              '${provider.conversationRenderVersionFor(chat.id)}',
+            ),
             direction: DismissDirection.endToStart,
             confirmDismiss: (_) => _confirmRemoveConversation(chat),
             onDismissed: (_) {

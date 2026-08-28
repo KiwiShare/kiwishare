@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
+import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/views/messages/messages_screen.dart';
 
 import '../../support/fake_chat_repository.dart';
@@ -28,7 +29,9 @@ void main() {
     await tester.pumpWidget(_buildSubject(repository));
     await tester.pumpAndSettle();
 
-    final dismissible = find.byKey(Key('chat_dismissible_${conversation.id}'));
+    final dismissible = find.byKey(
+      Key('chat_dismissible_${conversation.id}_0'),
+    );
     await tester.drag(dismissible, const Offset(-500, 0));
     await tester.pumpAndSettle();
 
@@ -53,6 +56,37 @@ void main() {
     expect(find.text('No conversations yet'), findsOneWidget);
   });
 
+  testWidgets('an immediate deletion failure restores a fresh chat row', (
+    tester,
+  ) async {
+    final conversation = testConversation();
+    final repository = FakeChatRepository(conversations: [conversation])
+      ..deleteError = const ChatRepositoryException(
+        'Chat could not be removed from the server.',
+      );
+    await tester.pumpWidget(_buildSubject(repository));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(Key('chat_dismissible_${conversation.id}_0')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chat_delete_confirm')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(Key('chat_dismissible_${conversation.id}_1')),
+      findsOneWidget,
+    );
+    expect(find.text(conversation.participantName), findsOneWidget);
+    expect(
+      find.text('Chat could not be removed from the server.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('right swipe does not offer deletion', (tester) async {
     final conversation = testConversation();
     final repository = FakeChatRepository(conversations: [conversation]);
@@ -60,7 +94,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.drag(
-      find.byKey(Key('chat_dismissible_${conversation.id}')),
+      find.byKey(Key('chat_dismissible_${conversation.id}_0')),
       const Offset(500, 0),
     );
     await tester.pumpAndSettle();

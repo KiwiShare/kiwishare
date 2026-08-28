@@ -19,7 +19,7 @@ outside this issue.
 | Flutter provider | Optimistic list removal, cached-history cleanup, and rollback after an API failure | Passed |
 | Flutter repository | Authenticated conversation deletion request and safe API-error handling | Passed |
 | Node API | Participant-only removal, per-member visibility, message-triggered restoration, and item-entry restoration | Passed |
-| Regression | Full Flutter and server test suites | 93/93 Flutter and 59/59 server tests passed |
+| Regression | Full Flutter and server test suites | 94/94 Flutter and 59/59 server tests passed |
 | Quality checks | Flutter analysis, server build, and repository lint checks | Passed |
 
 The Node integration suite uses an isolated in-memory MongoDB. It does not call

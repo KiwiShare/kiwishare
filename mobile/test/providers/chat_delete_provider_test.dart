@@ -10,6 +10,7 @@ void main() {
     final repository = FakeChatRepository(conversations: [conversation]);
     final provider = ChatProvider(repository: repository);
     await provider.loadConversations('valid-token');
+    expect(provider.conversationRenderVersionFor(conversation.id), 0);
 
     final removed = await provider.deleteConversation(
       conversation: conversation,
@@ -38,6 +39,7 @@ void main() {
 
     expect(removed, isFalse);
     expect(provider.conversations.single.id, conversation.id);
+    expect(provider.conversationRenderVersionFor(conversation.id), 1);
     expect(
       provider.conversationDeleteErrorFor(conversation.id),
       'Chat could not be removed from the server.',

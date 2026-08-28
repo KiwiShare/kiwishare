@@ -28,6 +28,7 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, String> _messageSendErrors = {};
   final Map<String, String> _conversationStartErrors = {};
   final Map<String, String> _conversationDeleteErrors = {};
+  final Map<String, int> _conversationRenderVersions = {};
 
   List<ChatMessageModel> messagesFor(String conversationId) =>
       List.unmodifiable(_messages[conversationId] ?? const []);
@@ -47,6 +48,8 @@ class ChatProvider extends ChangeNotifier {
       _deletingConversationIds.contains(conversationId);
   String? conversationDeleteErrorFor(String conversationId) =>
       _conversationDeleteErrors[conversationId];
+  int conversationRenderVersionFor(String conversationId) =>
+      _conversationRenderVersions[conversationId] ?? 0;
 
   Future<ChatConversationModel?> startConversation({
     required String itemId,
@@ -65,6 +68,7 @@ class ChatProvider extends ChangeNotifier {
       _messageSendErrors.clear();
       _conversationStartErrors.clear();
       _conversationDeleteErrors.clear();
+      _conversationRenderVersions.clear();
     }
 
     _startingItemIds.add(itemId);
@@ -116,6 +120,7 @@ class ChatProvider extends ChangeNotifier {
       _messageSendErrors.clear();
       _conversationStartErrors.clear();
       _conversationDeleteErrors.clear();
+      _conversationRenderVersions.clear();
     }
     _isLoadingConversations = true;
     _conversationError = null;
@@ -245,6 +250,7 @@ class ChatProvider extends ChangeNotifier {
     } on ChatRepositoryException catch (error) {
       if (_sessionToken == token) {
         _conversationDeleteErrors[conversation.id] = error.message;
+        _refreshConversationRenderIdentity(conversation.id);
         _restoreConversation(conversation, originalIndex);
       }
       return false;
@@ -252,6 +258,7 @@ class ChatProvider extends ChangeNotifier {
       if (_sessionToken == token) {
         _conversationDeleteErrors[conversation.id] =
             'Chat could not be removed. Please try again.';
+        _refreshConversationRenderIdentity(conversation.id);
         _restoreConversation(conversation, originalIndex);
       }
       return false;
@@ -279,5 +286,10 @@ class ChatProvider extends ChangeNotifier {
         : restored.length;
     restored.insert(safeIndex, value);
     _conversations = restored;
+  }
+
+  void _refreshConversationRenderIdentity(String conversationId) {
+    _conversationRenderVersions[conversationId] =
+        conversationRenderVersionFor(conversationId) + 1;
   }
 }
