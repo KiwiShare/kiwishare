@@ -163,6 +163,65 @@ void main() {
     },
   );
 
+  test('forwards the history cursor and marks a conversation read', () async {
+    final requests = <http.Request>[];
+    final repository = RestChatRepository(
+      client: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'status': 'success',
+              'messages': <Map<String, dynamic>>[],
+              'pagination': {'hasMore': false, 'nextBefore': null},
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode({'status': 'success'}), 200);
+      }),
+    );
+    final before = DateTime.utc(2026, 8, 27, 8, 30);
+
+    await repository.fetchMessages(
+      conversationId: 'conversation-1',
+      token: 'valid-token',
+      before: before,
+      limit: 25,
+    );
+    await repository.markConversationRead(
+      conversationId: 'conversation-1',
+      token: 'valid-token',
+    );
+
+    expect(requests.first.url.queryParameters, {
+      'limit': '25',
+      'before': '2026-08-27T08:30:00.000Z',
+    });
+    expect(requests.last.method, 'PATCH');
+    expect(requests.last.url.path, '/api/conversations/conversation-1/read');
+    expect(requests.last.headers['Authorization'], 'Bearer valid-token');
+  });
+
+  test('rejects malformed successful chat responses', () async {
+    final repository = RestChatRepository(
+      client: MockClient(
+        (_) async => http.Response(jsonEncode({'status': 'success'}), 200),
+      ),
+    );
+
+    expect(
+      () => repository.fetchConversations(token: 'valid-token'),
+      throwsA(
+        isA<ChatRepositoryException>().having(
+          (error) => error.message,
+          'message',
+          'The chat service returned an invalid conversation list.',
+        ),
+      ),
+    );
+  });
+
   test('preserves safe API errors and identifies an expired session', () async {
     var requestCount = 0;
     final repository = RestChatRepository(

@@ -75,6 +75,21 @@ describe('KiwiShare text chat API', () => {
     expect(res.status).toBe(401);
   });
 
+  test('rejects invalid item identifiers before creating a conversation', async () => {
+    const malformed = await request(app.callback())
+      .post('/api/conversations')
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ itemId: 'not-an-object-id' });
+    const missing = await request(app.callback())
+      .post('/api/conversations')
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({});
+
+    expect(malformed.status).toBe(400);
+    expect(missing.status).toBe(400);
+    expect(await Conversation.countDocuments()).toBe(0);
+  });
+
   test('creates one buyer-seller conversation per item idempotently', async () => {
     const created = await request(app.callback())
       .post('/api/conversations')
@@ -156,6 +171,27 @@ describe('KiwiShare text chat API', () => {
     expect(await Message.countDocuments()).toBe(0);
   });
 
+  test('returns safe errors for malformed, missing, and invalid history cursors', async () => {
+    const malformedId = await request(app.callback())
+      .get('/api/conversations/not-an-object-id/messages')
+      .set('Authorization', `Bearer ${buyerToken}`);
+    const missingId = new mongoose.Types.ObjectId().toString();
+    const missing = await request(app.callback())
+      .get(`/api/conversations/${missingId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`);
+    const invalidCursor = await request(app.callback())
+      .get(`/api/conversations/${conversationId}/messages`)
+      .query({ before: 'not-a-date' })
+      .set('Authorization', `Bearer ${buyerToken}`);
+
+    expect(malformedId.status).toBe(400);
+    expect(malformedId.body.message).toBe('Invalid conversation ID.');
+    expect(missing.status).toBe(404);
+    expect(missing.body.message).toBe('Conversation not found.');
+    expect(invalidCursor.status).toBe(400);
+    expect(invalidCursor.body.message).toContain('valid date');
+  });
+
   test('sends and paginates text history while updating unread state', async () => {
     const first = await request(app.callback())
       .post(`/api/conversations/${conversationId}/messages`)
@@ -235,6 +271,37 @@ describe('KiwiShare text chat API', () => {
       .get('/api/conversations')
       .set('Authorization', `Bearer ${buyerToken}`);
     expect(buyerList.body.conversations[0].unreadCount).toBe(1);
+
+    const buyerRead = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${buyerToken}`);
+    expect(buyerRead.status).toBe(200);
+    expect(buyerRead.body.readCount).toBe(1);
+
+    const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
+    expect(messages.filter((message) => message.status === 'read')).toHaveLength(3);
+    expect(messages.at(-1)?.receiverId.toString()).toBe(buyerId);
+  });
+
+  test('omits soft-deleted messages from history', async () => {
+    const deleted = await Message.create({
+      conversationId: new mongoose.Types.ObjectId(conversationId),
+      senderId: new mongoose.Types.ObjectId(buyerId),
+      receiverId: new mongoose.Types.ObjectId(sellerId),
+      type: 'text',
+      text: 'This message was deleted.',
+      status: 'deleted',
+      deletedAt: new Date()
+    });
+
+    const history = await request(app.callback())
+      .get(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${sellerToken}`);
+
+    expect(history.status).toBe(200);
+    expect(history.body.messages).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: deleted.id })])
+    );
   });
 
   test('does not send into a closed conversation', async () => {
