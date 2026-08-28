@@ -16,6 +16,7 @@ class FakeChatRepository implements ChatRepository {
   ChatRepositoryException? createError;
   ChatRepositoryException? messageError;
   ChatRepositoryException? sendError;
+  ChatRepositoryException? deleteError;
   ChatConversationModel? createdConversation;
   Completer<ChatConversationModel>? createCompleter;
   int conversationFetches = 0;
@@ -23,8 +24,10 @@ class FakeChatRepository implements ChatRepository {
   int messageFetches = 0;
   int markReadCalls = 0;
   int sendCalls = 0;
+  int deleteCalls = 0;
   final List<String> sentTexts = [];
   final List<String> createdItemIds = [];
+  final List<String> deletedConversationIds = [];
 
   @override
   Future<List<ChatConversationModel>> fetchConversations({
@@ -70,6 +73,16 @@ class FakeChatRepository implements ChatRepository {
     required String token,
   }) async {
     markReadCalls += 1;
+  }
+
+  @override
+  Future<void> deleteConversation({
+    required String conversationId,
+    required String token,
+  }) async {
+    deleteCalls += 1;
+    deletedConversationIds.add(conversationId);
+    if (deleteError != null) throw deleteError!;
   }
 
   @override

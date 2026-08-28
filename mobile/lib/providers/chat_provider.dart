@@ -23,9 +23,11 @@ class ChatProvider extends ChangeNotifier {
   final Set<String> _loadingConversationIds = {};
   final Set<String> _sendingConversationIds = {};
   final Set<String> _startingItemIds = {};
+  final Set<String> _deletingConversationIds = {};
   final Map<String, String> _messageLoadErrors = {};
   final Map<String, String> _messageSendErrors = {};
   final Map<String, String> _conversationStartErrors = {};
+  final Map<String, String> _conversationDeleteErrors = {};
 
   List<ChatMessageModel> messagesFor(String conversationId) =>
       List.unmodifiable(_messages[conversationId] ?? const []);
@@ -41,6 +43,10 @@ class ChatProvider extends ChangeNotifier {
       _startingItemIds.contains(itemId);
   String? conversationStartErrorFor(String itemId) =>
       _conversationStartErrors[itemId];
+  bool isDeletingConversation(String conversationId) =>
+      _deletingConversationIds.contains(conversationId);
+  String? conversationDeleteErrorFor(String conversationId) =>
+      _conversationDeleteErrors[conversationId];
 
   Future<ChatConversationModel?> startConversation({
     required String itemId,
@@ -58,6 +64,7 @@ class ChatProvider extends ChangeNotifier {
       _messageLoadErrors.clear();
       _messageSendErrors.clear();
       _conversationStartErrors.clear();
+      _conversationDeleteErrors.clear();
     }
 
     _startingItemIds.add(itemId);
@@ -108,6 +115,7 @@ class ChatProvider extends ChangeNotifier {
       _messageLoadErrors.clear();
       _messageSendErrors.clear();
       _conversationStartErrors.clear();
+      _conversationDeleteErrors.clear();
     }
     _isLoadingConversations = true;
     _conversationError = null;
@@ -204,6 +212,55 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> deleteConversation({
+    required ChatConversationModel conversation,
+    required String token,
+  }) async {
+    if (conversation.id.isEmpty ||
+        token.isEmpty ||
+        _sessionToken != token ||
+        _deletingConversationIds.contains(conversation.id)) {
+      return false;
+    }
+
+    final originalIndex = _conversations.indexWhere(
+      (item) => item.id == conversation.id,
+    );
+    if (originalIndex == -1) return false;
+
+    _deletingConversationIds.add(conversation.id);
+    _conversationDeleteErrors.remove(conversation.id);
+    _conversations = _conversations
+        .where((item) => item.id != conversation.id)
+        .toList(growable: false);
+    notifyListeners();
+
+    try {
+      await repository.deleteConversation(
+        conversationId: conversation.id,
+        token: token,
+      );
+      if (_sessionToken == token) _messages.remove(conversation.id);
+      return true;
+    } on ChatRepositoryException catch (error) {
+      if (_sessionToken == token) {
+        _conversationDeleteErrors[conversation.id] = error.message;
+        _restoreConversation(conversation, originalIndex);
+      }
+      return false;
+    } catch (_) {
+      if (_sessionToken == token) {
+        _conversationDeleteErrors[conversation.id] =
+            'Chat could not be removed. Please try again.';
+        _restoreConversation(conversation, originalIndex);
+      }
+      return false;
+    } finally {
+      _deletingConversationIds.remove(conversation.id);
+      notifyListeners();
+    }
+  }
+
   void clearMessageSendError(String conversationId) {
     if (_messageSendErrors.remove(conversationId) != null) notifyListeners();
   }
@@ -212,5 +269,15 @@ class ChatProvider extends ChangeNotifier {
     final index = _conversations.indexWhere((item) => item.id == value.id);
     if (index == -1) return;
     _conversations = [..._conversations]..[index] = value;
+  }
+
+  void _restoreConversation(ChatConversationModel value, int originalIndex) {
+    if (_conversations.any((item) => item.id == value.id)) return;
+    final restored = [..._conversations];
+    final safeIndex = originalIndex < restored.length
+        ? originalIndex
+        : restored.length;
+    restored.insert(safeIndex, value);
+    _conversations = restored;
   }
 }

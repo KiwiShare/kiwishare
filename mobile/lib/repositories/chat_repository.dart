@@ -47,6 +47,11 @@ abstract class ChatRepository {
     required String conversationId,
     required String token,
   });
+
+  Future<void> deleteConversation({
+    required String conversationId,
+    required String token,
+  });
 }
 
 class RestChatRepository implements ChatRepository {
@@ -170,6 +175,18 @@ class RestChatRepository implements ChatRepository {
   }) async {
     final response = await _client.patch(
       Uri.parse('${ApiConfig.baseUrl}/api/conversations/$conversationId/read'),
+      headers: _headers(token),
+    );
+    _responseMap(response);
+  }
+
+  @override
+  Future<void> deleteConversation({
+    required String conversationId,
+    required String token,
+  }) async {
+    final response = await _client.delete(
+      Uri.parse('${ApiConfig.baseUrl}/api/conversations/$conversationId'),
       headers: _headers(token),
     );
     _responseMap(response);
