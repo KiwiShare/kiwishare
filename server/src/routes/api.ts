@@ -7,6 +7,7 @@ import watchlistRouter from './watchlist';
 import categoriesRouter from './categories';
 import adminRouter from './admin';
 import uploadRouter from './upload';
+import chatRouter from './chat';
 
 const router = new Router({ prefix: '/api' });
 
@@ -34,5 +35,8 @@ router.use(adminRouter.allowedMethods());
 
 router.use(uploadRouter.routes());
 router.use(uploadRouter.allowedMethods());
+
+router.use(chatRouter.routes());
+router.use(chatRouter.allowedMethods());
 
 export default router;

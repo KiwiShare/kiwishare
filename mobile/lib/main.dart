@@ -10,6 +10,7 @@ import 'views/search/search_screen.dart';
 import 'views/watchlist/watchlist_screen.dart';
 import 'views/post/post_item_screen.dart';
 import 'views/messages/messages_screen.dart';
+import 'views/messages/chat_conversation_screen.dart';
 import 'views/profile/profile_screen.dart';
 import 'views/auth/login_view.dart';
 import 'views/products/product_detail_screen.dart';
@@ -20,6 +21,7 @@ import 'providers/providers.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 import 'repositories/watchlist_repository.dart';
+import 'repositories/chat_repository.dart';
 import 'services/remote_config_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -82,6 +84,27 @@ final GoRouter _router = GoRouter(
         item: state.extra is ItemModel ? state.extra as ItemModel : null,
       ),
     ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: '/messages/:conversationId',
+      builder: (context, state) {
+        final conversation = state.extra is ChatConversationModel
+            ? state.extra as ChatConversationModel
+            : ChatConversationModel(
+                id: state.pathParameters['conversationId'] ?? '',
+                itemId: '',
+                itemTitle: 'Item conversation',
+                itemImageUrl: '',
+                participantId: '',
+                participantName: 'Kiwi member',
+                direction: ChatDirection.buying,
+                status: 'active',
+                lastMessage: '',
+                unreadCount: 0,
+              );
+        return ChatConversationScreen(conversation: conversation);
+      },
+    ),
   ],
 );
 
@@ -117,6 +140,9 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(
           create: (_) => ListingProvider(itemRepository: RestItemRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ChatProvider(repository: RestChatRepository()),
         ),
       ],
       child: const KiwiShareApp(),
