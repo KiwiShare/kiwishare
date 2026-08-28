@@ -22,8 +22,10 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, List<ChatMessageModel>> _messages = {};
   final Set<String> _loadingConversationIds = {};
   final Set<String> _sendingConversationIds = {};
+  final Set<String> _startingItemIds = {};
   final Map<String, String> _messageLoadErrors = {};
   final Map<String, String> _messageSendErrors = {};
+  final Map<String, String> _conversationStartErrors = {};
 
   List<ChatMessageModel> messagesFor(String conversationId) =>
       List.unmodifiable(_messages[conversationId] ?? const []);
@@ -35,6 +37,66 @@ class ChatProvider extends ChangeNotifier {
       _messageLoadErrors[conversationId];
   String? messageSendErrorFor(String conversationId) =>
       _messageSendErrors[conversationId];
+  bool isStartingConversation(String itemId) =>
+      _startingItemIds.contains(itemId);
+  String? conversationStartErrorFor(String itemId) =>
+      _conversationStartErrors[itemId];
+
+  Future<ChatConversationModel?> startConversation({
+    required String itemId,
+    required String token,
+  }) async {
+    if (itemId.isEmpty || token.isEmpty || _startingItemIds.contains(itemId)) {
+      return null;
+    }
+
+    if (_sessionToken != token) {
+      _sessionToken = token;
+      _conversations = const [];
+      _conversationError = null;
+      _messages.clear();
+      _messageLoadErrors.clear();
+      _messageSendErrors.clear();
+      _conversationStartErrors.clear();
+    }
+
+    _startingItemIds.add(itemId);
+    _conversationStartErrors.remove(itemId);
+    notifyListeners();
+    try {
+      final conversation = await repository.createConversation(
+        itemId: itemId,
+        token: token,
+      );
+      if (_sessionToken != token) return null;
+      final index = _conversations.indexWhere(
+        (existing) => existing.id == conversation.id,
+      );
+      if (index == -1) {
+        _conversations = [conversation, ..._conversations];
+      } else {
+        _replaceConversation(conversation);
+      }
+      return conversation;
+    } on ChatAuthenticationException {
+      if (_sessionToken == token) rethrow;
+      return null;
+    } on ChatRepositoryException catch (error) {
+      if (_sessionToken == token) {
+        _conversationStartErrors[itemId] = error.message;
+      }
+      return null;
+    } catch (_) {
+      if (_sessionToken == token) {
+        _conversationStartErrors[itemId] =
+            'Chat could not be started. Please try again.';
+      }
+      return null;
+    } finally {
+      _startingItemIds.remove(itemId);
+      notifyListeners();
+    }
+  }
 
   Future<void> loadConversations(String token) async {
     if (_isLoadingConversations && _sessionToken == token) return;
@@ -45,6 +107,7 @@ class ChatProvider extends ChangeNotifier {
       _messages.clear();
       _messageLoadErrors.clear();
       _messageSendErrors.clear();
+      _conversationStartErrors.clear();
     }
     _isLoadingConversations = true;
     _conversationError = null;

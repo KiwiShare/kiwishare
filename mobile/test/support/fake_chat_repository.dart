@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:kiwishare/models/chat_conversation_model.dart';
 import 'package:kiwishare/models/chat_message_model.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
@@ -11,13 +13,18 @@ class FakeChatRepository implements ChatRepository {
   List<ChatConversationModel> conversations;
   final Map<String, List<ChatMessageModel>> messages;
   ChatRepositoryException? conversationError;
+  ChatRepositoryException? createError;
   ChatRepositoryException? messageError;
   ChatRepositoryException? sendError;
+  ChatConversationModel? createdConversation;
+  Completer<ChatConversationModel>? createCompleter;
   int conversationFetches = 0;
+  int createCalls = 0;
   int messageFetches = 0;
   int markReadCalls = 0;
   int sendCalls = 0;
   final List<String> sentTexts = [];
+  final List<String> createdItemIds = [];
 
   @override
   Future<List<ChatConversationModel>> fetchConversations({
@@ -33,7 +40,12 @@ class FakeChatRepository implements ChatRepository {
     required String itemId,
     required String token,
   }) async {
-    return conversations.first;
+    createCalls += 1;
+    createdItemIds.add(itemId);
+    if (createError != null) throw createError!;
+    final completer = createCompleter;
+    if (completer != null) return completer.future;
+    return createdConversation ?? conversations.first;
   }
 
   @override
