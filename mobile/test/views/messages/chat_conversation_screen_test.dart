@@ -57,28 +57,29 @@ void main() {
     expect(find.byKey(const Key('chat_message_2')), findsOneWidget);
   });
 
-  testWidgets('sends trimmed text once and clears the composer on success', (
-    tester,
-  ) async {
-    final repository = FakeChatRepository();
-    await tester.pumpWidget(_buildSubject(repository: repository));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'appends to fixed-length history and clears the composer after API success',
+    (tester) async {
+      final repository = FakeChatRepository();
+      await tester.pumpWidget(_buildSubject(repository: repository));
+      await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const Key('chat_message_input')),
-      '  Can I collect this tomorrow?  ',
-    );
-    await tester.tap(find.byKey(const Key('chat_send_button')));
-    await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('chat_message_input')),
+        '  Can I collect this tomorrow?  ',
+      );
+      await tester.tap(find.byKey(const Key('chat_send_button')));
+      await tester.pumpAndSettle();
 
-    expect(repository.sendCalls, 1);
-    expect(repository.sentTexts, ['Can I collect this tomorrow?']);
-    expect(find.text('Can I collect this tomorrow?'), findsOneWidget);
-    final input = tester.widget<TextField>(
-      find.byKey(const Key('chat_message_input')),
-    );
-    expect(input.controller?.text, isEmpty);
-  });
+      expect(repository.sendCalls, 1);
+      expect(repository.sentTexts, ['Can I collect this tomorrow?']);
+      expect(find.text('Can I collect this tomorrow?'), findsOneWidget);
+      final input = tester.widget<TextField>(
+        find.byKey(const Key('chat_message_input')),
+      );
+      expect(input.controller?.text, isEmpty);
+    },
+  );
 
   testWidgets('preserves the draft and explains a recoverable send failure', (
     tester,

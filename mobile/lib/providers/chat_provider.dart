@@ -117,9 +117,9 @@ class ChatProvider extends ChangeNotifier {
         text: normalized,
         token: token,
       );
-      final messages = _messages.putIfAbsent(conversation.id, () => []);
+      final messages = _messages[conversation.id] ?? const [];
       if (!messages.any((existing) => existing.id == message.id)) {
-        messages.add(message);
+        _messages[conversation.id] = [...messages, message];
       }
       _replaceConversation(
         conversation.copyWith(

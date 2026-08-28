@@ -46,7 +46,8 @@ class FakeChatRepository implements ChatRepository {
     messageFetches += 1;
     if (messageError != null) throw messageError!;
     return ChatMessagePage(
-      messages: List.of(messages[conversationId] ?? const []),
+      // Match the REST repository, which returns a fixed-length page list.
+      messages: List.unmodifiable(messages[conversationId] ?? const []),
       hasMore: false,
     );
   }
