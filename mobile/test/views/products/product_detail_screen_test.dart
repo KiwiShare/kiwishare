@@ -116,6 +116,32 @@ void main() {
     expect(find.text('Product unavailable'), findsOneWidget);
   });
 
+  testWidgets('Product detail opens the existing report form', (tester) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final provider = WatchlistProvider(repository: TestWatchlistRepository());
+
+    await tester.pumpWidget(
+      _productDetailApp(item: _detailItem, watchlistProvider: provider),
+    );
+    await tester.pumpAndSettle();
+
+    final reportButton = find.byKey(const Key('detail-report-listing-button'));
+    await tester.ensureVisible(reportButton);
+    await tester.pumpAndSettle();
+
+    expect(reportButton, findsOneWidget);
+    await tester.tap(reportButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report a safety issue'), findsOneWidget);
+    expect(find.text('What happened?'), findsOneWidget);
+    expect(find.text('Details'), findsOneWidget);
+  });
+
   testWidgets('Message seller creates an item conversation and opens it', (
     tester,
   ) async {

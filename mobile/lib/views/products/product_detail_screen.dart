@@ -10,6 +10,7 @@ import '../../providers/watchlist_provider.dart';
 import '../../repositories/chat_repository.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
+import '../profile/report_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ItemModel? item;
@@ -131,6 +132,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ),
       ),
     );
+  }
+
+  void _openReportForm() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ReportScreen()));
   }
 
   @override
@@ -319,6 +326,24 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           label: 'Sustainability',
                           value: 'Pre-loved item',
                         ),
+                      const SizedBox(height: AppSpacing.md),
+                      Center(
+                        child: TextButton.icon(
+                          key: const Key('detail-report-listing-button'),
+                          onPressed: _openReportForm,
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            minimumSize: const Size(48, 48),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                            ),
+                            textStyle: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(fontWeight: FontWeight.w500),
+                          ),
+                          icon: const Icon(Icons.flag_outlined, size: 16),
+                          label: const Text('Report listing'),
+                        ),
+                      ),
                     ],
                   ),
                 ),
