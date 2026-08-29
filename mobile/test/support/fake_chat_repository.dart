@@ -15,6 +15,7 @@ class FakeChatRepository implements ChatRepository {
   ChatRepositoryException? conversationError;
   ChatRepositoryException? createError;
   ChatRepositoryException? messageError;
+  Object? markReadError;
   ChatRepositoryException? sendError;
   ChatRepositoryException? deleteError;
   ChatConversationModel? createdConversation;
@@ -74,6 +75,7 @@ class FakeChatRepository implements ChatRepository {
     required String token,
   }) async {
     markReadCalls += 1;
+    if (markReadError != null) throw markReadError!;
   }
 
   @override

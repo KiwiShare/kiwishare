@@ -47,6 +47,7 @@ void main() {
   testWidgets('loads private history and marks incoming messages read', (
     tester,
   ) async {
+    final conversation = testConversation(unreadCount: 2);
     final repository = FakeChatRepository(
       messages: {
         'conversation-1': [
@@ -55,7 +56,9 @@ void main() {
         ],
       },
     );
-    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpWidget(
+      _buildSubject(repository: repository, conversation: conversation),
+    );
     await tester.pumpAndSettle();
 
     expect(repository.messageFetches, 1);
@@ -68,6 +71,41 @@ void main() {
     expect(find.text('Ergonomic Office Chair'), findsOneWidget);
     expect(find.byKey(const Key('chat_message_1')), findsOneWidget);
     expect(find.byKey(const Key('chat_message_2')), findsOneWidget);
+  });
+
+  testWidgets('shows the empty state for a newly created conversation', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 1);
+    expect(repository.markReadCalls, 0);
+    expect(find.byKey(const Key('conversation_empty_state')), findsOneWidget);
+    expect(find.byKey(const Key('conversation_error_state')), findsNothing);
+  });
+
+  testWidgets('keeps the retry state for a genuine history fetch failure', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository()
+      ..messageError = const ChatRepositoryException(
+        'Messages could not be loaded. Please try again.',
+      );
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('conversation_error_state')), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+
+    repository.messageError = null;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 2);
+    expect(find.byKey(const Key('conversation_empty_state')), findsOneWidget);
+    expect(find.byKey(const Key('conversation_error_state')), findsNothing);
   });
 
   testWidgets(
