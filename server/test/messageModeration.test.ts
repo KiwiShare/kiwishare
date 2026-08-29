@@ -30,6 +30,12 @@ describe('chat message moderation', () => {
     expect(moderateChatText('ＦＵＣＫ').isAllowed).toBe(false);
   });
 
+  test('rejects common inflections and compounds of built-in terms', () => {
+    for (const text of ['fucking', 'motherfucker', 'bullshit', 'shithead']) {
+      expect(moderateChatText(text).isAllowed).toBe(false);
+    }
+  });
+
   test('supports team-configured terms without exposing the matched term', () => {
     process.env.CHAT_BLOCKED_TERMS = 'kiwi-test-term';
 
@@ -41,5 +47,6 @@ describe('chat message moderation', () => {
     process.env.CHAT_BLOCKED_TERMS = 'ass';
 
     expect(moderateChatText('This is a classic desk.').isAllowed).toBe(true);
+    expect(moderateChatText('Scunthorpe collection').isAllowed).toBe(true);
   });
 });
