@@ -6,6 +6,10 @@ import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Item from '../models/Item';
 import { R2_CONFIG } from '../config/r2';
+import {
+  MESSAGE_CONTENT_NOT_ALLOWED,
+  moderateChatText
+} from '../services/messageModeration';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -342,21 +346,41 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     return;
   }
 
-  const normalizedText = typeof body.text === 'string' ? body.text.trim() : '';
-  const imageUrl = validR2ImageUrl(body.imageUrl);
-  if (
-    (messageType === 'text' &&
-      (normalizedText.length < 1 || normalizedText.length > MAX_MESSAGE_LENGTH)) ||
-    (messageType === 'image' && imageUrl == null)
-  ) {
-    ctx.status = 400;
-    ctx.body = {
-      status: 'error',
-      message: messageType === 'text'
-        ? `Message text must be between 1 and ${MAX_MESSAGE_LENGTH} characters.`
-        : 'A valid uploaded image URL is required.'
-    };
-    return;
+  let normalizedText = '';
+  let imageUrl: string | null = null;
+  if (messageType === 'text') {
+    const moderation = moderateChatText(body.text);
+    normalizedText = moderation.text;
+    if (
+      normalizedText.length < 1 ||
+      normalizedText.length > MAX_MESSAGE_LENGTH
+    ) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: `Message text must be between 1 and ${MAX_MESSAGE_LENGTH} characters.`
+      };
+      return;
+    }
+    if (!moderation.isAllowed) {
+      ctx.status = 422;
+      ctx.body = {
+        status: 'error',
+        code: 'MESSAGE_CONTENT_NOT_ALLOWED',
+        message: MESSAGE_CONTENT_NOT_ALLOWED
+      };
+      return;
+    }
+  } else {
+    imageUrl = validR2ImageUrl(body.imageUrl);
+    if (imageUrl == null) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A valid uploaded image URL is required.'
+      };
+      return;
+    }
   }
 
   const sendingAsBuyer = conversation.buyerId.equals(userId);

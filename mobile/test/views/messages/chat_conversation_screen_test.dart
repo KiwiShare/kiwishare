@@ -221,12 +221,12 @@ void main() {
     );
   });
 
-  testWidgets('preserves the draft and explains a recoverable send failure', (
+  testWidgets('preserves the draft and explains a moderation rejection', (
     tester,
   ) async {
     final repository = FakeChatRepository()
       ..sendError = const ChatRepositoryException(
-        'Message service unavailable. Please try again.',
+        'Your message contains language that is not allowed. Please edit it and try again.',
       );
     await tester.pumpWidget(_buildSubject(repository: repository));
     await tester.pumpAndSettle();
@@ -240,7 +240,9 @@ void main() {
 
     expect(find.byKey(const Key('conversation_inline_error')), findsOneWidget);
     expect(
-      find.text('Message service unavailable. Please try again.'),
+      find.text(
+        'Your message contains language that is not allowed. Please edit it and try again.',
+      ),
       findsOneWidget,
     );
     final input = tester.widget<TextField>(
