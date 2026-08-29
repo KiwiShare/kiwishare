@@ -61,8 +61,39 @@ Verified on 29 August 2026:
   runtime notification permission included.
 
 These results verify application behaviour and native integration compilation.
-They do not claim successful delivery through the shared Firebase project;
-that requires the manual two-installation check below.
+
+## Android FCM delivery result
+
+Verified on 29 August 2026 with the PR83 seller signed in on an Android 16
+(API 36) emulator and the PR83 buyer signed in through the local web client.
+Both clients used the local Koa server and the shared `kiwishare_test` MongoDB
+database. Firebase Admin credentials were loaded from a private file outside
+the repository.
+
+- Device registration returned HTTP 200 after the receiver signed in.
+- A message sent while the Android app was backgrounded produced a system
+  notification. Its copy identified the sender and item without including the
+  message body.
+- Tapping the background notification opened the correct PR83 conversation and
+  loaded the persisted message.
+- A message sent while the Android app was foregrounded produced the in-app
+  notification with its Open action.
+- A message sent after the Android app was removed from recent tasks produced a
+  system notification. Tapping it cold-started KiwiShare, opened the correct
+  conversation, and loaded the persisted message.
+- During an earlier run where Firebase Admin could not initialize, chat message
+  creation still returned HTTP 201 and the receiver could load the messages
+  after refreshing. This confirms that push failure does not roll back chat.
+- Logout returned HTTP 200 from `DELETE /api/notifications/devices`. The
+  receiver then had zero device registrations in `kiwishare_test`, and a later
+  message produced no notification on that installation.
+
+Screenshots captured during the session cover background delivery, correct
+conversation navigation, foreground delivery, terminated-state delivery and
+the post-logout absence of notifications. iOS delivery remains pending because
+the current development host cannot run Xcode or an iOS device; it must be
+verified by the team member with iPhone access before the pull request is
+merged.
 
 ## Manual device verification
 
@@ -85,6 +116,7 @@ on distinct devices or emulators:
 7. Log out on the receiver device and confirm that installation is no longer
    registered for the previous account.
 
-Attach Android and iOS screenshots or a short recording to the pull request.
-Record any platform that could not be exercised and the responsible follow-up
-owner; automated tests do not replace real-device FCM verification.
+Attach the captured Android screenshots and the later iOS screenshots or a
+short recording to the pull request. Record any platform that could not be
+exercised and the responsible follow-up owner; automated tests do not replace
+real-device FCM verification.
