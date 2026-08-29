@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/chat_conversation_model.dart';
 import '../../models/chat_message_model.dart';
+import '../../config/api_config.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../services/listing_image_picker.dart';
@@ -39,6 +40,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   void initState() {
     super.initState();
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhoto());
   }
 
   ChatProvider get _chatProvider =>
@@ -96,8 +98,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Future<void> _addPhoto() async {
-    final token = _currentAuthToken;
-    if (token == null || token.isEmpty) return;
     final source = await showModalBottomSheet<_ChatPhotoSource>(
       context: context,
       showDragHandle: true,
@@ -115,18 +115,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         file = files.isEmpty ? null : files.first;
       }
       if (file == null || !mounted) return;
-
-      final contentType = _photoContentType(file);
-      final sent = await _chatProvider.sendPhoto(
-        conversation: widget.conversation,
-        bytes: await file.readAsBytes(),
-        fileName: file.name.isEmpty
-            ? 'chat_photo_${DateTime.now().millisecondsSinceEpoch}.${_photoExtension(contentType)}'
-            : file.name,
-        contentType: contentType,
-        token: token,
-      );
-      if (sent && mounted) _scrollToEnd();
+      await _sendPhoto(file);
     } on PlatformException {
       _showPhotoPickerError(
         'Camera or photo access is unavailable. Check the app permissions and try again.',
@@ -136,6 +125,38 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         'That photo could not be opened. Please try again.',
       );
     }
+  }
+
+  Future<void> _recoverLostPhoto() async {
+    try {
+      final files = await _imagePicker.recoverLostPhotos();
+      if (files.isEmpty || !mounted) return;
+      await _sendPhoto(files.first);
+    } on PlatformException {
+      _showPhotoPickerError(
+        'The selected photo could not be restored. Please choose it again.',
+      );
+    } catch (_) {
+      _showPhotoPickerError(
+        'The selected photo could not be restored. Please choose it again.',
+      );
+    }
+  }
+
+  Future<void> _sendPhoto(XFile file) async {
+    final token = _currentAuthToken;
+    if (token == null || token.isEmpty || !mounted) return;
+    final contentType = _photoContentType(file);
+    final sent = await _chatProvider.sendPhoto(
+      conversation: widget.conversation,
+      bytes: await file.readAsBytes(),
+      fileName: file.name.isEmpty
+          ? 'chat_photo_${DateTime.now().millisecondsSinceEpoch}.${_photoExtension(contentType)}'
+          : file.name,
+      contentType: contentType,
+      token: token,
+    );
+    if (sent && mounted) _scrollToEnd();
   }
 
   void _showPhotoPickerError(String message) {
@@ -294,7 +315,7 @@ class _MessageBubble extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.small),
                   child: Image.network(
-                    message.imageUrl!,
+                    _resolvedChatImageUrl(message.imageUrl!),
                     key: Key('chat_message_image_${message.id}'),
                     width: 220,
                     height: 180,
@@ -501,6 +522,13 @@ String _photoExtension(String contentType) => switch (contentType) {
   'image/heic' => 'heic',
   _ => 'jpg',
 };
+
+String _resolvedChatImageUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.hasScheme) return value;
+  final path = value.startsWith('/') ? value : '/$value';
+  return '${ApiConfig.baseUrl}$path';
+}
 
 class _InlineChatError extends StatelessWidget {
   const _InlineChatError({required this.message});

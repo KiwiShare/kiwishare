@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
+import 'package:kiwishare/config/api_config.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/services/chat_photo_upload_service.dart';
@@ -122,6 +123,66 @@ void main() {
     expect(find.byKey(const Key('chat_message_image_sent-1')), findsOneWidget);
   });
 
+  testWidgets('recovers and sends a photo after Android recreates the screen', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final uploader = FakeChatPhotoUploader();
+    final picker = _FakeChatImagePicker(
+      lostPhotos: [
+        XFile.fromData(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'recovered.jpg',
+          mimeType: 'image/jpeg',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        photoUploader: uploader,
+        imagePicker: picker,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(picker.recoveryCalls, 1);
+    expect(uploader.uploadCalls, 1);
+    expect(uploader.uploadedFileName, endsWith('.jpg'));
+    expect(uploader.uploadedBytes, Uint8List.fromList([4, 5, 6]));
+    expect(repository.sentImageUrls, [uploader.url]);
+  });
+
+  testWidgets('resolves relative image proxy URLs against the API origin', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '7',
+            type: 'image',
+            text: '',
+            imageUrl: '/api/images/test/pr-97/chat/photo.jpg',
+            isMine: false,
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    final image = tester.widget<Image>(
+      find.byKey(const Key('chat_message_image_7')),
+    );
+    expect(
+      (image.image as NetworkImage).url,
+      '${ApiConfig.baseUrl}/api/images/test/pr-97/chat/photo.jpg',
+    );
+  });
+
   testWidgets('preserves the draft and explains a recoverable send failure', (
     tester,
   ) async {
@@ -218,7 +279,11 @@ void main() {
 }
 
 class _FakeChatImagePicker implements ListingImagePicker {
+  _FakeChatImagePicker({this.lostPhotos = const []});
+
+  final List<XFile> lostPhotos;
   int galleryCalls = 0;
+  int recoveryCalls = 0;
 
   @override
   Future<List<XFile>> chooseFromGallery({required int limit}) async {
@@ -233,7 +298,10 @@ class _FakeChatImagePicker implements ListingImagePicker {
   }
 
   @override
-  Future<List<XFile>> recoverLostPhotos() async => const [];
+  Future<List<XFile>> recoverLostPhotos() async {
+    recoveryCalls += 1;
+    return lostPhotos;
+  }
 
   @override
   Future<XFile?> takePhoto() async => null;

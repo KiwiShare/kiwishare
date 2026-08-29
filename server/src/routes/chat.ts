@@ -80,8 +80,24 @@ function validR2ImageUrl(value: unknown): string | null {
   if (normalized.length < 1 || normalized.length > 2048) return null;
 
   try {
+    const configuredBase = R2_CONFIG.publicUrlBase.trim();
+    if (!configuredBase.startsWith('http')) {
+      const relativeUrl = new URL(normalized, 'http://kiwishare.local');
+      if (
+        !normalized.startsWith('/api/images/') ||
+        normalized.startsWith('//') ||
+        relativeUrl.origin !== 'http://kiwishare.local' ||
+        !relativeUrl.pathname.startsWith('/api/images/') ||
+        relativeUrl.search.length > 0 ||
+        relativeUrl.hash.length > 0
+      ) {
+        return null;
+      }
+      return relativeUrl.pathname;
+    }
+
     const imageUrl = new URL(normalized);
-    const publicBase = new URL(R2_CONFIG.publicUrlBase);
+    const publicBase = new URL(configuredBase);
     const basePath = publicBase.pathname.replace(/\/$/, '');
     const hasExpectedPath =
       basePath.length === 0 || imageUrl.pathname.startsWith(`${basePath}/`);

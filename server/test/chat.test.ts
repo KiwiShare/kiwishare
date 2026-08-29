@@ -330,6 +330,46 @@ describe('KiwiShare text chat API', () => {
     );
   });
 
+  test('accepts the relative image proxy when R2 uses local serving', async () => {
+    const originalPublicUrl = process.env.R2_PUBLIC_URL;
+    process.env.R2_PUBLIC_URL = 'relative';
+    const imageUrl = '/api/images/test/pr-97/chat/recovered-photo.jpg';
+
+    try {
+      const sent = await request(app.callback())
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({ type: 'image', imageUrl });
+
+      expect(sent.status).toBe(201);
+      expect(sent.body.message.imageUrl).toBe(imageUrl);
+      expect((await Message.findById(sent.body.message.id))?.imageUrl).toBe(
+        imageUrl
+      );
+
+      const external = await request(app.callback())
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({
+          type: 'image',
+          imageUrl: 'https://example.com/api/images/external.jpg'
+        });
+      expect(external.status).toBe(400);
+
+      const traversal = await request(app.callback())
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({ type: 'image', imageUrl: '/api/images/../auth/login' });
+      expect(traversal.status).toBe(400);
+    } finally {
+      if (originalPublicUrl == null) {
+        delete process.env.R2_PUBLIC_URL;
+      } else {
+        process.env.R2_PUBLIC_URL = originalPublicUrl;
+      }
+    }
+  });
+
   test('omits soft-deleted messages from history', async () => {
     const deleted = await Message.create({
       conversationId: new mongoose.Types.ObjectId(conversationId),

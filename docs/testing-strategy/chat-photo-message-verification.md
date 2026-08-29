@@ -36,7 +36,10 @@ conversation. It does not include voice messages or push notifications.
 - avoid creating a message when the R2 upload fails;
 - map image message JSON into the chat domain model;
 - open the gallery option from the composer and render the resulting image
-  bubble; and
+  bubble;
+- recover and send a selected image after Android recreates the activity;
+- resolve locally served `/api/images/...` messages against the active API
+  origin; and
 - preserve the existing text, closed-conversation, error, and accessibility
   behaviour.
 
