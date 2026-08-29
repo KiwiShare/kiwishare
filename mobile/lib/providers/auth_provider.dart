@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../repositories/user_repository.dart';
+import '../services/push_notification_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final UserRepository userRepository;
 
-  AuthProvider({required this.userRepository}) {
+  AuthProvider({required this.userRepository, this.pushNotifications}) {
     _loadSession();
   }
+
+  final PushNotificationSession? pushNotifications;
 
   bool _isLoggedIn = false;
   bool get isLoggedIn => _isLoggedIn;
@@ -37,6 +41,7 @@ class AuthProvider extends ChangeNotifier {
         );
         _isLoggedIn = true;
         notifyListeners();
+        unawaited(pushNotifications?.activate(_jwtToken!) ?? Future.value());
       }
     } catch (e) {
       debugPrint('Error loading auth session: $e');
@@ -61,6 +66,7 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
+      unawaited(pushNotifications?.activate(token) ?? Future.value());
     } catch (e) {
       _currentUser = null;
       _isLoggedIn = false;
@@ -94,6 +100,7 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
+      unawaited(pushNotifications?.activate(token) ?? Future.value());
     } catch (e) {
       _currentUser = null;
       _isLoggedIn = false;
@@ -138,6 +145,7 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
+      unawaited(pushNotifications?.activate(token) ?? Future.value());
     } catch (e) {
       _currentUser = null;
       _isLoggedIn = false;
@@ -178,6 +186,7 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
+      unawaited(pushNotifications?.activate(token) ?? Future.value());
     } catch (e) {
       debugPrint('Google Login Provider Error: $e');
       _currentUser = null;
@@ -190,6 +199,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    final token = _jwtToken;
+    if (token != null) await pushNotifications?.deactivate(token);
     await clearSession();
 
     try {

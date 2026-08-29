@@ -8,6 +8,7 @@ import categoriesRouter from './categories';
 import adminRouter from './admin';
 import uploadRouter from './upload';
 import chatRouter from './chat';
+import notificationsRouter from './notifications';
 
 const router = new Router({ prefix: '/api' });
 
@@ -38,5 +39,8 @@ router.use(uploadRouter.allowedMethods());
 
 router.use(chatRouter.routes());
 router.use(chatRouter.allowedMethods());
+
+router.use(notificationsRouter.routes());
+router.use(notificationsRouter.allowedMethods());
 
 export default router;

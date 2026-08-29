@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -23,6 +24,7 @@ import 'repositories/item_repository.dart';
 import 'repositories/watchlist_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'services/remote_config_service.dart';
+import 'services/push_notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
@@ -34,6 +36,8 @@ final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
 final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'shell',
 );
+final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 // This router must live longer than a single widget build. ThemeProvider
 // notifies MaterialApp when the user selects Light/Dark/System; recreating a
@@ -110,11 +114,13 @@ final GoRouter _router = GoRouter(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  var firebaseInitialized = false;
   if (DefaultFirebaseOptions.isConfigured) {
     try {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      firebaseInitialized = true;
       await RemoteConfigService.instance.initialize();
     } catch (e) {
       debugPrint('Firebase/RemoteConfig initialization failed: $e');
@@ -124,11 +130,29 @@ void main() async {
       'ℹ️ [Firebase] Placeholder credentials detected. Skipping Firebase init and using in-app local defaults.',
     );
   }
+
+  PushNotificationSession? pushNotifications;
+  if (firebaseInitialized &&
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
+    pushNotifications = PushNotificationService(
+      messaging: FirebasePushMessagingClient(),
+      repository: RestPushDeviceRepository(),
+      platform: defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+      onForegroundMessage: _showForegroundChatNotification,
+      onNotificationOpened: _openChatNotification,
+    );
+  }
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => AuthProvider(userRepository: RestUserRepository()),
+          create: (_) => AuthProvider(
+            userRepository: RestUserRepository(),
+            pushNotifications: pushNotifications,
+          ),
         ),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(
@@ -150,6 +174,47 @@ void main() async {
   );
 }
 
+void _showForegroundChatNotification(
+  ChatPushMessage message,
+  PushEnvelope envelope,
+) {
+  final messenger = _scaffoldMessengerKey.currentState;
+  if (messenger == null) return;
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          envelope.body ?? '${message.participantName} sent you a message.',
+        ),
+        action: SnackBarAction(
+          label: 'Open',
+          onPressed: () => _openChatNotification(message),
+        ),
+      ),
+    );
+}
+
+void _openChatNotification(ChatPushMessage message) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _router.push(
+      '/messages/${message.conversationId}',
+      extra: ChatConversationModel(
+        id: message.conversationId,
+        itemId: message.itemId,
+        itemTitle: message.itemTitle,
+        itemImageUrl: '',
+        participantId: message.participantId,
+        participantName: message.participantName,
+        direction: ChatDirection.buying,
+        status: 'active',
+        lastMessage: '',
+        unreadCount: 1,
+      ),
+    );
+  });
+}
+
 class KiwiShareApp extends StatelessWidget {
   const KiwiShareApp({super.key});
 
@@ -160,6 +225,7 @@ class KiwiShareApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'KiwiShare - Buy. Sell. Share. Sustain.',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: _scaffoldMessengerKey,
       themeMode: themeMode,
       theme: buildKiwiShareTheme(),
       darkTheme: buildKiwiShareDarkTheme(),

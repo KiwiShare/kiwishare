@@ -10,6 +10,7 @@ import {
   MESSAGE_CONTENT_NOT_ALLOWED,
   moderateChatText
 } from '../services/messageModeration';
+import { notifyChatReceiver } from '../services/pushNotification';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -406,6 +407,14 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       ? { sellerUnreadCount: 1 }
       : { buyerUnreadCount: 1 },
     $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+  });
+
+  void notifyChatReceiver({
+    receiverId,
+    conversationId: conversation.id,
+    itemId: conversation.itemId.toString(),
+    senderId: userId.toString(),
+    messageType
   });
 
   ctx.status = 201;
