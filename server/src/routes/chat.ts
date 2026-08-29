@@ -5,6 +5,10 @@ import { authenticateToken } from '../middleware/auth';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Item from '../models/Item';
+import {
+  MESSAGE_CONTENT_NOT_ALLOWED,
+  moderateChatText
+} from '../services/messageModeration';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -286,12 +290,23 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
   }
 
   const { text } = ctx.request.body as { text?: unknown };
-  const normalizedText = typeof text === 'string' ? text.trim() : '';
+  const moderation = moderateChatText(text);
+  const normalizedText = moderation.text;
   if (normalizedText.length < 1 || normalizedText.length > MAX_MESSAGE_LENGTH) {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
       message: `Message text must be between 1 and ${MAX_MESSAGE_LENGTH} characters.`
+    };
+    return;
+  }
+
+  if (!moderation.isAllowed) {
+    ctx.status = 422;
+    ctx.body = {
+      status: 'error',
+      code: 'MESSAGE_CONTENT_NOT_ALLOWED',
+      message: MESSAGE_CONTENT_NOT_ALLOWED
     };
     return;
   }

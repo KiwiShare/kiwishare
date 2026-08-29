@@ -265,4 +265,35 @@ void main() {
       ),
     );
   });
+
+  test('preserves the server moderation message for rejected content', () async {
+    final repository = RestChatRepository(
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'status': 'error',
+            'code': 'MESSAGE_CONTENT_NOT_ALLOWED',
+            'message':
+                'Your message contains language that is not allowed. Please edit it and try again.',
+          }),
+          422,
+        ),
+      ),
+    );
+
+    expect(
+      () => repository.sendTextMessage(
+        conversationId: 'conversation-1',
+        text: 'Rejected draft',
+        token: 'valid-token',
+      ),
+      throwsA(
+        isA<ChatRepositoryException>().having(
+          (error) => error.message,
+          'message',
+          'Your message contains language that is not allowed. Please edit it and try again.',
+        ),
+      ),
+    );
+  });
 }

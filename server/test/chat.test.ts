@@ -171,6 +171,54 @@ describe('KiwiShare text chat API', () => {
     expect(await Message.countDocuments()).toBe(0);
   });
 
+  test('sanitises accepted text before storing and returning it', async () => {
+    const conversationBefore = await Conversation.findById(conversationId);
+    const response = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: '  Ｈｅｌｌｏ\u200b\t  seller\r\n  Is this available?  ' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.message.text).toBe('Hello seller\nIs this available?');
+    expect(
+      await Message.findOne({ conversationId, text: 'Hello seller\nIs this available?' })
+    ).not.toBeNull();
+
+    await Message.findByIdAndDelete(response.body.message.id);
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: {
+        lastMessageText: conversationBefore?.lastMessageText ?? '',
+        lastMessageAt: conversationBefore?.lastMessageAt ?? null,
+        lastMessageSenderId: conversationBefore?.lastMessageSenderId ?? null,
+        buyerUnreadCount: conversationBefore?.buyerUnreadCount ?? 0,
+        sellerUnreadCount: conversationBefore?.sellerUnreadCount ?? 0
+      }
+    });
+  });
+
+  test('rejects sensitive content without storing it or changing the preview', async () => {
+    const conversationBefore = await Conversation.findById(conversationId);
+    const messageCountBefore = await Message.countDocuments({ conversationId });
+
+    const response = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'This contains F.U_C K obfuscation.' });
+
+    const conversationAfter = await Conversation.findById(conversationId);
+    expect(response.status).toBe(422);
+    expect(response.body).toEqual({
+      status: 'error',
+      code: 'MESSAGE_CONTENT_NOT_ALLOWED',
+      message:
+        'Your message contains language that is not allowed. Please edit it and try again.'
+    });
+    expect(JSON.stringify(response.body)).not.toContain('F.U_C K');
+    expect(await Message.countDocuments({ conversationId })).toBe(messageCountBefore);
+    expect(conversationAfter?.lastMessageText).toBe(conversationBefore?.lastMessageText);
+    expect(conversationAfter?.lastMessageAt).toEqual(conversationBefore?.lastMessageAt);
+  });
+
   test('returns safe errors for malformed, missing, and invalid history cursors', async () => {
     const malformedId = await request(app.callback())
       .get('/api/conversations/not-an-object-id/messages')
