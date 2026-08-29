@@ -185,19 +185,19 @@ class KiwiShareShell extends StatelessWidget {
     return 0;
   }
 
-  void _showLoginBottomSheet(BuildContext context) {
+  void _showLoginBottomSheet(BuildContext shellContext) {
     showModalBottomSheet(
-      context: context,
+      context: shellContext,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
+      builder: (sheetContext) {
         return Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
           ),
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
+              color: Theme.of(sheetContext).colorScheme.surface,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(28),
               ),
@@ -207,9 +207,10 @@ class KiwiShareShell extends StatelessWidget {
                 padding: const EdgeInsets.all(8.0),
                 child: LoginView(
                   onLoginSuccess: () {
-                    Navigator.pop(context);
-                    // Route to post screen after successful authentication
-                    context.go('/post');
+                    Navigator.of(sheetContext).pop();
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (shellContext.mounted) shellContext.go('/post');
+                    });
                   },
                 ),
               ),

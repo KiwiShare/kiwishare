@@ -163,6 +163,45 @@ void main() {
     },
   );
 
+  test('sends an R2 image URL and parses the image message', () async {
+    late http.Request captured;
+    const imageUrl = 'https://assets.kiwishare.online/images/chat/chair.png';
+    final repository = RestChatRepository(
+      client: MockClient((request) async {
+        captured = request;
+        return http.Response(
+          jsonEncode({
+            'status': 'created',
+            'message': {
+              'id': 'message-image-1',
+              'conversationId': 'conversation-1',
+              'senderId': 'buyer-1',
+              'receiverId': 'seller-1',
+              'type': 'image',
+              'text': '',
+              'imageUrl': imageUrl,
+              'status': 'sent',
+              'isMine': true,
+              'createdAt': '2026-08-27T08:31:00.000Z',
+            },
+          }),
+          201,
+        );
+      }),
+    );
+
+    final message = await repository.sendImageMessage(
+      conversationId: 'conversation-1',
+      imageUrl: imageUrl,
+      token: 'valid-token',
+    );
+
+    expect(captured.method, 'POST');
+    expect(jsonDecode(captured.body), {'type': 'image', 'imageUrl': imageUrl});
+    expect(message.isImage, isTrue);
+    expect(message.imageUrl, imageUrl);
+  });
+
   test('forwards the history cursor and marks a conversation read', () async {
     final requests = <http.Request>[];
     final repository = RestChatRepository(

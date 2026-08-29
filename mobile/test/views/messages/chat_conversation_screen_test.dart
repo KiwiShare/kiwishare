@@ -1,10 +1,17 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
+import 'package:kiwishare/config/api_config.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
+import 'package:kiwishare/services/chat_photo_upload_service.dart';
+import 'package:kiwishare/services/listing_image_picker.dart';
 import 'package:kiwishare/views/messages/chat_conversation_screen.dart';
 
+import '../../support/fake_chat_photo_uploader.dart';
 import '../../support/fake_chat_repository.dart';
 
 Widget _buildSubject({
@@ -12,6 +19,8 @@ Widget _buildSubject({
   ChatConversationModel? conversation,
   String? authToken = 'valid-token',
   TextScaler textScaler = TextScaler.noScaling,
+  ChatPhotoUploader? photoUploader,
+  ListingImagePicker? imagePicker,
 }) {
   final value = conversation ?? testConversation();
   return MaterialApp(
@@ -23,8 +32,12 @@ Widget _buildSubject({
       data: MediaQueryData(textScaler: textScaler),
       child: ChatConversationScreen(
         conversation: value,
-        chatProvider: ChatProvider(repository: repository),
+        chatProvider: ChatProvider(
+          repository: repository,
+          photoUploader: photoUploader,
+        ),
         authToken: authToken,
+        imagePicker: imagePicker,
       ),
     ),
   );
@@ -34,6 +47,7 @@ void main() {
   testWidgets('loads private history and marks incoming messages read', (
     tester,
   ) async {
+    final conversation = testConversation(unreadCount: 2);
     final repository = FakeChatRepository(
       messages: {
         'conversation-1': [
@@ -42,7 +56,9 @@ void main() {
         ],
       },
     );
-    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpWidget(
+      _buildSubject(repository: repository, conversation: conversation),
+    );
     await tester.pumpAndSettle();
 
     expect(repository.messageFetches, 1);
@@ -55,6 +71,41 @@ void main() {
     expect(find.text('Ergonomic Office Chair'), findsOneWidget);
     expect(find.byKey(const Key('chat_message_1')), findsOneWidget);
     expect(find.byKey(const Key('chat_message_2')), findsOneWidget);
+  });
+
+  testWidgets('shows the empty state for a newly created conversation', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 1);
+    expect(repository.markReadCalls, 0);
+    expect(find.byKey(const Key('conversation_empty_state')), findsOneWidget);
+    expect(find.byKey(const Key('conversation_error_state')), findsNothing);
+  });
+
+  testWidgets('keeps the retry state for a genuine history fetch failure', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository()
+      ..messageError = const ChatRepositoryException(
+        'Messages could not be loaded. Please try again.',
+      );
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('conversation_error_state')), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+
+    repository.messageError = null;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 2);
+    expect(find.byKey(const Key('conversation_empty_state')), findsOneWidget);
+    expect(find.byKey(const Key('conversation_error_state')), findsNothing);
   });
 
   testWidgets(
@@ -80,6 +131,95 @@ void main() {
       expect(input.controller?.text, isEmpty);
     },
   );
+
+  testWidgets('chooses, uploads, sends, and renders a gallery photo', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final uploader = FakeChatPhotoUploader();
+    final picker = _FakeChatImagePicker();
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        photoUploader: uploader,
+        imagePicker: picker,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_add_photo_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Send a photo'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('chat_choose_photo_option')));
+    await tester.pumpAndSettle();
+
+    expect(picker.galleryCalls, 1);
+    expect(uploader.uploadCalls, 1);
+    expect(uploader.uploadedFileName, endsWith('.png'));
+    expect(uploader.uploadedContentType, 'image/png');
+    expect(repository.sentImageUrls, [uploader.url]);
+    expect(find.byKey(const Key('chat_message_image_sent-1')), findsOneWidget);
+  });
+
+  testWidgets('recovers and sends a photo after Android recreates the screen', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final uploader = FakeChatPhotoUploader();
+    final picker = _FakeChatImagePicker(
+      lostPhotos: [
+        XFile.fromData(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'recovered.jpg',
+          mimeType: 'image/jpeg',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        photoUploader: uploader,
+        imagePicker: picker,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(picker.recoveryCalls, 1);
+    expect(uploader.uploadCalls, 1);
+    expect(uploader.uploadedFileName, endsWith('.jpg'));
+    expect(uploader.uploadedBytes, Uint8List.fromList([4, 5, 6]));
+    expect(repository.sentImageUrls, [uploader.url]);
+  });
+
+  testWidgets('resolves relative image proxy URLs against the API origin', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '7',
+            type: 'image',
+            text: '',
+            imageUrl: '/api/images/test/pr-97/chat/photo.jpg',
+            isMine: false,
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    final image = tester.widget<Image>(
+      find.byKey(const Key('chat_message_image_7')),
+    );
+    expect(
+      (image.image as NetworkImage).url,
+      '${ApiConfig.baseUrl}/api/images/test/pr-97/chat/photo.jpg',
+    );
+  });
 
   testWidgets('preserves the draft and explains a moderation rejection', (
     tester,
@@ -176,4 +316,33 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('conversation_message_list')), findsOneWidget);
   });
+}
+
+class _FakeChatImagePicker implements ListingImagePicker {
+  _FakeChatImagePicker({this.lostPhotos = const []});
+
+  final List<XFile> lostPhotos;
+  int galleryCalls = 0;
+  int recoveryCalls = 0;
+
+  @override
+  Future<List<XFile>> chooseFromGallery({required int limit}) async {
+    galleryCalls += 1;
+    return [
+      XFile.fromData(
+        Uint8List.fromList([1, 2, 3]),
+        name: 'chair.png',
+        mimeType: 'image/png',
+      ),
+    ];
+  }
+
+  @override
+  Future<List<XFile>> recoverLostPhotos() async {
+    recoveryCalls += 1;
+    return lostPhotos;
+  }
+
+  @override
+  Future<XFile?> takePhoto() async => null;
 }

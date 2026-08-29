@@ -15,6 +15,7 @@ class FakeChatRepository implements ChatRepository {
   ChatRepositoryException? conversationError;
   ChatRepositoryException? createError;
   ChatRepositoryException? messageError;
+  Object? markReadError;
   ChatRepositoryException? sendError;
   ChatRepositoryException? deleteError;
   ChatConversationModel? createdConversation;
@@ -26,6 +27,7 @@ class FakeChatRepository implements ChatRepository {
   int sendCalls = 0;
   int deleteCalls = 0;
   final List<String> sentTexts = [];
+  final List<String> sentImageUrls = [];
   final List<String> createdItemIds = [];
   final List<String> deletedConversationIds = [];
 
@@ -73,6 +75,7 @@ class FakeChatRepository implements ChatRepository {
     required String token,
   }) async {
     markReadCalls += 1;
+    if (markReadError != null) throw markReadError!;
   }
 
   @override
@@ -100,6 +103,31 @@ class FakeChatRepository implements ChatRepository {
       senderId: 'current-user',
       receiverId: 'other-user',
       text: text,
+      status: 'sent',
+      isMine: true,
+      createdAt: DateTime.utc(2026, 8, 27, 8, sendCalls),
+    );
+    messages.putIfAbsent(conversationId, () => []).add(message);
+    return message;
+  }
+
+  @override
+  Future<ChatMessageModel> sendImageMessage({
+    required String conversationId,
+    required String imageUrl,
+    required String token,
+  }) async {
+    sendCalls += 1;
+    sentImageUrls.add(imageUrl);
+    if (sendError != null) throw sendError!;
+    final message = ChatMessageModel(
+      id: 'sent-$sendCalls',
+      conversationId: conversationId,
+      senderId: 'current-user',
+      receiverId: 'other-user',
+      type: 'image',
+      text: '',
+      imageUrl: imageUrl,
       status: 'sent',
       isMine: true,
       createdAt: DateTime.utc(2026, 8, 27, 8, sendCalls),
@@ -137,13 +165,17 @@ ChatMessageModel testMessage({
   required String id,
   required String text,
   required bool isMine,
+  String type = 'text',
+  String? imageUrl,
 }) {
   return ChatMessageModel(
     id: id,
     conversationId: 'conversation-1',
     senderId: isMine ? 'current-user' : 'other-user',
     receiverId: isMine ? 'other-user' : 'current-user',
+    type: type,
     text: text,
+    imageUrl: imageUrl,
     status: 'sent',
     isMine: isMine,
     createdAt: DateTime.utc(2026, 8, 27, 8, int.parse(id)),

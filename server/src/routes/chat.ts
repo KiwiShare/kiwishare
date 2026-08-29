@@ -5,6 +5,7 @@ import { authenticateToken } from '../middleware/auth';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Item from '../models/Item';
+import { R2_CONFIG } from '../config/r2';
 import {
   MESSAGE_CONTENT_NOT_ALLOWED,
   moderateChatText
@@ -68,12 +69,53 @@ function formatMessage(message: any, userId: string) {
     receiverId: objectId(message.receiverId),
     type: message.type,
     text: message.text ?? '',
+    imageUrl: message.imageUrl ?? null,
     status: message.status,
     isMine: senderId === userId,
     readAt: message.readAt ?? null,
     createdAt: message.createdAt,
     updatedAt: message.updatedAt
   };
+}
+
+function validR2ImageUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (normalized.length < 1 || normalized.length > 2048) return null;
+
+  try {
+    const configuredBase = R2_CONFIG.publicUrlBase.trim();
+    if (!configuredBase.startsWith('http')) {
+      const relativeUrl = new URL(normalized, 'http://kiwishare.local');
+      if (
+        !normalized.startsWith('/api/images/') ||
+        normalized.startsWith('//') ||
+        relativeUrl.origin !== 'http://kiwishare.local' ||
+        !relativeUrl.pathname.startsWith('/api/images/') ||
+        relativeUrl.search.length > 0 ||
+        relativeUrl.hash.length > 0
+      ) {
+        return null;
+      }
+      return relativeUrl.pathname;
+    }
+
+    const imageUrl = new URL(normalized);
+    const publicBase = new URL(configuredBase);
+    const basePath = publicBase.pathname.replace(/\/$/, '');
+    const hasExpectedPath =
+      basePath.length === 0 || imageUrl.pathname.startsWith(`${basePath}/`);
+    if (
+      imageUrl.protocol !== 'https:' ||
+      imageUrl.origin !== publicBase.origin ||
+      !hasExpectedPath
+    ) {
+      return null;
+    }
+    return imageUrl.toString();
+  } catch (_) {
+    return null;
+  }
 }
 
 async function findConversationForUser(
@@ -289,26 +331,56 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     return;
   }
 
-  const { text } = ctx.request.body as { text?: unknown };
-  const moderation = moderateChatText(text);
-  const normalizedText = moderation.text;
-  if (normalizedText.length < 1 || normalizedText.length > MAX_MESSAGE_LENGTH) {
+  const body = ctx.request.body as {
+    type?: unknown;
+    text?: unknown;
+    imageUrl?: unknown;
+  };
+  const messageType = body.type ?? 'text';
+  if (messageType !== 'text' && messageType !== 'image') {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: `Message text must be between 1 and ${MAX_MESSAGE_LENGTH} characters.`
+      message: 'Message type must be text or image.'
     };
     return;
   }
 
-  if (!moderation.isAllowed) {
-    ctx.status = 422;
-    ctx.body = {
-      status: 'error',
-      code: 'MESSAGE_CONTENT_NOT_ALLOWED',
-      message: MESSAGE_CONTENT_NOT_ALLOWED
-    };
-    return;
+  let normalizedText = '';
+  let imageUrl: string | null = null;
+  if (messageType === 'text') {
+    const moderation = moderateChatText(body.text);
+    normalizedText = moderation.text;
+    if (
+      normalizedText.length < 1 ||
+      normalizedText.length > MAX_MESSAGE_LENGTH
+    ) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: `Message text must be between 1 and ${MAX_MESSAGE_LENGTH} characters.`
+      };
+      return;
+    }
+    if (!moderation.isAllowed) {
+      ctx.status = 422;
+      ctx.body = {
+        status: 'error',
+        code: 'MESSAGE_CONTENT_NOT_ALLOWED',
+        message: MESSAGE_CONTENT_NOT_ALLOWED
+      };
+      return;
+    }
+  } else {
+    imageUrl = validR2ImageUrl(body.imageUrl);
+    if (imageUrl == null) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A valid uploaded image URL is required.'
+      };
+      return;
+    }
   }
 
   const sendingAsBuyer = conversation.buyerId.equals(userId);
@@ -317,14 +389,16 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     conversationId: conversation._id,
     senderId: userId,
     receiverId,
-    type: 'text',
-    text: normalizedText,
+    type: messageType,
+    ...(messageType === 'text' ? { text: normalizedText } : { imageUrl }),
     status: 'sent'
   });
 
+  const conversationPreview = messageType === 'image' ? 'Photo' : normalizedText;
+
   await Conversation.findByIdAndUpdate(conversation._id, {
     $set: {
-      lastMessageText: normalizedText,
+      lastMessageText: conversationPreview,
       lastMessageAt: message.createdAt,
       lastMessageSenderId: userId
     },

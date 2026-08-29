@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
+import 'package:kiwishare/services/chat_photo_upload_service.dart';
 
 import '../support/fake_chat_repository.dart';
+import '../support/fake_chat_photo_uploader.dart';
 
 void main() {
   test(
@@ -57,6 +60,72 @@ void main() {
     },
   );
 
+  test(
+    'loads a new empty conversation without an unnecessary read request',
+    () async {
+      final conversation = testConversation(unreadCount: 0);
+      final repository = FakeChatRepository(conversations: [conversation]);
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+
+      expect(provider.messagesFor(conversation.id), isEmpty);
+      expect(provider.messageLoadErrorFor(conversation.id), isNull);
+      expect(repository.messageFetches, 1);
+      expect(repository.markReadCalls, 0);
+    },
+  );
+
+  test(
+    'marks fetched incoming messages read when the conversation snapshot is stale',
+    () async {
+      final conversation = testConversation(unreadCount: 0);
+      final repository = FakeChatRepository(
+        conversations: [conversation],
+        messages: {
+          conversation.id: [testMessage(id: '1', text: 'New', isMine: false)],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+
+      expect(provider.messagesFor(conversation.id).single.text, 'New');
+      expect(repository.markReadCalls, 1);
+      expect(provider.messageLoadErrorFor(conversation.id), isNull);
+    },
+  );
+
+  test('keeps loaded history visible when marking it read fails', () async {
+    final conversation = testConversation(unreadCount: 2);
+    final repository = FakeChatRepository(
+      conversations: [conversation],
+      messages: {
+        conversation.id: [testMessage(id: '1', text: 'Hello', isMine: false)],
+      },
+    )..markReadError = Exception('read update failed');
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+
+    await provider.loadMessages(
+      conversation: conversation,
+      token: 'valid-token',
+    );
+
+    expect(provider.messagesFor(conversation.id).single.text, 'Hello');
+    expect(provider.conversations.single.unreadCount, 2);
+    expect(provider.messageLoadErrorFor(conversation.id), isNull);
+    expect(repository.markReadCalls, 1);
+  });
+
   test('sends normalized text and updates conversation preview', () async {
     final conversation = testConversation();
     final repository = FakeChatRepository(conversations: [conversation]);
@@ -80,6 +149,61 @@ void main() {
       'Can I collect tomorrow?',
     );
     expect(provider.isSending(conversation.id), isFalse);
+  });
+
+  test(
+    'uploads and sends a photo URL without storing binary in chat',
+    () async {
+      final conversation = testConversation();
+      final repository = FakeChatRepository(conversations: [conversation]);
+      final uploader = FakeChatPhotoUploader();
+      final provider = ChatProvider(
+        repository: repository,
+        photoUploader: uploader,
+      );
+      await provider.loadConversations('valid-token');
+
+      final sent = await provider.sendPhoto(
+        conversation: conversation,
+        bytes: Uint8List.fromList([1, 2, 3]),
+        fileName: 'chair.png',
+        contentType: 'image/png',
+        token: 'valid-token',
+      );
+
+      expect(sent, isTrue);
+      expect(uploader.uploadCalls, 1);
+      expect(uploader.uploadedBytes, [1, 2, 3]);
+      expect(repository.sentImageUrls, [uploader.url]);
+      expect(provider.messagesFor(conversation.id).single.isImage, isTrue);
+      expect(provider.conversations.single.lastMessage, 'Photo');
+    },
+  );
+
+  test('does not create an image message when its R2 upload fails', () async {
+    final conversation = testConversation();
+    final repository = FakeChatRepository(conversations: [conversation]);
+    final provider = ChatProvider(
+      repository: repository,
+      photoUploader: FakeChatPhotoUploader(
+        error: const ChatPhotoUploadException('Photo upload unavailable.'),
+      ),
+    );
+
+    final sent = await provider.sendPhoto(
+      conversation: conversation,
+      bytes: Uint8List.fromList([1]),
+      fileName: 'chair.jpg',
+      contentType: 'image/jpeg',
+      token: 'valid-token',
+    );
+
+    expect(sent, isFalse);
+    expect(repository.sentImageUrls, isEmpty);
+    expect(
+      provider.messageSendErrorFor(conversation.id),
+      'Photo upload unavailable.',
+    );
   });
 
   test('rejects invalid text locally without calling the API', () async {
