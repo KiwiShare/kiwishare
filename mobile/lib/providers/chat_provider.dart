@@ -3,11 +3,14 @@ import 'package:flutter/foundation.dart';
 import '../models/chat_conversation_model.dart';
 import '../models/chat_message_model.dart';
 import '../repositories/chat_repository.dart';
+import '../services/chat_photo_upload_service.dart';
 
 class ChatProvider extends ChangeNotifier {
-  ChatProvider({required this.repository});
+  ChatProvider({required this.repository, ChatPhotoUploader? photoUploader})
+    : photoUploader = photoUploader ?? R2ChatPhotoUploader();
 
   final ChatRepository repository;
+  final ChatPhotoUploader photoUploader;
 
   String? _sessionToken;
   bool ownsSession(String token) => _sessionToken == token;
@@ -193,16 +196,7 @@ class ChatProvider extends ChangeNotifier {
         text: normalized,
         token: token,
       );
-      final messages = _messages[conversation.id] ?? const [];
-      if (!messages.any((existing) => existing.id == message.id)) {
-        _messages[conversation.id] = [...messages, message];
-      }
-      _replaceConversation(
-        conversation.copyWith(
-          lastMessage: message.text,
-          lastMessageAt: message.createdAt,
-        ),
-      );
+      _appendMessage(conversation, message, preview: message.text);
       return true;
     } on ChatRepositoryException catch (error) {
       _messageSendErrors[conversation.id] = error.message;
@@ -210,6 +204,59 @@ class ChatProvider extends ChangeNotifier {
     } catch (_) {
       _messageSendErrors[conversation.id] =
           'Your message was not sent. Please try again.';
+      return false;
+    } finally {
+      _sendingConversationIds.remove(conversation.id);
+      notifyListeners();
+    }
+  }
+
+  Future<bool> sendPhoto({
+    required ChatConversationModel conversation,
+    required Uint8List bytes,
+    required String fileName,
+    required String contentType,
+    required String token,
+  }) async {
+    const maximumPhotoBytes = 10 * 1024 * 1024;
+    if (bytes.isEmpty ||
+        bytes.length > maximumPhotoBytes ||
+        token.isEmpty ||
+        _sendingConversationIds.contains(conversation.id)) {
+      if (bytes.length > maximumPhotoBytes) {
+        _messageSendErrors[conversation.id] =
+            'Choose a photo smaller than 10 MB.';
+        notifyListeners();
+      }
+      return false;
+    }
+
+    _sendingConversationIds.add(conversation.id);
+    _messageSendErrors.remove(conversation.id);
+    notifyListeners();
+    try {
+      final imageUrl = await photoUploader.uploadPhoto(
+        bytes: bytes,
+        fileName: fileName,
+        contentType: contentType,
+        authToken: token,
+      );
+      final message = await repository.sendImageMessage(
+        conversationId: conversation.id,
+        imageUrl: imageUrl,
+        token: token,
+      );
+      _appendMessage(conversation, message, preview: 'Photo');
+      return true;
+    } on ChatPhotoUploadException catch (error) {
+      _messageSendErrors[conversation.id] = error.message;
+      return false;
+    } on ChatRepositoryException catch (error) {
+      _messageSendErrors[conversation.id] = error.message;
+      return false;
+    } catch (_) {
+      _messageSendErrors[conversation.id] =
+          'Your photo was not sent. Please try again.';
       return false;
     } finally {
       _sendingConversationIds.remove(conversation.id);
@@ -270,6 +317,23 @@ class ChatProvider extends ChangeNotifier {
 
   void clearMessageSendError(String conversationId) {
     if (_messageSendErrors.remove(conversationId) != null) notifyListeners();
+  }
+
+  void _appendMessage(
+    ChatConversationModel conversation,
+    ChatMessageModel message, {
+    required String preview,
+  }) {
+    final messages = _messages[conversation.id] ?? const [];
+    if (!messages.any((existing) => existing.id == message.id)) {
+      _messages[conversation.id] = [...messages, message];
+    }
+    _replaceConversation(
+      conversation.copyWith(
+        lastMessage: preview,
+        lastMessageAt: message.createdAt,
+      ),
+    );
   }
 
   void _replaceConversation(ChatConversationModel value) {

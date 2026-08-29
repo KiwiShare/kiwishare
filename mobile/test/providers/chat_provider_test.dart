@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
+import 'package:kiwishare/services/chat_photo_upload_service.dart';
 
 import '../support/fake_chat_repository.dart';
+import '../support/fake_chat_photo_uploader.dart';
 
 void main() {
   test(
@@ -80,6 +83,61 @@ void main() {
       'Can I collect tomorrow?',
     );
     expect(provider.isSending(conversation.id), isFalse);
+  });
+
+  test(
+    'uploads and sends a photo URL without storing binary in chat',
+    () async {
+      final conversation = testConversation();
+      final repository = FakeChatRepository(conversations: [conversation]);
+      final uploader = FakeChatPhotoUploader();
+      final provider = ChatProvider(
+        repository: repository,
+        photoUploader: uploader,
+      );
+      await provider.loadConversations('valid-token');
+
+      final sent = await provider.sendPhoto(
+        conversation: conversation,
+        bytes: Uint8List.fromList([1, 2, 3]),
+        fileName: 'chair.png',
+        contentType: 'image/png',
+        token: 'valid-token',
+      );
+
+      expect(sent, isTrue);
+      expect(uploader.uploadCalls, 1);
+      expect(uploader.uploadedBytes, [1, 2, 3]);
+      expect(repository.sentImageUrls, [uploader.url]);
+      expect(provider.messagesFor(conversation.id).single.isImage, isTrue);
+      expect(provider.conversations.single.lastMessage, 'Photo');
+    },
+  );
+
+  test('does not create an image message when its R2 upload fails', () async {
+    final conversation = testConversation();
+    final repository = FakeChatRepository(conversations: [conversation]);
+    final provider = ChatProvider(
+      repository: repository,
+      photoUploader: FakeChatPhotoUploader(
+        error: const ChatPhotoUploadException('Photo upload unavailable.'),
+      ),
+    );
+
+    final sent = await provider.sendPhoto(
+      conversation: conversation,
+      bytes: Uint8List.fromList([1]),
+      fileName: 'chair.jpg',
+      contentType: 'image/jpeg',
+      token: 'valid-token',
+    );
+
+    expect(sent, isFalse);
+    expect(repository.sentImageUrls, isEmpty);
+    expect(
+      provider.messageSendErrorFor(conversation.id),
+      'Photo upload unavailable.',
+    );
   });
 
   test('rejects invalid text locally without calling the API', () async {

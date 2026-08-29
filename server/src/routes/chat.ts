@@ -5,6 +5,7 @@ import { authenticateToken } from '../middleware/auth';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Item from '../models/Item';
+import { R2_CONFIG } from '../config/r2';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -64,12 +65,37 @@ function formatMessage(message: any, userId: string) {
     receiverId: objectId(message.receiverId),
     type: message.type,
     text: message.text ?? '',
+    imageUrl: message.imageUrl ?? null,
     status: message.status,
     isMine: senderId === userId,
     readAt: message.readAt ?? null,
     createdAt: message.createdAt,
     updatedAt: message.updatedAt
   };
+}
+
+function validR2ImageUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (normalized.length < 1 || normalized.length > 2048) return null;
+
+  try {
+    const imageUrl = new URL(normalized);
+    const publicBase = new URL(R2_CONFIG.publicUrlBase);
+    const basePath = publicBase.pathname.replace(/\/$/, '');
+    const hasExpectedPath =
+      basePath.length === 0 || imageUrl.pathname.startsWith(`${basePath}/`);
+    if (
+      imageUrl.protocol !== 'https:' ||
+      imageUrl.origin !== publicBase.origin ||
+      !hasExpectedPath
+    ) {
+      return null;
+    }
+    return imageUrl.toString();
+  } catch (_) {
+    return null;
+  }
 }
 
 async function findConversationForUser(
@@ -285,13 +311,34 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     return;
   }
 
-  const { text } = ctx.request.body as { text?: unknown };
-  const normalizedText = typeof text === 'string' ? text.trim() : '';
-  if (normalizedText.length < 1 || normalizedText.length > MAX_MESSAGE_LENGTH) {
+  const body = ctx.request.body as {
+    type?: unknown;
+    text?: unknown;
+    imageUrl?: unknown;
+  };
+  const messageType = body.type ?? 'text';
+  if (messageType !== 'text' && messageType !== 'image') {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: `Message text must be between 1 and ${MAX_MESSAGE_LENGTH} characters.`
+      message: 'Message type must be text or image.'
+    };
+    return;
+  }
+
+  const normalizedText = typeof body.text === 'string' ? body.text.trim() : '';
+  const imageUrl = validR2ImageUrl(body.imageUrl);
+  if (
+    (messageType === 'text' &&
+      (normalizedText.length < 1 || normalizedText.length > MAX_MESSAGE_LENGTH)) ||
+    (messageType === 'image' && imageUrl == null)
+  ) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: messageType === 'text'
+        ? `Message text must be between 1 and ${MAX_MESSAGE_LENGTH} characters.`
+        : 'A valid uploaded image URL is required.'
     };
     return;
   }
@@ -302,14 +349,16 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     conversationId: conversation._id,
     senderId: userId,
     receiverId,
-    type: 'text',
-    text: normalizedText,
+    type: messageType,
+    ...(messageType === 'text' ? { text: normalizedText } : { imageUrl }),
     status: 'sent'
   });
 
+  const conversationPreview = messageType === 'image' ? 'Photo' : normalizedText;
+
   await Conversation.findByIdAndUpdate(conversation._id, {
     $set: {
-      lastMessageText: normalizedText,
+      lastMessageText: conversationPreview,
       lastMessageAt: message.createdAt,
       lastMessageSenderId: userId
     },

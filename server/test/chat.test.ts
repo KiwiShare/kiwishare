@@ -164,10 +164,20 @@ describe('KiwiShare text chat API', () => {
     const outsider = await request(app.callback())
       .get(`/api/conversations/${conversationId}/messages`)
       .set('Authorization', `Bearer ${outsiderToken}`);
+    const externalImage = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ type: 'image', imageUrl: 'https://example.com/not-r2.jpg' });
+    const unsupportedType = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ type: 'voice', imageUrl: 'https://assets.kiwishare.online/images/chat/a.jpg' });
 
     expect(empty.status).toBe(400);
     expect(overlong.status).toBe(400);
     expect(outsider.status).toBe(403);
+    expect(externalImage.status).toBe(400);
+    expect(unsupportedType.status).toBe(400);
     expect(await Message.countDocuments()).toBe(0);
   });
 
@@ -281,6 +291,43 @@ describe('KiwiShare text chat API', () => {
     const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
     expect(messages.filter((message) => message.status === 'read')).toHaveLength(3);
     expect(messages.at(-1)?.receiverId.toString()).toBe(buyerId);
+  });
+
+  test('stores an R2 image URL and returns it in chat history', async () => {
+    const imageUrl = 'https://assets.kiwishare.online/images/chat/photo.jpg';
+    const sent = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ type: 'image', imageUrl });
+
+    expect(sent.status).toBe(201);
+    expect(sent.body.message).toEqual(
+      expect.objectContaining({
+        type: 'image',
+        imageUrl,
+        text: '',
+        isMine: true
+      })
+    );
+
+    const stored = await Message.findById(sent.body.message.id);
+    expect(stored?.type).toBe('image');
+    expect(stored?.imageUrl).toBe(imageUrl);
+    expect(stored?.text).toBeUndefined();
+
+    const sellerList = await request(app.callback())
+      .get('/api/conversations')
+      .set('Authorization', `Bearer ${sellerToken}`);
+    expect(sellerList.body.conversations[0].lastMessageText).toBe('Photo');
+
+    const history = await request(app.callback())
+      .get(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${sellerToken}`);
+    expect(history.body.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'image', imageUrl, isMine: false })
+      ])
+    );
   });
 
   test('omits soft-deleted messages from history', async () => {
