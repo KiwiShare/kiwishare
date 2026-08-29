@@ -100,6 +100,52 @@ class _MessagesScreenState extends State<MessagesScreen> {
     context.push('/messages/${conversation.id}', extra: conversation);
   }
 
+  Future<bool> _confirmRemoveConversation(
+    ChatConversationModel conversation,
+  ) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Remove chat?'),
+            content: Text(
+              'Remove your conversation with ${conversation.participantName} '
+              'from this list? It will return if a new message arrives.',
+            ),
+            actions: [
+              TextButton(
+                key: const Key('chat_delete_cancel'),
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                key: const Key('chat_delete_confirm'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Remove'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _removeConversation(
+    ChatConversationModel conversation,
+    String token,
+  ) async {
+    final removed = await _chatProvider.deleteConversation(
+      conversation: conversation,
+      token: token,
+    );
+    if (!removed && mounted) {
+      final message =
+          _chatProvider.conversationDeleteErrorFor(conversation.id) ??
+          'Chat could not be removed. Please try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = _chatProvider;
@@ -193,19 +239,72 @@ class _MessagesScreenState extends State<MessagesScreen> {
         ),
         itemBuilder: (context, index) {
           final chat = chats[index];
-          return ChatListTile(
-            key: Key('chat_conversation_${chat.id}'),
-            name: chat.participantName,
-            itemTitle: chat.itemTitle,
-            lastMessage: chat.lastMessage.isEmpty
-                ? 'No messages yet'
-                : chat.lastMessage,
-            time: _conversationTime(chat.lastMessageAt),
-            unreadCount: chat.unreadCount,
-            avatarStyle: chat.direction == ChatDirection.buying
-                ? ChatAvatarStyle.personWarm
-                : ChatAvatarStyle.item,
-            onTap: () => _openConversation(chat),
+          return Dismissible(
+            key: Key(
+              'chat_dismissible_${chat.id}_'
+              '${provider.conversationRenderVersionFor(chat.id)}',
+            ),
+            direction: DismissDirection.endToStart,
+            confirmDismiss: (_) => _confirmRemoveConversation(chat),
+            onDismissed: (_) {
+              _removeConversation(chat, token);
+            },
+            background: Container(
+              key: Key('chat_delete_background_${chat.id}'),
+              alignment: Alignment.centerRight,
+              color: Colors.transparent,
+              child: Container(
+                width: 104,
+                margin: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.sm,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.error.withValues(alpha: 0.12),
+                  border: Border.all(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.error.withValues(alpha: 0.32),
+                  ),
+                  borderRadius: BorderRadius.circular(AppRadius.medium),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.error,
+                      semanticLabel: 'Remove chat',
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      'Remove',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            child: ChatListTile(
+              key: Key('chat_conversation_${chat.id}'),
+              name: chat.participantName,
+              itemTitle: chat.itemTitle,
+              lastMessage: chat.lastMessage.isEmpty
+                  ? 'No messages yet'
+                  : chat.lastMessage,
+              time: _conversationTime(chat.lastMessageAt),
+              unreadCount: chat.unreadCount,
+              avatarStyle: chat.direction == ChatDirection.buying
+                  ? ChatAvatarStyle.personWarm
+                  : ChatAvatarStyle.item,
+              onTap: () => _openConversation(chat),
+            ),
           );
         },
       ),

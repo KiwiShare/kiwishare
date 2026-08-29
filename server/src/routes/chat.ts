@@ -115,7 +115,8 @@ router.get('/', async (ctx: Context) => {
   }
 
   const conversations = await Conversation.find({
-    $or: [{ buyerId: userId }, { sellerId: userId }]
+    $or: [{ buyerId: userId }, { sellerId: userId }],
+    hiddenForUserIds: { $ne: userId }
   })
     .populate('itemId', 'title imageUrl images status')
     .populate('buyerId', 'displayName avatarUrl')
@@ -188,6 +189,17 @@ router.post('/', async (ctx: Context) => {
 
   if (!conversation) {
     throw new Error('Conversation could not be created.');
+  }
+
+  if (
+    conversation.hiddenForUserIds.some((hiddenId: mongoose.Types.ObjectId) =>
+      hiddenId.equals(userId)
+    )
+  ) {
+    conversation.hiddenForUserIds = conversation.hiddenForUserIds.filter(
+      (hiddenId: mongoose.Types.ObjectId) => !hiddenId.equals(userId)
+    );
+    await conversation.save();
   }
 
   await conversation.populate('itemId', 'title imageUrl images status');
@@ -303,7 +315,8 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     },
     $inc: sendingAsBuyer
       ? { sellerUnreadCount: 1 }
-      : { buyerUnreadCount: 1 }
+      : { buyerUnreadCount: 1 },
+    $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
   });
 
   ctx.status = 201;
@@ -349,6 +362,36 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   ctx.body = {
     status: 'success',
     readCount: result.modifiedCount
+  };
+});
+
+router.delete('/:conversationId', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Invalid authenticated user.' };
+    return;
+  }
+
+  const conversation = await findConversationForUser(
+    ctx,
+    ctx.params.conversationId,
+    userId
+  );
+  if (!conversation) return;
+
+  const hidingAsBuyer = conversation.buyerId.equals(userId);
+  await Conversation.findByIdAndUpdate(conversation._id, {
+    $addToSet: { hiddenForUserIds: userId },
+    $set: hidingAsBuyer
+      ? { buyerUnreadCount: 0 }
+      : { sellerUnreadCount: 0 }
+  });
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    conversationId: conversation.id
   };
 });
 
