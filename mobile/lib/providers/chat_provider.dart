@@ -156,11 +156,18 @@ class ChatProvider extends ChangeNotifier {
         token: token,
       );
       _messages[conversation.id] = page.messages;
-      await repository.markConversationRead(
-        conversationId: conversation.id,
-        token: token,
-      );
-      _replaceConversation(conversation.copyWith(unreadCount: 0));
+      if (conversation.unreadCount > 0) {
+        try {
+          await repository.markConversationRead(
+            conversationId: conversation.id,
+            token: token,
+          );
+          _replaceConversation(conversation.copyWith(unreadCount: 0));
+        } catch (_) {
+          // History is already available. Keep the unread count so a later
+          // visit can retry without replacing usable content with an error.
+        }
+      }
     } on ChatRepositoryException catch (error) {
       _messageLoadErrors[conversation.id] = error.message;
     } catch (_) {

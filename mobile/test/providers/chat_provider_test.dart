@@ -57,6 +57,48 @@ void main() {
     },
   );
 
+  test(
+    'loads a new empty conversation without an unnecessary read request',
+    () async {
+      final conversation = testConversation(unreadCount: 0);
+      final repository = FakeChatRepository(conversations: [conversation]);
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+
+      expect(provider.messagesFor(conversation.id), isEmpty);
+      expect(provider.messageLoadErrorFor(conversation.id), isNull);
+      expect(repository.messageFetches, 1);
+      expect(repository.markReadCalls, 0);
+    },
+  );
+
+  test('keeps loaded history visible when marking it read fails', () async {
+    final conversation = testConversation(unreadCount: 2);
+    final repository = FakeChatRepository(
+      conversations: [conversation],
+      messages: {
+        conversation.id: [testMessage(id: '1', text: 'Hello', isMine: false)],
+      },
+    )..markReadError = Exception('read update failed');
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+
+    await provider.loadMessages(
+      conversation: conversation,
+      token: 'valid-token',
+    );
+
+    expect(provider.messagesFor(conversation.id).single.text, 'Hello');
+    expect(provider.conversations.single.unreadCount, 2);
+    expect(provider.messageLoadErrorFor(conversation.id), isNull);
+    expect(repository.markReadCalls, 1);
+  });
+
   test('sends normalized text and updates conversation preview', () async {
     final conversation = testConversation();
     final repository = FakeChatRepository(conversations: [conversation]);
