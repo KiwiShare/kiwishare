@@ -199,8 +199,6 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    final token = _jwtToken;
-    if (token != null) await pushNotifications?.deactivate(token);
     await clearSession();
 
     try {
@@ -209,6 +207,11 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> clearSession() async {
+    final token = _jwtToken;
+    final pushDeactivation = token == null
+        ? null
+        : pushNotifications?.deactivate(token);
+
     _isLoggedIn = false;
     _currentUser = null;
     _jwtToken = null;
@@ -216,6 +219,7 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     await prefs.remove('current_user');
+    if (pushDeactivation != null) await pushDeactivation;
 
     notifyListeners();
   }

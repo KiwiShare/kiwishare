@@ -1,14 +1,15 @@
 import { Context } from 'koa';
 import Router from 'koa-router';
 import mongoose from 'mongoose';
-import { authenticateToken } from '../middleware/auth';
+import {
+  authenticateToken,
+  authenticateTokenAllowExpired
+} from '../middleware/auth';
 import PushDevice, { PushPlatform } from '../models/PushDevice';
 
 const router = new Router({ prefix: '/notifications' });
 const MIN_TOKEN_LENGTH = 20;
 const MAX_TOKEN_LENGTH = 4096;
-
-router.use(authenticateToken);
 
 function currentUserId(ctx: Context): mongoose.Types.ObjectId | null {
   const value = ctx.state.user?.id;
@@ -29,7 +30,7 @@ function validPlatform(value: unknown): value is PushPlatform {
   return value === 'android' || value === 'ios';
 }
 
-router.post('/devices', async (ctx: Context) => {
+router.post('/devices', authenticateToken, async (ctx: Context) => {
   const userId = currentUserId(ctx);
   if (!userId) {
     ctx.status = 403;
@@ -67,7 +68,7 @@ router.post('/devices', async (ctx: Context) => {
   };
 });
 
-router.delete('/devices', async (ctx: Context) => {
+router.delete('/devices', authenticateTokenAllowExpired, async (ctx: Context) => {
   const userId = currentUserId(ctx);
   if (!userId) {
     ctx.status = 403;

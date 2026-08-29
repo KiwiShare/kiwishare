@@ -53,8 +53,8 @@ this change.
 
 Verified on 29 August 2026:
 
-- Koa/Jest: 75 of 75 tests passed;
-- Flutter: 114 of 114 tests passed;
+- Koa/Jest: 77 of 77 tests passed;
+- Flutter: 116 of 116 tests passed;
 - TypeScript build and ESLint passed;
 - Flutter static analysis reported no issues; and
 - the Android debug APK compiled successfully with Firebase Messaging and the

@@ -58,6 +58,29 @@ class FakePushDeviceRepository implements PushDeviceRepository {
   }
 }
 
+class BlockingPushDeviceRepository implements PushDeviceRepository {
+  final registrationStarted = Completer<void>();
+  final finishRegistration = Completer<void>();
+  final registrations = <({String jwt, String token, String platform})>[];
+  final removals = <({String jwt, String token})>[];
+
+  @override
+  Future<void> register({
+    required String jwt,
+    required String token,
+    required String platform,
+  }) async {
+    registrationStarted.complete();
+    await finishRegistration.future;
+    registrations.add((jwt: jwt, token: token, platform: platform));
+  }
+
+  @override
+  Future<void> unregister({required String jwt, required String token}) async {
+    removals.add((jwt: jwt, token: token));
+  }
+}
+
 PushEnvelope chatEnvelope({String conversationId = 'conversation-1'}) {
   return PushEnvelope(
     title: 'New KiwiShare message',
@@ -175,6 +198,35 @@ void main() {
     messaging.tokenController.add('token-after-logout-123456789');
     await Future<void>.delayed(Duration.zero);
     expect(repository.registrations, hasLength(2));
+    await service.dispose();
+    await messaging.close();
+  });
+
+  test('removes a registration that finishes after logout', () async {
+    final messaging = FakeMessagingClient();
+    final repository = BlockingPushDeviceRepository();
+    final service = PushNotificationService(
+      messaging: messaging,
+      repository: repository,
+      platform: 'android',
+      onForegroundMessage: (_, _) {},
+      onNotificationOpened: (_) {},
+    );
+
+    final activation = service.activate('jwt-1');
+    await repository.registrationStarted.future;
+    await service.deactivate('jwt-1');
+    repository.finishRegistration.complete();
+    await activation;
+
+    expect(repository.registrations, hasLength(1));
+    expect(repository.removals, hasLength(1));
+    expect(repository.removals.single.jwt, 'jwt-1');
+    expect(repository.removals.single.token, 'device-token-value-123456789');
+
+    messaging.tokenController.add('token-after-logout-123456789');
+    await Future<void>.delayed(Duration.zero);
+    expect(repository.registrations, hasLength(1));
     await service.dispose();
     await messaging.close();
   });

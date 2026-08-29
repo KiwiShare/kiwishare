@@ -28,6 +28,28 @@ export interface PushGateway {
 let firebaseApp: App | null | undefined;
 let gatewayOverride: PushGateway | null = null;
 
+export type FirebaseCredentialConfiguration =
+  | { source: 'inline'; credentials: string }
+  | { source: 'application-default'; projectId?: string }
+  | null;
+
+export function resolveFirebaseCredentialConfiguration(
+  env: NodeJS.ProcessEnv = process.env
+): FirebaseCredentialConfiguration {
+  const inlineCredentials = env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (inlineCredentials) {
+    return { source: 'inline', credentials: inlineCredentials };
+  }
+
+  const credentialFile = env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+  const projectId = env.FIREBASE_PROJECT_ID?.trim();
+  if (!credentialFile && !projectId) return null;
+  return {
+    source: 'application-default',
+    ...(projectId ? { projectId } : {})
+  };
+}
+
 async function configuredFirebaseApp(): Promise<App | null> {
   if (firebaseApp !== undefined) return firebaseApp;
 
@@ -40,16 +62,17 @@ async function configuredFirebaseApp(): Promise<App | null> {
       return firebaseApp;
     }
 
-    const inlineCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
-    const projectId = process.env.FIREBASE_PROJECT_ID?.trim();
-    if (inlineCredentials) {
+    const configuration = resolveFirebaseCredentialConfiguration();
+    if (configuration?.source === 'inline') {
       firebaseApp = initializeApp({
-        credential: cert(JSON.parse(inlineCredentials))
+        credential: cert(JSON.parse(configuration.credentials))
       });
-    } else if (projectId) {
+    } else if (configuration?.source === 'application-default') {
       firebaseApp = initializeApp({
         credential: applicationDefault(),
-        projectId
+        ...(configuration.projectId
+          ? { projectId: configuration.projectId }
+          : {})
       });
     } else {
       firebaseApp = null;

@@ -1,5 +1,6 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import app from '../src/app';
 import Conversation from '../src/models/Conversation';
@@ -8,6 +9,7 @@ import Message from '../src/models/Message';
 import PushDevice from '../src/models/PushDevice';
 import {
   ChatPushPayload,
+  resolveFirebaseCredentialConfiguration,
   setPushGatewayForTests
 } from '../src/services/pushNotification';
 
@@ -139,6 +141,52 @@ describe('KiwiShare chat push notifications', () => {
       .send({ token: sellerDeviceToken });
     expect(owner.status).toBe(200);
     expect(await PushDevice.countDocuments()).toBe(0);
+  });
+
+  test('allows exact device cleanup with an expired but valid signed session', async () => {
+    await PushDevice.create({
+      userId: new mongoose.Types.ObjectId(sellerId),
+      token: sellerDeviceToken,
+      platform: 'android'
+    });
+    // Jest imports app directly rather than through src/index.ts, so dotenv is
+    // not loaded before the auth modules capture their test fallback secret.
+    const secret = 'kiwishare_super_secret_key_123_abc';
+    const expiredToken = jwt.sign(
+      { id: sellerId, email: 'push-seller@example.com' },
+      secret,
+      { expiresIn: -1 }
+    );
+    const invalidToken = jwt.sign(
+      { id: sellerId, email: 'push-seller@example.com' },
+      'not-the-kiwishare-signing-secret',
+      { expiresIn: -1 }
+    );
+
+    const invalidSignature = await request(app.callback())
+      .delete('/api/notifications/devices')
+      .set('Authorization', `Bearer ${invalidToken}`)
+      .send({ token: sellerDeviceToken });
+    expect(invalidSignature.status).toBe(403);
+    expect(await PushDevice.countDocuments()).toBe(1);
+
+    const expiredSession = await request(app.callback())
+      .delete('/api/notifications/devices')
+      .set('Authorization', `Bearer ${expiredToken}`)
+      .send({ token: sellerDeviceToken });
+    expect({ status: expiredSession.status, body: expiredSession.body }).toEqual({
+      status: 200,
+      body: { status: 'success' }
+    });
+    expect(await PushDevice.countDocuments()).toBe(0);
+  });
+
+  test('accepts a credential-file deployment without a project ID override', () => {
+    expect(
+      resolveFirebaseCredentialConfiguration({
+        GOOGLE_APPLICATION_CREDENTIALS: '/private/firebase-admin.json'
+      })
+    ).toEqual({ source: 'application-default' });
   });
 
   test('notifies only the receiver with privacy-safe chat metadata', async () => {

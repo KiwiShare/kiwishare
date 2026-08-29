@@ -172,6 +172,7 @@ class PushNotificationService implements PushNotificationSession {
 
   String? _jwt;
   String? _deviceToken;
+  int _sessionGeneration = 0;
   bool _listenersStarted = false;
   StreamSubscription<String>? _tokenSubscription;
   StreamSubscription<PushEnvelope>? _foregroundSubscription;
@@ -179,20 +180,28 @@ class PushNotificationService implements PushNotificationSession {
 
   @override
   Future<void> activate(String jwt) async {
+    final generation = ++_sessionGeneration;
     _jwt = jwt;
     try {
       if (!await messaging.requestPermission()) return;
+      if (!_isCurrentSession(jwt, generation)) return;
       _startListeners();
       final token = await messaging.getToken();
       if (token != null && token.trim().isNotEmpty) {
-        await _register(jwt, token);
+        await _registerForSession(jwt, token, generation);
       }
+      if (!_isCurrentSession(jwt, generation)) return;
       final initial = await messaging.getInitialMessage();
-      if (initial != null) _open(initial);
+      if (_isCurrentSession(jwt, generation) && initial != null) {
+        _open(initial);
+      }
     } catch (error) {
       debugPrint('Push notification setup failed: $error');
     }
   }
+
+  bool _isCurrentSession(String jwt, int generation) =>
+      _jwt == jwt && _sessionGeneration == generation;
 
   void _startListeners() {
     if (_listenersStarted) return;
@@ -200,13 +209,15 @@ class PushNotificationService implements PushNotificationSession {
     _tokenSubscription = messaging.onTokenRefresh.listen((token) async {
       final jwt = _jwt;
       if (jwt == null) return;
+      final generation = _sessionGeneration;
       try {
-        await _register(jwt, token);
+        await _registerForSession(jwt, token, generation);
       } catch (error) {
         debugPrint('Push token refresh could not be registered: $error');
       }
     });
     _foregroundSubscription = messaging.onForegroundMessage.listen((message) {
+      if (_jwt == null) return;
       final chat = ChatPushMessage.fromData(message.data);
       if (chat != null) foregroundMessageHandler(chat, message);
     });
@@ -214,17 +225,36 @@ class PushNotificationService implements PushNotificationSession {
   }
 
   void _open(PushEnvelope envelope) {
+    if (_jwt == null) return;
     final chat = ChatPushMessage.fromData(envelope.data);
     if (chat != null) notificationOpenedHandler(chat);
   }
 
-  Future<void> _register(String jwt, String token) async {
+  Future<void> _registerForSession(
+    String jwt,
+    String token,
+    int generation,
+  ) async {
     await repository.register(jwt: jwt, token: token, platform: platform);
+    if (!_isCurrentSession(jwt, generation)) {
+      // Registration may finish after logout. Compensate with a removal using
+      // the same signed session; the backend accepts an expired but otherwise
+      // valid JWT for this exact-token cleanup endpoint only.
+      if (_jwt != jwt) {
+        try {
+          await repository.unregister(jwt: jwt, token: token);
+        } catch (error) {
+          debugPrint('Late push registration could not be removed: $error');
+        }
+      }
+      return;
+    }
     _deviceToken = token;
   }
 
   @override
   Future<void> deactivate(String jwt) async {
+    _sessionGeneration += 1;
     final token = _deviceToken;
     _jwt = null;
     _deviceToken = null;
