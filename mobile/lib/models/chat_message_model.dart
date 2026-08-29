@@ -7,6 +7,8 @@ class ChatMessageModel {
     this.type = 'text',
     required this.text,
     this.imageUrl,
+    this.audioUrl,
+    this.durationMs,
     required this.status,
     required this.isMine,
     required this.createdAt,
@@ -20,12 +22,18 @@ class ChatMessageModel {
   final String type;
   final String text;
   final String? imageUrl;
+  final String? audioUrl;
+  final int? durationMs;
   final String status;
   final bool isMine;
   final DateTime createdAt;
   final DateTime? readAt;
 
   bool get isImage => type == 'image' && (imageUrl?.isNotEmpty ?? false);
+  bool get isVoice =>
+      type == 'voice' &&
+      (audioUrl?.isNotEmpty ?? false) &&
+      (durationMs ?? 0) > 0;
 
   factory ChatMessageModel.fromJson(Map<String, dynamic> json) {
     return ChatMessageModel(
@@ -36,6 +44,12 @@ class ChatMessageModel {
       type: (json['type'] ?? 'text').toString(),
       text: (json['text'] ?? '').toString(),
       imageUrl: json['imageUrl']?.toString(),
+      audioUrl: json['audioUrl']?.toString(),
+      durationMs: switch (json['durationMs']) {
+        int value => value,
+        num value => value.round(),
+        _ => int.tryParse(json['durationMs']?.toString() ?? ''),
+      },
       status: (json['status'] ?? 'sent').toString(),
       isMine: json['isMine'] == true,
       createdAt:

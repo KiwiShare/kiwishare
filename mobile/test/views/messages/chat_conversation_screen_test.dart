@@ -8,11 +8,13 @@ import 'package:kiwishare/config/api_config.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/services/chat_photo_upload_service.dart';
+import 'package:kiwishare/services/chat_voice_service.dart';
 import 'package:kiwishare/services/listing_image_picker.dart';
 import 'package:kiwishare/views/messages/chat_conversation_screen.dart';
 
 import '../../support/fake_chat_photo_uploader.dart';
 import '../../support/fake_chat_repository.dart';
+import '../../support/fake_chat_voice_service.dart';
 
 Widget _buildSubject({
   required FakeChatRepository repository,
@@ -21,6 +23,8 @@ Widget _buildSubject({
   TextScaler textScaler = TextScaler.noScaling,
   ChatPhotoUploader? photoUploader,
   ListingImagePicker? imagePicker,
+  ChatVoiceUploader? voiceUploader,
+  ChatVoiceRecorder? voiceRecorder,
 }) {
   final value = conversation ?? testConversation();
   return MaterialApp(
@@ -35,9 +39,11 @@ Widget _buildSubject({
         chatProvider: ChatProvider(
           repository: repository,
           photoUploader: photoUploader,
+          voiceUploader: voiceUploader,
         ),
         authToken: authToken,
         imagePicker: imagePicker,
+        voiceRecorder: voiceRecorder,
       ),
     ),
   );
@@ -190,6 +196,62 @@ void main() {
     expect(uploader.uploadedFileName, endsWith('.jpg'));
     expect(uploader.uploadedBytes, Uint8List.fromList([4, 5, 6]));
     expect(repository.sentImageUrls, [uploader.url]);
+  });
+
+  testWidgets('records, uploads, sends, and renders a voice message', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final uploader = FakeChatVoiceUploader();
+    final recorder = FakeChatVoiceRecorder();
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        voiceUploader: uploader,
+        voiceRecorder: recorder,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+    expect(recorder.startCalls, 1);
+    expect(find.byKey(const Key('chat_voice_recording_timer')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('chat_send_voice_button')));
+    await tester.pumpAndSettle();
+
+    expect(recorder.stopCalls, 1);
+    expect(uploader.uploadCalls, 1);
+    expect(repository.sentAudioUrls, [uploader.url]);
+    expect(find.byKey(const Key('chat_voice_play_sent-1')), findsOneWidget);
+    expect(find.text('0:04'), findsOneWidget);
+  });
+
+  testWidgets('cancels a recording without uploading a message', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final uploader = FakeChatVoiceUploader();
+    final recorder = FakeChatVoiceRecorder();
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        voiceUploader: uploader,
+        voiceRecorder: recorder,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
+    await tester.pumpAndSettle();
+
+    expect(recorder.cancelCalls, 1);
+    expect(uploader.uploadCalls, 0);
+    expect(repository.sentAudioUrls, isEmpty);
+    expect(find.byKey(const Key('chat_voice_recording_timer')), findsNothing);
   });
 
   testWidgets('resolves relative image proxy URLs against the API origin', (

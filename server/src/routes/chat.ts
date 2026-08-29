@@ -15,6 +15,7 @@ const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 100;
 const MAX_MESSAGE_LENGTH = 2000;
+const MAX_VOICE_DURATION_MS = 60000;
 
 router.use(authenticateToken);
 
@@ -70,6 +71,8 @@ function formatMessage(message: any, userId: string) {
     type: message.type,
     text: message.text ?? '',
     imageUrl: message.imageUrl ?? null,
+    audioUrl: message.audioUrl ?? null,
+    durationMs: message.durationMs ?? null,
     status: message.status,
     isMine: senderId === userId,
     readAt: message.readAt ?? null,
@@ -78,7 +81,7 @@ function formatMessage(message: any, userId: string) {
   };
 }
 
-function validR2ImageUrl(value: unknown): string | null {
+function validR2AssetUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   if (normalized.length < 1 || normalized.length > 2048) return null;
@@ -335,19 +338,23 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     type?: unknown;
     text?: unknown;
     imageUrl?: unknown;
+    audioUrl?: unknown;
+    durationMs?: unknown;
   };
   const messageType = body.type ?? 'text';
-  if (messageType !== 'text' && messageType !== 'image') {
+  if (messageType !== 'text' && messageType !== 'image' && messageType !== 'voice') {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: 'Message type must be text or image.'
+      message: 'Message type must be text, image, or voice.'
     };
     return;
   }
 
   let normalizedText = '';
   let imageUrl: string | null = null;
+  let audioUrl: string | null = null;
+  let durationMs: number | null = null;
   if (messageType === 'text') {
     const moderation = moderateChatText(body.text);
     normalizedText = moderation.text;
@@ -371,13 +378,30 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       };
       return;
     }
-  } else {
-    imageUrl = validR2ImageUrl(body.imageUrl);
+  } else if (messageType === 'image') {
+    imageUrl = validR2AssetUrl(body.imageUrl);
     if (imageUrl == null) {
       ctx.status = 400;
       ctx.body = {
         status: 'error',
         message: 'A valid uploaded image URL is required.'
+      };
+      return;
+    }
+  } else {
+    audioUrl = validR2AssetUrl(body.audioUrl);
+    durationMs = typeof body.durationMs === 'number' ? body.durationMs : null;
+    if (
+      audioUrl == null ||
+      durationMs == null ||
+      !Number.isInteger(durationMs) ||
+      durationMs < 1 ||
+      durationMs > MAX_VOICE_DURATION_MS
+    ) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A valid uploaded voice message up to 60 seconds is required.'
       };
       return;
     }
@@ -390,11 +414,19 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     senderId: userId,
     receiverId,
     type: messageType,
-    ...(messageType === 'text' ? { text: normalizedText } : { imageUrl }),
+    ...(messageType === 'text'
+      ? { text: normalizedText }
+      : messageType === 'image'
+        ? { imageUrl }
+        : { audioUrl, durationMs }),
     status: 'sent'
   });
 
-  const conversationPreview = messageType === 'image' ? 'Photo' : normalizedText;
+  const conversationPreview = messageType === 'image'
+    ? 'Photo'
+    : messageType === 'voice'
+      ? 'Voice message'
+      : normalizedText;
 
   await Conversation.findByIdAndUpdate(conversation._id, {
     $set: {

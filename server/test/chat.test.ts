@@ -171,7 +171,7 @@ describe('KiwiShare text chat API', () => {
     const unsupportedType = await request(app.callback())
       .post(`/api/conversations/${conversationId}/messages`)
       .set('Authorization', `Bearer ${buyerToken}`)
-      .send({ type: 'voice', imageUrl: 'https://assets.kiwishare.online/images/chat/a.jpg' });
+      .send({ type: 'video', imageUrl: 'https://assets.kiwishare.online/images/chat/a.jpg' });
 
     expect(empty.status).toBe(400);
     expect(overlong.status).toBe(400);
@@ -376,6 +376,59 @@ describe('KiwiShare text chat API', () => {
         expect.objectContaining({ type: 'image', imageUrl, isMine: false })
       ])
     );
+  });
+
+  test('stores a bounded R2 voice message and returns it in chat history', async () => {
+    const audioUrl = 'https://assets.kiwishare.online/audio/chat/voice.m4a';
+    const sent = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ type: 'voice', audioUrl, durationMs: 12500 });
+
+    expect(sent.status).toBe(201);
+    expect(sent.body.message).toEqual(
+      expect.objectContaining({
+        type: 'voice',
+        audioUrl,
+        durationMs: 12500,
+        text: '',
+        isMine: true
+      })
+    );
+
+    const stored = await Message.findById(sent.body.message.id);
+    expect(stored?.type).toBe('voice');
+    expect(stored?.audioUrl).toBe(audioUrl);
+    expect(stored?.durationMs).toBe(12500);
+
+    const sellerList = await request(app.callback())
+      .get('/api/conversations')
+      .set('Authorization', `Bearer ${sellerToken}`);
+    expect(sellerList.body.conversations[0].lastMessageText).toBe('Voice message');
+  });
+
+  test('rejects invalid voice URLs and durations without storing messages', async () => {
+    const countBefore = await Message.countDocuments({ conversationId });
+    const invalidUrl = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({
+        type: 'voice',
+        audioUrl: 'https://example.com/voice.m4a',
+        durationMs: 1000
+      });
+    const excessiveDuration = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({
+        type: 'voice',
+        audioUrl: 'https://assets.kiwishare.online/audio/chat/voice.m4a',
+        durationMs: 60001
+      });
+
+    expect(invalidUrl.status).toBe(400);
+    expect(excessiveDuration.status).toBe(400);
+    expect(await Message.countDocuments({ conversationId })).toBe(countBefore);
   });
 
   test('accepts the relative image proxy when R2 uses local serving', async () => {

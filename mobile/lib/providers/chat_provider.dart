@@ -4,13 +4,19 @@ import '../models/chat_conversation_model.dart';
 import '../models/chat_message_model.dart';
 import '../repositories/chat_repository.dart';
 import '../services/chat_photo_upload_service.dart';
+import '../services/chat_voice_service.dart';
 
 class ChatProvider extends ChangeNotifier {
-  ChatProvider({required this.repository, ChatPhotoUploader? photoUploader})
-    : photoUploader = photoUploader ?? R2ChatPhotoUploader();
+  ChatProvider({
+    required this.repository,
+    ChatPhotoUploader? photoUploader,
+    ChatVoiceUploader? voiceUploader,
+  }) : photoUploader = photoUploader ?? R2ChatPhotoUploader(),
+       voiceUploader = voiceUploader ?? R2ChatVoiceUploader();
 
   final ChatRepository repository;
   final ChatPhotoUploader photoUploader;
+  final ChatVoiceUploader voiceUploader;
 
   String? _sessionToken;
   bool ownsSession(String token) => _sessionToken == token;
@@ -267,6 +273,66 @@ class ChatProvider extends ChangeNotifier {
     } catch (_) {
       _messageSendErrors[conversation.id] =
           'Your photo was not sent. Please try again.';
+      return false;
+    } finally {
+      _sendingConversationIds.remove(conversation.id);
+      notifyListeners();
+    }
+  }
+
+  Future<bool> sendVoice({
+    required ChatConversationModel conversation,
+    required Uint8List bytes,
+    required String fileName,
+    required String contentType,
+    required int durationMs,
+    required String token,
+  }) async {
+    const maximumVoiceBytes = 5 * 1024 * 1024;
+    if (bytes.isEmpty ||
+        bytes.length > maximumVoiceBytes ||
+        durationMs < 1 ||
+        durationMs > 60000 ||
+        token.isEmpty ||
+        _sendingConversationIds.contains(conversation.id)) {
+      if (bytes.length > maximumVoiceBytes) {
+        _messageSendErrors[conversation.id] =
+            'Keep the voice message smaller than 5 MB.';
+      } else if (durationMs > 60000) {
+        _messageSendErrors[conversation.id] =
+            'Voice messages can be up to 60 seconds long.';
+      }
+      notifyListeners();
+      return false;
+    }
+
+    _sendingConversationIds.add(conversation.id);
+    _messageSendErrors.remove(conversation.id);
+    notifyListeners();
+    try {
+      final audioUrl = await voiceUploader.uploadVoice(
+        bytes: bytes,
+        fileName: fileName,
+        contentType: contentType,
+        authToken: token,
+      );
+      final message = await repository.sendVoiceMessage(
+        conversationId: conversation.id,
+        audioUrl: audioUrl,
+        durationMs: durationMs,
+        token: token,
+      );
+      _appendMessage(conversation, message, preview: 'Voice message');
+      return true;
+    } on ChatVoiceException catch (error) {
+      _messageSendErrors[conversation.id] = error.message;
+      return false;
+    } on ChatRepositoryException catch (error) {
+      _messageSendErrors[conversation.id] = error.message;
+      return false;
+    } catch (_) {
+      _messageSendErrors[conversation.id] =
+          'Your voice message was not sent. Please try again.';
       return false;
     } finally {
       _sendingConversationIds.remove(conversation.id);

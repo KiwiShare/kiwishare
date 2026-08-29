@@ -202,6 +202,51 @@ void main() {
     expect(message.imageUrl, imageUrl);
   });
 
+  test('sends voice metadata and parses the voice message', () async {
+    late http.Request captured;
+    const audioUrl = 'https://assets.kiwishare.online/audio/chat/voice.m4a';
+    final repository = RestChatRepository(
+      client: MockClient((request) async {
+        captured = request;
+        return http.Response(
+          jsonEncode({
+            'status': 'created',
+            'message': {
+              'id': 'message-voice-1',
+              'conversationId': 'conversation-1',
+              'senderId': 'buyer-1',
+              'receiverId': 'seller-1',
+              'type': 'voice',
+              'text': '',
+              'audioUrl': audioUrl,
+              'durationMs': 3200,
+              'status': 'sent',
+              'isMine': true,
+              'createdAt': '2026-08-27T08:31:00.000Z',
+            },
+          }),
+          201,
+        );
+      }),
+    );
+
+    final message = await repository.sendVoiceMessage(
+      conversationId: 'conversation-1',
+      audioUrl: audioUrl,
+      durationMs: 3200,
+      token: 'valid-token',
+    );
+
+    expect(captured.method, 'POST');
+    expect(jsonDecode(captured.body), {
+      'type': 'voice',
+      'audioUrl': audioUrl,
+      'durationMs': 3200,
+    });
+    expect(message.isVoice, isTrue);
+    expect(message.durationMs, 3200);
+  });
+
   test('forwards the history cursor and marks a conversation read', () async {
     final requests = <http.Request>[];
     final repository = RestChatRepository(

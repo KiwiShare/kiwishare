@@ -37,7 +37,7 @@ export function normalizeR2Folder(folder?: unknown): string {
   const root = normalized.split('/')[0];
   if (
     !/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(normalized) ||
-    !['images', 'test'].includes(root)
+    !['images', 'audio', 'test'].includes(root)
   ) {
     throw new Error('Invalid R2 upload folder.');
   }
