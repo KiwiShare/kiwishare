@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/chat_conversation_model.dart';
 import '../../models/chat_message_model.dart';
+import '../../config/api_config.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../services/listing_image_picker.dart';
 import '../../theme/app_theme.dart';
 
 class ChatConversationScreen extends StatefulWidget {
@@ -13,11 +17,13 @@ class ChatConversationScreen extends StatefulWidget {
     required this.conversation,
     this.chatProvider,
     this.authToken,
+    this.imagePicker,
   });
 
   final ChatConversationModel conversation;
   final ChatProvider? chatProvider;
   final String? authToken;
+  final ListingImagePicker? imagePicker;
 
   @override
   State<ChatConversationScreen> createState() => _ChatConversationScreenState();
@@ -26,8 +32,16 @@ class ChatConversationScreen extends StatefulWidget {
 class _ChatConversationScreenState extends State<ChatConversationScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  late final ListingImagePicker _imagePicker;
   String? _loadedToken;
   String? _currentAuthToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhoto());
+  }
 
   ChatProvider get _chatProvider =>
       widget.chatProvider ?? context.read<ChatProvider>();
@@ -81,6 +95,75 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       _messageController.clear();
       _scrollToEnd();
     }
+  }
+
+  Future<void> _addPhoto() async {
+    final source = await showModalBottomSheet<_ChatPhotoSource>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) => const _ChatPhotoSourceSheet(),
+    );
+    if (source == null || !mounted) return;
+
+    try {
+      final XFile? file;
+      if (source == _ChatPhotoSource.camera) {
+        file = await _imagePicker.takePhoto();
+      } else {
+        final files = await _imagePicker.chooseFromGallery(limit: 1);
+        file = files.isEmpty ? null : files.first;
+      }
+      if (file == null || !mounted) return;
+      await _sendPhoto(file);
+    } on PlatformException {
+      _showPhotoPickerError(
+        'Camera or photo access is unavailable. Check the app permissions and try again.',
+      );
+    } catch (_) {
+      _showPhotoPickerError(
+        'That photo could not be opened. Please try again.',
+      );
+    }
+  }
+
+  Future<void> _recoverLostPhoto() async {
+    try {
+      final files = await _imagePicker.recoverLostPhotos();
+      if (files.isEmpty || !mounted) return;
+      await _sendPhoto(files.first);
+    } on PlatformException {
+      _showPhotoPickerError(
+        'The selected photo could not be restored. Please choose it again.',
+      );
+    } catch (_) {
+      _showPhotoPickerError(
+        'The selected photo could not be restored. Please choose it again.',
+      );
+    }
+  }
+
+  Future<void> _sendPhoto(XFile file) async {
+    final token = _currentAuthToken;
+    if (token == null || token.isEmpty || !mounted) return;
+    final contentType = _photoContentType(file);
+    final sent = await _chatProvider.sendPhoto(
+      conversation: widget.conversation,
+      bytes: await file.readAsBytes(),
+      fileName: file.name.isEmpty
+          ? 'chat_photo_${DateTime.now().millisecondsSinceEpoch}.${_photoExtension(contentType)}'
+          : file.name,
+      contentType: contentType,
+      token: token,
+    );
+    if (sent && mounted) _scrollToEnd();
+  }
+
+  void _showPhotoPickerError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _scrollToEnd() {
@@ -139,6 +222,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 enabled:
                     widget.conversation.isActive &&
                     (_currentAuthToken?.isNotEmpty ?? false),
+                onAddPhoto: _addPhoto,
                 onSend: _send,
               ),
             ],
@@ -200,8 +284,9 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mine = message.isMine;
+    final semanticContent = message.isImage ? 'a photo' : message.text;
     return Semantics(
-      label: mine ? 'You said ${message.text}' : 'They said ${message.text}',
+      label: mine ? 'You sent $semanticContent' : 'They sent $semanticContent',
       child: Align(
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -226,14 +311,38 @@ class _MessageBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                message.text,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: mine
-                      ? Theme.of(context).colorScheme.onPrimary
-                      : Theme.of(context).colorScheme.onSurface,
+              if (message.isImage)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                  child: Image.network(
+                    _resolvedChatImageUrl(message.imageUrl!),
+                    key: Key('chat_message_image_${message.id}'),
+                    width: 220,
+                    height: 180,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, _, _) => SizedBox(
+                      width: 220,
+                      height: 120,
+                      child: Center(
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: mine
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  message.text,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: mine
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
-              ),
               const SizedBox(height: 2),
               Text(
                 _messageTime(message.createdAt),
@@ -264,12 +373,14 @@ class _MessageComposer extends StatelessWidget {
     required this.controller,
     required this.isSending,
     required this.enabled,
+    required this.onAddPhoto,
     required this.onSend,
   });
 
   final TextEditingController controller;
   final bool isSending;
   final bool enabled;
+  final VoidCallback onAddPhoto;
   final VoidCallback onSend;
 
   @override
@@ -279,7 +390,7 @@ class _MessageComposer extends StatelessWidget {
       color: Theme.of(context).colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
+          AppSpacing.sm,
           AppSpacing.sm,
           AppSpacing.sm,
           AppSpacing.sm,
@@ -287,6 +398,17 @@ class _MessageComposer extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            SizedBox(
+              width: 44,
+              height: 48,
+              child: IconButton(
+                key: const Key('chat_add_photo_button'),
+                tooltip: 'Add photo',
+                onPressed: enabled && !isSending ? onAddPhoto : null,
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
             Expanded(
               child: TextField(
                 key: const Key('chat_message_input'),
@@ -335,6 +457,77 @@ class _MessageComposer extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _ChatPhotoSource { camera, gallery }
+
+class _ChatPhotoSourceSheet extends StatelessWidget {
+  const _ChatPhotoSourceSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Send a photo', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.sm),
+            ListTile(
+              key: const Key('chat_take_photo_option'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              subtitle: const Text('Open your device camera'),
+              onTap: () => Navigator.pop(context, _ChatPhotoSource.camera),
+            ),
+            ListTile(
+              key: const Key('chat_choose_photo_option'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              subtitle: const Text('Select an existing photo'),
+              onTap: () => Navigator.pop(context, _ChatPhotoSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _photoContentType(XFile file) {
+  final reported = file.mimeType?.trim().toLowerCase();
+  if (reported != null && reported.startsWith('image/')) return reported;
+  final extension = file.name.split('.').last.toLowerCase();
+  return switch (extension) {
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'heic' || 'heif' => 'image/heic',
+    _ => 'image/jpeg',
+  };
+}
+
+String _photoExtension(String contentType) => switch (contentType) {
+  'image/png' => 'png',
+  'image/webp' => 'webp',
+  'image/heic' => 'heic',
+  _ => 'jpg',
+};
+
+String _resolvedChatImageUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.hasScheme) return value;
+  final path = value.startsWith('/') ? value : '/$value';
+  return '${ApiConfig.baseUrl}$path';
 }
 
 class _InlineChatError extends StatelessWidget {
