@@ -156,7 +156,10 @@ class ChatProvider extends ChangeNotifier {
         token: token,
       );
       _messages[conversation.id] = page.messages;
-      if (conversation.unreadCount > 0) {
+      final hasUnreadIncomingMessage = page.messages.any(
+        (message) => !message.isMine && message.status != 'read',
+      );
+      if (conversation.unreadCount > 0 || hasUnreadIncomingMessage) {
         try {
           await repository.markConversationRead(
             conversationId: conversation.id,

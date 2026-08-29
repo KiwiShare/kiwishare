@@ -77,6 +77,30 @@ void main() {
     },
   );
 
+  test(
+    'marks fetched incoming messages read when the conversation snapshot is stale',
+    () async {
+      final conversation = testConversation(unreadCount: 0);
+      final repository = FakeChatRepository(
+        conversations: [conversation],
+        messages: {
+          conversation.id: [testMessage(id: '1', text: 'New', isMine: false)],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+
+      expect(provider.messagesFor(conversation.id).single.text, 'New');
+      expect(repository.markReadCalls, 1);
+      expect(provider.messageLoadErrorFor(conversation.id), isNull);
+    },
+  );
+
   test('keeps loaded history visible when marking it read fails', () async {
     final conversation = testConversation(unreadCount: 2);
     final repository = FakeChatRepository(
