@@ -254,6 +254,31 @@ void main() {
     expect(find.byKey(const Key('chat_voice_recording_timer')), findsNothing);
   });
 
+  testWidgets('auto-stops with headroom before the hard duration limit', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final uploader = FakeChatVoiceUploader();
+    final recorder = FakeChatVoiceRecorder();
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        voiceUploader: uploader,
+        voiceRecorder: recorder,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 59));
+    await tester.pumpAndSettle();
+
+    expect(recorder.stopCalls, 1);
+    expect(uploader.uploadCalls, 1);
+    expect(find.byKey(const Key('chat_voice_recording_timer')), findsNothing);
+  });
+
   testWidgets('resolves relative image proxy URLs against the API origin', (
     tester,
   ) async {

@@ -489,7 +489,8 @@ describe('KiwiShare text chat API', () => {
     );
     expect(mockedProbeVoiceAudio).toHaveBeenCalledWith(
       expect.any(Buffer),
-      60000
+      60000,
+      expect.any(String)
     );
 
     const sellerList = await request(app.callback())

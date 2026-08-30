@@ -195,7 +195,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           return;
         }
         setState(() => _recordingSeconds += 1);
-        if (_recordingSeconds >= 60) {
+        // Keep one second of headroom so timer scheduling jitter cannot push
+        // the native recording beyond the server's hard 60-second limit.
+        if (_recordingSeconds >= 59) {
           timer.cancel();
           unawaited(_finishVoiceRecording(send: true));
         }

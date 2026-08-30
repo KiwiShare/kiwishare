@@ -458,7 +458,8 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       );
       const verified = await probeVoiceAudio(
         uploaded.bytes,
-        MAX_VOICE_DURATION_MS
+        MAX_VOICE_DURATION_MS,
+        userId.toString()
       );
       if (
         verified == null ||

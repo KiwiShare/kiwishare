@@ -1,3 +1,9 @@
+import { spawn } from 'child_process';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import ffmpegPath from 'ffmpeg-static';
+
 export interface VerifiedVoiceAudio {
   contentType: 'audio/mp4' | 'audio/aac';
   extension: 'm4a' | 'aac';
@@ -8,6 +14,51 @@ const AAC_SAMPLE_RATES = [
   96000, 88200, 64000, 48000, 44100, 32000, 24000,
   22050, 16000, 12000, 11025, 8000, 7350
 ];
+
+const DECODE_SAMPLE_RATE = 8000;
+const DECODE_BYTES_PER_SAMPLE = 2;
+const MAX_CONCURRENT_DECODERS = 2;
+const MAX_DECODERS_PER_USER = 1;
+const MAX_PROBES_PER_USER_PER_MINUTE = 10;
+let activeDecoders = 0;
+const activeDecodersByUser = new Map<string, number>();
+const probeWindowsByUser = new Map<string, { count: number; resetAt: number }>();
+
+function acceptsProbe(userId?: string): boolean {
+  if (!userId) return true;
+  const now = Date.now();
+  const window = probeWindowsByUser.get(userId);
+  if (!window || now >= window.resetAt) {
+    probeWindowsByUser.set(userId, { count: 1, resetAt: now + 60000 });
+    return true;
+  }
+  if (window.count >= MAX_PROBES_PER_USER_PER_MINUTE) return false;
+  window.count += 1;
+  return true;
+}
+
+function acquireDecoder(userId?: string): (() => void) | null {
+  const userDecoders = userId ? activeDecodersByUser.get(userId) ?? 0 : 0;
+  if (
+    activeDecoders >= MAX_CONCURRENT_DECODERS ||
+    (userId != null && userDecoders >= MAX_DECODERS_PER_USER)
+  ) {
+    return null;
+  }
+
+  activeDecoders += 1;
+  if (userId) activeDecodersByUser.set(userId, userDecoders + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    activeDecoders -= 1;
+    if (!userId) return;
+    const remaining = (activeDecodersByUser.get(userId) ?? 1) - 1;
+    if (remaining > 0) activeDecodersByUser.set(userId, remaining);
+    else activeDecodersByUser.delete(userId);
+  };
+}
 
 function boxType(bytes: Buffer, offset: number): string {
   return bytes.toString('ascii', offset + 4, offset + 8);
@@ -126,15 +177,19 @@ function inspectVoiceContainer(bytes: Buffer): VerifiedVoiceAudio | null {
 async function decodesAsAudio(
   bytes: Buffer,
   extension: string,
-  maximumDurationMs: number
-): Promise<boolean> {
-  if (!ffmpegPath) return false;
+  maximumDurationMs: number,
+  userId?: string
+): Promise<number | null> {
+  if (!ffmpegPath) return null;
+  const releaseDecoder = acquireDecoder(userId);
+  if (!releaseDecoder) return null;
   const executablePath = ffmpegPath;
-  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'kiwishare-voice-'));
-  const inputPath = path.join(temporaryDirectory, `input.${extension}`);
+  let temporaryDirectory: string | null = null;
   try {
+    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'kiwishare-voice-'));
+    const inputPath = path.join(temporaryDirectory, `input.${extension}`);
     await writeFile(inputPath, bytes);
-    return await new Promise<boolean>((resolve) => {
+    return await new Promise<number | null>((resolve) => {
       const child = spawn(
         executablePath,
         [
@@ -144,20 +199,20 @@ async function decodesAsAudio(
           '-i', inputPath,
           '-map', '0:a:0',
           '-ac', '1',
-          '-ar', '8000',
+          '-ar', DECODE_SAMPLE_RATE.toString(),
           '-f', 's16le',
           'pipe:1'
         ],
         { windowsHide: true }
       );
       child.stdin.end();
-      const maximumDecodedBytes = Math.ceil(
-        ((maximumDurationMs + 1000) / 1000) * 8000 * 2
+      const maximumDecodedBytes = Math.floor(
+        (maximumDurationMs / 1000) * DECODE_SAMPLE_RATE * DECODE_BYTES_PER_SAMPLE
       );
       let decodedBytes = 0;
       let invalid = false;
       let settled = false;
-      const finish = (result: boolean) => {
+      const finish = (result: number | null) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
@@ -166,7 +221,7 @@ async function decodesAsAudio(
       const timeout = setTimeout(() => {
         invalid = true;
         child.kill();
-        finish(false);
+        finish(null);
       }, 15000);
 
       child.stdout.on('data', (chunk: Buffer) => {
@@ -178,20 +233,30 @@ async function decodesAsAudio(
       });
       // Drain stderr so a malformed input cannot block the child process.
       child.stderr.resume();
-      child.once('error', () => finish(false));
+      child.once('error', () => finish(null));
       child.once('close', (code) => {
-        finish(!invalid && code === 0 && decodedBytes > 0);
+        if (invalid || code !== 0 || decodedBytes < DECODE_BYTES_PER_SAMPLE) {
+          finish(null);
+          return;
+        }
+        const decodedSamples = Math.floor(decodedBytes / DECODE_BYTES_PER_SAMPLE);
+        finish(Math.ceil((decodedSamples * 1000) / DECODE_SAMPLE_RATE));
       });
     });
   } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
+    if (temporaryDirectory) {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+    releaseDecoder();
   }
 }
 
 export async function probeVoiceAudio(
   bytes: Buffer,
-  maximumDurationMs: number
+  maximumDurationMs: number,
+  userId?: string
 ): Promise<VerifiedVoiceAudio | null> {
+  if (!acceptsProbe(userId)) return null;
   const container = inspectVoiceContainer(bytes);
   if (
     container == null ||
@@ -200,12 +265,12 @@ export async function probeVoiceAudio(
   ) {
     return null;
   }
-  return await decodesAsAudio(bytes, container.extension, maximumDurationMs)
-    ? container
-    : null;
+  const decodedDurationMs = await decodesAsAudio(
+    bytes,
+    container.extension,
+    maximumDurationMs,
+    userId
+  );
+  if (decodedDurationMs == null || decodedDurationMs > maximumDurationMs) return null;
+  return { ...container, durationMs: decodedDurationMs };
 }
-import { spawn } from 'child_process';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import ffmpegPath from 'ffmpeg-static';

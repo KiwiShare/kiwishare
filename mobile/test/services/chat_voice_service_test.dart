@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,32 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('copies and deletes a completed temporary recording', () async {
+    final directory = await Directory.systemTemp.createTemp('kiwishare-voice-');
+    final file = File('${directory.path}/voice.m4a');
+    await file.writeAsBytes([1, 2, 3]);
+    addTearDown(() => directory.delete(recursive: true));
+
+    final recording = await recordingFromTemporaryFile(file.path, 2500);
+
+    expect(recording.bytes, Uint8List.fromList([1, 2, 3]));
+    expect(recording.durationMs, 2500);
+    expect(await file.exists(), isFalse);
+  });
+
+  test('deletes an over-limit temporary recording after rejection', () async {
+    final directory = await Directory.systemTemp.createTemp('kiwishare-voice-');
+    final file = File('${directory.path}/voice.m4a');
+    await file.writeAsBytes([1, 2, 3]);
+    addTearDown(() => directory.delete(recursive: true));
+
+    await expectLater(
+      recordingFromTemporaryFile(file.path, 60001),
+      throwsA(isA<ChatVoiceException>()),
+    );
+    expect(await file.exists(), isFalse);
   });
 
   test('uploads voice bytes through the controlled audio folder', () async {

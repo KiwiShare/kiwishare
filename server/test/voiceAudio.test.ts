@@ -58,6 +58,18 @@ function labelledButUndecodableMp4(): Buffer {
   ]);
 }
 
+function withMovieDuration(bytes: Buffer, duration: number): Buffer {
+  const changed = Buffer.from(bytes);
+  const typeOffset = changed.indexOf(Buffer.from('mvhd'));
+  if (typeOffset < 0) throw new Error('Generated fixture has no mvhd box');
+  const dataStart = typeOffset + 4;
+  const version = changed[dataStart];
+  const durationOffset = dataStart + (version === 1 ? 24 : 16);
+  if (version === 1) changed.writeBigUInt64BE(BigInt(duration), durationOffset);
+  else changed.writeUInt32BE(duration, durationOffset);
+  return changed;
+}
+
 describe('voice audio probing', () => {
   let validAudio: Buffer;
 
@@ -88,5 +100,23 @@ describe('voice audio probing', () => {
 
   test('enforces measured container duration before decoding', async () => {
     await expect(probeVoiceAudio(validAudio, 100)).resolves.toBeNull();
+  });
+
+  test('uses decoded samples instead of a shortened movie-header duration', async () => {
+    const shortenedHeader = withMovieDuration(validAudio, 1);
+
+    await expect(probeVoiceAudio(shortenedHeader, 100)).resolves.toBeNull();
+    const result = await probeVoiceAudio(shortenedHeader, 60000);
+    expect(result?.durationMs).toBeGreaterThan(100);
+  });
+
+  test('rejects concurrent decoders for the same authenticated user', async () => {
+    const results = await Promise.all([
+      probeVoiceAudio(validAudio, 60000, 'user-a'),
+      probeVoiceAudio(validAudio, 60000, 'user-a')
+    ]);
+
+    expect(results.filter((result) => result == null)).toHaveLength(1);
+    expect(results.filter((result) => result != null)).toHaveLength(1);
   });
 });

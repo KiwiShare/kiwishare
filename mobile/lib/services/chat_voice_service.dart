@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:image_picker/image_picker.dart';
@@ -15,6 +16,31 @@ int validatedChatVoiceDurationMs(int elapsedMs) {
     );
   }
   return elapsedMs < 1 ? 1 : elapsedMs;
+}
+
+Future<ChatVoiceRecording> recordingFromTemporaryFile(
+  String path,
+  int elapsedMs,
+) async {
+  final file = XFile(path, mimeType: 'audio/mp4');
+  try {
+    final durationMs = validatedChatVoiceDurationMs(elapsedMs);
+    final bytes = await file.readAsBytes();
+    return ChatVoiceRecording(
+      bytes: bytes,
+      fileName: file.name.isEmpty
+          ? 'chat_voice_${DateTime.now().millisecondsSinceEpoch}.m4a'
+          : file.name,
+      contentType: 'audio/mp4',
+      durationMs: durationMs,
+    );
+  } finally {
+    try {
+      await File(path).delete();
+    } on FileSystemException {
+      // Cache cleanup is best-effort after the recording bytes are copied.
+    }
+  }
 }
 
 class ChatVoiceRecording {
@@ -84,17 +110,7 @@ class DeviceChatVoiceRecorder implements ChatVoiceRecorder {
     final elapsedMs = _stopwatch.elapsedMilliseconds;
     final path = await _recorder.stop();
     if (path == null || path.isEmpty) return null;
-    final durationMs = validatedChatVoiceDurationMs(elapsedMs);
-    final file = XFile(path, mimeType: 'audio/mp4');
-    final bytes = await file.readAsBytes();
-    return ChatVoiceRecording(
-      bytes: bytes,
-      fileName: file.name.isEmpty
-          ? 'chat_voice_${DateTime.now().millisecondsSinceEpoch}.m4a'
-          : file.name,
-      contentType: 'audio/mp4',
-      durationMs: durationMs,
-    );
+    return recordingFromTemporaryFile(path, elapsedMs);
   }
 
   @override
