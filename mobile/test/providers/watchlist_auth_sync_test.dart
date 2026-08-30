@@ -40,6 +40,61 @@ void main() {
       expect(provider.watchedItemIds, {'new-item'});
     },
   );
+
+  test('account switch clears the previous account immediately', () async {
+    final provider = WatchlistProvider(
+      repository: _DelayedWatchlistRepository(),
+      initialToken: 'old-token',
+      initialWatchedIds: {'old-item'},
+    );
+
+    syncWatchlistAuth(provider, 'new-token');
+
+    expect(provider.watchedItemIds, isEmpty);
+    expect(provider.watchlistItems, isEmpty);
+    await Future<void>.delayed(Duration.zero);
+  });
+
+  test(
+    'failed add from an old session cannot remove a new account item',
+    () async {
+      final repository = _DelayedMutationWatchlistRepository();
+      final provider = WatchlistProvider(
+        repository: repository,
+        initialToken: 'old-token',
+      );
+
+      final oldAdd = provider.addToWatchlist('shared-item');
+      syncWatchlistAuth(provider, 'new-token');
+      await Future<void>.delayed(Duration.zero);
+
+      repository.completeOldAdd(false);
+      await oldAdd;
+
+      expect(provider.watchedItemIds, {'shared-item'});
+    },
+  );
+
+  test(
+    'failed removal from an old session cannot restore into a new account',
+    () async {
+      final repository = _DelayedMutationWatchlistRepository();
+      final provider = WatchlistProvider(
+        repository: repository,
+        initialToken: 'old-token',
+        initialWatchedIds: {'old-item'},
+      );
+
+      final oldRemoval = provider.removeFromWatchlist('old-item');
+      syncWatchlistAuth(provider, 'new-token');
+      await Future<void>.delayed(Duration.zero);
+
+      repository.completeOldRemoval(false);
+      await oldRemoval;
+
+      expect(provider.watchedItemIds, {'shared-item'});
+    },
+  );
 }
 
 class _RecordingWatchlistRepository implements WatchlistRepository {
@@ -93,6 +148,32 @@ class _DelayedWatchlistRepository implements WatchlistRepository {
   @override
   Future<bool> removeFromWatchlist(String itemId, {String? token}) async =>
       true;
+
+  @override
+  Future<bool> isWatched(String itemId, {String? token}) async => false;
+}
+
+class _DelayedMutationWatchlistRepository implements WatchlistRepository {
+  final _oldAdd = Completer<bool>();
+  final _oldRemoval = Completer<bool>();
+
+  void completeOldAdd(bool success) => _oldAdd.complete(success);
+  void completeOldRemoval(bool success) => _oldRemoval.complete(success);
+
+  @override
+  Future<List<ItemModel>> fetchWatchlist({String? token}) async => [];
+
+  @override
+  Future<Set<String>> fetchWatchedItemIds({String? token}) async =>
+      token == 'new-token' ? {'shared-item'} : {};
+
+  @override
+  Future<bool> addToWatchlist(String itemId, {String? token}) =>
+      token == 'old-token' ? _oldAdd.future : Future.value(true);
+
+  @override
+  Future<bool> removeFromWatchlist(String itemId, {String? token}) =>
+      token == 'old-token' ? _oldRemoval.future : Future.value(true);
 
   @override
   Future<bool> isWatched(String itemId, {String? token}) async => false;

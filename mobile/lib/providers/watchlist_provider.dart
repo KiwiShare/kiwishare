@@ -7,6 +7,7 @@ import '../repositories/watchlist_repository.dart';
 class WatchlistProvider extends ChangeNotifier {
   final WatchlistRepository _repository;
   String? _authToken;
+  int _authGeneration = 0;
 
   final Set<String> _watchedItemIds = <String>{};
   List<ItemModel> _watchlistItems = <ItemModel>[];
@@ -35,6 +36,12 @@ class WatchlistProvider extends ChangeNotifier {
   void updateAuthToken(String? token) {
     if (_authToken == token) return;
     _authToken = token;
+    _authGeneration += 1;
+    _watchedItemIds.clear();
+    _watchlistItems.clear();
+    _isLoading = false;
+    _error = null;
+
     if (token != null && token.isNotEmpty) {
       scheduleMicrotask(() {
         if (_authToken == token) {
@@ -42,10 +49,6 @@ class WatchlistProvider extends ChangeNotifier {
         }
       });
     } else {
-      _watchedItemIds.clear();
-      _watchlistItems.clear();
-      _isLoading = false;
-      _error = null;
       scheduleMicrotask(notifyListeners);
     }
   }
@@ -55,6 +58,7 @@ class WatchlistProvider extends ChangeNotifier {
 
   Future<void> loadWatchlist({bool forceRefresh = false}) async {
     final requestToken = _authToken;
+    final requestGeneration = _authGeneration;
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -69,7 +73,7 @@ class WatchlistProvider extends ChangeNotifier {
 
       // A login, logout, or account switch may finish while this request is in
       // flight. Never let the previous account overwrite the current state.
-      if (_authToken != requestToken) return;
+      if (!_isCurrentSession(requestToken, requestGeneration)) return;
 
       _watchlistItems = fetchedItems;
       _watchedItemIds.clear();
@@ -81,7 +85,7 @@ class WatchlistProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      if (_authToken != requestToken) return;
+      if (!_isCurrentSession(requestToken, requestGeneration)) return;
       _error = 'Failed to load watchlist: $e';
       _isLoading = false;
       notifyListeners();
@@ -102,6 +106,8 @@ class WatchlistProvider extends ChangeNotifier {
 
   Future<void> addToWatchlist(String itemId, {ItemModel? item}) async {
     if (_watchedItemIds.contains(itemId)) return;
+    final requestToken = _authToken;
+    final requestGeneration = _authGeneration;
 
     // Optimistic UI update
     _watchedItemIds.add(itemId);
@@ -110,8 +116,13 @@ class WatchlistProvider extends ChangeNotifier {
     }
     notifyListeners();
 
-    final success = await _repository.addToWatchlist(itemId, token: _authToken);
-    if (!success && _authToken != null) {
+    final success = await _repository.addToWatchlist(
+      itemId,
+      token: requestToken,
+    );
+    if (!_isCurrentSession(requestToken, requestGeneration)) return;
+
+    if (!success && requestToken != null) {
       // Revert if API failed when user is logged in
       _watchedItemIds.remove(itemId);
       _watchlistItems.removeWhere((i) => i.id == itemId);
@@ -121,6 +132,8 @@ class WatchlistProvider extends ChangeNotifier {
 
   Future<void> removeFromWatchlist(String itemId) async {
     if (!_watchedItemIds.contains(itemId)) return;
+    final requestToken = _authToken;
+    final requestGeneration = _authGeneration;
 
     // Optimistic UI update
     final removedIndex = _watchlistItems.indexWhere((i) => i.id == itemId);
@@ -133,9 +146,11 @@ class WatchlistProvider extends ChangeNotifier {
 
     final success = await _repository.removeFromWatchlist(
       itemId,
-      token: _authToken,
+      token: requestToken,
     );
-    if (!success && _authToken != null) {
+    if (!_isCurrentSession(requestToken, requestGeneration)) return;
+
+    if (!success && requestToken != null) {
       // Revert on API failure
       _watchedItemIds.add(itemId);
       if (removedItem != null) {
@@ -147,4 +162,7 @@ class WatchlistProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  bool _isCurrentSession(String? token, int generation) =>
+      _authToken == token && _authGeneration == generation;
 }
