@@ -10,6 +10,7 @@ class WatchlistProvider extends ChangeNotifier {
   int _authGeneration = 0;
   int _mutationRevision = 0;
   int _pendingMutationCount = 0;
+  int _loadSequence = 0;
 
   final Set<String> _watchedItemIds = <String>{};
   List<ItemModel> _watchlistItems = <ItemModel>[];
@@ -41,6 +42,7 @@ class WatchlistProvider extends ChangeNotifier {
     _authGeneration += 1;
     _mutationRevision += 1;
     _pendingMutationCount = 0;
+    _loadSequence += 1;
     _watchedItemIds.clear();
     _watchlistItems.clear();
     _isLoading = false;
@@ -61,6 +63,7 @@ class WatchlistProvider extends ChangeNotifier {
   bool isFavorite(String itemId) => isWatched(itemId); // Compatibility alias
 
   Future<void> loadWatchlist({bool forceRefresh = false}) async {
+    final requestLoadSequence = ++_loadSequence;
     final requestToken = _authToken;
     final requestGeneration = _authGeneration;
     final requestMutationRevision = _mutationRevision;
@@ -79,7 +82,13 @@ class WatchlistProvider extends ChangeNotifier {
 
       // A login, logout, or account switch may finish while this request is in
       // flight. Never let the previous account overwrite the current state.
-      if (!_isCurrentSession(requestToken, requestGeneration)) return;
+      if (!_isCurrentLoad(
+        requestToken,
+        requestGeneration,
+        requestLoadSequence,
+      )) {
+        return;
+      }
 
       final mutationChangedWhileLoading =
           requestHadPendingMutation ||
@@ -97,7 +106,13 @@ class WatchlistProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      if (!_isCurrentSession(requestToken, requestGeneration)) return;
+      if (!_isCurrentLoad(
+        requestToken,
+        requestGeneration,
+        requestLoadSequence,
+      )) {
+        return;
+      }
       _error = 'Failed to load watchlist: $e';
       _isLoading = false;
       notifyListeners();
@@ -198,4 +213,7 @@ class WatchlistProvider extends ChangeNotifier {
 
   bool _isCurrentSession(String? token, int generation) =>
       _authToken == token && _authGeneration == generation;
+
+  bool _isCurrentLoad(String? token, int generation, int loadSequence) =>
+      _isCurrentSession(token, generation) && _loadSequence == loadSequence;
 }

@@ -128,6 +128,25 @@ void main() {
 
     expect(provider.watchedItemIds, isEmpty);
   });
+
+  test('older same-session load cannot replace a newer result', () async {
+    final repository = _ConcurrentLoadWatchlistRepository();
+    final provider = WatchlistProvider(
+      repository: repository,
+      initialToken: 'valid-token',
+    );
+
+    final olderLoad = provider.loadWatchlist();
+    final newerLoad = provider.loadWatchlist();
+
+    repository.completeNewerLoad();
+    await newerLoad;
+    expect(provider.watchedItemIds, {'new-item'});
+
+    repository.completeOlderLoad();
+    await olderLoad;
+    expect(provider.watchedItemIds, {'new-item'});
+  });
 }
 
 class _RecordingWatchlistRepository implements WatchlistRepository {
@@ -225,6 +244,38 @@ class _SameSessionRaceWatchlistRepository implements WatchlistRepository {
 
   @override
   Future<Set<String>> fetchWatchedItemIds({String? token}) async => serverIds;
+
+  @override
+  Future<bool> addToWatchlist(String itemId, {String? token}) async => true;
+
+  @override
+  Future<bool> removeFromWatchlist(String itemId, {String? token}) async =>
+      true;
+
+  @override
+  Future<bool> isWatched(String itemId, {String? token}) async => false;
+}
+
+class _ConcurrentLoadWatchlistRepository implements WatchlistRepository {
+  final _olderItems = Completer<List<ItemModel>>();
+  final _newerItems = Completer<List<ItemModel>>();
+  int _itemRequestCount = 0;
+  int _idRequestCount = 0;
+
+  void completeOlderLoad() => _olderItems.complete([]);
+  void completeNewerLoad() => _newerItems.complete([]);
+
+  @override
+  Future<List<ItemModel>> fetchWatchlist({String? token}) {
+    _itemRequestCount += 1;
+    return _itemRequestCount == 1 ? _olderItems.future : _newerItems.future;
+  }
+
+  @override
+  Future<Set<String>> fetchWatchedItemIds({String? token}) async {
+    _idRequestCount += 1;
+    return _idRequestCount == 1 ? {'new-item'} : {'old-item'};
+  }
 
   @override
   Future<bool> addToWatchlist(String itemId, {String? token}) async => true;
