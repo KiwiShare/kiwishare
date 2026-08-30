@@ -225,13 +225,15 @@ class AuthProvider extends ChangeNotifier {
     _isLoggedIn = false;
     _currentUser = null;
     _jwtToken = null;
+    // Account-scoped providers must stop exposing the previous session before
+    // storage and push-token cleanup, which may take an arbitrary amount of
+    // time.
+    notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     await prefs.remove('current_user');
     if (pushDeactivation != null) await pushDeactivation;
-
-    notifyListeners();
   }
 
   Future<void> updateDisplayName(String value) async {

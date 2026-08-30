@@ -25,6 +25,29 @@ void main() {
       expect(pushSession.deactivatedTokens, ['mock_jwt_token']);
     },
   );
+
+  test('session listeners are notified before logout cleanup awaits', () async {
+    SharedPreferences.setMockInitialValues({});
+    final auth = AuthProvider(
+      userRepository: MockUserRepository(),
+      pushNotifications: _FakePushNotificationSession(),
+    );
+    await Future<void>.delayed(Duration.zero);
+    await auth.login('watcher@example.com', 'password');
+
+    var notifications = 0;
+    auth.addListener(() => notifications += 1);
+
+    final clearing = auth.clearSession();
+
+    expect(auth.isLoggedIn, isFalse);
+    expect(auth.currentUser, isNull);
+    expect(auth.jwtToken, isNull);
+    expect(notifications, 1);
+
+    await clearing;
+    expect(notifications, 1);
+  });
 }
 
 class _FakePushNotificationSession implements PushNotificationSession {
