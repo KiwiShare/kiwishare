@@ -245,6 +245,7 @@ const firebaseChatGateway: ChatPushGateway = {
       },
       data: {
         type: 'chat_message',
+        recipientId: payload.receiverId.toString(),
         conversationId: payload.conversationId,
         itemId: payload.itemId,
         itemTitle: payload.itemTitle,

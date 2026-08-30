@@ -18,7 +18,7 @@ class RecordingPushNotificationSession implements PushNotificationSession {
   final deactivations = <String>[];
 
   @override
-  Future<void> activate(String jwt) async {
+  Future<void> activate(String jwt, {String? userId}) async {
     activations.add(jwt);
   }
 

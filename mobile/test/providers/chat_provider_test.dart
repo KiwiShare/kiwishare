@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
+import 'package:kiwishare/models/chat_message_model.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/services/chat_photo_upload_service.dart';
@@ -120,6 +121,46 @@ void main() {
       );
     },
   );
+
+  test('session switch clears history and isolates in-flight loads', () async {
+    final conversation = testConversation();
+    final accountALoad = Completer<ChatMessagePage>();
+    final accountBLoad = Completer<ChatMessagePage>();
+    final repository = FakeChatRepository()
+      ..messageCompletersByToken['account-a-token'] = accountALoad
+      ..messageCompletersByToken['account-b-token'] = accountBLoad;
+    final provider = ChatProvider(repository: repository);
+
+    final pendingA = provider.loadMessages(
+      conversation: conversation,
+      token: 'account-a-token',
+    );
+    final pendingB = provider.loadMessages(
+      conversation: conversation,
+      token: 'account-b-token',
+    );
+    expect(repository.messageFetches, 2);
+
+    accountALoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '1', text: 'A', isMine: true)],
+        hasMore: false,
+      ),
+    );
+    await pendingA;
+    expect(provider.messagesFor(conversation.id), isEmpty);
+    expect(provider.isLoadingMessages(conversation.id), isTrue);
+
+    accountBLoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '2', text: 'B', isMine: false)],
+        hasMore: false,
+      ),
+    );
+    await pendingB;
+    expect(provider.messagesFor(conversation.id).single.id, '2');
+    expect(provider.isLoadingMessages(conversation.id), isFalse);
+  });
 
   test(
     'loads a new empty conversation without an unnecessary read request',
