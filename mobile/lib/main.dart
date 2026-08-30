@@ -174,9 +174,14 @@ void main() async {
         ),
         Provider<ItemRepository>(create: (_) => RestItemRepository()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
-        ChangeNotifierProvider(
+        ChangeNotifierProxyProvider<AuthProvider, WatchlistProvider>(
           create: (_) =>
               WatchlistProvider(repository: RestWatchlistRepository()),
+          update: (_, auth, watchlist) => syncWatchlistAuth(
+            watchlist ??
+                WatchlistProvider(repository: RestWatchlistRepository()),
+            auth.jwtToken,
+          ),
         ),
         ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
@@ -191,6 +196,15 @@ void main() async {
       child: const KiwiShareApp(),
     ),
   );
+}
+
+@visibleForTesting
+WatchlistProvider syncWatchlistAuth(
+  WatchlistProvider watchlist,
+  String? authToken,
+) {
+  watchlist.updateAuthToken(authToken);
+  return watchlist;
 }
 
 void _openWatchlistPriceDrop(String itemId) {

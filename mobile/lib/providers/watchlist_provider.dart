@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../models/item_model.dart';
 import '../repositories/watchlist_repository.dart';
@@ -33,12 +35,18 @@ class WatchlistProvider extends ChangeNotifier {
   void updateAuthToken(String? token) {
     if (_authToken == token) return;
     _authToken = token;
-    if (_authToken != null) {
-      loadWatchlist(forceRefresh: true);
+    if (token != null && token.isNotEmpty) {
+      scheduleMicrotask(() {
+        if (_authToken == token) {
+          unawaited(loadWatchlist(forceRefresh: true));
+        }
+      });
     } else {
       _watchedItemIds.clear();
       _watchlistItems.clear();
-      notifyListeners();
+      _isLoading = false;
+      _error = null;
+      scheduleMicrotask(notifyListeners);
     }
   }
 
@@ -46,15 +54,22 @@ class WatchlistProvider extends ChangeNotifier {
   bool isFavorite(String itemId) => isWatched(itemId); // Compatibility alias
 
   Future<void> loadWatchlist({bool forceRefresh = false}) async {
+    final requestToken = _authToken;
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final fetchedItems = await _repository.fetchWatchlist(token: _authToken);
-      final fetchedIds = await _repository.fetchWatchedItemIds(
-        token: _authToken,
+      final fetchedItems = await _repository.fetchWatchlist(
+        token: requestToken,
       );
+      final fetchedIds = await _repository.fetchWatchedItemIds(
+        token: requestToken,
+      );
+
+      // A login, logout, or account switch may finish while this request is in
+      // flight. Never let the previous account overwrite the current state.
+      if (_authToken != requestToken) return;
 
       _watchlistItems = fetchedItems;
       _watchedItemIds.clear();
@@ -66,6 +81,7 @@ class WatchlistProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
+      if (_authToken != requestToken) return;
       _error = 'Failed to load watchlist: $e';
       _isLoading = false;
       notifyListeners();
