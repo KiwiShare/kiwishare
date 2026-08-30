@@ -118,6 +118,14 @@ export const Navbar: React.FC = () => {
               )}
             </Link>
 
+            {/* Orders Hub */}
+            {isLoggedIn && (
+              <Link to="/orders" className="btn btn-secondary" style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', border: location.pathname.startsWith('/orders') ? '1.5px solid var(--primary-500)' : undefined }}>
+                <ShieldCheck size={18} color="var(--primary-600)" />
+                <span>Orders</span>
+              </Link>
+            )}
+
             {/* Post Item Action */}
             <button
               onClick={handlePostClick}
@@ -206,6 +214,26 @@ export const Navbar: React.FC = () => {
                     >
                       <UserIcon size={16} />
                       <span>My Profile</span>
+                    </Link>
+
+                    <Link
+                      to="/orders"
+                      onClick={() => setShowDropdown(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-main)',
+                        fontWeight: 500,
+                        transition: 'background 0.15s'
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      <ShieldCheck size={16} color="var(--primary-600)" />
+                      <span>My Orders</span>
                     </Link>
 
                     {isAdmin && (

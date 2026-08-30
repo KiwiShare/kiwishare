@@ -25,9 +25,9 @@ rootRouter.get('/health', (ctx) => {
   ctx.body = 'OK';
 });
 
-// Hook in logger, cors, body parser, and centralized error filter
-app.use(loggerMiddleware);
+// Hook in cors, logger, body parser, and centralized error filter
 app.use(corsMiddleware);
+app.use(loggerMiddleware);
 app.use(bodyParser());
 app.use(errorHandler);
 

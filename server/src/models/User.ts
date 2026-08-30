@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IUser extends Document {
-  email: string;
+  email?: string;
   phone?: string;
   passwordHash?: string;
   username?: string;
@@ -20,6 +20,9 @@ export interface IUser extends Document {
   stripeConnectedAccountId?: string;
   stripeAccountStatus: 'not_created' | 'pending' | 'active' | 'restricted';
   stripePayoutsEnabled: boolean;
+  isTurboMember: boolean;
+  turboExpiresAt?: Date;
+  sellerBalance: number; // in cents
   rating: number;
   reviewCount: number;
   lastLoginAt?: Date;
@@ -47,8 +50,8 @@ export interface IUser extends Document {
 
 const UserSchema = new Schema<IUser>(
   {
-    email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
-    phone: { type: String, unique: true, sparse: true },
+    email: { type: String, unique: true, sparse: true, index: true, lowercase: true, trim: true },
+    phone: { type: String, unique: true, sparse: true, index: true, trim: true },
     passwordHash: { type: String, select: false },
     username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     displayName: { type: String, required: true },
@@ -67,6 +70,9 @@ const UserSchema = new Schema<IUser>(
     stripeConnectedAccountId: { type: String, unique: true, sparse: true },
     stripeAccountStatus: { type: String, enum: ['not_created', 'pending', 'active', 'restricted'], default: 'not_created' },
     stripePayoutsEnabled: { type: Boolean, default: false },
+    isTurboMember: { type: Boolean, default: false },
+    turboExpiresAt: { type: Date },
+    sellerBalance: { type: Number, default: 0 }, // in cents
     rating: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
     lastLoginAt: { type: Date },

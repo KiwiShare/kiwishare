@@ -46,7 +46,17 @@ class ApiConfig {
 
   static String get sendOtpUrl => '$baseUrl/api/auth/send-otp';
   static String get verifyOtpUrl => '$baseUrl/api/auth/verify-otp';
+  static String get sendPhoneOtpUrl => '$baseUrl/api/auth/send-phone-otp';
+  static String get phoneAuthUrl => '$baseUrl/api/auth/phone';
   static String get googleAuthUrl => '$baseUrl/api/auth/google';
   static String get loginUrl => '$baseUrl/api/auth/login';
   static String get registerUrl => '$baseUrl/api/auth/register';
+
+  static String get safeZonesUrl => '$baseUrl/api/safe-zones';
+  static String get ordersCheckoutUrl => '$baseUrl/api/orders/checkout';
+  static String get ordersUrl => '$baseUrl/api/orders';
+  static String orderDetailUrl(String id) => '$baseUrl/api/orders/$id';
+  static String orderPayUrl(String id) => '$baseUrl/api/orders/$id/pay';
+  static String orderVerifyUrl(String id) => '$baseUrl/api/orders/$id/verify-handover';
+  static String get turboBoostUrl => '$baseUrl/api/users/membership/boost';
 }

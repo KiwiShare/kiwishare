@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/item_model.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/favorites_provider.dart';
 import '../../../theme/app_theme.dart';
+import '../../auth/login_view.dart';
 
 class HomeProductPreviewCard extends StatelessWidget {
   final ItemModel item;
@@ -31,26 +33,24 @@ class HomeProductPreviewCard extends StatelessWidget {
       child: InkWell(
         key: const Key('home-preview-open'),
         onTap: onOpen,
-        child: Container(
+        child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(AppRadius.large),
-          ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.small),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
                 child: SizedBox(
                   width: 88,
                   height: 88,
                   child: Image.network(
                     item.imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const ColoredBox(
+                    errorBuilder: (context, error, stackTrace) => Container(
                       color: AppColors.surfaceMuted,
-                      child: Icon(Icons.image_not_supported_outlined),
+                      child: const Icon(
+                        Icons.image_not_supported_outlined,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
                 ),
@@ -59,6 +59,7 @@ class HomeProductPreviewCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       item.title,
@@ -69,8 +70,9 @@ class HomeProductPreviewCard extends StatelessWidget {
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       '\$${item.priceNzd} NZD',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppColors.textBrand,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: AppColors.brandPrimary,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xs),
@@ -78,34 +80,25 @@ class HomeProductPreviewCard extends StatelessWidget {
                       children: [
                         const Icon(
                           Icons.location_on_outlined,
-                          size: 16,
+                          size: 14,
                           color: AppColors.textSecondary,
                         ),
-                        const SizedBox(width: AppSpacing.xs),
+                        const SizedBox(width: 2),
                         Expanded(
                           child: Text(
                             item.location,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall,
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      item.description.isEmpty
-                          ? 'Tap to view product details.'
-                          : item.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
                   ],
                 ),
               ),
-              const SizedBox(width: AppSpacing.xs),
               Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
                     tooltip: 'Close product preview',
@@ -117,7 +110,19 @@ class HomeProductPreviewCard extends StatelessWidget {
                     tooltip: isFavorite
                         ? 'Remove from saved items'
                         : 'Save item',
-                    onPressed: () => favorites.toggleFavorite(item.id),
+                    onPressed: () {
+                      final auth = context.read<AuthProvider?>();
+                      if (auth != null && !auth.isLoggedIn) {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (_) => const LoginView(),
+                        );
+                        return;
+                      }
+                      favorites.toggleFavorite(item.id, item);
+                    },
                     icon: Icon(
                       isFavorite ? Icons.favorite : Icons.favorite_border,
                       color: isFavorite

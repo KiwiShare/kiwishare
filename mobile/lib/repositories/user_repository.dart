@@ -10,6 +10,13 @@ abstract class UserRepository {
     String code, {
     String? displayName,
   });
+  Future<void> sendPhoneOtp(String phone);
+  Future<Map<String, dynamic>> loginWithPhone({
+    String? idToken,
+    String? phone,
+    String? code,
+    String? displayName,
+  });
   Future<Map<String, dynamic>> loginWithPassword({
     required String email,
     required String password,
@@ -37,6 +44,7 @@ class RestUserRepository implements UserRepository {
       Uri.parse(ApiConfig.loginUrl),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
+        'identifier': email.trim(),
         'email': email.trim().toLowerCase(),
         'password': password,
         'platform': 'mobile',
@@ -187,6 +195,80 @@ class RestUserRepository implements UserRepository {
   }
 
   @override
+  Future<void> sendPhoneOtp(String phone) async {
+    final response = await http.post(
+      Uri.parse(ApiConfig.sendPhoneOtpUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'phone': phone.trim()}),
+    );
+
+    if (response.statusCode != 200) {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(
+          error['message'] ?? 'Failed to send SMS verification code.',
+        );
+      } catch (e) {
+        if (e is Exception &&
+            !e.toString().startsWith('Exception: FormatException')) {
+          rethrow;
+        }
+        throw Exception('Failed to send SMS verification code.');
+      }
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> loginWithPhone({
+    String? idToken,
+    String? phone,
+    String? code,
+    String? displayName,
+  }) async {
+    final payload = <String, dynamic>{
+      'platform': 'mobile',
+    };
+    if (idToken != null && idToken.isNotEmpty) {
+      payload['idToken'] = idToken;
+    }
+    if (phone != null && phone.isNotEmpty) {
+      payload['phone'] = phone.trim();
+    }
+    if (code != null && code.isNotEmpty) {
+      payload['code'] = code.trim();
+    }
+    if (displayName != null && displayName.trim().isNotEmpty) {
+      payload['displayName'] = displayName.trim();
+    }
+
+    final response = await http.post(
+      Uri.parse(ApiConfig.phoneAuthUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final token = data['token'] as String;
+      final user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
+      return {'token': token, 'user': user};
+    } else {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(
+          error['message'] ?? 'Failed to authenticate phone number.',
+        );
+      } catch (e) {
+        if (e is Exception &&
+            !e.toString().startsWith('Exception: FormatException')) {
+          rethrow;
+        }
+        throw Exception('Failed to authenticate phone number.');
+      }
+    }
+  }
+
+  @override
   Future<Map<String, dynamic>> loginWithGoogle(String idToken) async {
     final response = await http.post(
       Uri.parse(ApiConfig.googleAuthUrl),
@@ -292,6 +374,29 @@ class MockUserRepository implements UserRepository {
       return {'token': 'mock_jwt_token', 'user': user};
     }
     throw Exception('Invalid or expired verification code.');
+  }
+
+  @override
+  Future<void> sendPhoneOtp(String phone) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  @override
+  Future<Map<String, dynamic>> loginWithPhone({
+    String? idToken,
+    String? phone,
+    String? code,
+    String? displayName,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    final user = UserModel(
+      id: 'mock_phone_user_1',
+      displayName: displayName ?? (phone != null ? 'User ${phone.substring(phone.length > 4 ? phone.length - 4 : 0)}' : 'Phone User'),
+      avatarUrl: null,
+      trustScore: 100,
+      isVerified: true,
+    );
+    return {'token': 'mock_jwt_token', 'user': user};
   }
 
   @override

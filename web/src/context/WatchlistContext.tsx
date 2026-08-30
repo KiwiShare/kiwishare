@@ -14,7 +14,7 @@ interface WatchlistContextType {
 const WatchlistContext = createContext<WatchlistContextType | undefined>(undefined);
 
 export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user } = useAuth();
   const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
   const [watchlistItems, setWatchlistItems] = useState<UsedItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -28,23 +28,25 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     try {
       setIsLoading(true);
+      const userId = user?.id;
       const [idsRes, itemsRes] = await Promise.all([
-        watchlistApi.getWatchlistIds().catch(() => ({ itemIds: [] })),
-        watchlistApi.getWatchlist().catch(() => ({ items: [] })),
+        watchlistApi.getWatchlistIds(userId).catch(() => ({ itemIds: [] })),
+        watchlistApi.getWatchlist(userId).catch(() => ({ items: [], data: [] })),
       ]);
 
       if (idsRes.itemIds) {
         setWatchlistIds(new Set(idsRes.itemIds.map(String)));
       }
-      if (itemsRes.items) {
-        setWatchlistItems(itemsRes.items);
+      const loadedItems = itemsRes.items || itemsRes.data || [];
+      if (Array.isArray(loadedItems)) {
+        setWatchlistItems(loadedItems);
       }
     } catch (err) {
       console.error('Failed to load watchlist:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, user?.id]);
 
   useEffect(() => {
     refreshWatchlist();
@@ -71,7 +73,7 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
       setWatchlistIds(newIds);
       setWatchlistItems((prev) => prev.filter((i) => (i.id || i._id) !== itemId));
       try {
-        await watchlistApi.removeFromWatchlist(itemId);
+        await watchlistApi.removeFromWatchlist(itemId, user?.id);
       } catch (e) {
         // Rollback on error
         newIds.add(itemId);
@@ -84,7 +86,7 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
       setWatchlistIds(newIds);
       setWatchlistItems((prev) => [item, ...prev]);
       try {
-        await watchlistApi.addToWatchlist(itemId);
+        await watchlistApi.addToWatchlist(itemId, user?.id);
       } catch (e) {
         // Rollback on error
         newIds.delete(itemId);

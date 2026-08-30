@@ -1,11 +1,9 @@
 import { Context, Next } from 'koa';
 import jwt from 'jsonwebtoken';
+import config, { MINIMUM_JWT_SECRET_LENGTH, INSECURE_JWT_SECRETS } from '../config';
 
-const MINIMUM_JWT_SECRET_LENGTH = 32;
+export { MINIMUM_JWT_SECRET_LENGTH, INSECURE_JWT_SECRETS };
 export const EXPIRED_TOKEN_CLEANUP_GRACE_SECONDS = 5 * 60;
-const INSECURE_JWT_SECRETS = new Set([
-  'kiwishare_super_secret_key_123_abc'
-]);
 
 export function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET?.trim();
@@ -19,6 +17,15 @@ export function getJwtSecret(): string {
     );
   }
   return secret;
+}
+
+export function signAuthToken(
+  payload: { id: string; email: string },
+  expiresIn?: jwt.SignOptions['expiresIn']
+): string {
+  return jwt.sign(payload, getJwtSecret(), {
+    expiresIn: expiresIn ?? (config.get('jwt.expiresIn') as jwt.SignOptions['expiresIn'])
+  });
 }
 
 export interface DecodedToken {

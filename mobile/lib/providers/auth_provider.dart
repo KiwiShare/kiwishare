@@ -21,12 +21,14 @@ class AuthProvider extends ChangeNotifier {
 
   UserModel? _currentUser;
   UserModel? get currentUser => _currentUser;
+  UserModel? get user => _currentUser;
 
   bool _isLoggingIn = false;
   bool get isLoggingIn => _isLoggingIn;
 
   String? _jwtToken;
   String? get jwtToken => _jwtToken;
+  String? get token => _jwtToken;
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
 
@@ -123,6 +125,55 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       await userRepository.sendOtp(email);
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> sendPhoneOtp(String phone) async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      await userRepository.sendPhoneOtp(phone);
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loginWithPhone({
+    String? idToken,
+    String? phone,
+    String? code,
+    String? displayName,
+  }) async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      final result = await userRepository.loginWithPhone(
+        idToken: idToken,
+        phone: phone,
+        code: code,
+        displayName: displayName,
+      );
+      final token = result['token'] as String;
+      final user = result['user'] as UserModel;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', token);
+      await prefs.setString('current_user', jsonEncode(user.toJson()));
+
+      _jwtToken = token;
+      _currentUser = user;
+      _isLoggedIn = true;
+      unawaited(
+        pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+      );
+    } catch (e) {
+      _currentUser = null;
+      _isLoggedIn = false;
+      rethrow;
     } finally {
       _isLoggingIn = false;
       notifyListeners();

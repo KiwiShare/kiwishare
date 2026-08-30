@@ -9,7 +9,8 @@
     "target": "es2022",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node", "jest"]
   },
   "compileOnSave": true,
   "include": [

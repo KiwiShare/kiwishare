@@ -6,8 +6,9 @@ interface AuthContextType {
   token: string | null;
   isLoggedIn: boolean;
   isLoading: boolean;
-  login: (email: string, password?: string) => Promise<void>;
+  login: (identifier: string, password?: string) => Promise<void>;
   loginWithOtp: (email: string, code: string, displayName?: string) => Promise<void>;
+  loginWithPhone: (params: { idToken?: string; phone?: string; code?: string; displayName?: string }) => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -61,13 +62,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [token, refreshUser]);
 
-  const login = async (email: string, password?: string) => {
-    const res = await authApi.login({ email, password, platform: 'web' });
+  const login = async (identifier: string, password?: string) => {
+    const res = await authApi.login({ identifier, password, platform: 'web' });
     saveAuth(res.token, res.user);
   };
 
   const loginWithOtp = async (email: string, code: string, displayName?: string) => {
     const res = await authApi.verifyOtp({ email, code, displayName });
+    saveAuth(res.token, res.user);
+  };
+
+  const loginWithPhone = async (params: { idToken?: string; phone?: string; code?: string; displayName?: string }) => {
+    const res = await authApi.loginWithPhone(params);
     saveAuth(res.token, res.user);
   };
 
@@ -89,6 +95,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isLoading,
         login,
         loginWithOtp,
+        loginWithPhone,
         register,
         logout,
         refreshUser,

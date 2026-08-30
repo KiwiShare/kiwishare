@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { itemsApi, UsedItem } from '../api/client';
 import { useWatchlist } from '../context/WatchlistContext';
 import { useAuth } from '../context/AuthContext';
+import { TurboBoostModal } from '../components/TurboBoostModal';
 import { 
   Heart, 
   MapPin, 
@@ -11,24 +12,27 @@ import {
   ArrowLeft, 
   Tag, 
   Share2, 
-  CheckCircle,
-  MessageCircle,
-  Loader2,
-  ChevronLeft,
-  ChevronRight
+  MessageCircle, 
+  Loader2, 
+  ChevronLeft, 
+  ChevronRight,
+  ShoppingBag,
+  Rocket,
+  Zap
 } from 'lucide-react';
 
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isWatched, toggleWatch } = useWatchlist();
-  const { isLoggedIn } = useAuth();
+  const { user, isLoggedIn } = useAuth();
 
   const [item, setItem] = useState<UsedItem | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImgIndex, setSelectedImgIndex] = useState<number>(0);
   const [claimed, setClaimed] = useState<boolean>(false);
+  const [turboModalOpen, setTurboModalOpen] = useState<boolean>(false);
 
   // Swipe handling state
   const touchStartX = useRef<number | null>(null);
@@ -76,6 +80,7 @@ export const ProductDetailPage: React.FC = () => {
 
   const itemId = item.id || item._id || '';
   const watched = isWatched(itemId);
+  const isOwner = Boolean(user?.id && (item.sellerId === user.id || item.ownerId === user.id || item.seller?.id === user.id));
 
   const imagesList = (item.images && item.images.length > 0)
     ? item.images.map((im) => im.url)
@@ -301,13 +306,30 @@ export const ProductDetailPage: React.FC = () => {
 
         {/* Right Column: Information & Actions */}
         <div>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
             <span className="badge badge-condition" style={{ textTransform: 'capitalize' }}>
               Condition: {item.condition || 'Pre-loved'}
             </span>
             <span className="badge" style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}>
               <Tag size={12} /> {item.category || 'General'}
             </span>
+            {item.isBoosted && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  backgroundColor: '#fef3c7',
+                  color: '#b45309',
+                  padding: '4px 10px',
+                  borderRadius: '12px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700
+                }}
+              >
+                <Zap size={12} /> Turbo Boosted
+              </span>
+            )}
           </div>
 
           <h1 style={{ fontSize: '2rem', fontWeight: 800, lineHeight: 1.25, marginBottom: '16px' }}>
@@ -433,67 +455,122 @@ export const ProductDetailPage: React.FC = () => {
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-            {claimed ? (
-              <div
-                className="glass-card"
-                style={{
-                  flex: 1,
-                  padding: '16px',
-                  backgroundColor: '#f0fdf4',
-                  borderColor: '#bbf7d0',
-                  color: '#15803d',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  fontWeight: 600,
-                  fontSize: '0.95rem',
-                }}
-              >
-                <CheckCircle size={20} />
-                <span>Claim request sent! The seller has been notified.</span>
-              </div>
-            ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+              {/* Primary Buy Now / Escrow Meetup Button */}
+              {isOwner ? (
+                <button
+                  onClick={() => setTurboModalOpen(true)}
+                  className="btn"
+                  style={{
+                    flex: 2,
+                    padding: '16px 24px',
+                    borderRadius: 'var(--radius-full)',
+                    fontSize: '1rem',
+                    fontWeight: 800,
+                    backgroundColor: '#f59e0b',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 8px 20px rgba(245, 158, 11, 0.35)',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Rocket size={18} />
+                  <span>Turbo Boost This Listing</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (!isLoggedIn) {
+                      navigate('/login');
+                      return;
+                    }
+                    navigate(`/checkout/${itemId}`);
+                  }}
+                  className="btn btn-primary"
+                  style={{
+                    flex: 2,
+                    padding: '16px 24px',
+                    borderRadius: 'var(--radius-full)',
+                    fontSize: '1.05rem',
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 8px 24px rgba(16, 185, 129, 0.35)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <ShoppingBag size={20} />
+                  <span>Buy Now • Escrow Meetup</span>
+                </button>
+              )}
+
+              {/* Watchlist Toggle Button */}
               <button
-                onClick={handleClaim}
-                className="btn btn-primary"
-                style={{ flex: 1, padding: '16px 24px', borderRadius: 'var(--radius-full)', fontSize: '1rem' }}
+                onClick={handleWatch}
+                className={`btn ${watched ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '16px 24px', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', gap: '6px' }}
+                title={watched ? 'Remove from Watchlist' : 'Add to Watchlist'}
               >
-                <MessageCircle size={18} />
-                <span>Contact Seller / Claim</span>
+                <Heart size={20} fill={watched ? 'currentColor' : 'none'} />
+                <span>{watched ? 'Watched' : 'Watch'}</span>
               </button>
+
+              {/* Share Button */}
+              <button
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({ title: item.title, url: window.location.href });
+                  } else {
+                    navigator.clipboard.writeText(window.location.href);
+                    alert('Item link copied to clipboard!');
+                  }
+                }}
+                className="btn btn-secondary"
+                style={{ padding: '16px', borderRadius: 'var(--radius-full)' }}
+                title="Share item"
+              >
+                <Share2 size={18} />
+              </button>
+            </div>
+
+            {/* Secondary Contact Seller option */}
+            {!isOwner && (
+              claimed ? (
+                <div style={{ backgroundColor: '#f0fdf4', color: '#16a34a', padding: '12px', borderRadius: 'var(--radius-full)', textAlign: 'center', fontSize: '0.9rem', fontWeight: 600 }}>
+                  ✓ Contact request sent to seller!
+                </div>
+              ) : (
+                <button
+                  onClick={handleClaim}
+                  className="btn btn-secondary"
+                  style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-full)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  <MessageCircle size={16} />
+                  <span>Message Seller / Ask Questions</span>
+                </button>
+              )
             )}
-
-            <button
-              onClick={handleWatch}
-              className={`btn ${watched ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ padding: '16px 24px', borderRadius: 'var(--radius-full)' }}
-              title={watched ? 'Remove from Watchlist' : 'Add to Watchlist'}
-            >
-              <Heart size={20} fill={watched ? 'currentColor' : 'none'} />
-              <span>{watched ? 'Watched' : 'Watch'}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (navigator.share) {
-                  navigator.share({ title: item.title, url: window.location.href });
-                } else {
-                  navigator.clipboard.writeText(window.location.href);
-                  alert('Item link copied to clipboard!');
-                }
-              }}
-              className="btn btn-secondary"
-              style={{ padding: '16px', borderRadius: 'var(--radius-full)' }}
-              title="Share item"
-            >
-              <Share2 size={18} />
-            </button>
           </div>
 
         </div>
 
       </div>
+
+      <TurboBoostModal
+        isOpen={turboModalOpen}
+        onClose={() => setTurboModalOpen(false)}
+        onActivated={() => {
+          setTurboModalOpen(false);
+          alert('Turbo Boost membership successfully activated!');
+        }}
+      />
 
     </div>
   );

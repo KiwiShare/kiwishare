@@ -9,6 +9,7 @@ import adminRouter from './admin';
 import uploadRouter from './upload';
 import chatRouter from './chat';
 import notificationsRouter from './notifications';
+import ordersRouter from './orders';
 
 const router = new Router({ prefix: '/api' });
 
@@ -27,6 +28,9 @@ router.use(transactionsRouter.allowedMethods());
 
 router.use(watchlistRouter.routes());
 router.use(watchlistRouter.allowedMethods());
+
+router.use(ordersRouter.routes());
+router.use(ordersRouter.allowedMethods());
 
 router.use(categoriesRouter.routes());
 router.use(categoriesRouter.allowedMethods());

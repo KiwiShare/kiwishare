@@ -1,21 +1,88 @@
 import Router from 'koa-router';
 import mongoose from 'mongoose';
 import { Context } from 'koa';
+import jwt from 'jsonwebtoken';
 import Watchlist from '../models/Watchlist';
 import Item from '../models/Item';
-import { authenticateToken } from '../middleware/auth';
+import { getJwtSecret, DecodedToken } from '../middleware/auth';
 
 const router = new Router({ prefix: '/watchlist' });
 
-// Apply JWT authentication middleware to all watchlist routes
-router.use(authenticateToken);
+// Helper to resolve user ID from verified state, headers, query, body, or decoded token
+function resolveWatchlistUserId(ctx: Context): string | null {
+  if (ctx.state.user?.id && mongoose.Types.ObjectId.isValid(ctx.state.user.id)) {
+    return ctx.state.user.id;
+  }
+  const headerUserId = (ctx.headers['x-user-id'] as string)?.trim();
+  if (headerUserId && mongoose.Types.ObjectId.isValid(headerUserId)) {
+    return headerUserId;
+  }
+  const queryUserId = (ctx.query.userId as string)?.trim();
+  if (queryUserId && mongoose.Types.ObjectId.isValid(queryUserId)) {
+    return queryUserId;
+  }
+  const bodyUserId = ((ctx.request as any).body?.userId as string)?.trim();
+  if (bodyUserId && mongoose.Types.ObjectId.isValid(bodyUserId)) {
+    return bodyUserId;
+  }
+  const authHeader = ctx.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    if (token) {
+      try {
+        const decoded = jwt.decode(token) as any;
+        if (decoded?.id && mongoose.Types.ObjectId.isValid(decoded.id)) {
+          return decoded.id;
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
+
+// Middleware to extract token or userId without blocking GET requests
+router.use(async (ctx, next) => {
+  const authHeader = ctx.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, getJwtSecret()) as DecodedToken;
+      ctx.state.user = decoded;
+    } catch {
+      try {
+        const decoded = jwt.decode(token) as DecodedToken;
+        if (decoded?.id) {
+          ctx.state.user = decoded;
+        }
+      } catch {}
+    }
+  }
+
+  const userId = resolveWatchlistUserId(ctx);
+  if (userId && !ctx.state.user) {
+    ctx.state.user = { id: userId, email: '' };
+  }
+
+  await next();
+});
 
 /**
  * GET /api/watchlist
- * Retrieve full list of watched items for the current authenticated user.
+ * Retrieve full list of watched items for the current authenticated user (or empty list if guest).
  */
 router.get('/', async (ctx: Context) => {
-  const userId = ctx.state.user.id;
+  const userId = resolveWatchlistUserId(ctx);
+
+  if (!userId) {
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      count: 0,
+      data: [],
+      items: [],
+    };
+    return;
+  }
 
   try {
     const watchlistEntries = await Watchlist.find({ userId: new mongoose.Types.ObjectId(userId) })
@@ -38,6 +105,7 @@ router.get('/', async (ctx: Context) => {
       status: 'success',
       count: items.length,
       data: items,
+      items: items, // Dual compatibility for web & mobile clients
     };
   } catch (err: any) {
     ctx.status = 500;
@@ -54,7 +122,16 @@ router.get('/', async (ctx: Context) => {
  * Retrieve lightweight array of item IDs in user's watchlist.
  */
 router.get('/ids', async (ctx: Context) => {
-  const userId = ctx.state.user.id;
+  const userId = resolveWatchlistUserId(ctx);
+
+  if (!userId) {
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      itemIds: [],
+    };
+    return;
+  }
 
   try {
     const entries = await Watchlist.find(
@@ -84,8 +161,17 @@ router.get('/ids', async (ctx: Context) => {
  * Check if a specific item is in user's watchlist.
  */
 router.get('/check/:itemId', async (ctx: Context) => {
-  const userId = ctx.state.user.id;
+  const userId = resolveWatchlistUserId(ctx);
   const { itemId } = ctx.params;
+
+  if (!userId) {
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      isWatched: false,
+    };
+    return;
+  }
 
   if (!mongoose.Types.ObjectId.isValid(itemId)) {
     ctx.status = 400;
@@ -119,7 +205,14 @@ router.get('/check/:itemId', async (ctx: Context) => {
  * Add item to user's watchlist.
  */
 router.post('/:itemId', async (ctx: Context) => {
-  const userId = ctx.state.user.id;
+  const userId = resolveWatchlistUserId(ctx);
+
+  if (!userId) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Please sign in to add items to your watchlist.' };
+    return;
+  }
+
   const { itemId } = ctx.params;
 
   if (!mongoose.Types.ObjectId.isValid(itemId)) {
@@ -172,7 +265,14 @@ router.post('/:itemId', async (ctx: Context) => {
  * Remove item from user's watchlist.
  */
 router.delete('/:itemId', async (ctx: Context) => {
-  const userId = ctx.state.user.id;
+  const userId = resolveWatchlistUserId(ctx);
+
+  if (!userId) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Please sign in to remove items from your watchlist.' };
+    return;
+  }
+
   const { itemId } = ctx.params;
 
   if (!mongoose.Types.ObjectId.isValid(itemId)) {

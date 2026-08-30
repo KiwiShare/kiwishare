@@ -1,4 +1,5 @@
 import { Context, Next } from 'koa';
+import config from '../config';
 
 interface RateLimitRecord {
   count: number;
@@ -10,7 +11,7 @@ const rateLimitStore = new Map<string, RateLimitRecord>();
 export function rateLimit(limit: number, windowMs: number) {
   return async (ctx: Context, next: Next) => {
     // Disable rate limiting in test environment to avoid test flakiness
-    if (process.env.NODE_ENV === 'test') {
+    if (config.get('env') === 'test') {
       return await next();
     }
 

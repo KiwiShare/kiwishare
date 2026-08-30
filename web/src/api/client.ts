@@ -52,6 +52,8 @@ export interface UsedItem {
   };
   sellerId?: string;
   ownerId?: string;
+  isBoosted?: boolean;
+  boostScore?: number;
   seller?: {
     id: string;
     displayName: string;
@@ -107,8 +109,18 @@ function getAuthToken(): string | null {
   return localStorage.getItem('kiwishare_token');
 }
 
+export function getStoredUser(): UserProfile | null {
+  try {
+    const raw = localStorage.getItem('kiwishare_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getAuthToken();
+  const user = getStoredUser();
   const headers = new Headers(options.headers || {});
 
   // Platform and content headers
@@ -119,6 +131,9 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (user?.id) {
+    headers.set('x-user-id', user.id);
   }
 
   const apiBase = getApiBaseUrl();
@@ -141,13 +156,13 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
 
 // Authentication APIs
 export const authApi = {
-  register: (body: { email: string; password?: string; displayName: string; platform?: string }) =>
+  register: (body: { email: string; password?: string; displayName: string; username?: string; phone?: string; platform?: string }) =>
     apiRequest<AuthResponse>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ ...body, platform: 'web' }),
     }),
 
-  login: (body: { email: string; password?: string; platform?: string }) =>
+  login: (body: { identifier?: string; email?: string; username?: string; password?: string; platform?: string }) =>
     apiRequest<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ ...body, platform: 'web' }),
@@ -163,6 +178,18 @@ export const authApi = {
     apiRequest<AuthResponse>('/auth/verify-otp', {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  sendPhoneOtp: (phone: string) =>
+    apiRequest<{ status: string; message: string; devCode?: string }>('/auth/send-phone-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    }),
+
+  loginWithPhone: (body: { idToken?: string; phone?: string; code?: string; displayName?: string }) =>
+    apiRequest<AuthResponse>('/auth/phone', {
+      method: 'POST',
+      body: JSON.stringify({ ...body, platform: 'web' }),
     }),
 
   getMe: () =>
@@ -320,24 +347,48 @@ export const adminApi = {
 
 // Watchlist APIs
 export const watchlistApi = {
-  getWatchlist: () =>
-    apiRequest<{ status: string; count: number; items: UsedItem[] }>('/watchlist'),
+  getWatchlist: (userId?: string) => {
+    const uid = userId || getStoredUser()?.id;
+    return apiRequest<{ status: string; count: number; items: UsedItem[]; data?: UsedItem[] }>(
+      uid ? `/watchlist?userId=${uid}` : '/watchlist'
+    );
+  },
 
-  getWatchlistIds: () =>
-    apiRequest<{ status: string; itemIds: string[] }>('/watchlist/ids'),
+  getWatchlistIds: (userId?: string) => {
+    const uid = userId || getStoredUser()?.id;
+    return apiRequest<{ status: string; itemIds: string[] }>(
+      uid ? `/watchlist/ids?userId=${uid}` : '/watchlist/ids'
+    );
+  },
 
-  checkWatch: (itemId: string) =>
-    apiRequest<{ status: string; isWatched: boolean }>(`/watchlist/check/${itemId}`),
+  checkWatch: (itemId: string, userId?: string) => {
+    const uid = userId || getStoredUser()?.id;
+    return apiRequest<{ status: string; isWatched: boolean }>(
+      uid ? `/watchlist/check/${itemId}?userId=${uid}` : `/watchlist/check/${itemId}`
+    );
+  },
 
-  addToWatchlist: (itemId: string) =>
-    apiRequest<{ status: string; message: string }>(`/watchlist/${itemId}`, {
-      method: 'POST',
-    }),
+  addToWatchlist: (itemId: string, userId?: string) => {
+    const uid = userId || getStoredUser()?.id;
+    return apiRequest<{ status: string; message: string; isWatched?: boolean }>(
+      uid ? `/watchlist/${itemId}?userId=${uid}` : `/watchlist/${itemId}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ userId: uid }),
+      }
+    );
+  },
 
-  removeFromWatchlist: (itemId: string) =>
-    apiRequest<{ status: string; message: string }>(`/watchlist/${itemId}`, {
-      method: 'DELETE',
-    }),
+  removeFromWatchlist: (itemId: string, userId?: string) => {
+    const uid = userId || getStoredUser()?.id;
+    return apiRequest<{ status: string; message: string; isWatched?: boolean }>(
+      uid ? `/watchlist/${itemId}?userId=${uid}` : `/watchlist/${itemId}`,
+      {
+        method: 'DELETE',
+        body: JSON.stringify({ userId: uid }),
+      }
+    );
+  },
 };
 
 // Cloudflare R2 Image Upload APIs
@@ -378,6 +429,165 @@ export const uploadApi = {
     }>('/upload/presign', {
       method: 'POST',
       body: JSON.stringify({ fileName, contentType }),
+    }),
+};
+
+// Safe Zones, Ecommerce Orders & Escrow Handover APIs
+export interface SafeZone {
+  id: string;
+  name: string;
+  category: string;
+  address: string;
+  suburb: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  features: string[];
+  operatingHours: string;
+}
+
+export interface FeeBreakdown {
+  itemAmount: number;
+  feeRate: number;
+  standardBuyerFee: number;
+  buyerFeeDiscount: number;
+  effectiveBuyerFee: number;
+  buyerTotalAmount: number;
+  standardSellerFee: number;
+  sellerFeeDiscount: number;
+  effectiveSellerFee: number;
+  sellerReceiveAmount: number;
+  isEarlyBirdWaiver: boolean;
+  isSellerTurboMember: boolean;
+}
+
+export interface OrderItem {
+  id: string;
+  _id?: string;
+  orderNumber: string;
+  itemId: any;
+  buyerId: any;
+  sellerId: any;
+  status:
+    | 'pending_payment'
+    | 'paid'
+    | 'meeting_scheduled'
+    | 'meeting_in_progress'
+    | 'qr_scanned'
+    | 'completed'
+    | 'cancelled'
+    | 'refunded'
+    | 'seller_paid'
+    | 'disputed';
+  itemSnapshot: {
+    title: string;
+    description?: string;
+    condition?: string;
+    imageUrl?: string;
+  };
+  currency: string;
+  itemAmount: number;
+  buyerFeeAmount: number;
+  sellerFeeAmount: number;
+  buyerTotalAmount: number;
+  sellerReceiveAmount: number;
+  meeting?: {
+    locationName?: string;
+    latitude?: number;
+    longitude?: number;
+    scheduledAt?: string;
+  };
+  paidAt?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrderDetailResponse {
+  status: string;
+  order: OrderItem;
+  userRole: 'buyer' | 'seller';
+  handover?: {
+    qrToken: string;
+    claimCode: string;
+    expiresAt: string;
+  };
+}
+
+export const ordersApi = {
+  getSafeZones: () =>
+    apiRequest<{ status: string; count: number; data: SafeZone[] }>('/safe-zones'),
+
+  checkout: (payload: {
+    itemId: string;
+    meetingLocation: {
+      name: string;
+      address?: string;
+      latitude?: number;
+      longitude?: number;
+    };
+    scheduledAt?: string;
+  }) =>
+    apiRequest<{
+      status: string;
+      order: OrderItem;
+      clientSecret: string;
+      publishableKey: string;
+      feeBreakdown: FeeBreakdown;
+    }>('/orders/checkout', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  payOrder: (orderId: string, payload?: { stripePaymentIntentId?: string }) =>
+    apiRequest<{
+      status: string;
+      message: string;
+      order: OrderItem;
+      handover: {
+        qrToken: string;
+        claimCode: string;
+        expiresAt: string;
+      };
+    }>(`/orders/${orderId}/pay`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+
+  getOrders: (role: 'all' | 'buying' | 'selling' = 'all') =>
+    apiRequest<{ status: string; count: number; orders: OrderItem[] }>(
+      `/orders?role=${role}`
+    ),
+
+  getOrderById: (orderId: string) =>
+    apiRequest<OrderDetailResponse>(`/orders/${orderId}`),
+
+  verifyHandover: (
+    orderId: string,
+    payload: { qrToken?: string; claimCode?: string }
+  ) =>
+    apiRequest<{
+      status: string;
+      message: string;
+      order: OrderItem;
+    }>(`/orders/${orderId}/verify-handover`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  activateTurboBoost: (plan: 'monthly' | 'yearly' = 'monthly') =>
+    apiRequest<{
+      status: string;
+      message: string;
+      user: any;
+      membership: {
+        isTurboMember: boolean;
+        expiresAt: string;
+        benefits: string[];
+      };
+    }>('/users/membership/boost', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
     }),
 };
 

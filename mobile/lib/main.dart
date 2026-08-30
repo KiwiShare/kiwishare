@@ -173,9 +173,13 @@ void main() async {
         ),
         Provider<ItemRepository>(create: (_) => RestItemRepository()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
-        ChangeNotifierProvider(
+        ChangeNotifierProxyProvider<AuthProvider, WatchlistProvider>(
           create: (_) =>
               WatchlistProvider(repository: RestWatchlistRepository()),
+          update: (_, auth, watchlist) =>
+              (watchlist ??
+                  WatchlistProvider(repository: RestWatchlistRepository()))
+                ..updateAuth(auth.token, userId: auth.user?.id),
         ),
         ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),

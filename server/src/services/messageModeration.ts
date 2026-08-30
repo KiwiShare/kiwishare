@@ -1,3 +1,5 @@
+import config from '../config';
+
 const DEFAULT_BLOCKED_TERMS = [
   'fuck',
   'fucks',
@@ -42,7 +44,7 @@ function escapeRegularExpression(value: string): string {
 }
 
 function configuredBlockedTerms(): string[] {
-  const configured = (process.env.CHAT_BLOCKED_TERMS ?? '')
+  const configured = ((process.env.CHAT_BLOCKED_TERMS ?? config.get('chat.blockedTerms')) ?? '')
     .split(/[\n,]/u)
     .map((term) => term.trim())
     .filter(Boolean);

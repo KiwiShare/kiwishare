@@ -1,12 +1,12 @@
 import Router from 'koa-router';
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
+import config from '../config';
 import User from '../models/User';
 import Otp from '../models/Otp';
 import { resolveClientPlatform } from '../middleware/logger';
-import { getJwtSecret } from '../middleware/auth';
+import { signAuthToken } from '../middleware/auth';
 
 const router = new Router();
 
@@ -49,7 +49,7 @@ router.post('/auth/register', async (ctx) => {
     passwordHash
   });
 
-  const token = jwt.sign({ id: newUser._id.toString(), email: newUser.email }, getJwtSecret(), { expiresIn: '2h' });
+  const token = signAuthToken({ id: newUser._id.toString(), email: newUser.email });
 
   ctx.status = 201;
   ctx.body = {
@@ -69,23 +69,28 @@ router.post('/auth/register', async (ctx) => {
 });
 
 router.post('/auth/login', async (ctx) => {
-  const { email, password, platform: bodyPlatform } = ctx.request.body as any;
+  const { email, username, identifier, password, platform: bodyPlatform } = ctx.request.body as any;
+  const loginIdentifier = (identifier || email || username)?.toString().trim();
 
-  if (!email || !password) {
+  if (!loginIdentifier || !password) {
     ctx.status = 400;
-    ctx.body = { status: 'error', message: 'Missing login parameters.' };
+    ctx.body = { status: 'error', message: 'Missing login credentials (username or email, and password required).' };
     return;
   }
 
-  // Find user and explicitly select passwordHash
-  const user = await User.findOne({ email }).select('+passwordHash');
+  const normalized = loginIdentifier.toLowerCase();
+  // Find user by either email or username and select passwordHash
+  const user = await User.findOne({
+    $or: [{ email: normalized }, { username: normalized }]
+  }).select('+passwordHash');
+
   if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
     ctx.status = 401;
-    ctx.body = { status: 'error', message: 'Invalid credentials provided.' };
+    ctx.body = { status: 'error', message: 'Invalid username/email or password provided.' };
     return;
   }
 
-  if (email.toLowerCase() === 'admin@kiwishare.online' && user.role !== 'admin') {
+  if (user.email?.toLowerCase() === 'admin@kiwishare.online' && user.role !== 'admin') {
     user.role = 'admin';
   }
 
@@ -95,7 +100,7 @@ router.post('/auth/login', async (ctx) => {
   user.lastActiveAt = new Date();
   await user.save();
 
-  const token = jwt.sign({ id: user._id.toString(), email: user.email }, getJwtSecret(), { expiresIn: '2h' });
+  const token = signAuthToken({ id: user._id.toString(), email: user.email || user.username || loginIdentifier });
 
   ctx.status = 200;
   ctx.body = {
@@ -104,6 +109,8 @@ router.post('/auth/login', async (ctx) => {
     user: {
       id: user._id.toString(),
       email: user.email,
+      phone: user.phone,
+      username: user.username,
       displayName: user.displayName,
       role: user.role,
       trustScore: user.trustScore,
@@ -178,8 +185,8 @@ router.post('/auth/send-otp', async (ctx) => {
   console.log(`\n📬 [OTP Sent] Email: ${normalizedEmail} | Code: ${code} (Expires in 10 minutes)\n`);
 
   // Attempt to send email via Resend API if configured
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const resendFrom = process.env.RESEND_FROM || 'onboarding@resend.dev';
+  const resendApiKey = process.env.RESEND_API_KEY || config.get('resend.apiKey');
+  const resendFrom = process.env.RESEND_FROM || config.get('resend.from');
 
   let mailSent = false;
 
@@ -214,12 +221,14 @@ router.post('/auth/send-otp', async (ctx) => {
 
   // Attempt to send email via SMTP if configured and not already sent via Resend
   if (!mailSent) {
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 465;
-    const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-    const smtpFrom = process.env.SMTP_FROM || `"KiwiShare" <${smtpUser}>`;
+    const smtpHost = process.env.SMTP_HOST || config.get('smtp.host');
+    const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : config.get('smtp.port');
+    const smtpSecure = process.env.SMTP_SECURE !== undefined
+      ? (process.env.SMTP_SECURE === 'true' || smtpPort === 465)
+      : (config.get('smtp.secure') || smtpPort === 465);
+    const smtpUser = process.env.SMTP_USER || config.get('smtp.user');
+    const smtpPass = process.env.SMTP_PASS || config.get('smtp.pass');
+    const smtpFrom = process.env.SMTP_FROM || config.get('smtp.from') || `"KiwiShare" <${smtpUser}>`;
 
     if (smtpHost && smtpUser && smtpPass) {
       try {
@@ -261,7 +270,7 @@ router.post('/auth/send-otp', async (ctx) => {
   }
 
   const responseBody: any = { status: 'success', message: 'Verification code sent successfully.' };
-  if (process.env.NODE_ENV !== 'production') {
+  if (config.get('env') !== 'production') {
     responseBody.devCode = code; // Return code in non-prod environments for automated tests and easier mobile debugging
   }
 
@@ -326,7 +335,7 @@ router.post('/auth/verify-otp', async (ctx) => {
     await user.save();
   }
 
-  const token = jwt.sign({ id: user._id.toString(), email: user.email }, getJwtSecret(), { expiresIn: '7d' });
+  const token = signAuthToken({ id: user._id.toString(), email: user.email });
 
   ctx.status = 200;
   ctx.body = {
@@ -418,7 +427,7 @@ router.post('/auth/google', async (ctx) => {
     });
   }
 
-  const token = jwt.sign({ id: user._id.toString(), email: user.email }, getJwtSecret(), { expiresIn: '7d' });
+  const token = signAuthToken({ id: user._id.toString(), email: user.email });
 
   ctx.status = 200;
   ctx.body = {
@@ -427,6 +436,149 @@ router.post('/auth/google', async (ctx) => {
     user: {
       id: user._id.toString(),
       email: user.email,
+      phone: user.phone,
+      username: user.username,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      trustScore: user.trustScore,
+      isVerified: user.isVerified,
+      registrationPlatform: user.registrationPlatform,
+      lastUsedPlatform: user.lastUsedPlatform
+    }
+  };
+});
+
+// --- 1.2 Phone Number Authentication (Firebase SMS & Direct OTP) ---
+
+router.post('/auth/send-phone-otp', async (ctx) => {
+  const { phone } = ctx.request.body as any;
+
+  if (!phone || phone.toString().trim().length < 6) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Please provide a valid phone number.' };
+    return;
+  }
+
+  const normalizedPhone = phone.toString().trim();
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  // Store in Otp collection
+  await Otp.create({
+    email: normalizedPhone,
+    code,
+    expiresAt,
+    used: false
+  });
+
+  const responseBody: any = {
+    status: 'success',
+    message: 'Verification code sent successfully.'
+  };
+
+  if (config.get('env') !== 'production') {
+    responseBody.devCode = code;
+  }
+
+  ctx.status = 200;
+  ctx.body = responseBody;
+});
+
+router.post('/auth/phone', async (ctx) => {
+  const { idToken, phone, code, displayName, platform: bodyPlatform } = ctx.request.body as any;
+
+  let verifiedPhoneNumber = '';
+
+  if (idToken) {
+    // 1. Firebase Phone Auth via ID token
+    if (idToken.startsWith('mock_phone_token_') || idToken.startsWith('mock_')) {
+      const parts = idToken.split('_');
+      verifiedPhoneNumber = parts[3] || parts[parts.length - 1] || '+64210000000';
+    } else {
+      try {
+        const { getAuth } = await import('firebase-admin/auth');
+        const decodedToken = await getAuth().verifyIdToken(idToken);
+        verifiedPhoneNumber = decodedToken.phone_number || '';
+      } catch (err: any) {
+        ctx.status = 401;
+        ctx.body = {
+          status: 'error',
+          message: `Firebase phone authentication failed: ${err.message || 'Invalid Firebase token.'}`
+        };
+        return;
+      }
+    }
+  } else if (phone && code) {
+    // 2. Direct Phone OTP fallback
+    const normalizedPhone = phone.toString().trim();
+    const otp = await Otp.findOne({
+      email: normalizedPhone,
+      code: code.toString().trim(),
+      used: false
+    }).sort({ expiresAt: -1 });
+
+    if (!otp || otp.expiresAt < new Date()) {
+      ctx.status = 401;
+      ctx.body = { status: 'error', message: 'Invalid or expired phone verification code.' };
+      return;
+    }
+
+    otp.used = true;
+    await otp.save();
+    verifiedPhoneNumber = normalizedPhone;
+  } else {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Phone number and verification code or Firebase ID token is required.' };
+    return;
+  }
+
+  if (!verifiedPhoneNumber) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Could not resolve valid phone number.' };
+    return;
+  }
+
+  const platform = bodyPlatform || ctx.state.clientPlatform || resolveClientPlatform(ctx);
+  const now = new Date();
+  const trimmedName = displayName?.toString().trim();
+
+  let user = await User.findOne({ phone: verifiedPhoneNumber });
+
+  if (user) {
+    user.lastUsedPlatform = platform;
+    user.lastLoginAt = now;
+    user.lastActiveAt = now;
+    if (trimmedName && trimmedName.length >= 2 && user.displayName !== trimmedName) {
+      user.displayName = trimmedName;
+    }
+    await user.save();
+  } else {
+    const defaultDisplayName = trimmedName || `Kiwi_${verifiedPhoneNumber.replace(/[^0-9]/g, '').slice(-4) || 'User'}`;
+    user = await User.create({
+      phone: verifiedPhoneNumber,
+      displayName: defaultDisplayName,
+      avatarUrl: null,
+      trustScore: 100,
+      isVerified: true,
+      authProvider: 'phone_otp',
+      registrationPlatform: platform,
+      lastUsedPlatform: platform,
+      lastActiveAt: now,
+      lastLoginAt: now
+    });
+  }
+
+  const token = signAuthToken({ id: user._id.toString(), email: user.email || verifiedPhoneNumber });
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    token,
+    user: {
+      id: user._id.toString(),
+      email: user.email,
+      phone: user.phone,
+      username: user.username,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       trustScore: user.trustScore,

@@ -34,6 +34,8 @@ export interface IItem extends Document {
   imageUrl: string;
   priceNzd: string;
   isSustainable: boolean;
+  isBoosted: boolean;
+  boostScore: number;
   ownerId: string; // User ID string
   createdAt: Date;
   updatedAt: Date;
@@ -81,6 +83,8 @@ const ItemSchema = new Schema<IItem>(
     imageUrl: { type: String },
     priceNzd: { type: String },
     isSustainable: { type: Boolean, default: false },
+    isBoosted: { type: Boolean, default: false, index: true },
+    boostScore: { type: Number, default: 0, index: true },
     ownerId: { type: String, index: true }
   },
   {

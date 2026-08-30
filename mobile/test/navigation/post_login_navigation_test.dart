@@ -69,8 +69,14 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.add));
       await tester.pumpAndSettle();
+
+      if (find.text('Use Username & Password Login').evaluate().isNotEmpty) {
+        await tester.tap(find.text('Use Username & Password Login'));
+        await tester.pumpAndSettle();
+      }
+
       await tester.enterText(
-        find.widgetWithText(TextFormField, 'Email Address'),
+        find.widgetWithText(TextFormField, 'Username or Email'),
         'jack@example.com',
       );
       await tester.enterText(

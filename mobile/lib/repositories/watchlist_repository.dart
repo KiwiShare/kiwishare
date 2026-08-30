@@ -7,11 +7,11 @@ import '../config/api_config.dart';
 import '../models/item_model.dart';
 
 abstract class WatchlistRepository {
-  Future<List<ItemModel>> fetchWatchlist({String? token});
-  Future<Set<String>> fetchWatchedItemIds({String? token});
-  Future<bool> addToWatchlist(String itemId, {String? token});
-  Future<bool> removeFromWatchlist(String itemId, {String? token});
-  Future<bool> isWatched(String itemId, {String? token});
+  Future<List<ItemModel>> fetchWatchlist({String? token, String? userId});
+  Future<Set<String>> fetchWatchedItemIds({String? token, String? userId});
+  Future<bool> addToWatchlist(String itemId, {String? token, String? userId});
+  Future<bool> removeFromWatchlist(String itemId, {String? token, String? userId});
+  Future<bool> isWatched(String itemId, {String? token, String? userId});
 }
 
 class RestWatchlistRepository implements WatchlistRepository {
@@ -20,20 +20,25 @@ class RestWatchlistRepository implements WatchlistRepository {
   RestWatchlistRepository({http.Client? client})
     : _client = client ?? http.Client();
 
-  Map<String, String> _headers(String? token) => {
+  Map<String, String> _headers(String? token, {String? userId}) => {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    if (userId != null && userId.isNotEmpty) 'x-user-id': userId,
   };
 
   @override
-  Future<List<ItemModel>> fetchWatchlist({String? token}) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/watchlist');
+  Future<List<ItemModel>> fetchWatchlist({String? token, String? userId}) async {
+    final uri = Uri.parse(
+      userId != null && userId.isNotEmpty
+          ? '${ApiConfig.baseUrl}/api/watchlist?userId=$userId'
+          : '${ApiConfig.baseUrl}/api/watchlist',
+    );
     try {
-      final response = await _client.get(uri, headers: _headers(token));
+      final response = await _client.get(uri, headers: _headers(token, userId: userId));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final list = (data['data'] as List<dynamic>? ?? []);
+        final list = (data['data'] as List<dynamic>? ?? data['items'] as List<dynamic>? ?? []);
         return list
             .map((raw) => ItemModel.fromJson(raw as Map<String, dynamic>))
             .toList();
@@ -49,10 +54,14 @@ class RestWatchlistRepository implements WatchlistRepository {
   }
 
   @override
-  Future<Set<String>> fetchWatchedItemIds({String? token}) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/watchlist/ids');
+  Future<Set<String>> fetchWatchedItemIds({String? token, String? userId}) async {
+    final uri = Uri.parse(
+      userId != null && userId.isNotEmpty
+          ? '${ApiConfig.baseUrl}/api/watchlist/ids?userId=$userId'
+          : '${ApiConfig.baseUrl}/api/watchlist/ids',
+    );
     try {
-      final response = await _client.get(uri, headers: _headers(token));
+      final response = await _client.get(uri, headers: _headers(token, userId: userId));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final ids = (data['itemIds'] as List<dynamic>? ?? [])
@@ -68,10 +77,18 @@ class RestWatchlistRepository implements WatchlistRepository {
   }
 
   @override
-  Future<bool> addToWatchlist(String itemId, {String? token}) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/watchlist/$itemId');
+  Future<bool> addToWatchlist(String itemId, {String? token, String? userId}) async {
+    final uri = Uri.parse(
+      userId != null && userId.isNotEmpty
+          ? '${ApiConfig.baseUrl}/api/watchlist/$itemId?userId=$userId'
+          : '${ApiConfig.baseUrl}/api/watchlist/$itemId',
+    );
     try {
-      final response = await _client.post(uri, headers: _headers(token));
+      final response = await _client.post(
+        uri,
+        headers: _headers(token, userId: userId),
+        body: jsonEncode({'userId': ?userId}),
+      );
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('Add to watchlist error: $e');
@@ -80,10 +97,18 @@ class RestWatchlistRepository implements WatchlistRepository {
   }
 
   @override
-  Future<bool> removeFromWatchlist(String itemId, {String? token}) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/watchlist/$itemId');
+  Future<bool> removeFromWatchlist(String itemId, {String? token, String? userId}) async {
+    final uri = Uri.parse(
+      userId != null && userId.isNotEmpty
+          ? '${ApiConfig.baseUrl}/api/watchlist/$itemId?userId=$userId'
+          : '${ApiConfig.baseUrl}/api/watchlist/$itemId',
+    );
     try {
-      final response = await _client.delete(uri, headers: _headers(token));
+      final response = await _client.delete(
+        uri,
+        headers: _headers(token, userId: userId),
+        body: jsonEncode({'userId': ?userId}),
+      );
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('Remove from watchlist error: $e');
@@ -92,10 +117,14 @@ class RestWatchlistRepository implements WatchlistRepository {
   }
 
   @override
-  Future<bool> isWatched(String itemId, {String? token}) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/watchlist/check/$itemId');
+  Future<bool> isWatched(String itemId, {String? token, String? userId}) async {
+    final uri = Uri.parse(
+      userId != null && userId.isNotEmpty
+          ? '${ApiConfig.baseUrl}/api/watchlist/check/$itemId?userId=$userId'
+          : '${ApiConfig.baseUrl}/api/watchlist/check/$itemId',
+    );
     try {
-      final response = await _client.get(uri, headers: _headers(token));
+      final response = await _client.get(uri, headers: _headers(token, userId: userId));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['isWatched'] == true;
@@ -120,29 +149,29 @@ class TestWatchlistRepository implements WatchlistRepository {
   }
 
   @override
-  Future<List<ItemModel>> fetchWatchlist({String? token}) async {
+  Future<List<ItemModel>> fetchWatchlist({String? token, String? userId}) async {
     return _items.where((item) => _watchedIds.contains(item.id)).toList();
   }
 
   @override
-  Future<Set<String>> fetchWatchedItemIds({String? token}) async {
+  Future<Set<String>> fetchWatchedItemIds({String? token, String? userId}) async {
     return Set.from(_watchedIds);
   }
 
   @override
-  Future<bool> addToWatchlist(String itemId, {String? token}) async {
+  Future<bool> addToWatchlist(String itemId, {String? token, String? userId}) async {
     _watchedIds.add(itemId);
     return true;
   }
 
   @override
-  Future<bool> removeFromWatchlist(String itemId, {String? token}) async {
+  Future<bool> removeFromWatchlist(String itemId, {String? token, String? userId}) async {
     _watchedIds.remove(itemId);
     return true;
   }
 
   @override
-  Future<bool> isWatched(String itemId, {String? token}) async {
+  Future<bool> isWatched(String itemId, {String? token, String? userId}) async {
     return _watchedIds.contains(itemId);
   }
 

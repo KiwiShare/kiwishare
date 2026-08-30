@@ -2,14 +2,15 @@ import 'dotenv/config';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
+import config from './index';
 
 export const R2_CONFIG = {
-  get accountId() { return process.env.R2_ACCOUNT_ID || 'cdc04de9bc4c6a41b5003758e505a0d1'; },
-  get bucketName() { return process.env.R2_BUCKET || 'kiwishare'; },
-  get endpoint() { return process.env.R2_ENDPOINT || 'https://cdc04de9bc4c6a41b5003758e505a0d1.r2.cloudflarestorage.com'; },
-  get accessKeyId() { return process.env.R2_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || ''; },
-  get secretAccessKey() { return process.env.R2_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || ''; },
-  get publicUrlBase() { return process.env.R2_PUBLIC_URL || 'https://assets.kiwishare.online'; },
+  get accountId() { return process.env.R2_ACCOUNT_ID || config.get('r2.accountId'); },
+  get bucketName() { return process.env.R2_BUCKET || config.get('r2.bucket'); },
+  get endpoint() { return process.env.R2_ENDPOINT || config.get('r2.endpoint'); },
+  get accessKeyId() { return process.env.R2_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || config.get('r2.accessKeyId'); },
+  get secretAccessKey() { return process.env.R2_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || config.get('r2.secretAccessKey'); },
+  get publicUrlBase() { return process.env.R2_PUBLIC_URL || config.get('r2.publicUrl'); },
 };
 
 export function getS3Client(): S3Client {

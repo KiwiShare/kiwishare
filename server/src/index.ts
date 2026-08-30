@@ -1,12 +1,13 @@
 import 'dotenv/config';
 import app from './app';
+import config from './config';
 import connectDB from './config/db';
 import { getJwtSecret } from './middleware/auth';
 
-const PORT = Number(process.env.PORT) || 3000;
-const HOST = process.env.HOST || '0.0.0.0';
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://REDACTED@/kiwishare';
-const MONGODB_URI_TEST = process.env.MONGODB_URI_TEST || MONGODB_URI;
+const PORT = config.get('port');
+const HOST = config.get('host');
+const MONGODB_URI = config.get('mongodb.uri');
+const MONGODB_URI_TEST = config.get('mongodb.uriTest') || MONGODB_URI;
 
 async function startServer() {
   try {
@@ -14,7 +15,7 @@ async function startServer() {
     // network listener. The secret itself is never logged.
     getJwtSecret();
     console.log('🔄 Connecting to MongoDB...');
-    const connectionUri = process.env.NODE_ENV === 'production' ? MONGODB_URI : MONGODB_URI_TEST;
+    const connectionUri = config.get('env') === 'production' ? MONGODB_URI : MONGODB_URI_TEST;
     await connectDB(connectionUri);
     console.log('✅ Connected to MongoDB successfully.');
 
@@ -28,6 +29,6 @@ async function startServer() {
   }
 }
 
-if (process.env.NODE_ENV !== 'test') {
+if (config.get('env') !== 'test') {
   startServer();
 }

@@ -11,6 +11,9 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { CheckoutPage } from './pages/CheckoutPage';
+import { OrderDetailPage } from './pages/OrderDetailPage';
+import { OrdersPage } from './pages/OrdersPage';
 import './styles/index.css';
 
 export const App: React.FC = () => {
@@ -24,6 +27,9 @@ export const App: React.FC = () => {
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/products/:id" element={<ProductDetailPage />} />
+                <Route path="/checkout/:itemId" element={<CheckoutPage />} />
+                <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+                <Route path="/orders" element={<OrdersPage />} />
                 <Route path="/watchlist" element={<WatchlistPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />

@@ -5,6 +5,7 @@ import '../repositories/watchlist_repository.dart';
 class WatchlistProvider extends ChangeNotifier {
   final WatchlistRepository _repository;
   String? _authToken;
+  String? _userId;
 
   final Set<String> _watchedItemIds = <String>{};
   List<ItemModel> _watchlistItems = <ItemModel>[];
@@ -14,9 +15,11 @@ class WatchlistProvider extends ChangeNotifier {
   WatchlistProvider({
     WatchlistRepository? repository,
     String? initialToken,
+    String? initialUserId,
     Set<String>? initialWatchedIds,
   }) : _repository = repository ?? RestWatchlistRepository(),
-       _authToken = initialToken {
+       _authToken = initialToken,
+       _userId = initialUserId {
     if (initialWatchedIds != null) {
       _watchedItemIds.addAll(initialWatchedIds);
     }
@@ -30,16 +33,21 @@ class WatchlistProvider extends ChangeNotifier {
   String? get error => _error;
   int get count => _watchedItemIds.length;
 
-  void updateAuthToken(String? token) {
-    if (_authToken == token) return;
+  void updateAuth(String? token, {String? userId}) {
+    if (_authToken == token && _userId == userId) return;
     _authToken = token;
-    if (_authToken != null) {
+    _userId = userId;
+    if (_authToken != null || _userId != null) {
       loadWatchlist(forceRefresh: true);
     } else {
       _watchedItemIds.clear();
       _watchlistItems.clear();
       notifyListeners();
     }
+  }
+
+  void updateAuthToken(String? token) {
+    updateAuth(token, userId: _userId);
   }
 
   bool isWatched(String itemId) => _watchedItemIds.contains(itemId);
@@ -51,9 +59,13 @@ class WatchlistProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final fetchedItems = await _repository.fetchWatchlist(token: _authToken);
+      final fetchedItems = await _repository.fetchWatchlist(
+        token: _authToken,
+        userId: _userId,
+      );
       final fetchedIds = await _repository.fetchWatchedItemIds(
         token: _authToken,
+        userId: _userId,
       );
 
       _watchlistItems = fetchedItems;
@@ -94,8 +106,12 @@ class WatchlistProvider extends ChangeNotifier {
     }
     notifyListeners();
 
-    final success = await _repository.addToWatchlist(itemId, token: _authToken);
-    if (!success && _authToken != null) {
+    final success = await _repository.addToWatchlist(
+      itemId,
+      token: _authToken,
+      userId: _userId,
+    );
+    if (!success && (_authToken != null || _userId != null)) {
       // Revert if API failed when user is logged in
       _watchedItemIds.remove(itemId);
       _watchlistItems.removeWhere((i) => i.id == itemId);
@@ -118,8 +134,9 @@ class WatchlistProvider extends ChangeNotifier {
     final success = await _repository.removeFromWatchlist(
       itemId,
       token: _authToken,
+      userId: _userId,
     );
-    if (!success && _authToken != null) {
+    if (!success && (_authToken != null || _userId != null)) {
       // Revert on API failure
       _watchedItemIds.add(itemId);
       if (removedItem != null) {

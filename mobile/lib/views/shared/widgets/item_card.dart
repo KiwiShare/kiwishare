@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../models/item_model.dart';
 import '../../../providers/providers.dart';
 import '../../../theme/app_theme.dart';
+import '../../auth/login_view.dart';
 
 class ItemCard extends StatelessWidget {
   final ItemModel item;
@@ -88,7 +89,19 @@ class ItemCard extends StatelessWidget {
                         tooltip: isFavorite
                             ? 'Remove from saved items'
                             : 'Save item',
-                        onPressed: () => favorites.toggleFavorite(item.id),
+                        onPressed: () {
+                          final auth = context.read<AuthProvider?>();
+                          if (auth != null && !auth.isLoggedIn) {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => const LoginView(),
+                            );
+                            return;
+                          }
+                          favorites.toggleFavorite(item.id, item);
+                        },
                         icon: Icon(
                           isFavorite ? Icons.favorite : Icons.favorite_border,
                         ),

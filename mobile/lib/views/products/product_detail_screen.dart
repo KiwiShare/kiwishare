@@ -11,6 +11,7 @@ import '../../repositories/chat_repository.dart';
 import '../../repositories/item_repository.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
+import '../orders/checkout_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String? itemId;
@@ -203,8 +204,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       tooltip: isWatched
                           ? 'Remove from Watchlist'
                           : 'Add to Watchlist',
-                      onPressed: () =>
-                          watchlist.toggleWatch(product.id, item: product),
+                      onPressed: () {
+                        final auth = context.read<AuthProvider?>();
+                        if (auth != null && !auth.isLoggedIn) {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (_) => const LoginView(),
+                          );
+                          return;
+                        }
+                        watchlist.toggleWatch(product.id, item: product);
+                      },
                       icon: Icon(
                         isWatched ? Icons.bookmark : Icons.bookmark_outline,
                         color: isWatched ? AppColors.brandPrimary : null,
@@ -411,10 +423,47 @@ class _ProductActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isWatched = watchlist.isWatched(product.id);
-    final useVerticalLayout = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final buyButton = FilledButton.icon(
+      key: const Key('detail-buy-now-button'),
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.brandPrimary,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+      onPressed: () {
+        final auth = context.read<AuthProvider?>();
+        if (auth != null && !auth.isLoggedIn) {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const LoginView(),
+          );
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => CheckoutScreen(product: product),
+          ),
+        );
+      },
+      icon: const Icon(Icons.shopping_bag_outlined),
+      label: Text('Buy \$${product.priceNzd} • Escrow'),
+    );
     final watchButton = OutlinedButton.icon(
       key: const Key('detail-watch-action-button'),
-      onPressed: () => watchlist.toggleWatch(product.id, item: product),
+      onPressed: () {
+        final auth = context.read<AuthProvider?>();
+        if (auth != null && !auth.isLoggedIn) {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const LoginView(),
+          );
+          return;
+        }
+        watchlist.toggleWatch(product.id, item: product);
+      },
       icon: Icon(isWatched ? Icons.bookmark : Icons.bookmark_outline),
       label: Text(isWatched ? 'Watching' : 'Watch Item'),
     );
@@ -435,6 +484,7 @@ class _ProductActions extends StatelessWidget {
           : const Icon(Icons.chat_bubble_outline),
       label: Text(isStartingConversation ? 'Opening chat' : messageSellerLabel),
     );
+    final useVerticalLayout = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
@@ -456,16 +506,26 @@ class _ProductActions extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  buyButton,
+                  const SizedBox(height: AppSpacing.sm),
                   watchButton,
                   const SizedBox(height: AppSpacing.sm),
                   messageButton,
                 ],
               )
-            : Row(
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: watchButton),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(child: messageButton),
+                  buyButton,
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      Expanded(child: watchButton),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(child: messageButton),
+                    ],
+                  ),
                 ],
               ),
       ),
