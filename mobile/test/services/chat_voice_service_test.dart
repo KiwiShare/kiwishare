@@ -8,6 +8,24 @@ import 'package:kiwishare/services/chat_voice_service.dart';
 import 'package:kiwishare/services/r2_upload_service.dart';
 
 void main() {
+  test('keeps the measured duration without relabelling it', () {
+    expect(validatedChatVoiceDurationMs(12500), 12500);
+    expect(validatedChatVoiceDurationMs(0), 1);
+  });
+
+  test('rejects a recording measured beyond 60 seconds', () {
+    expect(
+      () => validatedChatVoiceDurationMs(60001),
+      throwsA(
+        isA<ChatVoiceException>().having(
+          (error) => error.message,
+          'message',
+          'Voice messages cannot be longer than 60 seconds.',
+        ),
+      ),
+    );
+  });
+
   test('uploads voice bytes through the controlled audio folder', () async {
     final requests = <http.Request>[];
     final uploader = R2ChatVoiceUploader(

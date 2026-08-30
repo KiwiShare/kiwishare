@@ -13,8 +13,8 @@ audio content is included in a text preview.
 
 ## Automated verification
 
-- Backend: 72/72 tests passed.
-- Flutter: 116/116 tests passed.
+- Backend: 98/98 tests passed.
+- Flutter: 139/139 tests passed.
 - Backend ESLint passed.
 - Backend TypeScript build passed.
 - Flutter analyze passed with no issues.
@@ -24,6 +24,8 @@ Coverage added for:
 
 - authenticated voice message creation and history serialization;
 - invalid external URLs and recordings over 60 seconds;
+- trusted R2 object-size and audio content-type validation before persistence;
+- rejection of native recordings measured beyond the 60-second limit;
 - the controlled `audio/chat` R2 upload folder;
 - Flutter upload and REST request payloads;
 - provider size and duration limits;

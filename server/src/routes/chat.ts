@@ -5,7 +5,7 @@ import { authenticateToken } from '../middleware/auth';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Item from '../models/Item';
-import { R2_CONFIG } from '../config/r2';
+import { getR2ObjectMetadata, R2_CONFIG } from '../config/r2';
 import {
   MESSAGE_CONTENT_NOT_ALLOWED,
   moderateChatText
@@ -16,6 +16,13 @@ const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 100;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_VOICE_DURATION_MS = 60000;
+const MAX_VOICE_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_VOICE_CONTENT_TYPES = new Set([
+  'audio/mp4',
+  'audio/m4a',
+  'audio/x-m4a',
+  'audio/aac'
+]);
 
 router.use(authenticateToken);
 
@@ -116,6 +123,33 @@ function validR2AssetUrl(value: unknown): string | null {
       return null;
     }
     return imageUrl.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
+function voiceR2ObjectKey(audioUrl: string): string | null {
+  try {
+    const configuredBase = R2_CONFIG.publicUrlBase.trim();
+    let encodedKey: string;
+    if (!configuredBase.startsWith('http')) {
+      const prefix = '/api/images/';
+      const pathname = new URL(audioUrl, 'http://kiwishare.local').pathname;
+      if (!pathname.startsWith(prefix)) return null;
+      encodedKey = pathname.slice(prefix.length);
+    } else {
+      const asset = new URL(audioUrl);
+      const publicBase = new URL(configuredBase);
+      const basePath = publicBase.pathname.replace(/\/$/, '');
+      const prefix = `${basePath}/`;
+      if (!asset.pathname.startsWith(prefix)) return null;
+      encodedKey = asset.pathname.slice(prefix.length);
+    }
+
+    const key = decodeURIComponent(encodedKey);
+    return /^audio\/chat\/[A-Za-z0-9_-]+\.[A-Za-z0-9]+$/.test(key)
+      ? key
+      : null;
   } catch (_) {
     return null;
   }
@@ -402,6 +436,41 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       ctx.body = {
         status: 'error',
         message: 'A valid uploaded voice message up to 60 seconds is required.'
+      };
+      return;
+    }
+
+    const objectKey = voiceR2ObjectKey(audioUrl);
+    if (objectKey == null) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A valid uploaded voice message up to 60 seconds is required.'
+      };
+      return;
+    }
+
+    try {
+      const metadata = await getR2ObjectMetadata(objectKey);
+      if (
+        metadata.contentLength == null ||
+        metadata.contentLength < 1 ||
+        metadata.contentLength > MAX_VOICE_FILE_SIZE_BYTES ||
+        metadata.contentType == null ||
+        !ALLOWED_VOICE_CONTENT_TYPES.has(metadata.contentType)
+      ) {
+        ctx.status = 400;
+        ctx.body = {
+          status: 'error',
+          message: 'The uploaded voice message must be valid audio up to 5 MB.'
+        };
+        return;
+      }
+    } catch (_) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'The uploaded voice message could not be verified.'
       };
       return;
     }

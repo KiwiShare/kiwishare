@@ -6,6 +6,17 @@ import 'package:record/record.dart';
 
 import 'r2_upload_service.dart';
 
+const maxChatVoiceDurationMs = 60000;
+
+int validatedChatVoiceDurationMs(int elapsedMs) {
+  if (elapsedMs > maxChatVoiceDurationMs) {
+    throw const ChatVoiceException(
+      'Voice messages cannot be longer than 60 seconds.',
+    );
+  }
+  return elapsedMs < 1 ? 1 : elapsedMs;
+}
+
 class ChatVoiceRecording {
   const ChatVoiceRecording({
     required this.bytes,
@@ -70,7 +81,9 @@ class DeviceChatVoiceRecorder implements ChatVoiceRecorder {
     final path = await _recorder.stop();
     _stopwatch.stop();
     if (path == null || path.isEmpty) return null;
-    final durationMs = _stopwatch.elapsedMilliseconds.clamp(1, 60000);
+    final durationMs = validatedChatVoiceDurationMs(
+      _stopwatch.elapsedMilliseconds,
+    );
     final file = XFile(path, mimeType: 'audio/mp4');
     final bytes = await file.readAsBytes();
     return ChatVoiceRecording(

@@ -5,6 +5,20 @@ import app from '../src/app';
 import Conversation from '../src/models/Conversation';
 import Message from '../src/models/Message';
 import Item from '../src/models/Item';
+import { getR2ObjectMetadata } from '../src/config/r2';
+
+jest.mock('../src/config/r2', () => {
+  const actual = jest.requireActual('../src/config/r2');
+  return {
+    ...actual,
+    getR2ObjectMetadata: jest.fn(async () => ({
+      contentLength: 1024,
+      contentType: 'audio/mp4'
+    }))
+  };
+});
+
+const mockedGetR2ObjectMetadata = jest.mocked(getR2ObjectMetadata);
 
 jest.setTimeout(60000);
 
@@ -17,6 +31,13 @@ describe('KiwiShare text chat API', () => {
   let outsiderToken = '';
   let itemId = '';
   let conversationId = '';
+
+  beforeEach(() => {
+    mockedGetR2ObjectMetadata.mockResolvedValue({
+      contentLength: 1024,
+      contentType: 'audio/mp4'
+    });
+  });
 
   beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
@@ -400,6 +421,9 @@ describe('KiwiShare text chat API', () => {
     expect(stored?.type).toBe('voice');
     expect(stored?.audioUrl).toBe(audioUrl);
     expect(stored?.durationMs).toBe(12500);
+    expect(mockedGetR2ObjectMetadata).toHaveBeenCalledWith(
+      'audio/chat/voice.m4a'
+    );
 
     const sellerList = await request(app.callback())
       .get('/api/conversations')
@@ -428,6 +452,42 @@ describe('KiwiShare text chat API', () => {
 
     expect(invalidUrl.status).toBe(400);
     expect(excessiveDuration.status).toBe(400);
+    expect(await Message.countDocuments({ conversationId })).toBe(countBefore);
+  });
+
+  test('rejects oversized or non-audio R2 objects before storing voice messages', async () => {
+    const countBefore = await Message.countDocuments({ conversationId });
+    mockedGetR2ObjectMetadata
+      .mockResolvedValueOnce({
+        contentLength: 5 * 1024 * 1024 + 1,
+        contentType: 'audio/mp4'
+      })
+      .mockResolvedValueOnce({
+        contentLength: 1024,
+        contentType: 'image/jpeg'
+      });
+
+    const oversized = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({
+        type: 'voice',
+        audioUrl: 'https://assets.kiwishare.online/audio/chat/oversized.m4a',
+        durationMs: 1000
+      });
+    const nonAudio = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({
+        type: 'voice',
+        audioUrl: 'https://assets.kiwishare.online/audio/chat/not-audio.m4a',
+        durationMs: 1000
+      });
+
+    expect(oversized.status).toBe(400);
+    expect(oversized.body.message).toContain('up to 5 MB');
+    expect(nonAudio.status).toBe(400);
+    expect(nonAudio.body.message).toContain('valid audio');
     expect(await Message.countDocuments({ conversationId })).toBe(countBefore);
   });
 

@@ -1,5 +1,10 @@
 import 'dotenv/config';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
 
@@ -141,4 +146,24 @@ export async function getR2ObjectStream(key: string) {
     Key: key,
   });
   return r2S3Client.send(command);
+}
+
+/**
+ * Reads trusted object metadata directly from R2 before a caller persists a
+ * reference supplied by a client.
+ */
+export async function getR2ObjectMetadata(key: string): Promise<{
+  contentLength: number | null;
+  contentType: string | null;
+}> {
+  const result = await r2S3Client.send(
+    new HeadObjectCommand({
+      Bucket: R2_CONFIG.bucketName,
+      Key: key
+    })
+  );
+  return {
+    contentLength: result.ContentLength ?? null,
+    contentType: result.ContentType?.toLowerCase() ?? null
+  };
 }
