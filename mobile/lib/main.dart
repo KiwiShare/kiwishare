@@ -95,20 +95,26 @@ final GoRouter _router = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/messages/:conversationId',
       builder: (context, state) {
-        final conversation = state.extra is ChatConversationModel
-            ? state.extra as ChatConversationModel
-            : ChatConversationModel(
-                id: state.pathParameters['conversationId'] ?? '',
-                itemId: '',
-                itemTitle: 'Item conversation',
-                itemImageUrl: '',
-                participantId: '',
-                participantName: 'Kiwi member',
-                direction: ChatDirection.buying,
-                status: 'active',
-                lastMessage: '',
-                unreadCount: 0,
-              );
+        final conversationId = state.pathParameters['conversationId'] ?? '';
+        final cachedConversation = context
+            .read<ChatProvider>()
+            .conversationById(conversationId);
+        final conversation =
+            cachedConversation ??
+            (state.extra is ChatConversationModel
+                ? state.extra as ChatConversationModel
+                : ChatConversationModel(
+                    id: conversationId,
+                    itemId: '',
+                    itemTitle: 'Item conversation',
+                    itemImageUrl: '',
+                    participantId: '',
+                    participantName: 'Kiwi member',
+                    direction: ChatDirection.buying,
+                    status: 'active',
+                    lastMessage: '',
+                    unreadCount: 0,
+                  ));
         return ChatConversationScreen(conversation: conversation);
       },
     ),

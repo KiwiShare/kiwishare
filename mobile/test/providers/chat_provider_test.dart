@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kiwishare/models/chat_conversation_model.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/services/chat_photo_upload_service.dart';
@@ -57,6 +58,42 @@ void main() {
       expect(repository.messageFetches, 1);
       expect(repository.markReadCalls, 1);
       expect(provider.messageLoadErrorFor(conversation.id), isNull);
+    },
+  );
+
+  test(
+    'notification snapshot cannot replace canonical conversation metadata',
+    () async {
+      final canonical = testConversation(
+        direction: ChatDirection.selling,
+        lastMessage: 'Canonical preview',
+        unreadCount: 2,
+      );
+      final notificationSnapshot = testConversation(
+        direction: ChatDirection.buying,
+        lastMessage: '',
+        unreadCount: 0,
+      );
+      final repository = FakeChatRepository(
+        conversations: [canonical],
+        messages: {
+          canonical.id: [testMessage(id: '1', text: 'New', isMine: false)],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+
+      await provider.loadMessages(
+        conversation: notificationSnapshot,
+        token: 'valid-token',
+      );
+
+      final updated = provider.conversations.single;
+      expect(updated.direction, ChatDirection.selling);
+      expect(updated.lastMessage, 'Canonical preview');
+      expect(updated.lastMessageAt, canonical.lastMessageAt);
+      expect(updated.unreadCount, 0);
+      expect(provider.conversationById(canonical.id), same(updated));
     },
   );
 

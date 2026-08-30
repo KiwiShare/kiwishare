@@ -17,6 +17,13 @@ class ChatProvider extends ChangeNotifier {
 
   List<ChatConversationModel> _conversations = const [];
   List<ChatConversationModel> get conversations => _conversations;
+  ChatConversationModel? conversationById(String conversationId) {
+    for (final conversation in _conversations) {
+      if (conversation.id == conversationId) return conversation;
+    }
+    return null;
+  }
+
   bool _isLoadingConversations = false;
   bool get isLoadingConversations => _isLoadingConversations;
   String? _conversationError;
@@ -168,7 +175,8 @@ class ChatProvider extends ChangeNotifier {
             conversationId: conversation.id,
             token: token,
           );
-          _replaceConversation(conversation.copyWith(unreadCount: 0));
+          final canonical = conversationById(conversation.id) ?? conversation;
+          _replaceConversation(canonical.copyWith(unreadCount: 0));
         } catch (_) {
           // History is already available. Keep the unread count so a later
           // visit can retry without replacing usable content with an error.
@@ -338,8 +346,9 @@ class ChatProvider extends ChangeNotifier {
     if (!messages.any((existing) => existing.id == message.id)) {
       _messages[conversation.id] = [...messages, message];
     }
+    final canonical = conversationById(conversation.id) ?? conversation;
     _replaceConversation(
-      conversation.copyWith(
+      canonical.copyWith(
         lastMessage: preview,
         lastMessageAt: message.createdAt,
       ),
