@@ -36,6 +36,7 @@ class FakeChatVoiceRecorder implements ChatVoiceRecorder {
   FakeChatVoiceRecorder({
     ChatVoiceRecording? recording,
     this.startError,
+    this.startGate,
     this.stopGate,
     this.cancelGate,
   }) : recording =
@@ -49,22 +50,27 @@ class FakeChatVoiceRecorder implements ChatVoiceRecorder {
 
   final ChatVoiceRecording recording;
   final ChatVoiceException? startError;
+  final Completer<void>? startGate;
   final Completer<void>? stopGate;
   final Completer<void>? cancelGate;
   int startCalls = 0;
   int stopCalls = 0;
   int cancelCalls = 0;
   int disposeCalls = 0;
+  final List<String> callOrder = [];
 
   @override
   Future<void> start() async {
     startCalls += 1;
+    callOrder.add('start');
+    await startGate?.future;
     if (startError != null) throw startError!;
   }
 
   @override
   Future<ChatVoiceRecording?> stop() async {
     stopCalls += 1;
+    callOrder.add('stop');
     await stopGate?.future;
     return recording;
   }
@@ -72,11 +78,13 @@ class FakeChatVoiceRecorder implements ChatVoiceRecorder {
   @override
   Future<void> cancel() async {
     cancelCalls += 1;
+    callOrder.add('cancel');
     await cancelGate?.future;
   }
 
   @override
   Future<void> dispose() async {
     disposeCalls += 1;
+    callOrder.add('dispose');
   }
 }

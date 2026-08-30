@@ -336,6 +336,59 @@ void main() {
     expect(recorder.startCalls, 1);
   });
 
+  testWidgets('locks the microphone while recorder startup is pending', (
+    tester,
+  ) async {
+    final startGate = Completer<void>();
+    final recorder = FakeChatVoiceRecorder(startGate: startGate);
+    await tester.pumpWidget(
+      _buildSubject(repository: FakeChatRepository(), voiceRecorder: recorder),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+    final microphone = tester.widget<IconButton>(
+      find.byKey(const Key('chat_record_voice_button')),
+    );
+    expect(microphone.onPressed, isNull);
+    expect(recorder.startCalls, 1);
+
+    startGate.complete();
+    await tester.pump();
+    expect(recorder.startCalls, 1);
+
+    await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('sequences cancellation before recorder disposal', (
+    tester,
+  ) async {
+    final startGate = Completer<void>();
+    final cancelGate = Completer<void>();
+    final recorder = FakeChatVoiceRecorder(
+      startGate: startGate,
+      cancelGate: cancelGate,
+    );
+    await tester.pumpWidget(
+      _buildSubject(repository: FakeChatRepository(), voiceRecorder: recorder),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+
+    await tester.pumpWidget(const SizedBox());
+    expect(recorder.callOrder, ['start']);
+
+    startGate.complete();
+    await tester.pump();
+    expect(recorder.callOrder, ['start', 'cancel']);
+    cancelGate.complete();
+    await tester.pump();
+    expect(recorder.callOrder, ['start', 'cancel', 'dispose']);
+  });
+
   testWidgets('resolves relative image proxy URLs against the API origin', (
     tester,
   ) async {

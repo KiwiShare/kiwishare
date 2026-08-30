@@ -42,7 +42,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   late final ChatVoiceRecorder _voiceRecorder;
   Timer? _recordingTimer;
   bool _isRecording = false;
+  bool _isStartingVoice = false;
   bool _isFinalizingVoice = false;
+  Future<void> _recorderQueue = Future<void>.value();
   int _recordingSeconds = 0;
   String? _loadedToken;
   String? _currentAuthToken;
@@ -79,13 +81,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   @override
   void dispose() {
     _recordingTimer?.cancel();
-    if (_isRecording) {
-      unawaited(_voiceRecorder.cancel());
+    if (_isRecording || _isStartingVoice) {
+      unawaited(_queueRecorder(_voiceRecorder.cancel));
     }
-    unawaited(_voiceRecorder.dispose());
+    unawaited(_queueRecorder(_voiceRecorder.dispose));
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<T> _queueRecorder<T>(Future<T> Function() operation) {
+    final result = _recorderQueue.then((_) => operation());
+    _recorderQueue = result.then<void>((_) {}, onError: (_, _) {});
+    return result;
   }
 
   Future<void> _retry() async {
@@ -178,14 +186,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   Future<void> _startVoiceRecording() async {
     if (_isRecording ||
+        _isStartingVoice ||
         _isFinalizingVoice ||
         _chatProvider.isSending(widget.conversation.id)) {
       return;
     }
+    setState(() => _isStartingVoice = true);
     try {
-      await _voiceRecorder.start();
+      await _queueRecorder(_voiceRecorder.start);
       if (!mounted) {
-        await _voiceRecorder.cancel();
         return;
       }
       setState(() {
@@ -215,6 +224,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       _showComposerError(
         'Voice recording could not be started. Please try again.',
       );
+    } finally {
+      if (mounted) setState(() => _isStartingVoice = false);
     }
   }
 
@@ -228,10 +239,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
     try {
       if (!send) {
-        await _voiceRecorder.cancel();
+        await _queueRecorder(_voiceRecorder.cancel);
         return;
       }
-      final recording = await _voiceRecorder.stop();
+      final recording = await _queueRecorder(_voiceRecorder.stop);
       final token = _currentAuthToken;
       if (recording == null || token == null || token.isEmpty || !mounted) {
         return;
@@ -326,6 +337,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 controller: _messageController,
                 isSending:
                     provider.isSending(widget.conversation.id) ||
+                    _isStartingVoice ||
                     _isFinalizingVoice,
                 enabled:
                     widget.conversation.isActive &&
