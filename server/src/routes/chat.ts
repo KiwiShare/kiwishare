@@ -5,11 +5,16 @@ import { authenticateToken } from '../middleware/auth';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Item from '../models/Item';
-import { getR2ObjectMetadata, R2_CONFIG } from '../config/r2';
+import {
+  getR2ObjectBytes,
+  R2_CONFIG,
+  storeImmutableVoiceObject
+} from '../config/r2';
 import {
   MESSAGE_CONTENT_NOT_ALLOWED,
   moderateChatText
 } from '../services/messageModeration';
+import { inspectVoiceAudio } from '../services/voiceAudio';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -17,12 +22,6 @@ const MAX_MESSAGE_LIMIT = 100;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_VOICE_DURATION_MS = 60000;
 const MAX_VOICE_FILE_SIZE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_VOICE_CONTENT_TYPES = new Set([
-  'audio/mp4',
-  'audio/m4a',
-  'audio/x-m4a',
-  'audio/aac'
-]);
 
 router.use(authenticateToken);
 
@@ -451,21 +450,37 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     }
 
     try {
-      const metadata = await getR2ObjectMetadata(objectKey);
+      // Read and validate the exact bytes that will be retained. The client
+      // supplied MIME type and duration are not trusted security boundaries.
+      const uploaded = await getR2ObjectBytes(
+        objectKey,
+        MAX_VOICE_FILE_SIZE_BYTES
+      );
+      const verified = inspectVoiceAudio(uploaded.bytes);
       if (
-        metadata.contentLength == null ||
-        metadata.contentLength < 1 ||
-        metadata.contentLength > MAX_VOICE_FILE_SIZE_BYTES ||
-        metadata.contentType == null ||
-        !ALLOWED_VOICE_CONTENT_TYPES.has(metadata.contentType)
+        verified == null ||
+        verified.durationMs < 1 ||
+        verified.durationMs > MAX_VOICE_DURATION_MS
       ) {
         ctx.status = 400;
         ctx.body = {
           status: 'error',
-          message: 'The uploaded voice message must be valid audio up to 5 MB.'
+          message: 'The uploaded voice message must be valid audio up to 60 seconds and 5 MB.'
         };
         return;
       }
+
+      // Persist a server-owned copy of the verified bytes under a fresh key.
+      // The original presigned PUT can still expire or be reused, but it can no
+      // longer mutate the object referenced by the chat message.
+      const immutableObject = await storeImmutableVoiceObject(
+        uploaded.bytes,
+        verified.contentType,
+        verified.extension,
+        objectKey
+      );
+      audioUrl = immutableObject.url;
+      durationMs = verified.durationMs;
     } catch (_) {
       ctx.status = 400;
       ctx.body = {

@@ -5,20 +5,52 @@ import app from '../src/app';
 import Conversation from '../src/models/Conversation';
 import Message from '../src/models/Message';
 import Item from '../src/models/Item';
-import { getR2ObjectMetadata } from '../src/config/r2';
+import { getR2ObjectBytes, storeImmutableVoiceObject } from '../src/config/r2';
+
+function mp4Box(type: string, payload: Buffer): Buffer {
+  const box = Buffer.alloc(8 + payload.length);
+  box.writeUInt32BE(box.length, 0);
+  box.write(type, 4, 4, 'ascii');
+  payload.copy(box, 8);
+  return box;
+}
+
+function validVoiceMp4(durationMs = 12500): Buffer {
+  const movieHeader = Buffer.alloc(20);
+  movieHeader.writeUInt32BE(1000, 12);
+  movieHeader.writeUInt32BE(durationMs, 16);
+  const handler = Buffer.alloc(12);
+  handler.write('soun', 8, 4, 'ascii');
+  return Buffer.concat([
+    mp4Box('ftyp', Buffer.from('M4A \u0000\u0000\u0000\u0000M4A ', 'binary')),
+    mp4Box(
+      'moov',
+      Buffer.concat([
+        mp4Box('mvhd', movieHeader),
+        mp4Box('trak', mp4Box('mdia', mp4Box('hdlr', handler)))
+      ])
+    ),
+    mp4Box('mdat', Buffer.from([1]))
+  ]);
+}
 
 jest.mock('../src/config/r2', () => {
   const actual = jest.requireActual('../src/config/r2');
   return {
     ...actual,
-    getR2ObjectMetadata: jest.fn(async () => ({
-      contentLength: 1024,
+    getR2ObjectBytes: jest.fn(async () => ({
+      bytes: validVoiceMp4(),
       contentType: 'audio/mp4'
+    })),
+    storeImmutableVoiceObject: jest.fn(async () => ({
+      key: 'audio/messages/immutable.m4a',
+      url: 'https://assets.kiwishare.online/audio/messages/immutable.m4a'
     }))
   };
 });
 
-const mockedGetR2ObjectMetadata = jest.mocked(getR2ObjectMetadata);
+const mockedGetR2ObjectBytes = jest.mocked(getR2ObjectBytes);
+const mockedStoreImmutableVoiceObject = jest.mocked(storeImmutableVoiceObject);
 
 jest.setTimeout(60000);
 
@@ -33,9 +65,15 @@ describe('KiwiShare text chat API', () => {
   let conversationId = '';
 
   beforeEach(() => {
-    mockedGetR2ObjectMetadata.mockResolvedValue({
-      contentLength: 1024,
+    mockedGetR2ObjectBytes.mockClear();
+    mockedStoreImmutableVoiceObject.mockClear();
+    mockedGetR2ObjectBytes.mockResolvedValue({
+      bytes: validVoiceMp4(),
       contentType: 'audio/mp4'
+    });
+    mockedStoreImmutableVoiceObject.mockResolvedValue({
+      key: 'audio/messages/immutable.m4a',
+      url: 'https://assets.kiwishare.online/audio/messages/immutable.m4a'
     });
   });
 
@@ -401,6 +439,8 @@ describe('KiwiShare text chat API', () => {
 
   test('stores a bounded R2 voice message and returns it in chat history', async () => {
     const audioUrl = 'https://assets.kiwishare.online/audio/chat/voice.m4a';
+    const immutableAudioUrl =
+      'https://assets.kiwishare.online/audio/messages/immutable.m4a';
     const sent = await request(app.callback())
       .post(`/api/conversations/${conversationId}/messages`)
       .set('Authorization', `Bearer ${buyerToken}`)
@@ -410,7 +450,7 @@ describe('KiwiShare text chat API', () => {
     expect(sent.body.message).toEqual(
       expect.objectContaining({
         type: 'voice',
-        audioUrl,
+        audioUrl: immutableAudioUrl,
         durationMs: 12500,
         text: '',
         isMine: true
@@ -419,9 +459,16 @@ describe('KiwiShare text chat API', () => {
 
     const stored = await Message.findById(sent.body.message.id);
     expect(stored?.type).toBe('voice');
-    expect(stored?.audioUrl).toBe(audioUrl);
+    expect(stored?.audioUrl).toBe(immutableAudioUrl);
     expect(stored?.durationMs).toBe(12500);
-    expect(mockedGetR2ObjectMetadata).toHaveBeenCalledWith(
+    expect(mockedGetR2ObjectBytes).toHaveBeenCalledWith(
+      'audio/chat/voice.m4a',
+      5 * 1024 * 1024
+    );
+    expect(mockedStoreImmutableVoiceObject).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'audio/mp4',
+      'm4a',
       'audio/chat/voice.m4a'
     );
 
@@ -455,15 +502,12 @@ describe('KiwiShare text chat API', () => {
     expect(await Message.countDocuments({ conversationId })).toBe(countBefore);
   });
 
-  test('rejects oversized or non-audio R2 objects before storing voice messages', async () => {
+  test('rejects oversized or invalid R2 bytes before storing voice messages', async () => {
     const countBefore = await Message.countDocuments({ conversationId });
-    mockedGetR2ObjectMetadata
+    mockedGetR2ObjectBytes
+      .mockRejectedValueOnce(new Error('R2 object exceeds the permitted size.'))
       .mockResolvedValueOnce({
-        contentLength: 5 * 1024 * 1024 + 1,
-        contentType: 'audio/mp4'
-      })
-      .mockResolvedValueOnce({
-        contentLength: 1024,
+        bytes: Buffer.from('not audio'),
         contentType: 'image/jpeg'
       });
 
@@ -485,9 +529,31 @@ describe('KiwiShare text chat API', () => {
       });
 
     expect(oversized.status).toBe(400);
-    expect(oversized.body.message).toContain('up to 5 MB');
+    expect(oversized.body.message).toContain('could not be verified');
     expect(nonAudio.status).toBe(400);
     expect(nonAudio.body.message).toContain('valid audio');
+    expect(await Message.countDocuments({ conversationId })).toBe(countBefore);
+  });
+
+  test('rejects a media stream whose measured duration exceeds 60 seconds', async () => {
+    const countBefore = await Message.countDocuments({ conversationId });
+    mockedGetR2ObjectBytes.mockResolvedValueOnce({
+      bytes: validVoiceMp4(60001),
+      contentType: 'audio/mp4'
+    });
+
+    const response = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({
+        type: 'voice',
+        audioUrl: 'https://assets.kiwishare.online/audio/chat/overlong.m4a',
+        durationMs: 1000
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('up to 60 seconds');
+    expect(mockedStoreImmutableVoiceObject).not.toHaveBeenCalled();
     expect(await Message.countDocuments({ conversationId })).toBe(countBefore);
   });
 

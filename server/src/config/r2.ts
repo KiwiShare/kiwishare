@@ -3,7 +3,8 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
-  HeadObjectCommand
+  HeadObjectCommand,
+  DeleteObjectCommand
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
@@ -166,4 +167,67 @@ export async function getR2ObjectMetadata(key: string): Promise<{
     contentLength: result.ContentLength ?? null,
     contentType: result.ContentType?.toLowerCase() ?? null
   };
+}
+
+export async function getR2ObjectBytes(
+  key: string,
+  maximumBytes: number
+): Promise<{ bytes: Buffer; contentType: string | null }> {
+  const result = await r2S3Client.send(
+    new GetObjectCommand({ Bucket: R2_CONFIG.bucketName, Key: key })
+  );
+  if (!result.Body) throw new Error('R2 object has no body.');
+
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  for await (const chunk of result.Body as AsyncIterable<Uint8Array>) {
+    const buffer = Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > maximumBytes) {
+      throw new Error('R2 object exceeds the permitted size.');
+    }
+    chunks.push(buffer);
+  }
+  return {
+    bytes: Buffer.concat(chunks, totalBytes),
+    contentType: result.ContentType?.toLowerCase() ?? null
+  };
+}
+
+export async function storeImmutableVoiceObject(
+  bytes: Buffer,
+  contentType: string,
+  extension: string,
+  sourceKey?: string
+): Promise<{ key: string; url: string }> {
+  const safeExtension = extension.replace(/[^a-z0-9]/gi, '') || 'm4a';
+  const key = `audio/messages/${Date.now()}_${crypto.randomBytes(12).toString('hex')}.${safeExtension}`;
+  await r2S3Client.send(
+    new PutObjectCommand({
+      Bucket: R2_CONFIG.bucketName,
+      Key: key,
+      Body: bytes,
+      ContentType: contentType,
+      CacheControl: 'public, max-age=31536000, immutable'
+    })
+  );
+
+  if (sourceKey && sourceKey !== key) {
+    try {
+      await r2S3Client.send(
+        new DeleteObjectCommand({ Bucket: R2_CONFIG.bucketName, Key: sourceKey })
+      );
+    } catch (error) {
+      console.warn(
+        '[R2 Cleanup] Verified temporary voice object could not be removed:',
+        error instanceof Error ? error.message : 'Unknown cleanup error.'
+      );
+    }
+  }
+
+  const isAbsolute = R2_CONFIG.publicUrlBase.startsWith('http');
+  const url = isAbsolute
+    ? `${R2_CONFIG.publicUrlBase.replace(/\/$/, '')}/${key}`
+    : `/api/images/${key}`;
+  return { key, url };
 }
