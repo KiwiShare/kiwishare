@@ -34,7 +34,7 @@ void main() {
     expect(find.text('Price drop on a saved item'), findsOneWidget);
     expect(
       tester.getSemantics(find.byType(KiwiShareNotificationContent)).label,
-      contains(
+      equals(
         'Price drop on a saved item. Oak chair dropped from \$100.00 to \$80.00',
       ),
     );

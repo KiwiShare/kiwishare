@@ -20,6 +20,7 @@ class KiwiShareNotificationContent extends StatelessWidget {
     return Semantics(
       container: true,
       liveRegion: true,
+      excludeSemantics: true,
       label: '$title. $body',
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
