@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -22,7 +23,10 @@ import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 import 'repositories/watchlist_repository.dart';
 import 'repositories/chat_repository.dart';
+import 'repositories/push_device_repository.dart';
 import 'services/remote_config_service.dart';
+import 'services/firebase_runtime_configuration.dart';
+import 'services/push_notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
@@ -34,6 +38,8 @@ final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
 final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'shell',
 );
+final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 // This router must live longer than a single widget build. ThemeProvider
 // notifies MaterialApp when the user selects Light/Dark/System; recreating a
@@ -81,6 +87,7 @@ final GoRouter _router = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/items/:itemId',
       builder: (context, state) => ProductDetailScreen(
+        itemId: state.pathParameters['itemId'],
         item: state.extra is ItemModel ? state.extra as ItemModel : null,
       ),
     ),
@@ -110,26 +117,52 @@ final GoRouter _router = GoRouter(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (DefaultFirebaseOptions.isConfigured) {
+  var firebaseInitialized = false;
+  FirebaseOptions? firebaseOptions;
+  try {
+    final candidate = DefaultFirebaseOptions.currentPlatform;
+    if (hasUsableFirebaseOptions(candidate)) firebaseOptions = candidate;
+  } catch (error) {
+    debugPrint('[Firebase] Configuration lookup failed: $error');
+  }
+  if (firebaseOptions != null) {
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      await Firebase.initializeApp(options: firebaseOptions);
+      firebaseInitialized = true;
       await RemoteConfigService.instance.initialize();
     } catch (e) {
       debugPrint('Firebase/RemoteConfig initialization failed: $e');
     }
   } else {
     debugPrint(
-      'ℹ️ [Firebase] Placeholder credentials detected. Skipping Firebase init and using in-app local defaults.',
+      'ℹ️ [Firebase] FlutterFire configuration is absent. Firebase and push notifications are disabled; the app will continue with local defaults.',
     );
+  }
+
+  PushNotificationService? pushNotifications;
+  if (firebaseInitialized &&
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
+    pushNotifications = PushNotificationService(
+      messagingClient: FirebasePushMessagingClient(),
+      deviceRepository: RestPushDeviceRepository(),
+      platform: defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+      onNavigateToItem: _openWatchlistPriceDrop,
+      onForegroundMessage: _showForegroundPriceDrop,
+    );
+    await pushNotifications.initialize();
   }
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => AuthProvider(userRepository: RestUserRepository()),
+          create: (_) => AuthProvider(
+            userRepository: RestUserRepository(),
+            pushNotifications: pushNotifications,
+          ),
         ),
+        Provider<ItemRepository>(create: (_) => RestItemRepository()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(
           create: (_) =>
@@ -150,6 +183,33 @@ void main() async {
   );
 }
 
+void _openWatchlistPriceDrop(String itemId) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _router.push('/items/$itemId');
+  });
+}
+
+void _showForegroundPriceDrop(
+  WatchlistPriceDropMessage message,
+  PushEnvelope envelope,
+) {
+  final messenger = _scaffoldMessengerKey.currentState;
+  if (messenger == null) return;
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          envelope.body ?? 'An item on your watchlist has dropped in price.',
+        ),
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () => _openWatchlistPriceDrop(message.itemId),
+        ),
+      ),
+    );
+}
+
 class KiwiShareApp extends StatelessWidget {
   const KiwiShareApp({super.key});
 
@@ -160,6 +220,7 @@ class KiwiShareApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'KiwiShare - Buy. Sell. Share. Sustain.',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: _scaffoldMessengerKey,
       themeMode: themeMode,
       theme: buildKiwiShareTheme(),
       darkTheme: buildKiwiShareDarkTheme(),

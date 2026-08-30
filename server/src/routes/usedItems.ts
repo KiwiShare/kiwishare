@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth';
 import Item from '../models/Item';
 import Category from '../models/Category';
 import User from '../models/User';
+import { notifyWatchlistPriceDrop } from '../services/pushNotification';
 
 const router = new Router();
 
@@ -629,30 +630,104 @@ async function updateUsedItemHandler(ctx: any) {
     return;
   }
 
-  if (updates.title != null) item.title = updates.title;
-  if (updates.description != null) item.description = updates.description;
-  if (updates.category != null) item.category = updates.category;
-  if (updates.condition != null) item.condition = updates.condition;
-  if (updates.status != null) item.status = updates.status;
-  if (updates.isSustainable != null) item.isSustainable = Boolean(updates.isSustainable);
-  if (updates.imageUrl != null) {
-    item.imageUrl = updates.imageUrl;
-    item.images = [{ url: updates.imageUrl, thumbnailUrl: updates.imageUrl, sortOrder: 0 }];
+  const updateFields: Record<string, unknown> = {};
+
+  if (updates.title != null) updateFields.title = updates.title;
+  if (updates.description != null) updateFields.description = updates.description;
+  if (updates.category != null) updateFields.category = updates.category;
+  if (updates.condition != null) updateFields.condition = updates.condition;
+  if (updates.status != null) updateFields.status = updates.status;
+  if (updates.isSustainable != null) {
+    updateFields.isSustainable = Boolean(updates.isSustainable);
   }
-  if (updates.priceNzd != null) {
-    item.priceNzd = updates.priceNzd.toString();
-    item.price = Math.round(parseFloat(updates.priceNzd.toString()) * 100);
+  if (updates.imageUrl != null) {
+    updateFields.imageUrl = updates.imageUrl;
+    updateFields.images = [
+      { url: updates.imageUrl, thumbnailUrl: updates.imageUrl, sortOrder: 0 }
+    ];
+  }
+  if (updates.priceNzd != null || updates.price != null) {
+    try {
+      const parsedPrice = parseListingPrice(updates.priceNzd, updates.price);
+      updateFields.priceNzd = parsedPrice.priceNzd;
+      updateFields.price = parsedPrice.priceCents;
+    } catch (error) {
+      if (error instanceof ListingValidationError) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: error.message };
+        return;
+      }
+      throw error;
+    }
   }
   if (updates.location != null) {
-    item.location = parseLocation(updates.location);
+    updateFields.location = parseLocation(updates.location);
   }
 
-  await item.save();
+  // A single atomic update returns the document immediately before this
+  // request's successful write. This pre-image is the authoritative previous
+  // price even when multiple PATCH requests race. Updating only explicit
+  // fields also avoids replacing unrelated concurrent changes.
+  const ownerFilter = item.sellerId
+    ? { sellerId: item.sellerId }
+    : { ownerId: userId };
+  const previousItem = await Item.findOneAndUpdate(
+    {
+      _id: item._id,
+      status: { $ne: 'deleted' },
+      ...ownerFilter
+    },
+    { $set: updateFields },
+    { new: false, runValidators: true }
+  );
+
+  if (!previousItem) {
+    const latestItem = await Item.findById(item._id);
+    if (!latestItem || latestItem.status === 'deleted') {
+      ctx.status = 404;
+      ctx.body = { status: 'error', message: 'Used item not found.' };
+    } else {
+      ctx.status = 403;
+      ctx.body = {
+        status: 'error',
+        message: 'Unauthorized: You can only edit your own listings.'
+      };
+    }
+    return;
+  }
+
+  const previousPriceCents = previousItem.price;
+  const previousPriceNzd = previousItem.priceNzd;
+  const updatedItem = previousItem;
+  updatedItem.set(updateFields);
+  const newPriceCents = updatedItem.price;
+  const newPriceNzd = updatedItem.priceNzd;
+
+  // Price drop detection: trigger notifications only if newPrice < oldPrice
+  if (newPriceCents < previousPriceCents) {
+    // A fresh immutable identity represents this persisted price-change event.
+    // It intentionally does not deduplicate by item/new price, because a later
+    // genuine drop may return to a price seen in an earlier event.
+    const eventId = new mongoose.Types.ObjectId().toHexString();
+    notifyWatchlistPriceDrop({
+      item: updatedItem,
+      oldPriceNzd: previousPriceNzd,
+      newPriceNzd,
+      oldPriceCents: previousPriceCents,
+      newPriceCents,
+      eventId
+    }).catch((err) => {
+      console.warn(
+        '[Notification] Background price drop dispatch warning:',
+        err instanceof Error ? err.message : err
+      );
+    });
+  }
 
   ctx.status = 200;
   ctx.body = {
     status: 'success',
-    item: formatItem(item)
+    item: formatItem(updatedItem)
   };
 }
 
