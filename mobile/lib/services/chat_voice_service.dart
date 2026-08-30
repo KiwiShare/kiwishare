@@ -78,12 +78,13 @@ class DeviceChatVoiceRecorder implements ChatVoiceRecorder {
 
   @override
   Future<ChatVoiceRecording?> stop() async {
-    final path = await _recorder.stop();
+    // Capture the user-visible recording duration before awaiting native AAC
+    // finalization, which can add encoder shutdown latency after the limit.
     _stopwatch.stop();
+    final elapsedMs = _stopwatch.elapsedMilliseconds;
+    final path = await _recorder.stop();
     if (path == null || path.isEmpty) return null;
-    final durationMs = validatedChatVoiceDurationMs(
-      _stopwatch.elapsedMilliseconds,
-    );
+    final durationMs = validatedChatVoiceDurationMs(elapsedMs);
     final file = XFile(path, mimeType: 'audio/mp4');
     final bytes = await file.readAsBytes();
     return ChatVoiceRecording(

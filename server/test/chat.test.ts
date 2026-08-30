@@ -6,6 +6,7 @@ import Conversation from '../src/models/Conversation';
 import Message from '../src/models/Message';
 import Item from '../src/models/Item';
 import { getR2ObjectBytes, storeImmutableVoiceObject } from '../src/config/r2';
+import { probeVoiceAudio } from '../src/services/voiceAudio';
 
 function mp4Box(type: string, payload: Buffer): Buffer {
   const box = Buffer.alloc(8 + payload.length);
@@ -49,8 +50,17 @@ jest.mock('../src/config/r2', () => {
   };
 });
 
+jest.mock('../src/services/voiceAudio', () => ({
+  probeVoiceAudio: jest.fn(async () => ({
+    contentType: 'audio/mp4',
+    extension: 'm4a',
+    durationMs: 12500
+  }))
+}));
+
 const mockedGetR2ObjectBytes = jest.mocked(getR2ObjectBytes);
 const mockedStoreImmutableVoiceObject = jest.mocked(storeImmutableVoiceObject);
+const mockedProbeVoiceAudio = jest.mocked(probeVoiceAudio);
 
 jest.setTimeout(60000);
 
@@ -67,6 +77,7 @@ describe('KiwiShare text chat API', () => {
   beforeEach(() => {
     mockedGetR2ObjectBytes.mockClear();
     mockedStoreImmutableVoiceObject.mockClear();
+    mockedProbeVoiceAudio.mockReset();
     mockedGetR2ObjectBytes.mockResolvedValue({
       bytes: validVoiceMp4(),
       contentType: 'audio/mp4'
@@ -74,6 +85,11 @@ describe('KiwiShare text chat API', () => {
     mockedStoreImmutableVoiceObject.mockResolvedValue({
       key: 'audio/messages/immutable.m4a',
       url: 'https://assets.kiwishare.online/audio/messages/immutable.m4a'
+    });
+    mockedProbeVoiceAudio.mockResolvedValue({
+      contentType: 'audio/mp4',
+      extension: 'm4a',
+      durationMs: 12500
     });
   });
 
@@ -471,6 +487,10 @@ describe('KiwiShare text chat API', () => {
       'm4a',
       'audio/chat/voice.m4a'
     );
+    expect(mockedProbeVoiceAudio).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      60000
+    );
 
     const sellerList = await request(app.callback())
       .get('/api/conversations')
@@ -510,6 +530,7 @@ describe('KiwiShare text chat API', () => {
         bytes: Buffer.from('not audio'),
         contentType: 'image/jpeg'
       });
+    mockedProbeVoiceAudio.mockResolvedValueOnce(null);
 
     const oversized = await request(app.callback())
       .post(`/api/conversations/${conversationId}/messages`)
@@ -537,10 +558,7 @@ describe('KiwiShare text chat API', () => {
 
   test('rejects a media stream whose measured duration exceeds 60 seconds', async () => {
     const countBefore = await Message.countDocuments({ conversationId });
-    mockedGetR2ObjectBytes.mockResolvedValueOnce({
-      bytes: validVoiceMp4(60001),
-      contentType: 'audio/mp4'
-    });
+    mockedProbeVoiceAudio.mockResolvedValueOnce(null);
 
     const response = await request(app.callback())
       .post(`/api/conversations/${conversationId}/messages`)

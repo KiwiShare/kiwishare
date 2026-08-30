@@ -118,7 +118,94 @@ function inspectAdtsAac(bytes: Buffer): VerifiedVoiceAudio | null {
   };
 }
 
-export function inspectVoiceAudio(bytes: Buffer): VerifiedVoiceAudio | null {
+function inspectVoiceContainer(bytes: Buffer): VerifiedVoiceAudio | null {
   if (bytes.length < 7) return null;
   return inspectMp4(bytes) ?? inspectAdtsAac(bytes);
 }
+
+async function decodesAsAudio(
+  bytes: Buffer,
+  extension: string,
+  maximumDurationMs: number
+): Promise<boolean> {
+  if (!ffmpegPath) return false;
+  const executablePath = ffmpegPath;
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'kiwishare-voice-'));
+  const inputPath = path.join(temporaryDirectory, `input.${extension}`);
+  try {
+    await writeFile(inputPath, bytes);
+    return await new Promise<boolean>((resolve) => {
+      const child = spawn(
+        executablePath,
+        [
+          '-v', 'error',
+          '-xerror',
+          '-nostdin',
+          '-i', inputPath,
+          '-map', '0:a:0',
+          '-ac', '1',
+          '-ar', '8000',
+          '-f', 's16le',
+          'pipe:1'
+        ],
+        { windowsHide: true }
+      );
+      child.stdin.end();
+      const maximumDecodedBytes = Math.ceil(
+        ((maximumDurationMs + 1000) / 1000) * 8000 * 2
+      );
+      let decodedBytes = 0;
+      let invalid = false;
+      let settled = false;
+      const finish = (result: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(result);
+      };
+      const timeout = setTimeout(() => {
+        invalid = true;
+        child.kill();
+        finish(false);
+      }, 15000);
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        decodedBytes += chunk.length;
+        if (decodedBytes > maximumDecodedBytes) {
+          invalid = true;
+          child.kill();
+        }
+      });
+      // Drain stderr so a malformed input cannot block the child process.
+      child.stderr.resume();
+      child.once('error', () => finish(false));
+      child.once('close', (code) => {
+        finish(!invalid && code === 0 && decodedBytes > 0);
+      });
+    });
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+}
+
+export async function probeVoiceAudio(
+  bytes: Buffer,
+  maximumDurationMs: number
+): Promise<VerifiedVoiceAudio | null> {
+  const container = inspectVoiceContainer(bytes);
+  if (
+    container == null ||
+    container.durationMs < 1 ||
+    container.durationMs > maximumDurationMs
+  ) {
+    return null;
+  }
+  return await decodesAsAudio(bytes, container.extension, maximumDurationMs)
+    ? container
+    : null;
+}
+import { spawn } from 'child_process';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import ffmpegPath from 'ffmpeg-static';

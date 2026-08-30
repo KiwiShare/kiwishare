@@ -14,7 +14,7 @@ import {
   MESSAGE_CONTENT_NOT_ALLOWED,
   moderateChatText
 } from '../services/messageModeration';
-import { inspectVoiceAudio } from '../services/voiceAudio';
+import { probeVoiceAudio } from '../services/voiceAudio';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -456,7 +456,10 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
         objectKey,
         MAX_VOICE_FILE_SIZE_BYTES
       );
-      const verified = inspectVoiceAudio(uploaded.bytes);
+      const verified = await probeVoiceAudio(
+        uploaded.bytes,
+        MAX_VOICE_DURATION_MS
+      );
       if (
         verified == null ||
         verified.durationMs < 1 ||
