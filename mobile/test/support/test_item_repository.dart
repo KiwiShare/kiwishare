@@ -99,6 +99,14 @@ class TestItemRepository implements ItemRepository {
     : items = List.unmodifiable(items ?? testCatalogItems);
 
   @override
+  Future<ItemModel?> fetchItemById(String id) async {
+    final trimmed = id.trim();
+    if (trimmed.isEmpty) return null;
+    final match = items.where((i) => i.id == trimmed);
+    return match.isNotEmpty ? match.first : null;
+  }
+
+  @override
   Future<DiscoveryOptionsModel> fetchDiscoveryOptions() async {
     final categories = <String, int>{};
     final locations = <String, List<ItemModel>>{};

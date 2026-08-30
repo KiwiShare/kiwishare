@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kiwishare/models/discovery_options_model.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
@@ -10,10 +11,14 @@ import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
 import 'package:provider/provider.dart';
 
+import 'package:kiwishare/repositories/item_repository.dart';
 import '../../support/fake_chat_repository.dart';
+import '../../support/test_item_repository.dart';
 
 Widget _productDetailApp({
-  required ItemModel? item,
+  ItemModel? item,
+  String? itemId,
+  ItemRepository? itemRepository,
   required WatchlistProvider watchlistProvider,
   ChatProvider? chatProvider,
   String? authToken,
@@ -27,6 +32,8 @@ Widget _productDetailApp({
       ChangeNotifierProvider.value(value: watchlistProvider),
       if (chatProvider != null)
         ChangeNotifierProvider.value(value: chatProvider),
+      if (itemRepository != null)
+        Provider<ItemRepository>.value(value: itemRepository),
     ],
     child: MaterialApp(
       theme: buildKiwiShareTheme(),
@@ -38,6 +45,8 @@ Widget _productDetailApp({
       ),
       home: ProductDetailScreen(
         item: item,
+        itemId: itemId,
+        itemRepository: itemRepository,
         chatProvider: chatProvider,
         authToken: authToken,
         currentUserId: currentUserId,
@@ -49,7 +58,7 @@ Widget _productDetailApp({
 }
 
 final _detailItem = ItemModel(
-  id: 'detail_tent_1',
+  id: '64f000000000000000000001',
   title: 'Eco 4-Person Camping Tent',
   priceNzd: '95',
   location: 'Takapuna, Auckland',
@@ -82,7 +91,7 @@ void main() {
     expect(find.text('Eco 4-Person Camping Tent'), findsOneWidget);
     expect(find.text('\$95 NZD'), findsOneWidget);
     expect(find.text('Watch Item'), findsOneWidget);
-    expect(provider.isWatched('detail_tent_1'), isFalse);
+    expect(provider.isWatched('64f000000000000000000001'), isFalse);
 
     // 2. Tap bottom "Watch Item" button
     await tester.tap(find.byKey(const Key('detail-watch-action-button')));
@@ -90,8 +99,11 @@ void main() {
 
     // 3. Status changes to "Watching"
     expect(find.text('Watching'), findsOneWidget);
-    expect(provider.isWatched('detail_tent_1'), isTrue);
-    expect(provider.watchlistItems.any((i) => i.id == 'detail_tent_1'), isTrue);
+    expect(provider.isWatched('64f000000000000000000001'), isTrue);
+    expect(
+      provider.watchlistItems.any((i) => i.id == '64f000000000000000000001'),
+      isTrue,
+    );
 
     // 4. Tap AppBar bookmark button to unwatch
     await tester.tap(find.byKey(const Key('detail-favorite-button')));
@@ -99,7 +111,7 @@ void main() {
 
     // 5. Status changes back to "Watch Item"
     expect(find.text('Watch Item'), findsOneWidget);
-    expect(provider.isWatched('detail_tent_1'), isFalse);
+    expect(provider.isWatched('64f000000000000000000001'), isFalse);
   });
 
   testWidgets('ProductDetailScreen renders unavailable view for null item', (
@@ -265,4 +277,176 @@ void main() {
     expect(find.text('Message seller'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'ProductDetailScreen fetches and renders by itemId when item is null',
+    (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final watchlist = WatchlistProvider(
+        repository: TestWatchlistRepository(),
+      );
+      final itemRepo = TestItemRepository(items: [_detailItem]);
+
+      await tester.pumpWidget(
+        _productDetailApp(
+          itemId: '64f000000000000000000001',
+          itemRepository: itemRepo,
+          watchlistProvider: watchlist,
+        ),
+      );
+
+      // Initial pump shows loading
+      expect(find.byKey(const Key('product-detail-loading')), findsOneWidget);
+
+      // Settle loads the item
+      await tester.pumpAndSettle();
+
+      expect(find.text('Eco 4-Person Camping Tent'), findsOneWidget);
+      expect(find.text('\$95 NZD'), findsOneWidget);
+      expect(find.byKey(const Key('product-detail-loading')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'ProductDetailScreen displays not found state when itemId does not exist',
+    (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final watchlist = WatchlistProvider(
+        repository: TestWatchlistRepository(),
+      );
+      final itemRepo = TestItemRepository(items: [_detailItem]);
+
+      await tester.pumpWidget(
+        _productDetailApp(
+          itemId: '64f000000000000000000099',
+          itemRepository: itemRepo,
+          watchlistProvider: watchlist,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Product unavailable'), findsOneWidget);
+      expect(
+        find.text('Item not found or no longer available.'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('ProductDetailScreen handles malformed or empty itemId safely', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final watchlist = WatchlistProvider(repository: TestWatchlistRepository());
+    final itemRepo = TestItemRepository(items: [_detailItem]);
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        itemId: '   ',
+        itemRepository: itemRepo,
+        watchlistProvider: watchlist,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Product unavailable'), findsOneWidget);
+    expect(find.text('The item link is invalid.'), findsOneWidget);
+  });
+
+  testWidgets(
+    'ProductDetailScreen displays network error and retries successfully',
+    (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final watchlist = WatchlistProvider(
+        repository: TestWatchlistRepository(),
+      );
+      var failFetch = true;
+
+      final mockRepo = _FailingItemRepository(
+        onFetch: (id) async {
+          if (failFetch) throw Exception('Network error');
+          return _detailItem;
+        },
+      );
+
+      await tester.pumpWidget(
+        _productDetailApp(
+          itemId: '64f000000000000000000001',
+          itemRepository: mockRepo,
+          watchlistProvider: watchlist,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Product unavailable'), findsOneWidget);
+      expect(
+        find.text(
+          'Unable to load item details. Please check your connection and try again.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('product-detail-retry-button')),
+        findsOneWidget,
+      );
+
+      // Now fix network and tap retry
+      failFetch = false;
+      await tester.tap(find.byKey(const Key('product-detail-retry-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Eco 4-Person Camping Tent'), findsOneWidget);
+      expect(find.text('\$95 NZD'), findsOneWidget);
+    },
+  );
+}
+
+class _FailingItemRepository implements ItemRepository {
+  final Future<ItemModel?> Function(String id) onFetch;
+
+  _FailingItemRepository({required this.onFetch});
+
+  @override
+  Future<ItemModel?> fetchItemById(String id) => onFetch(id);
+
+  @override
+  Future<DiscoveryOptionsModel> fetchDiscoveryOptions() =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<ItemModel>> fetchDiscoveryItems(DiscoveryQuery query) =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<ItemModel>> fetchMyItems({
+    required bool sold,
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<List<ItemModel>> fetchPopularItems() => throw UnimplementedError();
+
+  @override
+  Future<List<ItemModel>> fetchRecommendedItems({int limit = 10}) =>
+      throw UnimplementedError();
+
+  @override
+  Stream<List<ItemModel>> searchItems({String? query, String? category}) =>
+      throw UnimplementedError();
 }

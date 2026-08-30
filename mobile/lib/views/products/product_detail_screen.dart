@@ -8,11 +8,14 @@ import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/watchlist_provider.dart';
 import '../../repositories/chat_repository.dart';
+import '../../repositories/item_repository.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
 
 class ProductDetailScreen extends StatefulWidget {
+  final String? itemId;
   final ItemModel? item;
+  final ItemRepository? itemRepository;
   final ChatProvider? chatProvider;
   final String? authToken;
   final String? currentUserId;
@@ -21,7 +24,9 @@ class ProductDetailScreen extends StatefulWidget {
 
   const ProductDetailScreen({
     super.key,
-    required this.item,
+    this.itemId,
+    this.item,
+    this.itemRepository,
     this.chatProvider,
     this.authToken,
     this.currentUserId,
@@ -34,13 +39,58 @@ class ProductDetailScreen extends StatefulWidget {
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
+  static final RegExp _objectId = RegExp(r'^[0-9a-fA-F]{24}$');
   int _activePhotoIndex = 0;
   late final PageController _pageController;
+  ItemModel? _loadedItem;
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _loadedItem = widget.item;
+    final id = widget.itemId?.trim() ?? widget.item?.id;
+    if (_loadedItem == null) {
+      if (id == null || !_objectId.hasMatch(id)) {
+        _errorMessage = 'The item link is invalid.';
+      } else {
+        _isLoading = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _fetchItem(id);
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchItem(String id) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final repo =
+          widget.itemRepository ??
+          context.read<ItemRepository?>() ??
+          RestItemRepository();
+      final fetched = await repo.fetchItemById(id);
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadedItem = fetched;
+        if (fetched == null) {
+          _errorMessage = 'Item not found or no longer available.';
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            'Unable to load item details. Please check your connection and try again.';
+      });
+    }
   }
 
   @override
@@ -135,7 +185,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final product = widget.item;
+    final product = _loadedItem;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -208,8 +258,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 );
               },
             ),
-      body: product == null
-          ? const _UnavailableProduct()
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(
+                key: Key('product-detail-loading'),
+              ),
+            )
+          : product == null
+          ? _UnavailableProduct(
+              message: _errorMessage,
+              onRetry:
+                  (widget.itemId != null &&
+                      _objectId.hasMatch(widget.itemId!.trim()))
+                  ? () => _fetchItem(widget.itemId!.trim())
+                  : null,
+            )
           : ListView(
               padding: const EdgeInsets.only(bottom: AppSpacing.xl),
               children: [
@@ -652,7 +715,10 @@ class _SellerProfileCard extends StatelessWidget {
 }
 
 class _UnavailableProduct extends StatelessWidget {
-  const _UnavailableProduct();
+  final String? message;
+  final VoidCallback? onRetry;
+
+  const _UnavailableProduct({this.message, this.onRetry});
 
   @override
   Widget build(BuildContext context) => Center(
@@ -672,10 +738,18 @@ class _UnavailableProduct extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: AppSpacing.sm),
-          const Text(
-            'Return to Products and choose an available item.',
+          Text(
+            message ?? 'Return to Products and choose an available item.',
             textAlign: TextAlign.center,
           ),
+          if (onRetry != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            ElevatedButton(
+              key: const Key('product-detail-retry-button'),
+              onPressed: onRetry,
+              child: const Text('Retry'),
+            ),
+          ],
         ],
       ),
     ),

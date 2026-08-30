@@ -81,5 +81,9 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>KiwiShare needs local network access to communicate with the development server.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>
