@@ -21,6 +21,8 @@ class FakeChatRepository implements ChatRepository {
   ChatRepositoryException? deleteError;
   ChatConversationModel? createdConversation;
   Completer<ChatConversationModel>? createCompleter;
+  final List<Completer<List<ChatConversationModel>>> conversationCompleters =
+      [];
   final Map<String, Completer<ChatMessagePage>> messageCompletersByToken = {};
   int conversationFetches = 0;
   int createCalls = 0;
@@ -41,6 +43,9 @@ class FakeChatRepository implements ChatRepository {
   }) async {
     conversationFetches += 1;
     if (conversationError != null) throw conversationError!;
+    if (conversationCompleters.isNotEmpty) {
+      return conversationCompleters.removeAt(0).future;
+    }
     return conversations;
   }
 

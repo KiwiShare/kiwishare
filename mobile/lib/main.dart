@@ -298,7 +298,7 @@ Future<void> refreshChatUnreadForMessage({
       authToken.isEmpty) {
     return;
   }
-  await chatProvider.loadConversations(authToken);
+  await chatProvider.loadConversations(authToken, queueIfBusy: true);
 }
 
 bool shouldOpenChatNotificationForUser(

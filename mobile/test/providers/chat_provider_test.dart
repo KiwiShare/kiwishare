@@ -313,6 +313,36 @@ void main() {
     expect(await second, isTrue);
   });
 
+  test(
+    'successful read reconciles a stale in-flight conversation load',
+    () async {
+      final conversation = testConversation(unreadCount: 4);
+      final staleLoad = Completer<List<ChatConversationModel>>();
+      final pendingRead = Completer<void>();
+      final repository = FakeChatRepository(conversations: [conversation]);
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+      repository
+        ..conversationCompleters.add(staleLoad)
+        ..markReadCompleter = pendingRead;
+
+      final loading = provider.loadConversations('valid-token');
+      final markingRead = provider.markConversationRead(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+      expect(provider.totalUnreadCount, 0);
+
+      staleLoad.complete([conversation]);
+      await loading;
+      expect(provider.totalUnreadCount, 4);
+
+      pendingRead.complete();
+      expect(await markingRead, isTrue);
+      expect(provider.totalUnreadCount, 0);
+    },
+  );
+
   test('sends normalized text and updates conversation preview', () async {
     final conversation = testConversation();
     final repository = FakeChatRepository(conversations: [conversation]);

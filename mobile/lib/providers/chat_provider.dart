@@ -48,6 +48,8 @@ class ChatProvider extends ChangeNotifier {
   bool get isLoadingConversations => _isLoadingConversations;
   String? _conversationError;
   String? get conversationError => _conversationError;
+  Completer<void>? _conversationLoadCompleter;
+  bool _conversationRefreshQueued = false;
 
   final Map<String, List<ChatMessageModel>> _messages = {};
   final Set<String> _loadingConversationIds = {};
@@ -107,6 +109,7 @@ class ChatProvider extends ChangeNotifier {
     _conversations = const [];
     _isLoadingConversations = false;
     _conversationError = null;
+    _conversationRefreshQueued = false;
     _messages.clear();
     _loadingConversationIds.clear();
     _sendingConversationIds.clear();
@@ -171,10 +174,25 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadConversations(String token) async {
-    if (_isLoadingConversations && _sessionToken == token) return;
+  Future<void> loadConversations(
+    String token, {
+    bool queueIfBusy = false,
+  }) async {
+    if (_isLoadingConversations && _sessionToken == token) {
+      if (!queueIfBusy) return;
+      _conversationRefreshQueued = true;
+      final activeLoad = _conversationLoadCompleter?.future;
+      if (activeLoad != null) await activeLoad;
+      if (_sessionToken == token && _conversationRefreshQueued) {
+        _conversationRefreshQueued = false;
+        await loadConversations(token);
+      }
+      return;
+    }
     _useSession(token);
     _isLoadingConversations = true;
+    final loadCompleter = Completer<void>();
+    _conversationLoadCompleter = loadCompleter;
     _conversationError = null;
     notifyListeners();
     try {
@@ -190,6 +208,10 @@ class ChatProvider extends ChangeNotifier {
       if (_sessionToken == token) {
         _isLoadingConversations = false;
         notifyListeners();
+      }
+      if (!loadCompleter.isCompleted) loadCompleter.complete();
+      if (identical(_conversationLoadCompleter, loadCompleter)) {
+        _conversationLoadCompleter = null;
       }
     }
   }
@@ -274,6 +296,13 @@ class ChatProvider extends ChangeNotifier {
         conversationId: conversation.id,
         token: token,
       );
+      if (_sessionToken == token) {
+        final current = conversationById(conversation.id);
+        if (current != null && current.unreadCount > 0) {
+          _replaceConversation(current.copyWith(unreadCount: 0));
+          notifyListeners();
+        }
+      }
       return _sessionToken == token;
     } catch (_) {
       if (_sessionToken == token) {
