@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kiwishare/models/chat_conversation_model.dart';
+import 'package:kiwishare/models/chat_message_model.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/services/chat_photo_upload_service.dart';
@@ -60,6 +62,106 @@ void main() {
       expect(provider.messageLoadErrorFor(conversation.id), isNull);
     },
   );
+
+  test(
+    'notification snapshot cannot replace canonical conversation metadata',
+    () async {
+      final canonical = testConversation(
+        direction: ChatDirection.selling,
+        lastMessage: 'Canonical preview',
+        unreadCount: 2,
+      );
+      final notificationSnapshot = testConversation(
+        direction: ChatDirection.buying,
+        lastMessage: '',
+        unreadCount: 0,
+      );
+      final repository = FakeChatRepository(
+        conversations: [canonical],
+        messages: {
+          canonical.id: [testMessage(id: '1', text: 'New', isMine: false)],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+
+      await provider.loadMessages(
+        conversation: notificationSnapshot,
+        token: 'valid-token',
+      );
+
+      final updated = provider.conversations.single;
+      expect(updated.direction, ChatDirection.selling);
+      expect(updated.lastMessage, 'Canonical preview');
+      expect(updated.lastMessageAt, canonical.lastMessageAt);
+      expect(updated.unreadCount, 0);
+      expect(provider.conversationById(canonical.id), same(updated));
+    },
+  );
+
+  test(
+    'does not expose a cached conversation to a different session',
+    () async {
+      final conversation = testConversation();
+      final provider = ChatProvider(
+        repository: FakeChatRepository(conversations: [conversation]),
+      );
+      await provider.loadConversations('account-a-token');
+
+      expect(
+        provider.conversationByIdForSession(conversation.id, 'account-a-token'),
+        same(conversation),
+      );
+      expect(
+        provider.conversationByIdForSession(conversation.id, 'account-b-token'),
+        isNull,
+      );
+      expect(
+        provider.conversationByIdForSession(conversation.id, null),
+        isNull,
+      );
+    },
+  );
+
+  test('session switch clears history and isolates in-flight loads', () async {
+    final conversation = testConversation();
+    final accountALoad = Completer<ChatMessagePage>();
+    final accountBLoad = Completer<ChatMessagePage>();
+    final repository = FakeChatRepository()
+      ..messageCompletersByToken['account-a-token'] = accountALoad
+      ..messageCompletersByToken['account-b-token'] = accountBLoad;
+    final provider = ChatProvider(repository: repository);
+
+    final pendingA = provider.loadMessages(
+      conversation: conversation,
+      token: 'account-a-token',
+    );
+    final pendingB = provider.loadMessages(
+      conversation: conversation,
+      token: 'account-b-token',
+    );
+    expect(repository.messageFetches, 2);
+
+    accountALoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '1', text: 'A', isMine: true)],
+        hasMore: false,
+      ),
+    );
+    await pendingA;
+    expect(provider.messagesFor(conversation.id), isEmpty);
+    expect(provider.isLoadingMessages(conversation.id), isTrue);
+
+    accountBLoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '2', text: 'B', isMine: false)],
+        hasMore: false,
+      ),
+    );
+    await pendingB;
+    expect(provider.messagesFor(conversation.id).single.id, '2');
+    expect(provider.isLoadingMessages(conversation.id), isFalse);
+  });
 
   test(
     'loads a new empty conversation without an unnecessary read request',

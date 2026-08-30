@@ -19,6 +19,7 @@ void main() {
       await auth.login('watcher@example.com', 'password');
       await Future<void>.delayed(Duration.zero);
       expect(pushSession.activatedTokens, ['mock_jwt_token']);
+      expect(pushSession.activatedUserIds, ['mock_user_1']);
 
       await auth.logout();
       expect(pushSession.deactivatedTokens, ['mock_jwt_token']);
@@ -28,11 +29,13 @@ void main() {
 
 class _FakePushNotificationSession implements PushNotificationSession {
   final activatedTokens = <String>[];
+  final activatedUserIds = <String?>[];
   final deactivatedTokens = <String>[];
 
   @override
-  Future<void> activate(String jwtToken) async {
+  Future<void> activate(String jwtToken, {String? userId}) async {
     activatedTokens.add(jwtToken);
+    activatedUserIds.add(userId);
   }
 
   @override

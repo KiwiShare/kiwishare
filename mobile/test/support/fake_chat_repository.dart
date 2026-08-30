@@ -20,6 +20,7 @@ class FakeChatRepository implements ChatRepository {
   ChatRepositoryException? deleteError;
   ChatConversationModel? createdConversation;
   Completer<ChatConversationModel>? createCompleter;
+  final Map<String, Completer<ChatMessagePage>> messageCompletersByToken = {};
   int conversationFetches = 0;
   int createCalls = 0;
   int messageFetches = 0;
@@ -64,6 +65,8 @@ class FakeChatRepository implements ChatRepository {
   }) async {
     messageFetches += 1;
     if (messageError != null) throw messageError!;
+    final completer = messageCompletersByToken[token];
+    if (completer != null) return completer.future;
     return ChatMessagePage(
       // Match the REST repository, which returns a fixed-length page list.
       messages: List.unmodifiable(messages[conversationId] ?? const []),

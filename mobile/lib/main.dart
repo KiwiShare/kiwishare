@@ -95,20 +95,27 @@ final GoRouter _router = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/messages/:conversationId',
       builder: (context, state) {
-        final conversation = state.extra is ChatConversationModel
-            ? state.extra as ChatConversationModel
-            : ChatConversationModel(
-                id: state.pathParameters['conversationId'] ?? '',
-                itemId: '',
-                itemTitle: 'Item conversation',
-                itemImageUrl: '',
-                participantId: '',
-                participantName: 'Kiwi member',
-                direction: ChatDirection.buying,
-                status: 'active',
-                lastMessage: '',
-                unreadCount: 0,
-              );
+        final conversationId = state.pathParameters['conversationId'] ?? '';
+        final authToken = context.read<AuthProvider>().jwtToken;
+        final cachedConversation = context
+            .read<ChatProvider>()
+            .conversationByIdForSession(conversationId, authToken);
+        final conversation =
+            cachedConversation ??
+            (state.extra is ChatConversationModel
+                ? state.extra as ChatConversationModel
+                : ChatConversationModel(
+                    id: conversationId,
+                    itemId: '',
+                    itemTitle: 'Item conversation',
+                    itemImageUrl: '',
+                    participantId: '',
+                    participantName: 'Kiwi member',
+                    direction: ChatDirection.buying,
+                    status: 'active',
+                    lastMessage: '',
+                    unreadCount: 0,
+                  ));
         return ChatConversationScreen(conversation: conversation);
       },
     ),
@@ -150,6 +157,8 @@ void main() async {
       platform: defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
       onNavigateToItem: _openWatchlistPriceDrop,
       onForegroundMessage: _showForegroundPriceDrop,
+      onNavigateToChat: _openChatNotification,
+      onForegroundChatMessage: _showForegroundChatNotification,
     );
     await pushNotifications.initialize();
   }
@@ -185,9 +194,77 @@ void main() async {
 
 void _openWatchlistPriceDrop(String itemId) {
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    _router.push('/items/$itemId');
+    navigateToNotificationRoute(_router, '/items/$itemId');
   });
 }
+
+void _openChatNotification(ChatPushMessage message) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    navigateToNotificationRoute(
+      _router,
+      '/messages/${message.conversationId}',
+      extra: ChatConversationModel(
+        id: message.conversationId,
+        itemId: message.itemId,
+        itemTitle: message.itemTitle,
+        itemImageUrl: '',
+        participantId: message.participantId,
+        participantName: message.participantName,
+        direction: ChatDirection.buying,
+        status: 'active',
+        lastMessage: '',
+        unreadCount: 0,
+      ),
+    );
+  });
+}
+
+void navigateToNotificationRoute(
+  GoRouter router,
+  String location, {
+  Object? extra,
+}) {
+  final currentPath = router.routerDelegate.currentConfiguration.uri.path;
+  if (currentPath == '/splash') {
+    // A cold-start notification owns initial navigation. Replacing Splash
+    // disposes its delayed Home timer instead of leaving it under this route.
+    router.go(location, extra: extra);
+    return;
+  }
+  router.push(location, extra: extra);
+}
+
+void _showForegroundChatNotification(
+  ChatPushMessage message,
+  PushEnvelope envelope,
+) {
+  final messenger = _scaffoldMessengerKey.currentState;
+  if (messenger == null) return;
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(envelope.body ?? 'You have a new KiwiShare message.'),
+        action: SnackBarAction(
+          label: 'Open',
+          onPressed: () {
+            final activeUserId = _scaffoldMessengerKey.currentContext
+                ?.read<AuthProvider>()
+                .currentUser
+                ?.id;
+            if (shouldOpenChatNotificationForUser(message, activeUserId)) {
+              _openChatNotification(message);
+            }
+          },
+        ),
+      ),
+    );
+}
+
+bool shouldOpenChatNotificationForUser(
+  ChatPushMessage message,
+  String? activeUserId,
+) => message.isForRecipient(activeUserId);
 
 void _showForegroundPriceDrop(
   WatchlistPriceDropMessage message,

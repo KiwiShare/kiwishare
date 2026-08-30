@@ -15,6 +15,46 @@ class PushEnvelope {
   final String? body;
 }
 
+class ChatPushMessage {
+  const ChatPushMessage({
+    required this.conversationId,
+    required this.recipientId,
+    required this.itemId,
+    required this.itemTitle,
+    required this.participantId,
+    required this.participantName,
+  });
+
+  final String conversationId;
+  final String recipientId;
+  final String itemId;
+  final String itemTitle;
+  final String participantId;
+  final String participantName;
+
+  bool isForRecipient(String? userId) {
+    final normalizedUserId = userId?.trim();
+    return normalizedUserId != null &&
+        normalizedUserId.isNotEmpty &&
+        recipientId == normalizedUserId;
+  }
+
+  static ChatPushMessage? fromData(Map<String, dynamic> data) {
+    if (data['type'] != 'chat_message') return null;
+    final conversationId = data['conversationId']?.toString().trim() ?? '';
+    final recipientId = data['recipientId']?.toString().trim() ?? '';
+    if (conversationId.isEmpty || recipientId.isEmpty) return null;
+    return ChatPushMessage(
+      conversationId: conversationId,
+      recipientId: recipientId,
+      itemId: data['itemId']?.toString() ?? '',
+      itemTitle: data['itemTitle']?.toString() ?? 'Item conversation',
+      participantId: data['participantId']?.toString() ?? '',
+      participantName: data['participantName']?.toString() ?? 'Kiwi member',
+    );
+  }
+}
+
 class WatchlistPriceDropMessage {
   const WatchlistPriceDropMessage({
     required this.itemId,
@@ -103,7 +143,7 @@ class FirebasePushMessagingClient implements PushMessagingClient {
 }
 
 abstract class PushNotificationSession {
-  Future<void> activate(String jwtToken);
+  Future<void> activate(String jwtToken, {String? userId});
   Future<void> deactivate(String jwtToken);
 }
 
@@ -113,19 +153,27 @@ class PushNotificationService implements PushNotificationSession {
     required this.deviceRepository,
     required this.platform,
     required this.onNavigateToItem,
+    this.onNavigateToChat,
     void Function(WatchlistPriceDropMessage message, PushEnvelope envelope)?
     onForegroundMessage,
-  }) : foregroundMessageHandler = onForegroundMessage;
+    void Function(ChatPushMessage message, PushEnvelope envelope)?
+    onForegroundChatMessage,
+  }) : foregroundMessageHandler = onForegroundMessage,
+       foregroundChatMessageHandler = onForegroundChatMessage;
 
   final PushMessagingClient messagingClient;
   final PushDeviceRepository deviceRepository;
   final String platform;
   final void Function(String itemId) onNavigateToItem;
+  final void Function(ChatPushMessage message)? onNavigateToChat;
   final void Function(WatchlistPriceDropMessage, PushEnvelope)?
   foregroundMessageHandler;
+  final void Function(ChatPushMessage, PushEnvelope)?
+  foregroundChatMessageHandler;
 
   String? _currentToken;
   String? _currentJwt;
+  String? _currentUserId;
   final Set<String> _registeredSessionTokens = <String>{};
   Future<void> _tokenOperations = Future<void>.value();
   int _sessionGeneration = 0;
@@ -163,10 +211,11 @@ class PushNotificationService implements PushNotificationSession {
   }
 
   @override
-  Future<void> activate(String jwtToken) async {
+  Future<void> activate(String jwtToken, {String? userId}) async {
     await initialize();
     final generation = ++_sessionGeneration;
     _currentJwt = jwtToken;
+    _currentUserId = userId?.trim();
 
     final pending = _pendingInitialMessage;
     _pendingInitialMessage = null;
@@ -260,12 +309,22 @@ class PushNotificationService implements PushNotificationSession {
 
   void _handleForegroundMessage(PushEnvelope envelope) {
     if (_currentJwt == null) return;
+    final chatMessage = ChatPushMessage.fromData(envelope.data);
+    if (chatMessage != null && _isForCurrentUser(chatMessage)) {
+      foregroundChatMessageHandler?.call(chatMessage, envelope);
+      return;
+    }
     final message = WatchlistPriceDropMessage.fromData(envelope.data);
     if (message != null) foregroundMessageHandler?.call(message, envelope);
   }
 
   void _handleNotificationTap(PushEnvelope envelope) {
     if (_currentJwt == null) return;
+    final chatMessage = ChatPushMessage.fromData(envelope.data);
+    if (chatMessage != null && _isForCurrentUser(chatMessage)) {
+      onNavigateToChat?.call(chatMessage);
+      return;
+    }
     final message = WatchlistPriceDropMessage.fromData(envelope.data);
     if (message != null) onNavigateToItem(message.itemId);
   }
@@ -274,6 +333,7 @@ class PushNotificationService implements PushNotificationSession {
   Future<void> deactivate(String jwtToken) async {
     _sessionGeneration += 1;
     _currentJwt = null;
+    _currentUserId = null;
     _currentToken = null;
 
     // Let registrations already in flight observe the ended session and
@@ -291,6 +351,10 @@ class PushNotificationService implements PushNotificationSession {
         debugPrint('Push token cleanup during logout failed: $error');
       }
     }
+  }
+
+  bool _isForCurrentUser(ChatPushMessage message) {
+    return message.isForRecipient(_currentUserId);
   }
 
   @visibleForTesting
