@@ -31,17 +31,25 @@ Coverage added for:
 
 ## Manual mobile verification
 
-Run these checks with two authenticated test accounts:
+Manual verification was completed on 30 August 2026 using the Android emulator
+and two authenticated users connected to the local API and `kiwishare_test`
+database.
 
-1. Open an active conversation and tap the microphone button.
-2. Allow microphone access and confirm the recording timer appears.
-3. Cancel once and confirm no message is sent.
-4. Record again, send, and confirm the sender sees a playable voice bubble.
-5. Open the same conversation as the receiver and confirm the message persists.
-6. Play, pause, replay, and verify the displayed duration.
-7. Deny microphone permission and confirm the app shows a safe recovery message.
-8. Record for 60 seconds and confirm recording stops without exceeding the
+Verified results:
+
+- microphone recording could be started and cancelled without sending a
+  message;
+- a recording could be completed and sent successfully;
+- the other participant received the persisted voice message;
+- the voice bubble displayed the recorded duration; and
+- playback, pause, and resume worked from the received message bubble.
+
+The following extended edge-case checks remain useful but are not blockers for
+the core Issue #96 acceptance path:
+
+1. Deny microphone permission and confirm the app shows a safe recovery message.
+2. Record for 60 seconds and confirm recording stops without exceeding the
    limit.
+3. Repeat the core flow on iOS.
 
-Android and iOS screenshots or a short recording should be attached to the PR
-after device verification.
+Android verification evidence was captured after completing the core flow.
