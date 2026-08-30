@@ -6,6 +6,7 @@ export interface IPushDevice extends Document {
   userId: mongoose.Types.ObjectId;
   token: string;
   platform: PushPlatform;
+  active: boolean;
   lastSeenAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -31,12 +32,13 @@ const PushDeviceSchema = new Schema<IPushDevice>(
       enum: ['android', 'ios'],
       required: true
     },
+    active: { type: Boolean, required: true, default: true, index: true },
     lastSeenAt: { type: Date, required: true, default: Date.now }
   },
   { timestamps: true }
 );
 
-PushDeviceSchema.index({ userId: 1, platform: 1 });
+PushDeviceSchema.index({ userId: 1, active: 1, platform: 1 });
 
 export default mongoose.models.PushDevice ||
   mongoose.model<IPushDevice>('PushDevice', PushDeviceSchema);

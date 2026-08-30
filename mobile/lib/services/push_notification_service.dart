@@ -1,11 +1,19 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 
-import '../config/api_config.dart';
+import '../repositories/push_device_repository.dart';
+
+enum PushPermissionStatus { authorized, denied, provisional, unavailable }
+
+class PushEnvelope {
+  const PushEnvelope({required this.data, this.title, this.body});
+
+  final Map<String, dynamic> data;
+  final String? title;
+  final String? body;
+}
 
 class ChatPushMessage {
   const ChatPushMessage({
@@ -36,16 +44,38 @@ class ChatPushMessage {
   }
 }
 
-class PushEnvelope {
-  const PushEnvelope({required this.data, this.title, this.body});
+class WatchlistPriceDropMessage {
+  const WatchlistPriceDropMessage({
+    required this.itemId,
+    required this.eventId,
+    required this.oldPrice,
+    required this.newPrice,
+  });
 
-  final Map<String, dynamic> data;
-  final String? title;
-  final String? body;
+  final String itemId;
+  final String eventId;
+  final String oldPrice;
+  final String newPrice;
+
+  static final RegExp _objectId = RegExp(r'^[0-9a-fA-F]{24}$');
+
+  static WatchlistPriceDropMessage? fromData(Map<String, dynamic> data) {
+    if (data['type'] != 'watchlist_price_drop') return null;
+    final itemId = data['itemId']?.toString().trim() ?? '';
+    if (!_objectId.hasMatch(itemId)) return null;
+    return WatchlistPriceDropMessage(
+      itemId: itemId,
+      eventId: data['eventId']?.toString().trim() ?? '',
+      oldPrice: data['oldPrice']?.toString().trim() ?? '',
+      newPrice: data['newPrice']?.toString().trim() ?? '',
+    );
+  }
 }
 
+/// Firebase Messaging boundary. Tests implement this without initializing
+/// Firebase or constructing plugin-specific message/settings objects.
 abstract class PushMessagingClient {
-  Future<bool> requestPermission();
+  Future<PushPermissionStatus> requestPermission();
   Future<String?> getToken();
   Future<PushEnvelope?> getInitialMessage();
   Stream<String> get onTokenRefresh;
@@ -60,20 +90,24 @@ class FirebasePushMessagingClient implements PushMessagingClient {
   final FirebaseMessaging _messaging;
 
   static PushEnvelope _map(RemoteMessage message) => PushEnvelope(
-    data: message.data,
+    data: Map<String, dynamic>.from(message.data),
     title: message.notification?.title,
     body: message.notification?.body,
   );
 
   @override
-  Future<bool> requestPermission() async {
+  Future<PushPermissionStatus> requestPermission() async {
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
-    return settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional;
+    return switch (settings.authorizationStatus) {
+      AuthorizationStatus.authorized => PushPermissionStatus.authorized,
+      AuthorizationStatus.provisional => PushPermissionStatus.provisional,
+      AuthorizationStatus.denied => PushPermissionStatus.denied,
+      AuthorizationStatus.notDetermined => PushPermissionStatus.unavailable,
+    };
   }
 
   @override
@@ -97,174 +131,216 @@ class FirebasePushMessagingClient implements PushMessagingClient {
       FirebaseMessaging.onMessageOpenedApp.map(_map);
 }
 
-abstract class PushDeviceRepository {
-  Future<void> register({
-    required String jwt,
-    required String token,
-    required String platform,
-  });
-  Future<void> unregister({required String jwt, required String token});
-}
-
-class RestPushDeviceRepository implements PushDeviceRepository {
-  RestPushDeviceRepository({http.Client? client})
-    : _client = client ?? http.Client();
-
-  final http.Client _client;
-
-  Uri get _devicesUrl =>
-      Uri.parse('${ApiConfig.baseUrl}/api/notifications/devices');
-
-  Map<String, String> _headers(String jwt) => {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer $jwt',
-  };
-
-  @override
-  Future<void> register({
-    required String jwt,
-    required String token,
-    required String platform,
-  }) async {
-    final response = await _client.post(
-      _devicesUrl,
-      headers: _headers(jwt),
-      body: jsonEncode({'token': token, 'platform': platform}),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Push notification registration failed.');
-    }
-  }
-
-  @override
-  Future<void> unregister({required String jwt, required String token}) async {
-    final request = http.Request('DELETE', _devicesUrl)
-      ..headers.addAll(_headers(jwt))
-      ..body = jsonEncode({'token': token});
-    final response = await _client.send(request);
-    if (response.statusCode != 200) {
-      throw Exception('Push notification removal failed.');
-    }
-  }
-}
-
 abstract class PushNotificationSession {
-  Future<void> activate(String jwt);
-  Future<void> deactivate(String jwt);
+  Future<void> activate(String jwtToken);
+  Future<void> deactivate(String jwtToken);
 }
 
 class PushNotificationService implements PushNotificationSession {
   PushNotificationService({
-    required this.messaging,
-    required this.repository,
+    required this.messagingClient,
+    required this.deviceRepository,
     required this.platform,
-    required void Function(ChatPushMessage message, PushEnvelope envelope)
+    required this.onNavigateToItem,
+    this.onNavigateToChat,
+    void Function(WatchlistPriceDropMessage message, PushEnvelope envelope)?
     onForegroundMessage,
-    required void Function(ChatPushMessage message) onNotificationOpened,
+    void Function(ChatPushMessage message, PushEnvelope envelope)?
+    onForegroundChatMessage,
   }) : foregroundMessageHandler = onForegroundMessage,
-       notificationOpenedHandler = onNotificationOpened;
+       foregroundChatMessageHandler = onForegroundChatMessage;
 
-  final PushMessagingClient messaging;
-  final PushDeviceRepository repository;
+  final PushMessagingClient messagingClient;
+  final PushDeviceRepository deviceRepository;
   final String platform;
-  final void Function(ChatPushMessage, PushEnvelope) foregroundMessageHandler;
-  final void Function(ChatPushMessage) notificationOpenedHandler;
+  final void Function(String itemId) onNavigateToItem;
+  final void Function(ChatPushMessage message)? onNavigateToChat;
+  final void Function(WatchlistPriceDropMessage, PushEnvelope)?
+  foregroundMessageHandler;
+  final void Function(ChatPushMessage, PushEnvelope)?
+  foregroundChatMessageHandler;
 
-  String? _jwt;
-  String? _deviceToken;
+  String? _currentToken;
+  String? _currentJwt;
+  final Set<String> _registeredSessionTokens = <String>{};
+  Future<void> _tokenOperations = Future<void>.value();
   int _sessionGeneration = 0;
-  bool _listenersStarted = false;
+  bool _initialized = false;
+  PushEnvelope? _pendingInitialMessage;
   StreamSubscription<String>? _tokenSubscription;
   StreamSubscription<PushEnvelope>? _foregroundSubscription;
   StreamSubscription<PushEnvelope>? _openedSubscription;
 
-  @override
-  Future<void> activate(String jwt) async {
-    final generation = ++_sessionGeneration;
-    _jwt = jwt;
+  /// Starts listeners once. Repeated calls are safe and do not duplicate them.
+  Future<void> initialize() async {
+    if (_initialized) return;
+    _initialized = true;
+    _tokenSubscription = messagingClient.onTokenRefresh.listen(
+      _handleTokenRefresh,
+    );
+    _foregroundSubscription = messagingClient.onForegroundMessage.listen(
+      _handleForegroundMessage,
+    );
+    _openedSubscription = messagingClient.onMessageOpened.listen(
+      _handleNotificationTap,
+    );
     try {
-      if (!await messaging.requestPermission()) return;
-      if (!_isCurrentSession(jwt, generation)) return;
-      _startListeners();
-      final token = await messaging.getToken();
-      if (token != null && token.trim().isNotEmpty) {
-        await _registerForSession(jwt, token, generation);
-      }
-      if (!_isCurrentSession(jwt, generation)) return;
-      final initial = await messaging.getInitialMessage();
-      if (_isCurrentSession(jwt, generation) && initial != null) {
-        _open(initial);
+      final initialMessage = await messagingClient.getInitialMessage();
+      if (initialMessage != null) {
+        if (_currentJwt == null) {
+          _pendingInitialMessage = initialMessage;
+        } else {
+          _handleNotificationTap(initialMessage);
+        }
       }
     } catch (error) {
-      debugPrint('Push notification setup failed: $error');
+      debugPrint('Push initial-message lookup failed: $error');
     }
   }
 
-  bool _isCurrentSession(String jwt, int generation) =>
-      _jwt == jwt && _sessionGeneration == generation;
+  @override
+  Future<void> activate(String jwtToken) async {
+    await initialize();
+    final generation = ++_sessionGeneration;
+    _currentJwt = jwtToken;
 
-  void _startListeners() {
-    if (_listenersStarted) return;
-    _listenersStarted = true;
-    _tokenSubscription = messaging.onTokenRefresh.listen((token) async {
-      final jwt = _jwt;
-      if (jwt == null) return;
-      final generation = _sessionGeneration;
-      try {
-        await _registerForSession(jwt, token, generation);
-      } catch (error) {
-        debugPrint('Push token refresh could not be registered: $error');
+    final pending = _pendingInitialMessage;
+    _pendingInitialMessage = null;
+    if (pending != null) _handleNotificationTap(pending);
+
+    try {
+      final permission = await messagingClient.requestPermission();
+      if (permission != PushPermissionStatus.authorized &&
+          permission != PushPermissionStatus.provisional) {
+        return;
       }
-    });
-    _foregroundSubscription = messaging.onForegroundMessage.listen((message) {
-      if (_jwt == null) return;
-      final chat = ChatPushMessage.fromData(message.data);
-      if (chat != null) foregroundMessageHandler(chat, message);
-    });
-    _openedSubscription = messaging.onMessageOpened.listen(_open);
+      if (!_isCurrentSession(jwtToken, generation)) return;
+      final token = (await messagingClient.getToken())?.trim();
+      if (token != null && token.isNotEmpty) {
+        await _queueTokenOperation(
+          () => _registerForSession(jwtToken, token, generation),
+        );
+      }
+    } catch (error) {
+      debugPrint('Push permission/token synchronization failed: $error');
+    }
   }
 
-  void _open(PushEnvelope envelope) {
-    if (_jwt == null) return;
-    final chat = ChatPushMessage.fromData(envelope.data);
-    if (chat != null) notificationOpenedHandler(chat);
+  bool _isCurrentSession(String jwtToken, int generation) =>
+      _currentJwt == jwtToken && _sessionGeneration == generation;
+
+  Future<void> _queueTokenOperation(Future<void> Function() operation) {
+    final result = _tokenOperations.then((_) => operation());
+    _tokenOperations = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
   }
 
   Future<void> _registerForSession(
-    String jwt,
+    String jwtToken,
     String token,
     int generation,
   ) async {
-    await repository.register(jwt: jwt, token: token, platform: platform);
-    if (!_isCurrentSession(jwt, generation)) {
-      // Registration may finish after logout. Compensate with a removal using
-      // the same signed session; the backend accepts an expired but otherwise
-      // valid JWT for this exact-token cleanup endpoint only.
-      if (_jwt != jwt) {
+    await deviceRepository.registerToken(
+      token: token,
+      platform: platform,
+      jwtToken: jwtToken,
+    );
+    if (!_isCurrentSession(jwtToken, generation)) {
+      if (_currentJwt != jwtToken) {
         try {
-          await repository.unregister(jwt: jwt, token: token);
+          await deviceRepository.unregisterToken(
+            token: token,
+            jwtToken: jwtToken,
+          );
         } catch (error) {
-          debugPrint('Late push registration could not be removed: $error');
+          debugPrint('Late push registration cleanup failed: $error');
         }
       }
       return;
     }
-    _deviceToken = token;
+
+    final previousToken = _currentToken;
+    _currentToken = token;
+    _registeredSessionTokens.add(token);
+
+    if (previousToken != null && previousToken != token) {
+      try {
+        await deviceRepository.unregisterToken(
+          token: previousToken,
+          jwtToken: jwtToken,
+        );
+        _registeredSessionTokens.remove(previousToken);
+      } catch (error) {
+        // Keep the old token tracked so deactivate can retry cleanup.
+        debugPrint('Previous push token cleanup failed: $error');
+      }
+    }
+  }
+
+  void _handleTokenRefresh(String newToken) {
+    final jwtToken = _currentJwt;
+    final token = newToken.trim();
+    if (jwtToken == null || token.isEmpty) return;
+    final generation = _sessionGeneration;
+    unawaited(
+      _queueTokenOperation(
+        () => _registerForSession(jwtToken, token, generation),
+      ).catchError((error) {
+        debugPrint('Refreshed push token synchronization failed: $error');
+      }),
+    );
+  }
+
+  void _handleForegroundMessage(PushEnvelope envelope) {
+    if (_currentJwt == null) return;
+    final chatMessage = ChatPushMessage.fromData(envelope.data);
+    if (chatMessage != null) {
+      foregroundChatMessageHandler?.call(chatMessage, envelope);
+      return;
+    }
+    final message = WatchlistPriceDropMessage.fromData(envelope.data);
+    if (message != null) foregroundMessageHandler?.call(message, envelope);
+  }
+
+  void _handleNotificationTap(PushEnvelope envelope) {
+    if (_currentJwt == null) return;
+    final chatMessage = ChatPushMessage.fromData(envelope.data);
+    if (chatMessage != null) {
+      onNavigateToChat?.call(chatMessage);
+      return;
+    }
+    final message = WatchlistPriceDropMessage.fromData(envelope.data);
+    if (message != null) onNavigateToItem(message.itemId);
   }
 
   @override
-  Future<void> deactivate(String jwt) async {
+  Future<void> deactivate(String jwtToken) async {
     _sessionGeneration += 1;
-    final token = _deviceToken;
-    _jwt = null;
-    _deviceToken = null;
-    if (token == null) return;
-    try {
-      await repository.unregister(jwt: jwt, token: token);
-    } catch (error) {
-      debugPrint('Push token could not be removed during logout: $error');
+    _currentJwt = null;
+    _currentToken = null;
+
+    // Let registrations already in flight observe the ended session and
+    // perform their late-registration cleanup before taking the final snapshot.
+    await _tokenOperations;
+    final tokens = Set<String>.from(_registeredSessionTokens);
+    _registeredSessionTokens.clear();
+    for (final token in tokens) {
+      try {
+        await deviceRepository.unregisterToken(
+          token: token,
+          jwtToken: jwtToken,
+        );
+      } catch (error) {
+        debugPrint('Push token cleanup during logout failed: $error');
+      }
     }
   }
+
+  @visibleForTesting
+  Future<void> waitForPendingTokenOperations() => _tokenOperations;
 
   @visibleForTesting
   Future<void> dispose() async {

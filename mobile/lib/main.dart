@@ -23,7 +23,9 @@ import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 import 'repositories/watchlist_repository.dart';
 import 'repositories/chat_repository.dart';
+import 'repositories/push_device_repository.dart';
 import 'services/remote_config_service.dart';
+import 'services/firebase_runtime_configuration.dart';
 import 'services/push_notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -85,6 +87,7 @@ final GoRouter _router = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/items/:itemId',
       builder: (context, state) => ProductDetailScreen(
+        itemId: state.pathParameters['itemId'],
         item: state.extra is ItemModel ? state.extra as ItemModel : null,
       ),
     ),
@@ -115,11 +118,16 @@ final GoRouter _router = GoRouter(
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   var firebaseInitialized = false;
-  if (DefaultFirebaseOptions.isConfigured) {
+  FirebaseOptions? firebaseOptions;
+  try {
+    final candidate = DefaultFirebaseOptions.currentPlatform;
+    if (hasUsableFirebaseOptions(candidate)) firebaseOptions = candidate;
+  } catch (error) {
+    debugPrint('[Firebase] Configuration lookup failed: $error');
+  }
+  if (firebaseOptions != null) {
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      await Firebase.initializeApp(options: firebaseOptions);
       firebaseInitialized = true;
       await RemoteConfigService.instance.initialize();
     } catch (e) {
@@ -127,24 +135,26 @@ void main() async {
     }
   } else {
     debugPrint(
-      'ℹ️ [Firebase] Placeholder credentials detected. Skipping Firebase init and using in-app local defaults.',
+      'ℹ️ [Firebase] FlutterFire configuration is absent. Firebase and push notifications are disabled; the app will continue with local defaults.',
     );
   }
 
-  PushNotificationSession? pushNotifications;
+  PushNotificationService? pushNotifications;
   if (firebaseInitialized &&
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS)) {
     pushNotifications = PushNotificationService(
-      messaging: FirebasePushMessagingClient(),
-      repository: RestPushDeviceRepository(),
+      messagingClient: FirebasePushMessagingClient(),
+      deviceRepository: RestPushDeviceRepository(),
       platform: defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
-      onForegroundMessage: _showForegroundChatNotification,
-      onNotificationOpened: _openChatNotification,
+      onNavigateToItem: _openWatchlistPriceDrop,
+      onForegroundMessage: _showForegroundPriceDrop,
+      onNavigateToChat: _openChatNotification,
+      onForegroundChatMessage: _showForegroundChatNotification,
     );
+    await pushNotifications.initialize();
   }
-
   runApp(
     MultiProvider(
       providers: [
@@ -154,6 +164,7 @@ void main() async {
             pushNotifications: pushNotifications,
           ),
         ),
+        Provider<ItemRepository>(create: (_) => RestItemRepository()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(
           create: (_) =>
@@ -172,6 +183,32 @@ void main() async {
       child: const KiwiShareApp(),
     ),
   );
+}
+
+void _openWatchlistPriceDrop(String itemId) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _router.push('/items/$itemId');
+  });
+}
+
+void _openChatNotification(ChatPushMessage message) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _router.push(
+      '/messages/${message.conversationId}',
+      extra: ChatConversationModel(
+        id: message.conversationId,
+        itemId: message.itemId,
+        itemTitle: message.itemTitle,
+        itemImageUrl: '',
+        participantId: message.participantId,
+        participantName: message.participantName,
+        direction: ChatDirection.buying,
+        status: 'active',
+        lastMessage: '',
+        unreadCount: 0,
+      ),
+    );
+  });
 }
 
 void _showForegroundChatNotification(
@@ -195,24 +232,25 @@ void _showForegroundChatNotification(
     );
 }
 
-void _openChatNotification(ChatPushMessage message) {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    _router.push(
-      '/messages/${message.conversationId}',
-      extra: ChatConversationModel(
-        id: message.conversationId,
-        itemId: message.itemId,
-        itemTitle: message.itemTitle,
-        itemImageUrl: '',
-        participantId: message.participantId,
-        participantName: message.participantName,
-        direction: ChatDirection.buying,
-        status: 'active',
-        lastMessage: '',
-        unreadCount: 1,
+void _showForegroundPriceDrop(
+  WatchlistPriceDropMessage message,
+  PushEnvelope envelope,
+) {
+  final messenger = _scaffoldMessengerKey.currentState;
+  if (messenger == null) return;
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          envelope.body ?? 'An item on your watchlist has dropped in price.',
+        ),
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () => _openWatchlistPriceDrop(message.itemId),
+        ),
       ),
     );
-  });
 }
 
 class KiwiShareApp extends StatelessWidget {

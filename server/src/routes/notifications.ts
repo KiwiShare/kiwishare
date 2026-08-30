@@ -6,6 +6,7 @@ import {
   authenticateTokenAllowExpired
 } from '../middleware/auth';
 import PushDevice, { PushPlatform } from '../models/PushDevice';
+import User from '../models/User';
 
 const router = new Router({ prefix: '/notifications' });
 const MIN_TOKEN_LENGTH = 20;
@@ -49,12 +50,14 @@ router.post('/devices', authenticateToken, async (ctx: Context) => {
     return;
   }
 
-  const registration = await PushDevice.findOneAndUpdate(
+  // Token might belong to another user previously; safely reassign to this user
+  await PushDevice.findOneAndUpdate(
     { token },
     {
       $set: {
         userId,
         platform: body.platform,
+        active: true,
         lastSeenAt: new Date()
       }
     },
@@ -64,7 +67,7 @@ router.post('/devices', authenticateToken, async (ctx: Context) => {
   ctx.status = 200;
   ctx.body = {
     status: 'success',
-    device: { id: registration.id, platform: registration.platform }
+    device: { platform: body.platform }
   };
 });
 
@@ -86,6 +89,76 @@ router.delete('/devices', authenticateTokenAllowExpired, async (ctx: Context) =>
   await PushDevice.deleteOne({ userId, token });
   ctx.status = 200;
   ctx.body = { status: 'success' };
+});
+
+router.get('/preferences', authenticateToken, async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Invalid authenticated user.' };
+    return;
+  }
+
+  const user = (await User.findById(userId)
+    .select('notificationPreferences')
+    .lean()) as any;
+  if (!user) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Authenticated user not found.' };
+    return;
+  }
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    preferences: {
+      watchlistPriceDrop:
+        user?.notificationPreferences?.watchlistPriceDrop ?? true
+    }
+  };
+});
+
+router.patch('/preferences', authenticateToken, async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Invalid authenticated user.' };
+    return;
+  }
+
+  const body = ctx.request.body as { watchlistPriceDrop?: unknown };
+  if (typeof body.watchlistPriceDrop !== 'boolean') {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'watchlistPriceDrop must be a boolean value.'
+    };
+    return;
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    {
+      $set: {
+        'notificationPreferences.watchlistPriceDrop': body.watchlistPriceDrop
+      }
+    },
+    { new: true }
+  ).select('notificationPreferences');
+
+  if (!updatedUser) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Authenticated user not found.' };
+    return;
+  }
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    preferences: {
+      watchlistPriceDrop:
+        updatedUser?.notificationPreferences?.watchlistPriceDrop ?? true
+    }
+  };
 });
 
 export default router;

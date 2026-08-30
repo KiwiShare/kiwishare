@@ -211,7 +211,6 @@ class AuthProvider extends ChangeNotifier {
     final pushDeactivation = token == null
         ? null
         : pushNotifications?.deactivate(token);
-
     _isLoggedIn = false;
     _currentUser = null;
     _jwtToken = null;

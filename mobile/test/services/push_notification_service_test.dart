@@ -1,269 +1,328 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
+import 'package:kiwishare/repositories/push_device_repository.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
 
-class FakeMessagingClient implements PushMessagingClient {
-  bool permissionGranted = true;
-  String? token = 'device-token-value-123456789';
-  PushEnvelope? initialMessage;
-  final tokenController = StreamController<String>.broadcast();
-  final foregroundController = StreamController<PushEnvelope>.broadcast();
-  final openedController = StreamController<PushEnvelope>.broadcast();
+const _itemId = '64f000000000000000000001';
 
-  @override
-  Future<PushEnvelope?> getInitialMessage() async => initialMessage;
+PushEnvelope _priceDrop({
+  String type = 'watchlist_price_drop',
+  Object? itemId = _itemId,
+}) => PushEnvelope(
+  data: {
+    'type': type,
+    'itemId': ?itemId,
+    'eventId': 'evt-1',
+    'oldPrice': '50.00',
+    'newPrice': '40.00',
+  },
+  body: 'Price dropped',
+);
 
-  @override
-  Future<String?> getToken() async => token;
-
-  @override
-  Stream<PushEnvelope> get onForegroundMessage => foregroundController.stream;
-
-  @override
-  Stream<PushEnvelope> get onMessageOpened => openedController.stream;
-
-  @override
-  Stream<String> get onTokenRefresh => tokenController.stream;
-
-  @override
-  Future<bool> requestPermission() async => permissionGranted;
-
-  Future<void> close() async {
-    await tokenController.close();
-    await foregroundController.close();
-    await openedController.close();
-  }
-}
-
-class FakePushDeviceRepository implements PushDeviceRepository {
-  final registrations = <({String jwt, String token, String platform})>[];
-  final removals = <({String jwt, String token})>[];
-
-  @override
-  Future<void> register({
-    required String jwt,
-    required String token,
-    required String platform,
-  }) async {
-    registrations.add((jwt: jwt, token: token, platform: platform));
-  }
-
-  @override
-  Future<void> unregister({required String jwt, required String token}) async {
-    removals.add((jwt: jwt, token: token));
-  }
-}
-
-class BlockingPushDeviceRepository implements PushDeviceRepository {
-  final registrationStarted = Completer<void>();
-  final finishRegistration = Completer<void>();
-  final registrations = <({String jwt, String token, String platform})>[];
-  final removals = <({String jwt, String token})>[];
-
-  @override
-  Future<void> register({
-    required String jwt,
-    required String token,
-    required String platform,
-  }) async {
-    registrationStarted.complete();
-    await finishRegistration.future;
-    registrations.add((jwt: jwt, token: token, platform: platform));
-  }
-
-  @override
-  Future<void> unregister({required String jwt, required String token}) async {
-    removals.add((jwt: jwt, token: token));
-  }
-}
-
-PushEnvelope chatEnvelope({String conversationId = 'conversation-1'}) {
-  return PushEnvelope(
-    title: 'New KiwiShare message',
-    body: 'A member sent you a message.',
-    data: {
-      'type': 'chat_message',
-      'conversationId': conversationId,
-      'itemId': 'item-1',
-      'itemTitle': 'Desk',
-      'participantId': 'user-2',
-      'participantName': 'Sam',
-    },
-  );
-}
+PushEnvelope _chatMessage({String conversationId = 'conversation-1'}) =>
+    PushEnvelope(
+      data: {
+        'type': 'chat_message',
+        'conversationId': conversationId,
+        'itemId': _itemId,
+        'itemTitle': 'Test chair',
+        'participantId': 'participant-1',
+        'participantName': 'Test Seller',
+      },
+      body: 'New chat message',
+    );
 
 void main() {
-  test(
-    'REST repository sends authenticated registration and removal requests',
-    () async {
-      final requests = <http.Request>[];
-      final repository = RestPushDeviceRepository(
-        client: MockClient((request) async {
-          requests.add(request);
-          return http.Response('{}', 200);
-        }),
-      );
+  group('PushNotificationService', () {
+    late _FakeMessagingClient messaging;
+    late _FakePushDeviceRepository repository;
+    late List<String> openedItems;
+    late List<String> foregroundItems;
+    late List<String> openedChats;
+    late List<String> foregroundChats;
+    late PushNotificationService service;
 
-      await repository.register(
-        jwt: 'jwt-1',
-        token: 'device-token-value-123456789',
+    setUp(() {
+      messaging = _FakeMessagingClient();
+      repository = _FakePushDeviceRepository();
+      openedItems = [];
+      foregroundItems = [];
+      openedChats = [];
+      foregroundChats = [];
+      service = PushNotificationService(
+        messagingClient: messaging,
+        deviceRepository: repository,
         platform: 'android',
+        onNavigateToItem: openedItems.add,
+        onForegroundMessage: (message, _) =>
+            foregroundItems.add(message.itemId),
+        onNavigateToChat: (message) => openedChats.add(message.conversationId),
+        onForegroundChatMessage: (message, _) =>
+            foregroundChats.add(message.conversationId),
       );
-      await repository.unregister(
-        jwt: 'jwt-1',
-        token: 'device-token-value-123456789',
-      );
+    });
 
-      expect(requests.map((request) => request.method), ['POST', 'DELETE']);
-      expect(
-        requests.every(
-          (request) => request.url.path.endsWith('/api/notifications/devices'),
-        ),
-        isTrue,
-      );
-      expect(
-        requests.every(
-          (request) => request.headers['Authorization'] == 'Bearer jwt-1',
-        ),
-        isTrue,
-      );
-      expect(jsonDecode(requests.first.body), {
-        'token': 'device-token-value-123456789',
-        'platform': 'android',
-      });
-      expect(jsonDecode(requests.last.body), {
-        'token': 'device-token-value-123456789',
-      });
-    },
-  );
+    tearDown(() async {
+      await service.dispose();
+      await messaging.dispose();
+    });
 
-  test('parses only valid chat notification data', () {
-    expect(ChatPushMessage.fromData({'type': 'other'}), isNull);
-    expect(ChatPushMessage.fromData({'type': 'chat_message'}), isNull);
-    final parsed = ChatPushMessage.fromData(chatEnvelope().data);
-    expect(parsed?.conversationId, 'conversation-1');
-    expect(parsed?.itemTitle, 'Desk');
-    expect(parsed?.participantName, 'Sam');
-  });
+    test(
+      'authorized and provisional permissions synchronize initial token',
+      () async {
+        for (final permission in [
+          PushPermissionStatus.authorized,
+          PushPermissionStatus.provisional,
+        ]) {
+          messaging.permission = permission;
+          await service.activate('jwt-${permission.name}');
+        }
 
-  test('does not register when notification permission is denied', () async {
-    final messaging = FakeMessagingClient()..permissionGranted = false;
-    final repository = FakePushDeviceRepository();
-    final service = PushNotificationService(
-      messaging: messaging,
-      repository: repository,
-      platform: 'android',
-      onForegroundMessage: (_, _) {},
-      onNotificationOpened: (_) {},
-    );
-
-    await service.activate('jwt-1');
-
-    expect(repository.registrations, isEmpty);
-    await service.dispose();
-    await messaging.close();
-  });
-
-  test('registers, refreshes, and removes the current device token', () async {
-    final messaging = FakeMessagingClient();
-    final repository = FakePushDeviceRepository();
-    final service = PushNotificationService(
-      messaging: messaging,
-      repository: repository,
-      platform: 'ios',
-      onForegroundMessage: (_, _) {},
-      onNotificationOpened: (_) {},
-    );
-
-    await service.activate('jwt-1');
-    expect(repository.registrations.single.platform, 'ios');
-
-    messaging.tokenController.add('refreshed-device-token-123456789');
-    await Future<void>.delayed(Duration.zero);
-    expect(
-      repository.registrations.last.token,
-      'refreshed-device-token-123456789',
-    );
-
-    await service.deactivate('jwt-1');
-    expect(
-      repository.removals.single.token,
-      'refreshed-device-token-123456789',
-    );
-
-    messaging.tokenController.add('token-after-logout-123456789');
-    await Future<void>.delayed(Duration.zero);
-    expect(repository.registrations, hasLength(2));
-    await service.dispose();
-    await messaging.close();
-  });
-
-  test('removes a registration that finishes after logout', () async {
-    final messaging = FakeMessagingClient();
-    final repository = BlockingPushDeviceRepository();
-    final service = PushNotificationService(
-      messaging: messaging,
-      repository: repository,
-      platform: 'android',
-      onForegroundMessage: (_, _) {},
-      onNotificationOpened: (_) {},
-    );
-
-    final activation = service.activate('jwt-1');
-    await repository.registrationStarted.future;
-    await service.deactivate('jwt-1');
-    repository.finishRegistration.complete();
-    await activation;
-
-    expect(repository.registrations, hasLength(1));
-    expect(repository.removals, hasLength(1));
-    expect(repository.removals.single.jwt, 'jwt-1');
-    expect(repository.removals.single.token, 'device-token-value-123456789');
-
-    messaging.tokenController.add('token-after-logout-123456789');
-    await Future<void>.delayed(Duration.zero);
-    expect(repository.registrations, hasLength(1));
-    await service.dispose();
-    await messaging.close();
-  });
-
-  test('handles foreground, opened, and initial chat notifications', () async {
-    final messaging = FakeMessagingClient()
-      ..initialMessage = chatEnvelope(conversationId: 'initial');
-    final repository = FakePushDeviceRepository();
-    final foreground = <String>[];
-    final opened = <String>[];
-    final service = PushNotificationService(
-      messaging: messaging,
-      repository: repository,
-      platform: 'android',
-      onForegroundMessage: (message, _) {
-        foreground.add(message.conversationId);
-      },
-      onNotificationOpened: (message) {
-        opened.add(message.conversationId);
+        expect(repository.registrations, hasLength(2));
+        expect(repository.registrations.last.platform, 'android');
+        expect(repository.registrations.last.token, 'initial-token-1234567890');
       },
     );
 
-    await service.activate('jwt-1');
-    expect(opened, ['initial']);
+    test(
+      'denied and unavailable permissions do not request or register token',
+      () async {
+        messaging.permission = PushPermissionStatus.denied;
+        await service.activate('jwt-denied');
+        messaging.permission = PushPermissionStatus.unavailable;
+        await service.activate('jwt-unavailable');
 
-    messaging.foregroundController.add(
-      chatEnvelope(conversationId: 'foreground'),
+        expect(messaging.getTokenCalls, 0);
+        expect(repository.registrations, isEmpty);
+      },
     );
-    messaging.openedController.add(chatEnvelope(conversationId: 'opened'));
-    messaging.foregroundController.add(
-      const PushEnvelope(data: {'type': 'unrelated'}),
-    );
-    await Future<void>.delayed(Duration.zero);
 
-    expect(foreground, ['foreground']);
-    expect(opened, ['initial', 'opened']);
-    await service.dispose();
-    await messaging.close();
+    test(
+      'refresh removes the old token and logout removes the new token',
+      () async {
+        await service.activate('jwt-user');
+        messaging.tokenRefresh.add('refreshed-token-1234567890');
+        await _drainEvents();
+        await service.waitForPendingTokenOperations();
+
+        expect(
+          repository.registrations.last.token,
+          'refreshed-token-1234567890',
+        );
+        expect(repository.removals, hasLength(1));
+        expect(repository.removals.single.token, 'initial-token-1234567890');
+        expect(repository.removals.single.jwtToken, 'jwt-user');
+
+        await service.deactivate('jwt-user');
+        expect(repository.removals.map((entry) => entry.token), [
+          'initial-token-1234567890',
+          'refreshed-token-1234567890',
+        ]);
+      },
+    );
+
+    test(
+      'failed refreshed-token registration preserves the old logout target',
+      () async {
+        await service.activate('jwt-user');
+        repository.registrationFailures.add('bad-refresh-token-1234567890');
+
+        messaging.tokenRefresh.add('bad-refresh-token-1234567890');
+        await _drainEvents();
+        await service.waitForPendingTokenOperations();
+        await service.deactivate('jwt-user');
+
+        expect(repository.removals, hasLength(1));
+        expect(repository.removals.single.token, 'initial-token-1234567890');
+      },
+    );
+
+    test('failed refresh cleanup is retried during logout', () async {
+      await service.activate('jwt-user');
+      repository.removalFailuresRemaining['initial-token-1234567890'] = 1;
+
+      messaging.tokenRefresh.add('refreshed-token-1234567890');
+      await _drainEvents();
+      await service.waitForPendingTokenOperations();
+      await service.deactivate('jwt-user');
+
+      expect(
+        repository.removals.where(
+          (entry) => entry.token == 'initial-token-1234567890',
+        ),
+        hasLength(2),
+      );
+      expect(
+        repository.removals.where(
+          (entry) => entry.token == 'refreshed-token-1234567890',
+        ),
+        hasLength(1),
+      );
+    });
+
+    test('foreground messages are parsed without navigating', () async {
+      await service.activate('jwt-user');
+      messaging.foreground.add(_priceDrop());
+      await _drainEvents();
+
+      expect(foregroundItems, [_itemId]);
+      expect(openedItems, isEmpty);
+    });
+
+    test('foreground chat messages are dispatched without navigating', () async {
+      await service.activate('jwt-user');
+      messaging.foreground.add(_chatMessage());
+      await _drainEvents();
+
+      expect(foregroundChats, ['conversation-1']);
+      expect(openedChats, isEmpty);
+      expect(foregroundItems, isEmpty);
+    });
+
+    test('chat notification taps navigate to the conversation', () async {
+      messaging.initialMessage = _chatMessage(conversationId: 'initial-chat');
+      await service.initialize();
+      await service.activate('jwt-user');
+      messaging.opened.add(_chatMessage(conversationId: 'opened-chat'));
+      await _drainEvents();
+
+      expect(openedChats, ['initial-chat', 'opened-chat']);
+      expect(openedItems, isEmpty);
+    });
+
+    test(
+      'background and terminated taps navigate to canonical item id',
+      () async {
+        messaging.initialMessage = _priceDrop();
+        await service.initialize();
+        await service.activate('jwt-user');
+        messaging.opened.add(_priceDrop());
+        await _drainEvents();
+
+        expect(openedItems, [_itemId, _itemId]);
+      },
+    );
+
+    test(
+      'unsupported, missing, and malformed payloads are ignored safely',
+      () async {
+        await service.activate('jwt-user');
+        messaging.opened
+          ..add(_priceDrop(type: 'chat_message'))
+          ..add(_priceDrop(itemId: null))
+          ..add(_priceDrop(itemId: 'not-an-object-id'));
+        await _drainEvents();
+
+        expect(openedItems, isEmpty);
+      },
+    );
+
+    test('repeated initialization does not duplicate listeners', () async {
+      await service.initialize();
+      await service.initialize();
+      await service.activate('jwt-user');
+      messaging.opened.add(_priceDrop());
+      messaging.tokenRefresh.add('one-refresh-token-1234567890');
+      await _drainEvents();
+
+      expect(openedItems, [_itemId]);
+      expect(
+        repository.registrations.where(
+          (entry) => entry.token == 'one-refresh-token-1234567890',
+        ),
+        hasLength(1),
+      );
+      expect(messaging.initialMessageCalls, 1);
+    });
   });
+}
+
+Future<void> _drainEvents() => Future<void>.delayed(Duration.zero);
+
+class _Registration {
+  const _Registration(this.token, this.platform, this.jwtToken);
+  final String token;
+  final String platform;
+  final String jwtToken;
+}
+
+class _Removal {
+  const _Removal(this.token, this.jwtToken);
+  final String token;
+  final String jwtToken;
+}
+
+class _FakePushDeviceRepository implements PushDeviceRepository {
+  final registrations = <_Registration>[];
+  final removals = <_Removal>[];
+  final registrationFailures = <String>{};
+  final removalFailuresRemaining = <String, int>{};
+
+  @override
+  Future<void> registerToken({
+    required String token,
+    required String platform,
+    required String jwtToken,
+  }) async {
+    registrations.add(_Registration(token, platform, jwtToken));
+    if (registrationFailures.contains(token)) {
+      throw Exception('Registration failed');
+    }
+  }
+
+  @override
+  Future<void> unregisterToken({
+    required String token,
+    required String jwtToken,
+  }) async {
+    removals.add(_Removal(token, jwtToken));
+    final failures = removalFailuresRemaining[token] ?? 0;
+    if (failures > 0) {
+      removalFailuresRemaining[token] = failures - 1;
+      throw Exception('Removal failed');
+    }
+  }
+}
+
+class _FakeMessagingClient implements PushMessagingClient {
+  PushPermissionStatus permission = PushPermissionStatus.authorized;
+  String? token = 'initial-token-1234567890';
+  PushEnvelope? initialMessage;
+  int getTokenCalls = 0;
+  int initialMessageCalls = 0;
+
+  final tokenRefresh = StreamController<String>.broadcast();
+  final foreground = StreamController<PushEnvelope>.broadcast();
+  final opened = StreamController<PushEnvelope>.broadcast();
+
+  @override
+  Future<String?> getToken() async {
+    getTokenCalls += 1;
+    return token;
+  }
+
+  @override
+  Future<PushEnvelope?> getInitialMessage() async {
+    initialMessageCalls += 1;
+    return initialMessage;
+  }
+
+  @override
+  Stream<PushEnvelope> get onForegroundMessage => foreground.stream;
+
+  @override
+  Stream<PushEnvelope> get onMessageOpened => opened.stream;
+
+  @override
+  Stream<String> get onTokenRefresh => tokenRefresh.stream;
+
+  @override
+  Future<PushPermissionStatus> requestPermission() async => permission;
+
+  Future<void> dispose() async {
+    await tokenRefresh.close();
+    await foreground.close();
+    await opened.close();
+  }
 }

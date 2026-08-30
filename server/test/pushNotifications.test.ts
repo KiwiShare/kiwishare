@@ -10,7 +10,7 @@ import PushDevice from '../src/models/PushDevice';
 import {
   ChatPushPayload,
   resolveFirebaseCredentialConfiguration,
-  setPushGatewayForTests
+  setChatPushGatewayForTests
 } from '../src/services/pushNotification';
 
 jest.setTimeout(60000);
@@ -79,12 +79,12 @@ describe('KiwiShare chat push notifications', () => {
   });
 
   afterEach(async () => {
-    setPushGatewayForTests(null);
+    setChatPushGatewayForTests(null);
     await PushDevice.deleteMany({});
   });
 
   afterAll(async () => {
-    setPushGatewayForTests(null);
+    setChatPushGatewayForTests(null);
     await mongoose.disconnect();
     await mongoServer.stop();
   });
@@ -149,9 +149,8 @@ describe('KiwiShare chat push notifications', () => {
       token: sellerDeviceToken,
       platform: 'android'
     });
-    // Jest imports app directly rather than through src/index.ts, so dotenv is
-    // not loaded before the auth modules capture their test fallback secret.
-    const secret = 'kiwishare_super_secret_key_123_abc';
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET is required by the test setup.');
     const expiredToken = jwt.sign(
       { id: sellerId, email: 'push-seller@example.com' },
       secret,
@@ -196,7 +195,7 @@ describe('KiwiShare chat push notifications', () => {
       platform: 'android'
     });
     const deliveries: Array<{ tokens: string[]; payload: ChatPushPayload }> = [];
-    setPushGatewayForTests({
+    setChatPushGatewayForTests({
       async send(tokens, payload) {
         deliveries.push({ tokens, payload });
         return { invalidTokens: [] };
@@ -231,7 +230,7 @@ describe('KiwiShare chat push notifications', () => {
       token: sellerDeviceToken,
       platform: 'ios'
     });
-    setPushGatewayForTests({
+    setChatPushGatewayForTests({
       async send() {
         return { invalidTokens: [sellerDeviceToken] };
       }
@@ -254,7 +253,7 @@ describe('KiwiShare chat push notifications', () => {
       token: sellerDeviceToken,
       platform: 'android'
     });
-    setPushGatewayForTests({
+    setChatPushGatewayForTests({
       async send() {
         throw new Error('Simulated FCM outage');
       }
