@@ -8,6 +8,8 @@ class WatchlistProvider extends ChangeNotifier {
   final WatchlistRepository _repository;
   String? _authToken;
   int _authGeneration = 0;
+  int _mutationRevision = 0;
+  int _pendingMutationCount = 0;
 
   final Set<String> _watchedItemIds = <String>{};
   List<ItemModel> _watchlistItems = <ItemModel>[];
@@ -37,6 +39,8 @@ class WatchlistProvider extends ChangeNotifier {
     if (_authToken == token) return;
     _authToken = token;
     _authGeneration += 1;
+    _mutationRevision += 1;
+    _pendingMutationCount = 0;
     _watchedItemIds.clear();
     _watchlistItems.clear();
     _isLoading = false;
@@ -59,6 +63,8 @@ class WatchlistProvider extends ChangeNotifier {
   Future<void> loadWatchlist({bool forceRefresh = false}) async {
     final requestToken = _authToken;
     final requestGeneration = _authGeneration;
+    final requestMutationRevision = _mutationRevision;
+    final requestHadPendingMutation = _pendingMutationCount > 0;
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -75,12 +81,18 @@ class WatchlistProvider extends ChangeNotifier {
       // flight. Never let the previous account overwrite the current state.
       if (!_isCurrentSession(requestToken, requestGeneration)) return;
 
-      _watchlistItems = fetchedItems;
-      _watchedItemIds.clear();
-      _watchedItemIds.addAll(fetchedIds);
-      // Ensure all items in list are also in set
-      for (final item in fetchedItems) {
-        _watchedItemIds.add(item.id);
+      final mutationChangedWhileLoading =
+          requestHadPendingMutation ||
+          _pendingMutationCount > 0 ||
+          requestMutationRevision != _mutationRevision;
+      if (!mutationChangedWhileLoading) {
+        _watchlistItems = fetchedItems;
+        _watchedItemIds.clear();
+        _watchedItemIds.addAll(fetchedIds);
+        // Ensure all items in list are also in set
+        for (final item in fetchedItems) {
+          _watchedItemIds.add(item.id);
+        }
       }
       _isLoading = false;
       notifyListeners();
@@ -108,6 +120,7 @@ class WatchlistProvider extends ChangeNotifier {
     if (_watchedItemIds.contains(itemId)) return;
     final requestToken = _authToken;
     final requestGeneration = _authGeneration;
+    _beginMutation();
 
     // Optimistic UI update
     _watchedItemIds.add(itemId);
@@ -116,17 +129,21 @@ class WatchlistProvider extends ChangeNotifier {
     }
     notifyListeners();
 
-    final success = await _repository.addToWatchlist(
-      itemId,
-      token: requestToken,
-    );
-    if (!_isCurrentSession(requestToken, requestGeneration)) return;
+    try {
+      final success = await _repository.addToWatchlist(
+        itemId,
+        token: requestToken,
+      );
+      if (!_isCurrentSession(requestToken, requestGeneration)) return;
 
-    if (!success && requestToken != null) {
-      // Revert if API failed when user is logged in
-      _watchedItemIds.remove(itemId);
-      _watchlistItems.removeWhere((i) => i.id == itemId);
-      notifyListeners();
+      if (!success && requestToken != null) {
+        // Revert if API failed when user is logged in
+        _watchedItemIds.remove(itemId);
+        _watchlistItems.removeWhere((i) => i.id == itemId);
+        notifyListeners();
+      }
+    } finally {
+      _finishMutation(requestToken, requestGeneration);
     }
   }
 
@@ -134,6 +151,7 @@ class WatchlistProvider extends ChangeNotifier {
     if (!_watchedItemIds.contains(itemId)) return;
     final requestToken = _authToken;
     final requestGeneration = _authGeneration;
+    _beginMutation();
 
     // Optimistic UI update
     final removedIndex = _watchlistItems.indexWhere((i) => i.id == itemId);
@@ -144,23 +162,38 @@ class WatchlistProvider extends ChangeNotifier {
     _watchedItemIds.remove(itemId);
     notifyListeners();
 
-    final success = await _repository.removeFromWatchlist(
-      itemId,
-      token: requestToken,
-    );
-    if (!_isCurrentSession(requestToken, requestGeneration)) return;
+    try {
+      final success = await _repository.removeFromWatchlist(
+        itemId,
+        token: requestToken,
+      );
+      if (!_isCurrentSession(requestToken, requestGeneration)) return;
 
-    if (!success && requestToken != null) {
-      // Revert on API failure
-      _watchedItemIds.add(itemId);
-      if (removedItem != null) {
-        _watchlistItems.insert(
-          removedIndex.clamp(0, _watchlistItems.length),
-          removedItem,
-        );
+      if (!success && requestToken != null) {
+        // Revert on API failure
+        _watchedItemIds.add(itemId);
+        if (removedItem != null) {
+          _watchlistItems.insert(
+            removedIndex.clamp(0, _watchlistItems.length),
+            removedItem,
+          );
+        }
+        notifyListeners();
       }
-      notifyListeners();
+    } finally {
+      _finishMutation(requestToken, requestGeneration);
     }
+  }
+
+  void _beginMutation() {
+    _pendingMutationCount += 1;
+    _mutationRevision += 1;
+  }
+
+  void _finishMutation(String? token, int generation) {
+    if (!_isCurrentSession(token, generation)) return;
+    if (_pendingMutationCount > 0) _pendingMutationCount -= 1;
+    _mutationRevision += 1;
   }
 
   bool _isCurrentSession(String? token, int generation) =>

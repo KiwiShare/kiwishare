@@ -95,6 +95,39 @@ void main() {
       expect(provider.watchedItemIds, {'shared-item'});
     },
   );
+
+  test('stale load cannot remove a successful same-session add', () async {
+    final repository = _SameSessionRaceWatchlistRepository(serverIds: {});
+    final provider = WatchlistProvider(
+      repository: repository,
+      initialToken: 'valid-token',
+    );
+
+    final loading = provider.loadWatchlist();
+    await provider.addToWatchlist('new-item');
+    repository.completeLoad();
+    await loading;
+
+    expect(provider.watchedItemIds, {'new-item'});
+  });
+
+  test('stale load cannot restore a successful same-session removal', () async {
+    final repository = _SameSessionRaceWatchlistRepository(
+      serverIds: {'old-item'},
+    );
+    final provider = WatchlistProvider(
+      repository: repository,
+      initialToken: 'valid-token',
+      initialWatchedIds: {'old-item'},
+    );
+
+    final loading = provider.loadWatchlist();
+    await provider.removeFromWatchlist('old-item');
+    repository.completeLoad();
+    await loading;
+
+    expect(provider.watchedItemIds, isEmpty);
+  });
 }
 
 class _RecordingWatchlistRepository implements WatchlistRepository {
@@ -174,6 +207,31 @@ class _DelayedMutationWatchlistRepository implements WatchlistRepository {
   @override
   Future<bool> removeFromWatchlist(String itemId, {String? token}) =>
       token == 'old-token' ? _oldRemoval.future : Future.value(true);
+
+  @override
+  Future<bool> isWatched(String itemId, {String? token}) async => false;
+}
+
+class _SameSessionRaceWatchlistRepository implements WatchlistRepository {
+  _SameSessionRaceWatchlistRepository({required this.serverIds});
+
+  final Set<String> serverIds;
+  final _loadGate = Completer<List<ItemModel>>();
+
+  void completeLoad() => _loadGate.complete([]);
+
+  @override
+  Future<List<ItemModel>> fetchWatchlist({String? token}) => _loadGate.future;
+
+  @override
+  Future<Set<String>> fetchWatchedItemIds({String? token}) async => serverIds;
+
+  @override
+  Future<bool> addToWatchlist(String itemId, {String? token}) async => true;
+
+  @override
+  Future<bool> removeFromWatchlist(String itemId, {String? token}) async =>
+      true;
 
   @override
   Future<bool> isWatched(String itemId, {String? token}) async => false;
