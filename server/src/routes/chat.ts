@@ -5,17 +5,27 @@ import { authenticateToken } from '../middleware/auth';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Item from '../models/Item';
-import { R2_CONFIG } from '../config/r2';
+import {
+  getR2ObjectBytes,
+  R2_CONFIG,
+  storeImmutableVoiceObject
+} from '../config/r2';
 import {
   MESSAGE_CONTENT_NOT_ALLOWED,
   moderateChatText
 } from '../services/messageModeration';
+import {
+  acquireVoiceProcessingAdmission,
+  probeVoiceAudio
+} from '../services/voiceAudio';
 import { notifyChatReceiver } from '../services/pushNotification';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 100;
 const MAX_MESSAGE_LENGTH = 2000;
+const MAX_VOICE_DURATION_MS = 60000;
+const MAX_VOICE_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 router.use(authenticateToken);
 
@@ -71,6 +81,8 @@ function formatMessage(message: any, userId: string) {
     type: message.type,
     text: message.text ?? '',
     imageUrl: message.imageUrl ?? null,
+    audioUrl: message.audioUrl ?? null,
+    durationMs: message.durationMs ?? null,
     status: message.status,
     isMine: senderId === userId,
     readAt: message.readAt ?? null,
@@ -79,7 +91,7 @@ function formatMessage(message: any, userId: string) {
   };
 }
 
-function validR2ImageUrl(value: unknown): string | null {
+function validR2AssetUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   if (normalized.length < 1 || normalized.length > 2048) return null;
@@ -114,6 +126,33 @@ function validR2ImageUrl(value: unknown): string | null {
       return null;
     }
     return imageUrl.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
+function voiceR2ObjectKey(audioUrl: string): string | null {
+  try {
+    const configuredBase = R2_CONFIG.publicUrlBase.trim();
+    let encodedKey: string;
+    if (!configuredBase.startsWith('http')) {
+      const prefix = '/api/images/';
+      const pathname = new URL(audioUrl, 'http://kiwishare.local').pathname;
+      if (!pathname.startsWith(prefix)) return null;
+      encodedKey = pathname.slice(prefix.length);
+    } else {
+      const asset = new URL(audioUrl);
+      const publicBase = new URL(configuredBase);
+      const basePath = publicBase.pathname.replace(/\/$/, '');
+      const prefix = `${basePath}/`;
+      if (!asset.pathname.startsWith(prefix)) return null;
+      encodedKey = asset.pathname.slice(prefix.length);
+    }
+
+    const key = decodeURIComponent(encodedKey);
+    return /^audio\/chat\/[A-Za-z0-9_-]+\.[A-Za-z0-9]+$/.test(key)
+      ? key
+      : null;
   } catch (_) {
     return null;
   }
@@ -336,19 +375,23 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     type?: unknown;
     text?: unknown;
     imageUrl?: unknown;
+    audioUrl?: unknown;
+    durationMs?: unknown;
   };
   const messageType = body.type ?? 'text';
-  if (messageType !== 'text' && messageType !== 'image') {
+  if (messageType !== 'text' && messageType !== 'image' && messageType !== 'voice') {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: 'Message type must be text or image.'
+      message: 'Message type must be text, image, or voice.'
     };
     return;
   }
 
   let normalizedText = '';
   let imageUrl: string | null = null;
+  let audioUrl: string | null = null;
+  let durationMs: number | null = null;
   if (messageType === 'text') {
     const moderation = moderateChatText(body.text);
     normalizedText = moderation.text;
@@ -372,8 +415,8 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       };
       return;
     }
-  } else {
-    imageUrl = validR2ImageUrl(body.imageUrl);
+  } else if (messageType === 'image') {
+    imageUrl = validR2AssetUrl(body.imageUrl);
     if (imageUrl == null) {
       ctx.status = 400;
       ctx.body = {
@@ -381,6 +424,90 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
         message: 'A valid uploaded image URL is required.'
       };
       return;
+    }
+  } else {
+    audioUrl = validR2AssetUrl(body.audioUrl);
+    durationMs = typeof body.durationMs === 'number' ? body.durationMs : null;
+    if (
+      audioUrl == null ||
+      durationMs == null ||
+      !Number.isInteger(durationMs) ||
+      durationMs < 1 ||
+      durationMs > MAX_VOICE_DURATION_MS
+    ) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A valid uploaded voice message up to 60 seconds is required.'
+      };
+      return;
+    }
+
+    const objectKey = voiceR2ObjectKey(audioUrl);
+    if (objectKey == null) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A valid uploaded voice message up to 60 seconds is required.'
+      };
+      return;
+    }
+
+    const voiceAdmission = acquireVoiceProcessingAdmission(userId.toString());
+    if (!voiceAdmission) {
+      ctx.status = 429;
+      ctx.body = {
+        status: 'error',
+        message: 'Voice message processing is busy. Please try again shortly.'
+      };
+      return;
+    }
+
+    try {
+      // Read and validate the exact bytes that will be retained. The client
+      // supplied MIME type and duration are not trusted security boundaries.
+      const uploaded = await getR2ObjectBytes(
+        objectKey,
+        MAX_VOICE_FILE_SIZE_BYTES
+      );
+      const verified = await probeVoiceAudio(
+        uploaded.bytes,
+        MAX_VOICE_DURATION_MS,
+        voiceAdmission
+      );
+      if (
+        verified == null ||
+        verified.durationMs < 1 ||
+        verified.durationMs > MAX_VOICE_DURATION_MS
+      ) {
+        ctx.status = 400;
+        ctx.body = {
+          status: 'error',
+          message: 'The uploaded voice message must be valid audio up to 60 seconds and 5 MB.'
+        };
+        return;
+      }
+
+      // Persist a server-owned copy of the verified bytes under a fresh key.
+      // The original presigned PUT can still expire or be reused, but it can no
+      // longer mutate the object referenced by the chat message.
+      const immutableObject = await storeImmutableVoiceObject(
+        uploaded.bytes,
+        verified.contentType,
+        verified.extension,
+        objectKey
+      );
+      audioUrl = immutableObject.url;
+      durationMs = verified.durationMs;
+    } catch (_) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'The uploaded voice message could not be verified.'
+      };
+      return;
+    } finally {
+      voiceAdmission.release();
     }
   }
 
@@ -391,11 +518,19 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     senderId: userId,
     receiverId,
     type: messageType,
-    ...(messageType === 'text' ? { text: normalizedText } : { imageUrl }),
+    ...(messageType === 'text'
+      ? { text: normalizedText }
+      : messageType === 'image'
+        ? { imageUrl }
+        : { audioUrl, durationMs }),
     status: 'sent'
   });
 
-  const conversationPreview = messageType === 'image' ? 'Photo' : normalizedText;
+  const conversationPreview = messageType === 'image'
+    ? 'Photo'
+    : messageType === 'voice'
+      ? 'Voice message'
+      : normalizedText;
 
   await Conversation.findByIdAndUpdate(conversation._id, {
     $set: {

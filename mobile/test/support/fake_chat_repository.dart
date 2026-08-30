@@ -29,6 +29,8 @@ class FakeChatRepository implements ChatRepository {
   int deleteCalls = 0;
   final List<String> sentTexts = [];
   final List<String> sentImageUrls = [];
+  final List<String> sentAudioUrls = [];
+  final List<int> sentVoiceDurations = [];
   final List<String> createdItemIds = [];
   final List<String> deletedConversationIds = [];
 
@@ -138,6 +140,34 @@ class FakeChatRepository implements ChatRepository {
     messages.putIfAbsent(conversationId, () => []).add(message);
     return message;
   }
+
+  @override
+  Future<ChatMessageModel> sendVoiceMessage({
+    required String conversationId,
+    required String audioUrl,
+    required int durationMs,
+    required String token,
+  }) async {
+    sendCalls += 1;
+    sentAudioUrls.add(audioUrl);
+    sentVoiceDurations.add(durationMs);
+    if (sendError != null) throw sendError!;
+    final message = ChatMessageModel(
+      id: 'sent-$sendCalls',
+      conversationId: conversationId,
+      senderId: 'current-user',
+      receiverId: 'other-user',
+      type: 'voice',
+      text: '',
+      audioUrl: audioUrl,
+      durationMs: durationMs,
+      status: 'sent',
+      isMine: true,
+      createdAt: DateTime.utc(2026, 8, 27, 8, sendCalls),
+    );
+    messages.putIfAbsent(conversationId, () => []).add(message);
+    return message;
+  }
 }
 
 ChatConversationModel testConversation({
@@ -170,6 +200,8 @@ ChatMessageModel testMessage({
   required bool isMine,
   String type = 'text',
   String? imageUrl,
+  String? audioUrl,
+  int? durationMs,
 }) {
   return ChatMessageModel(
     id: id,
@@ -179,6 +211,8 @@ ChatMessageModel testMessage({
     type: type,
     text: text,
     imageUrl: imageUrl,
+    audioUrl: audioUrl,
+    durationMs: durationMs,
     status: 'sent',
     isMine: isMine,
     createdAt: DateTime.utc(2026, 8, 27, 8, int.parse(id)),

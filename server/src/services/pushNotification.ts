@@ -12,7 +12,7 @@ export interface ChatPushRequest {
   conversationId: string;
   itemId: string;
   senderId: string;
-  messageType: 'text' | 'image';
+  messageType: 'text' | 'image' | 'voice';
 }
 
 export interface ChatPushPayload extends ChatPushRequest {

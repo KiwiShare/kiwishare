@@ -4,5 +4,6 @@ packages:
 allowBuilds:
   '@firebase/util': false
   esbuild: true
+  ffmpeg-static: true
   mongodb-memory-server: true
   protobufjs: true

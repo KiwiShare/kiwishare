@@ -804,4 +804,19 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.status).toBe(400);
     expect(res.body.status).toBe('error');
   });
+
+  test('POST /api/upload/presign - accepts the controlled audio folder', async () => {
+    const res = await request(app.callback())
+      .post('/api/upload/presign')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        fileName: 'voice.m4a',
+        contentType: 'audio/mp4',
+        folder: 'audio/chat'
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.key).toContain('audio/chat/');
+    expect(res.body.publicUrl).toContain('audio/chat/');
+  });
 });

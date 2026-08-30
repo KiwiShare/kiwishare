@@ -10,6 +10,7 @@ import 'package:kiwishare/services/chat_photo_upload_service.dart';
 
 import '../support/fake_chat_repository.dart';
 import '../support/fake_chat_photo_uploader.dart';
+import '../support/fake_chat_voice_service.dart';
 
 void main() {
   test(
@@ -305,6 +306,58 @@ void main() {
     expect(
       provider.messageSendErrorFor(conversation.id),
       'Photo upload unavailable.',
+    );
+  });
+
+  test('uploads, sends, and appends a bounded voice message', () async {
+    final conversation = testConversation();
+    final repository = FakeChatRepository(conversations: [conversation]);
+    final uploader = FakeChatVoiceUploader();
+    final provider = ChatProvider(
+      repository: repository,
+      voiceUploader: uploader,
+    );
+    await provider.loadConversations('valid-token');
+
+    final sent = await provider.sendVoice(
+      conversation: conversation,
+      bytes: Uint8List.fromList([7, 8, 9]),
+      fileName: 'voice.m4a',
+      contentType: 'audio/mp4',
+      durationMs: 3200,
+      token: 'valid-token',
+    );
+
+    expect(sent, isTrue);
+    expect(uploader.uploadCalls, 1);
+    expect(repository.sentAudioUrls, [uploader.url]);
+    expect(repository.sentVoiceDurations, [3200]);
+    expect(provider.messagesFor(conversation.id).single.isVoice, isTrue);
+    expect(provider.conversations.single.lastMessage, 'Voice message');
+  });
+
+  test('rejects voice messages over 60 seconds before upload', () async {
+    final conversation = testConversation();
+    final uploader = FakeChatVoiceUploader();
+    final provider = ChatProvider(
+      repository: FakeChatRepository(conversations: [conversation]),
+      voiceUploader: uploader,
+    );
+
+    final sent = await provider.sendVoice(
+      conversation: conversation,
+      bytes: Uint8List.fromList([1]),
+      fileName: 'voice.m4a',
+      contentType: 'audio/mp4',
+      durationMs: 60001,
+      token: 'valid-token',
+    );
+
+    expect(sent, isFalse);
+    expect(uploader.uploadCalls, 0);
+    expect(
+      provider.messageSendErrorFor(conversation.id),
+      'Voice messages can be up to 60 seconds long.',
     );
   });
 

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/chat_conversation_model.dart';
@@ -9,6 +12,7 @@ import '../../config/api_config.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../services/listing_image_picker.dart';
+import '../../services/chat_voice_service.dart';
 import '../../theme/app_theme.dart';
 
 class ChatConversationScreen extends StatefulWidget {
@@ -18,12 +22,14 @@ class ChatConversationScreen extends StatefulWidget {
     this.chatProvider,
     this.authToken,
     this.imagePicker,
+    this.voiceRecorder,
   });
 
   final ChatConversationModel conversation;
   final ChatProvider? chatProvider;
   final String? authToken;
   final ListingImagePicker? imagePicker;
+  final ChatVoiceRecorder? voiceRecorder;
 
   @override
   State<ChatConversationScreen> createState() => _ChatConversationScreenState();
@@ -33,6 +39,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   late final ListingImagePicker _imagePicker;
+  late final ChatVoiceRecorder _voiceRecorder;
+  Timer? _recordingTimer;
+  bool _isRecording = false;
+  bool _isStartingVoice = false;
+  bool _isFinalizingVoice = false;
+  Future<void> _recorderQueue = Future<void>.value();
+  int _recordingSeconds = 0;
   String? _loadedToken;
   String? _currentAuthToken;
 
@@ -40,6 +53,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   void initState() {
     super.initState();
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
+    _voiceRecorder = widget.voiceRecorder ?? DeviceChatVoiceRecorder();
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhoto());
   }
 
@@ -66,9 +80,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   @override
   void dispose() {
+    _recordingTimer?.cancel();
+    if (_isRecording || _isStartingVoice) {
+      unawaited(_queueRecorder(_voiceRecorder.cancel));
+    }
+    unawaited(_queueRecorder(_voiceRecorder.dispose));
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<T> _queueRecorder<T>(Future<T> Function() operation) {
+    final result = _recorderQueue.then((_) => operation());
+    _recorderQueue = result.then<void>((_) {}, onError: (_, _) {});
+    return result;
   }
 
   Future<void> _retry() async {
@@ -159,7 +184,99 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     if (sent && mounted) _scrollToEnd();
   }
 
+  Future<void> _startVoiceRecording() async {
+    if (_isRecording ||
+        _isStartingVoice ||
+        _isFinalizingVoice ||
+        _chatProvider.isSending(widget.conversation.id)) {
+      return;
+    }
+    setState(() => _isStartingVoice = true);
+    try {
+      await _queueRecorder(_voiceRecorder.start);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isRecording = true;
+        _recordingSeconds = 0;
+      });
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted || !_isRecording) {
+          timer.cancel();
+          return;
+        }
+        setState(() => _recordingSeconds += 1);
+        // Keep one second of headroom so timer scheduling jitter cannot push
+        // the native recording beyond the server's hard 60-second limit.
+        if (_recordingSeconds >= 59) {
+          timer.cancel();
+          unawaited(_finishVoiceRecording(send: true));
+        }
+      });
+    } on ChatVoiceException catch (error) {
+      _showComposerError(error.message);
+    } on PlatformException {
+      _showComposerError(
+        'Microphone access is unavailable. Check the app permissions and try again.',
+      );
+    } catch (_) {
+      _showComposerError(
+        'Voice recording could not be started. Please try again.',
+      );
+    } finally {
+      if (mounted) setState(() => _isStartingVoice = false);
+    }
+  }
+
+  Future<void> _finishVoiceRecording({required bool send}) async {
+    if (!_isRecording || _isFinalizingVoice) return;
+    _recordingTimer?.cancel();
+    setState(() {
+      _isRecording = false;
+      _isFinalizingVoice = true;
+    });
+
+    try {
+      if (!send) {
+        await _queueRecorder(_voiceRecorder.cancel);
+        return;
+      }
+      final recording = await _queueRecorder(_voiceRecorder.stop);
+      final token = _currentAuthToken;
+      if (recording == null || token == null || token.isEmpty || !mounted) {
+        return;
+      }
+      final sent = await _chatProvider.sendVoice(
+        conversation: widget.conversation,
+        bytes: recording.bytes,
+        fileName: recording.fileName,
+        contentType: recording.contentType,
+        durationMs: recording.durationMs,
+        token: token,
+      );
+      if (sent && mounted) _scrollToEnd();
+    } on ChatVoiceException catch (error) {
+      _showComposerError(error.message);
+    } catch (_) {
+      _showComposerError(
+        'The voice message could not be prepared. Please try again.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isFinalizingVoice = false;
+          _recordingSeconds = 0;
+        });
+      }
+    }
+  }
+
   void _showPhotoPickerError(String message) {
+    _showComposerError(message);
+  }
+
+  void _showComposerError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -218,12 +335,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 ),
               _MessageComposer(
                 controller: _messageController,
-                isSending: provider.isSending(widget.conversation.id),
+                isSending:
+                    provider.isSending(widget.conversation.id) ||
+                    _isStartingVoice ||
+                    _isFinalizingVoice,
                 enabled:
                     widget.conversation.isActive &&
                     (_currentAuthToken?.isNotEmpty ?? false),
                 onAddPhoto: _addPhoto,
                 onSend: _send,
+                isRecording: _isRecording,
+                recordingSeconds: _recordingSeconds,
+                onStartRecording: _startVoiceRecording,
+                onCancelRecording: () => _finishVoiceRecording(send: false),
+                onSendRecording: () => _finishVoiceRecording(send: true),
               ),
             ],
           ),
@@ -284,7 +409,11 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mine = message.isMine;
-    final semanticContent = message.isImage ? 'a photo' : message.text;
+    final semanticContent = message.isImage
+        ? 'a photo'
+        : message.isVoice
+        ? 'a voice message'
+        : message.text;
     return Semantics(
       label: mine ? 'You sent $semanticContent' : 'They sent $semanticContent',
       child: Align(
@@ -334,6 +463,13 @@ class _MessageBubble extends StatelessWidget {
                     ),
                   ),
                 )
+              else if (message.isVoice)
+                _VoiceMessageBubble(
+                  messageId: message.id,
+                  audioUrl: _resolvedChatAssetUrl(message.audioUrl!),
+                  durationMs: message.durationMs!,
+                  mine: mine,
+                )
               else
                 Text(
                   message.text,
@@ -375,6 +511,11 @@ class _MessageComposer extends StatelessWidget {
     required this.enabled,
     required this.onAddPhoto,
     required this.onSend,
+    required this.isRecording,
+    required this.recordingSeconds,
+    required this.onStartRecording,
+    required this.onCancelRecording,
+    required this.onSendRecording,
   });
 
   final TextEditingController controller;
@@ -382,6 +523,11 @@ class _MessageComposer extends StatelessWidget {
   final bool enabled;
   final VoidCallback onAddPhoto;
   final VoidCallback onSend;
+  final bool isRecording;
+  final int recordingSeconds;
+  final VoidCallback onStartRecording;
+  final VoidCallback onCancelRecording;
+  final VoidCallback onSendRecording;
 
   @override
   Widget build(BuildContext context) {
@@ -395,68 +541,245 @@ class _MessageComposer extends StatelessWidget {
           AppSpacing.sm,
           AppSpacing.sm,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            SizedBox(
-              width: 44,
-              height: 48,
-              child: IconButton(
-                key: const Key('chat_add_photo_button'),
-                tooltip: 'Add photo',
-                onPressed: enabled && !isSending ? onAddPhoto : null,
-                icon: const Icon(Icons.add_photo_alternate_outlined),
+        child: isRecording
+            ? _RecordingComposer(
+                seconds: recordingSeconds,
+                onCancel: onCancelRecording,
+                onSend: onSendRecording,
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  SizedBox(
+                    width: 44,
+                    height: 48,
+                    child: IconButton(
+                      key: const Key('chat_add_photo_button'),
+                      tooltip: 'Add photo',
+                      onPressed: enabled && !isSending ? onAddPhoto : null,
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: TextField(
+                      key: const Key('chat_message_input'),
+                      controller: controller,
+                      enabled: enabled && !isSending,
+                      minLines: 1,
+                      maxLines: 5,
+                      maxLength: 2000,
+                      buildCounter:
+                          (
+                            context, {
+                            required currentLength,
+                            required isFocused,
+                            required maxLength,
+                          }) => null,
+                      textCapitalization: TextCapitalization.sentences,
+                      textInputAction: TextInputAction.newline,
+                      decoration: InputDecoration(
+                        labelText: enabled ? 'Message' : 'Conversation closed',
+                        hintText: enabled ? 'Write a message' : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  SizedBox(
+                    width: 44,
+                    height: 48,
+                    child: IconButton(
+                      key: const Key('chat_record_voice_button'),
+                      tooltip: 'Record voice message',
+                      onPressed: enabled && !isSending
+                          ? onStartRecording
+                          : null,
+                      icon: const Icon(Icons.mic_none_rounded),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: IconButton.filled(
+                      key: const Key('chat_send_button'),
+                      tooltip: 'Send message',
+                      onPressed: enabled && !isSending ? onSend : null,
+                      icon: isSending
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.send_rounded),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Expanded(
-              child: TextField(
-                key: const Key('chat_message_input'),
-                controller: controller,
-                enabled: enabled && !isSending,
-                minLines: 1,
-                maxLines: 5,
-                maxLength: 2000,
-                buildCounter:
-                    (
-                      context, {
-                      required currentLength,
-                      required isFocused,
-                      required maxLength,
-                    }) => null,
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: TextInputAction.newline,
-                decoration: InputDecoration(
-                  labelText: enabled ? 'Message' : 'Conversation closed',
-                  hintText: enabled ? 'Write a message' : null,
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            SizedBox(
-              width: 48,
-              height: 48,
-              child: IconButton.filled(
-                key: const Key('chat_send_button'),
-                tooltip: 'Send message',
-                onPressed: enabled && !isSending ? onSend : null,
-                icon: isSending
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.send_rounded),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
+}
+
+class _RecordingComposer extends StatelessWidget {
+  const _RecordingComposer({
+    required this.seconds,
+    required this.onCancel,
+    required this.onSend,
+  });
+
+  final int seconds;
+  final VoidCallback onCancel;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        IconButton(
+          key: const Key('chat_cancel_voice_button'),
+          tooltip: 'Cancel recording',
+          onPressed: onCancel,
+          icon: const Icon(Icons.delete_outline),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Icon(Icons.mic_rounded, color: Theme.of(context).colorScheme.error),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            'Recording ${_voiceDuration(seconds * 1000)} / 1:00',
+            key: const Key('chat_voice_recording_timer'),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        IconButton.filled(
+          key: const Key('chat_send_voice_button'),
+          tooltip: 'Send voice message',
+          onPressed: onSend,
+          icon: const Icon(Icons.send_rounded),
+        ),
+      ],
+    );
+  }
+}
+
+class _VoiceMessageBubble extends StatefulWidget {
+  const _VoiceMessageBubble({
+    required this.messageId,
+    required this.audioUrl,
+    required this.durationMs,
+    required this.mine,
+  });
+
+  final String messageId;
+  final String audioUrl;
+  final int durationMs;
+  final bool mine;
+
+  @override
+  State<_VoiceMessageBubble> createState() => _VoiceMessageBubbleState();
+}
+
+class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
+  AudioPlayer? _player;
+  StreamSubscription<PlayerState>? _stateSubscription;
+  bool _isPlaying = false;
+  bool _isLoading = false;
+
+  Future<void> _toggle() async {
+    if (_isLoading) return;
+    final player = _player ??= AudioPlayer();
+    _stateSubscription ??= player.playerStateStream.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = state.playing;
+        _isLoading =
+            state.processingState == ProcessingState.loading ||
+            state.processingState == ProcessingState.buffering;
+      });
+    });
+    try {
+      if (player.playing) {
+        await player.pause();
+      } else {
+        if (player.audioSource == null) {
+          setState(() => _isLoading = true);
+          await player.setUrl(widget.audioUrl);
+        } else if (player.processingState == ProcessingState.completed) {
+          await player.seek(Duration.zero);
+        }
+        await player.play();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isPlaying = false;
+        });
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('This voice message could not be played.'),
+            ),
+          );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_stateSubscription?.cancel());
+    unawaited(_player?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = widget.mine
+        ? Theme.of(context).colorScheme.onPrimary
+        : Theme.of(context).colorScheme.onSurface;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          key: Key('chat_voice_play_${widget.messageId}'),
+          tooltip: _isPlaying ? 'Pause voice message' : 'Play voice message',
+          color: foreground,
+          onPressed: _toggle,
+          icon: _isLoading
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: foreground,
+                  ),
+                )
+              : Icon(
+                  _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                ),
+        ),
+        Icon(Icons.graphic_eq_rounded, color: foreground),
+        const SizedBox(width: AppSpacing.sm),
+        Text(
+          _voiceDuration(widget.durationMs),
+          key: Key('chat_voice_duration_${widget.messageId}'),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: foreground),
+        ),
+      ],
+    );
+  }
+}
+
+String _voiceDuration(int durationMs) {
+  final totalSeconds = (durationMs / 1000).ceil().clamp(0, 60);
+  return '${totalSeconds ~/ 60}:${(totalSeconds % 60).toString().padLeft(2, '0')}';
 }
 
 enum _ChatPhotoSource { camera, gallery }
@@ -523,12 +846,14 @@ String _photoExtension(String contentType) => switch (contentType) {
   _ => 'jpg',
 };
 
-String _resolvedChatImageUrl(String value) {
+String _resolvedChatAssetUrl(String value) {
   final uri = Uri.tryParse(value);
   if (uri == null || uri.hasScheme) return value;
   final path = value.startsWith('/') ? value : '/$value';
   return '${ApiConfig.baseUrl}$path';
 }
+
+String _resolvedChatImageUrl(String value) => _resolvedChatAssetUrl(value);
 
 class _InlineChatError extends StatelessWidget {
   const _InlineChatError({required this.message});

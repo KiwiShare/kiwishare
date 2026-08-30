@@ -4,9 +4,11 @@ export interface IMessage extends Document {
   conversationId: mongoose.Types.ObjectId;
   senderId: mongoose.Types.ObjectId;
   receiverId: mongoose.Types.ObjectId;
-  type: 'text' | 'image' | 'location' | 'system';
+  type: 'text' | 'image' | 'voice' | 'location' | 'system';
   text?: string;
   imageUrl?: string;
+  audioUrl?: string;
+  durationMs?: number;
   location?: {
     name?: string;
     latitude: number;
@@ -24,9 +26,11 @@ const MessageSchema = new Schema<IMessage>(
     conversationId: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true },
     senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     receiverId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    type: { type: String, enum: ['text', 'image', 'location', 'system'], default: 'text' },
+    type: { type: String, enum: ['text', 'image', 'voice', 'location', 'system'], default: 'text' },
     text: { type: String },
     imageUrl: { type: String },
+    audioUrl: { type: String },
+    durationMs: { type: Number, min: 1, max: 60000 },
     location: {
       name: { type: String },
       latitude: { type: Number },

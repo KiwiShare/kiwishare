@@ -32,6 +32,8 @@
 	<string>KiwiShare accesses your photo library so you can add listing photos.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>KiwiShare uses your approximate location when you request nearby items or choose a pickup area for a listing.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>KiwiShare uses the microphone when you choose to record a voice message.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
