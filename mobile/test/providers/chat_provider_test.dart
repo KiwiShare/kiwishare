@@ -343,6 +343,62 @@ void main() {
     },
   );
 
+  test('successful read preserves unread state from a newer load', () async {
+    final conversation = testConversation(unreadCount: 2);
+    final newerLoad = Completer<List<ChatConversationModel>>();
+    final pendingRead = Completer<void>();
+    final repository = FakeChatRepository(conversations: [conversation]);
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+    repository
+      ..conversationCompleters.add(newerLoad)
+      ..markReadCompleter = pendingRead;
+
+    final markingRead = provider.markConversationRead(
+      conversation: conversation,
+      token: 'valid-token',
+    );
+    final loading = provider.loadConversations('valid-token');
+    newerLoad.complete([conversation.copyWith(unreadCount: 1)]);
+    await loading;
+    expect(provider.totalUnreadCount, 1);
+
+    pendingRead.complete();
+    expect(await markingRead, isTrue);
+    expect(provider.totalUnreadCount, 1);
+  });
+
+  test(
+    'retry immediately clears a read error without a canonical chat',
+    () async {
+      final conversation = testConversation(unreadCount: 0);
+      final repository = FakeChatRepository()
+        ..markReadError = Exception('read failed');
+      final provider = ChatProvider(repository: repository);
+
+      expect(
+        await provider.markConversationRead(
+          conversation: conversation,
+          token: 'valid-token',
+        ),
+        isFalse,
+      );
+      expect(provider.messageReadErrorFor(conversation.id), isNotNull);
+
+      repository.markReadError = null;
+      var notifications = 0;
+      provider.addListener(() => notifications += 1);
+      final retry = provider.markConversationRead(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+
+      expect(provider.messageReadErrorFor(conversation.id), isNull);
+      expect(notifications, 1);
+      expect(await retry, isTrue);
+    },
+  );
+
   test('sends normalized text and updates conversation preview', () async {
     final conversation = testConversation();
     final repository = FakeChatRepository(conversations: [conversation]);
