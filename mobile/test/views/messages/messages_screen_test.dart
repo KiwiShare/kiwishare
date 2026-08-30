@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
@@ -8,6 +10,7 @@ import '../../support/fake_chat_repository.dart';
 
 Widget _buildSubject({
   required FakeChatRepository repository,
+  ChatProvider? chatProvider,
   String? authToken = 'valid-token',
   VoidCallback? onComposePressed,
   ValueChanged<ChatConversationModel>? onConversationPressed,
@@ -26,7 +29,7 @@ Widget _buildSubject({
       data: MediaQueryData(textScaler: textScaler),
       child: MessagesScreen(
         authToken: authToken,
-        chatProvider: ChatProvider(repository: repository),
+        chatProvider: chatProvider ?? ChatProvider(repository: repository),
         onComposePressed: onComposePressed,
         onConversationPressed: onConversationPressed,
       ),
@@ -127,6 +130,35 @@ void main() {
 
     expect(composePressed, isTrue);
     expect(selectedChat?.participantName, 'Sophie M.');
+  });
+
+  testWidgets('opening an unread conversation clears its badge immediately', (
+    tester,
+  ) async {
+    final pendingRead = Completer<void>();
+    final repository = FakeChatRepository(conversations: _conversations())
+      ..markReadCompleter = pendingRead;
+    final provider = ChatProvider(repository: repository);
+
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        chatProvider: provider,
+        onConversationPressed: (_) {},
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chat_unread_badge')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('chat_conversation_conversation-1')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('chat_unread_badge')), findsNothing);
+    expect(provider.totalUnreadCount, 0);
+    expect(repository.markReadCalls, 1);
+
+    pendingRead.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('shows private signed-out and authenticated empty states', (

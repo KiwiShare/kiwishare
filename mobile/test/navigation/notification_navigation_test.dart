@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kiwishare/main.dart';
+import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/views/splash/splash_screen.dart';
+
+import '../support/fake_chat_repository.dart';
 
 void main() {
   test('foreground chat action revalidates the active account', () {
@@ -19,6 +22,59 @@ void main() {
     expect(shouldOpenChatNotificationForUser(message, 'account-a'), isTrue);
     expect(shouldOpenChatNotificationForUser(message, 'account-b'), isFalse);
     expect(shouldOpenChatNotificationForUser(message, null), isFalse);
+  });
+
+  test(
+    'matching foreground chat notification refreshes unread totals',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final repository = FakeChatRepository(
+        conversations: [testConversation(unreadCount: 3)],
+      );
+      final provider = ChatProvider(repository: repository);
+
+      await refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+      );
+
+      expect(repository.conversationFetches, 1);
+      expect(provider.totalUnreadCount, 3);
+    },
+  );
+
+  test('notification for another account cannot refresh chat state', () async {
+    const message = ChatPushMessage(
+      conversationId: 'conversation-1',
+      recipientId: 'account-a',
+      itemId: 'item-1',
+      itemTitle: 'Chair',
+      participantId: 'seller-1',
+      participantName: 'Seller',
+    );
+    final repository = FakeChatRepository(
+      conversations: [testConversation(unreadCount: 3)],
+    );
+    final provider = ChatProvider(repository: repository);
+
+    await refreshChatUnreadForMessage(
+      message: message,
+      activeUserId: 'account-b',
+      authToken: 'valid-token',
+      chatProvider: provider,
+    );
+
+    expect(repository.conversationFetches, 0);
+    expect(provider.totalUnreadCount, 0);
   });
 
   testWidgets('cold-start notification replaces the pending splash route', (

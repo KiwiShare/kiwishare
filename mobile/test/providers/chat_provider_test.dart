@@ -13,6 +13,41 @@ import '../support/fake_chat_photo_uploader.dart';
 import '../support/fake_chat_voice_service.dart';
 
 void main() {
+  test('sums unread messages across conversations', () async {
+    final provider = ChatProvider(
+      repository: FakeChatRepository(
+        conversations: [
+          testConversation(unreadCount: 2),
+          testConversation(id: 'conversation-2', unreadCount: 3),
+        ],
+      ),
+    );
+
+    await provider.loadConversations('valid-token');
+
+    expect(provider.totalUnreadCount, 5);
+  });
+
+  test('auth token updates preload chats and logout clears them', () async {
+    final repository = FakeChatRepository(
+      conversations: [testConversation(unreadCount: 2)],
+    );
+    final provider = ChatProvider(repository: repository);
+
+    provider.updateAuthToken('valid-token');
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.conversationFetches, 1);
+    expect(provider.totalUnreadCount, 2);
+
+    provider.updateAuthToken(null);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.conversations, isEmpty);
+    expect(provider.totalUnreadCount, 0);
+  });
+
   test(
     'loads conversations and exposes a recoverable repository error',
     () async {
@@ -226,7 +261,56 @@ void main() {
     expect(provider.messagesFor(conversation.id).single.text, 'Hello');
     expect(provider.conversations.single.unreadCount, 2);
     expect(provider.messageLoadErrorFor(conversation.id), isNull);
+    expect(
+      provider.messageReadErrorFor(conversation.id),
+      'Messages could not be marked as read. Try again.',
+    );
     expect(repository.markReadCalls, 1);
+  });
+
+  test('clears unread immediately while the read request is pending', () async {
+    final conversation = testConversation(unreadCount: 4);
+    final pendingRead = Completer<void>();
+    final repository = FakeChatRepository(conversations: [conversation])
+      ..markReadCompleter = pendingRead;
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+
+    final operation = provider.markConversationRead(
+      conversation: conversation,
+      token: 'valid-token',
+    );
+
+    expect(provider.conversations.single.unreadCount, 0);
+    expect(provider.totalUnreadCount, 0);
+    expect(repository.markReadCalls, 1);
+
+    pendingRead.complete();
+    expect(await operation, isTrue);
+    expect(provider.messageReadErrorFor(conversation.id), isNull);
+  });
+
+  test('deduplicates concurrent read requests for one conversation', () async {
+    final conversation = testConversation(unreadCount: 2);
+    final pendingRead = Completer<void>();
+    final repository = FakeChatRepository(conversations: [conversation])
+      ..markReadCompleter = pendingRead;
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+
+    final first = provider.markConversationRead(
+      conversation: conversation,
+      token: 'valid-token',
+    );
+    final second = provider.markConversationRead(
+      conversation: conversation,
+      token: 'valid-token',
+    );
+
+    expect(repository.markReadCalls, 1);
+    pendingRead.complete();
+    expect(await first, isTrue);
+    expect(await second, isTrue);
   });
 
   test('sends normalized text and updates conversation preview', () async {

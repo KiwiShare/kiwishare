@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/chat_conversation_model.dart';
@@ -23,6 +25,10 @@ class ChatProvider extends ChangeNotifier {
 
   List<ChatConversationModel> _conversations = const [];
   List<ChatConversationModel> get conversations => _conversations;
+  int get totalUnreadCount => _conversations.fold<int>(
+    0,
+    (total, conversation) => total + conversation.unreadCount,
+  );
   ChatConversationModel? conversationById(String conversationId) {
     for (final conversation in _conversations) {
       if (conversation.id == conversationId) return conversation;
@@ -49,10 +55,12 @@ class ChatProvider extends ChangeNotifier {
   final Set<String> _startingItemIds = {};
   final Set<String> _deletingConversationIds = {};
   final Map<String, String> _messageLoadErrors = {};
+  final Map<String, String> _messageReadErrors = {};
   final Map<String, String> _messageSendErrors = {};
   final Map<String, String> _conversationStartErrors = {};
   final Map<String, String> _conversationDeleteErrors = {};
   final Map<String, int> _conversationRenderVersions = {};
+  final Map<String, Future<bool>> _markingReadOperations = {};
 
   List<ChatMessageModel> messagesFor(String conversationId) =>
       List.unmodifiable(_messages[conversationId] ?? const []);
@@ -62,6 +70,8 @@ class ChatProvider extends ChangeNotifier {
       _sendingConversationIds.contains(conversationId);
   String? messageLoadErrorFor(String conversationId) =>
       _messageLoadErrors[conversationId];
+  String? messageReadErrorFor(String conversationId) =>
+      _messageReadErrors[conversationId];
   String? messageSendErrorFor(String conversationId) =>
       _messageSendErrors[conversationId];
   bool isStartingConversation(String itemId) =>
@@ -75,8 +85,24 @@ class ChatProvider extends ChangeNotifier {
   int conversationRenderVersionFor(String conversationId) =>
       _conversationRenderVersions[conversationId] ?? 0;
 
+  void updateAuthToken(String? token) {
+    if (_sessionToken == token) return;
+    _resetSession(token);
+    if (token == null || token.isEmpty) {
+      scheduleMicrotask(notifyListeners);
+      return;
+    }
+    scheduleMicrotask(() {
+      if (_sessionToken == token) unawaited(loadConversations(token));
+    });
+  }
+
   void _useSession(String token) {
     if (_sessionToken == token) return;
+    _resetSession(token);
+  }
+
+  void _resetSession(String? token) {
     _sessionToken = token;
     _conversations = const [];
     _isLoadingConversations = false;
@@ -87,10 +113,12 @@ class ChatProvider extends ChangeNotifier {
     _startingItemIds.clear();
     _deletingConversationIds.clear();
     _messageLoadErrors.clear();
+    _messageReadErrors.clear();
     _messageSendErrors.clear();
     _conversationStartErrors.clear();
     _conversationDeleteErrors.clear();
     _conversationRenderVersions.clear();
+    _markingReadOperations.clear();
   }
 
   Future<ChatConversationModel?> startConversation({
@@ -185,18 +213,9 @@ class ChatProvider extends ChangeNotifier {
       final hasUnreadIncomingMessage = page.messages.any(
         (message) => !message.isMine && message.status != 'read',
       );
-      if (conversation.unreadCount > 0 || hasUnreadIncomingMessage) {
-        try {
-          await repository.markConversationRead(
-            conversationId: conversation.id,
-            token: token,
-          );
-          final canonical = conversationById(conversation.id) ?? conversation;
-          _replaceConversation(canonical.copyWith(unreadCount: 0));
-        } catch (_) {
-          // History is already available. Keep the unread count so a later
-          // visit can retry without replacing usable content with an error.
-        }
+      final canonical = conversationById(conversation.id) ?? conversation;
+      if (canonical.unreadCount > 0 || hasUnreadIncomingMessage) {
+        await markConversationRead(conversation: canonical, token: token);
       }
     } on ChatRepositoryException catch (error) {
       if (_sessionToken == token) {
@@ -212,6 +231,65 @@ class ChatProvider extends ChangeNotifier {
         _loadingConversationIds.remove(conversation.id);
         notifyListeners();
       }
+    }
+  }
+
+  Future<bool> markConversationRead({
+    required ChatConversationModel conversation,
+    required String token,
+  }) {
+    if (conversation.id.isEmpty || token.isEmpty) return Future.value(false);
+    _useSession(token);
+    final pending = _markingReadOperations[conversation.id];
+    if (pending != null) return pending;
+
+    late final Future<bool> operation;
+    operation =
+        _markConversationReadNow(
+          conversation: conversation,
+          token: token,
+        ).whenComplete(() {
+          if (identical(_markingReadOperations[conversation.id], operation)) {
+            _markingReadOperations.remove(conversation.id);
+          }
+        });
+    _markingReadOperations[conversation.id] = operation;
+    return operation;
+  }
+
+  Future<bool> _markConversationReadNow({
+    required ChatConversationModel conversation,
+    required String token,
+  }) async {
+    final canonical = conversationById(conversation.id) ?? conversation;
+    final previousUnreadCount = canonical.unreadCount;
+    _messageReadErrors.remove(conversation.id);
+    if (previousUnreadCount > 0 && conversationById(conversation.id) != null) {
+      _replaceConversation(canonical.copyWith(unreadCount: 0));
+      notifyListeners();
+    }
+
+    try {
+      await repository.markConversationRead(
+        conversationId: conversation.id,
+        token: token,
+      );
+      return _sessionToken == token;
+    } catch (_) {
+      if (_sessionToken == token) {
+        final current = conversationById(conversation.id);
+        if (previousUnreadCount > 0 &&
+            current != null &&
+            current.unreadCount == 0) {
+          _replaceConversation(
+            current.copyWith(unreadCount: previousUnreadCount),
+          );
+        }
+        _messageReadErrors[conversation.id] =
+            'Messages could not be marked as read. Try again.';
+        notifyListeners();
+      }
+      return false;
     }
   }
 

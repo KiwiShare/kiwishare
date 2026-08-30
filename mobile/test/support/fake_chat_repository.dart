@@ -16,6 +16,7 @@ class FakeChatRepository implements ChatRepository {
   ChatRepositoryException? createError;
   ChatRepositoryException? messageError;
   Object? markReadError;
+  Completer<void>? markReadCompleter;
   ChatRepositoryException? sendError;
   ChatRepositoryException? deleteError;
   ChatConversationModel? createdConversation;
@@ -80,6 +81,8 @@ class FakeChatRepository implements ChatRepository {
     required String token,
   }) async {
     markReadCalls += 1;
+    final completer = markReadCompleter;
+    if (completer != null) await completer.future;
     if (markReadError != null) throw markReadError!;
   }
 

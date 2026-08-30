@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -183,13 +185,23 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => ListingProvider(itemRepository: RestItemRepository()),
         ),
-        ChangeNotifierProvider(
+        ChangeNotifierProxyProvider<AuthProvider, ChatProvider>(
           create: (_) => ChatProvider(repository: RestChatRepository()),
+          update: (_, auth, chat) => syncChatAuth(
+            chat ?? ChatProvider(repository: RestChatRepository()),
+            auth.jwtToken,
+          ),
         ),
       ],
       child: const KiwiShareApp(),
     ),
   );
+}
+
+@visibleForTesting
+ChatProvider syncChatAuth(ChatProvider chat, String? authToken) {
+  chat.updateAuthToken(authToken);
+  return chat;
 }
 
 void _openWatchlistPriceDrop(String itemId) {
@@ -238,6 +250,19 @@ void _showForegroundChatNotification(
   ChatPushMessage message,
   PushEnvelope envelope,
 ) {
+  final appContext = _scaffoldMessengerKey.currentContext;
+  final auth = appContext?.read<AuthProvider>();
+  final chat = appContext?.read<ChatProvider>();
+  if (auth != null && chat != null) {
+    unawaited(
+      refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: auth.currentUser?.id,
+        authToken: auth.jwtToken,
+        chatProvider: chat,
+      ),
+    );
+  }
   final messenger = _scaffoldMessengerKey.currentState;
   if (messenger == null) return;
   messenger
@@ -259,6 +284,21 @@ void _showForegroundChatNotification(
         ),
       ),
     );
+}
+
+@visibleForTesting
+Future<void> refreshChatUnreadForMessage({
+  required ChatPushMessage message,
+  required String? activeUserId,
+  required String? authToken,
+  required ChatProvider chatProvider,
+}) async {
+  if (!shouldOpenChatNotificationForUser(message, activeUserId) ||
+      authToken == null ||
+      authToken.isEmpty) {
+    return;
+  }
+  await chatProvider.loadConversations(authToken);
 }
 
 bool shouldOpenChatNotificationForUser(
@@ -369,6 +409,9 @@ class KiwiShareShell extends StatelessWidget {
     final activeIndex = _getSelectedIndex(context);
     final authProvider = Provider.of<AuthProvider>(context);
     final homeDiscovery = context.watch<HomeDiscoveryProvider>();
+    final unreadChatCount = context.select<ChatProvider?, int>(
+      (provider) => provider?.totalUnreadCount ?? 0,
+    );
 
     final shell = Scaffold(
       body: child,
@@ -461,13 +504,13 @@ class KiwiShareShell extends StatelessWidget {
               label: '',
             ),
             BottomNavigationBarItem(
-              icon: const Padding(
-                padding: EdgeInsets.only(bottom: 2.0),
-                child: Icon(Icons.chat_bubble_outline, size: 22),
+              icon: ChatNavigationIcon(
+                unreadCount: unreadChatCount,
+                active: false,
               ),
-              activeIcon: const Padding(
-                padding: EdgeInsets.only(bottom: 2.0),
-                child: Icon(Icons.chat_bubble, size: 24),
+              activeIcon: ChatNavigationIcon(
+                unreadCount: unreadChatCount,
+                active: true,
               ),
               label: 'Chat',
             ),
@@ -497,6 +540,48 @@ class KiwiShareShell extends StatelessWidget {
         }
       },
       child: shell,
+    );
+  }
+}
+
+@visibleForTesting
+class ChatNavigationIcon extends StatelessWidget {
+  const ChatNavigationIcon({
+    super.key,
+    required this.unreadCount,
+    required this.active,
+  });
+
+  final int unreadCount;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedCount = unreadCount < 0 ? 0 : unreadCount;
+    final badgeLabel = normalizedCount > 99 ? '99+' : '$normalizedCount';
+    return Semantics(
+      label: normalizedCount == 0
+          ? 'Chat'
+          : 'Chat, $normalizedCount unread messages',
+      child: ExcludeSemantics(
+        child: Badge(
+          key: Key(
+            active ? 'chat_navigation_badge_active' : 'chat_navigation_badge',
+          ),
+          isLabelVisible: normalizedCount > 0,
+          label: Text(badgeLabel),
+          backgroundColor: const Color(0xFFC96B4A),
+          textColor: Colors.white,
+          offset: const Offset(8, -5),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Icon(
+              active ? Icons.chat_bubble : Icons.chat_bubble_outline,
+              size: active ? 24 : 22,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
