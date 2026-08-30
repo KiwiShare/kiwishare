@@ -98,6 +98,30 @@ void main() {
   );
 
   test(
+    'does not expose a cached conversation to a different session',
+    () async {
+      final conversation = testConversation();
+      final provider = ChatProvider(
+        repository: FakeChatRepository(conversations: [conversation]),
+      );
+      await provider.loadConversations('account-a-token');
+
+      expect(
+        provider.conversationByIdForSession(conversation.id, 'account-a-token'),
+        same(conversation),
+      );
+      expect(
+        provider.conversationByIdForSession(conversation.id, 'account-b-token'),
+        isNull,
+      );
+      expect(
+        provider.conversationByIdForSession(conversation.id, null),
+        isNull,
+      );
+    },
+  );
+
+  test(
     'loads a new empty conversation without an unnecessary read request',
     () async {
       final conversation = testConversation(unreadCount: 0);

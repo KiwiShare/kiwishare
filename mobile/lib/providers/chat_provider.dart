@@ -24,6 +24,14 @@ class ChatProvider extends ChangeNotifier {
     return null;
   }
 
+  ChatConversationModel? conversationByIdForSession(
+    String conversationId,
+    String? token,
+  ) {
+    if (token == null || !ownsSession(token)) return null;
+    return conversationById(conversationId);
+  }
+
   bool _isLoadingConversations = false;
   bool get isLoadingConversations => _isLoadingConversations;
   String? _conversationError;

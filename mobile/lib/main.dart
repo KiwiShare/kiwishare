@@ -96,9 +96,10 @@ final GoRouter _router = GoRouter(
       path: '/messages/:conversationId',
       builder: (context, state) {
         final conversationId = state.pathParameters['conversationId'] ?? '';
+        final authToken = context.read<AuthProvider>().jwtToken;
         final cachedConversation = context
             .read<ChatProvider>()
-            .conversationById(conversationId);
+            .conversationByIdForSession(conversationId, authToken);
         final conversation =
             cachedConversation ??
             (state.extra is ChatConversationModel
