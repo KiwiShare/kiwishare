@@ -194,13 +194,14 @@ void main() async {
 
 void _openWatchlistPriceDrop(String itemId) {
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    _router.push('/items/$itemId');
+    navigateToNotificationRoute(_router, '/items/$itemId');
   });
 }
 
 void _openChatNotification(ChatPushMessage message) {
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    _router.push(
+    navigateToNotificationRoute(
+      _router,
       '/messages/${message.conversationId}',
       extra: ChatConversationModel(
         id: message.conversationId,
@@ -216,6 +217,21 @@ void _openChatNotification(ChatPushMessage message) {
       ),
     );
   });
+}
+
+void navigateToNotificationRoute(
+  GoRouter router,
+  String location, {
+  Object? extra,
+}) {
+  final currentPath = router.routerDelegate.currentConfiguration.uri.path;
+  if (currentPath == '/splash') {
+    // A cold-start notification owns initial navigation. Replacing Splash
+    // disposes its delayed Home timer instead of leaving it under this route.
+    router.go(location, extra: extra);
+    return;
+  }
+  router.push(location, extra: extra);
 }
 
 void _showForegroundChatNotification(
