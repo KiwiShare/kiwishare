@@ -244,16 +244,27 @@ void _showForegroundChatNotification(
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(
-          envelope.body ?? '${message.participantName} sent you a message.',
-        ),
+        content: Text(envelope.body ?? 'You have a new KiwiShare message.'),
         action: SnackBarAction(
           label: 'Open',
-          onPressed: () => _openChatNotification(message),
+          onPressed: () {
+            final activeUserId = _scaffoldMessengerKey.currentContext
+                ?.read<AuthProvider>()
+                .currentUser
+                ?.id;
+            if (shouldOpenChatNotificationForUser(message, activeUserId)) {
+              _openChatNotification(message);
+            }
+          },
         ),
       ),
     );
 }
+
+bool shouldOpenChatNotificationForUser(
+  ChatPushMessage message,
+  String? activeUserId,
+) => message.isForRecipient(activeUserId);
 
 void _showForegroundPriceDrop(
   WatchlistPriceDropMessage message,

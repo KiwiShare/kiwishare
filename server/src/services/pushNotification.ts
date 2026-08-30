@@ -28,6 +28,9 @@ export interface ChatPushGateway {
   send(tokens: string[], payload: ChatPushPayload): Promise<ChatPushDeliveryResult>;
 }
 
+export const CHAT_PUSH_NOTIFICATION_TITLE = 'New KiwiShare message';
+export const CHAT_PUSH_NOTIFICATION_BODY = 'Open KiwiShare to view it.';
+
 export interface Clock {
   now(): Date;
 }
@@ -240,8 +243,8 @@ const firebaseChatGateway: ChatPushGateway = {
     const response = await getMessaging(app).sendEachForMulticast({
       tokens,
       notification: {
-        title: 'New KiwiShare message',
-        body: `${payload.senderName} sent you ${payload.messageType === 'image' ? 'a photo' : 'a message'} about ${payload.itemTitle}.`
+        title: CHAT_PUSH_NOTIFICATION_TITLE,
+        body: CHAT_PUSH_NOTIFICATION_BODY
       },
       data: {
         type: 'chat_message',

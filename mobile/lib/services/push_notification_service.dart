@@ -32,6 +32,13 @@ class ChatPushMessage {
   final String participantId;
   final String participantName;
 
+  bool isForRecipient(String? userId) {
+    final normalizedUserId = userId?.trim();
+    return normalizedUserId != null &&
+        normalizedUserId.isNotEmpty &&
+        recipientId == normalizedUserId;
+  }
+
   static ChatPushMessage? fromData(Map<String, dynamic> data) {
     if (data['type'] != 'chat_message') return null;
     final conversationId = data['conversationId']?.toString().trim() ?? '';
@@ -347,10 +354,7 @@ class PushNotificationService implements PushNotificationSession {
   }
 
   bool _isForCurrentUser(ChatPushMessage message) {
-    final currentUserId = _currentUserId;
-    return currentUserId != null &&
-        currentUserId.isNotEmpty &&
-        message.recipientId == currentUserId;
+    return message.isForRecipient(_currentUserId);
   }
 
   @visibleForTesting

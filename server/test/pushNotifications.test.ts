@@ -8,6 +8,8 @@ import Item from '../src/models/Item';
 import Message from '../src/models/Message';
 import PushDevice from '../src/models/PushDevice';
 import {
+  CHAT_PUSH_NOTIFICATION_BODY,
+  CHAT_PUSH_NOTIFICATION_TITLE,
   ChatPushPayload,
   resolveFirebaseCredentialConfiguration,
   setChatPushGatewayForTests
@@ -186,6 +188,13 @@ describe('KiwiShare chat push notifications', () => {
         GOOGLE_APPLICATION_CREDENTIALS: '/private/firebase-admin.json'
       })
     ).toEqual({ source: 'application-default' });
+  });
+
+  test('uses account-neutral system notification text', () => {
+    expect(CHAT_PUSH_NOTIFICATION_TITLE).toBe('New KiwiShare message');
+    expect(CHAT_PUSH_NOTIFICATION_BODY).toBe('Open KiwiShare to view it.');
+    expect(`${CHAT_PUSH_NOTIFICATION_TITLE} ${CHAT_PUSH_NOTIFICATION_BODY}`)
+      .not.toMatch(/sender|seller|buyer|item|chair/i);
   });
 
   test('notifies only the receiver with privacy-safe chat metadata', async () => {

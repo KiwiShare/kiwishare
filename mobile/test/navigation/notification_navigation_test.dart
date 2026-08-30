@@ -2,9 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kiwishare/main.dart';
+import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/views/splash/splash_screen.dart';
 
 void main() {
+  test('foreground chat action revalidates the active account', () {
+    const message = ChatPushMessage(
+      conversationId: 'conversation-1',
+      recipientId: 'account-a',
+      itemId: 'item-1',
+      itemTitle: 'Chair',
+      participantId: 'seller-1',
+      participantName: 'Seller',
+    );
+
+    expect(shouldOpenChatNotificationForUser(message, 'account-a'), isTrue);
+    expect(shouldOpenChatNotificationForUser(message, 'account-b'), isFalse);
+    expect(shouldOpenChatNotificationForUser(message, null), isFalse);
+  });
+
   testWidgets('cold-start notification replaces the pending splash route', (
     tester,
   ) async {
