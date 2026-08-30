@@ -337,9 +337,11 @@ void main() {
       await loading;
       expect(provider.totalUnreadCount, 4);
 
+      repository.conversations = [conversation.copyWith(unreadCount: 0)];
       pendingRead.complete();
       expect(await markingRead, isTrue);
       expect(provider.totalUnreadCount, 0);
+      expect(repository.conversationFetches, 3);
     },
   );
 
@@ -363,9 +365,38 @@ void main() {
     await loading;
     expect(provider.totalUnreadCount, 1);
 
+    repository.conversations = [conversation.copyWith(unreadCount: 1)];
     pendingRead.complete();
     expect(await markingRead, isTrue);
     expect(provider.totalUnreadCount, 1);
+  });
+
+  test('read success queues revalidation behind a later stale load', () async {
+    final conversation = testConversation(unreadCount: 2);
+    final staleLoad = Completer<List<ChatConversationModel>>();
+    final pendingRead = Completer<void>();
+    final repository = FakeChatRepository(conversations: [conversation]);
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+    repository
+      ..conversationCompleters.add(staleLoad)
+      ..markReadCompleter = pendingRead
+      ..conversations = [conversation.copyWith(unreadCount: 0)];
+
+    final markingRead = provider.markConversationRead(
+      conversation: conversation,
+      token: 'valid-token',
+    );
+    final loading = provider.loadConversations('valid-token');
+
+    pendingRead.complete();
+    await Future<void>.delayed(Duration.zero);
+    staleLoad.complete([conversation]);
+    await loading;
+    expect(await markingRead, isTrue);
+
+    expect(repository.conversationFetches, 3);
+    expect(provider.totalUnreadCount, 0);
   });
 
   test(

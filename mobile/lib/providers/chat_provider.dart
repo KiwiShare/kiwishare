@@ -50,8 +50,6 @@ class ChatProvider extends ChangeNotifier {
   String? get conversationError => _conversationError;
   Completer<void>? _conversationLoadCompleter;
   bool _conversationRefreshQueued = false;
-  int _conversationLoadSequence = 0;
-  final Map<String, int> _lastConversationLoadById = {};
 
   final Map<String, List<ChatMessageModel>> _messages = {};
   final Set<String> _loadingConversationIds = {};
@@ -112,8 +110,6 @@ class ChatProvider extends ChangeNotifier {
     _isLoadingConversations = false;
     _conversationError = null;
     _conversationRefreshQueued = false;
-    _conversationLoadSequence = 0;
-    _lastConversationLoadById.clear();
     _messages.clear();
     _loadingConversationIds.clear();
     _sendingConversationIds.clear();
@@ -195,19 +191,13 @@ class ChatProvider extends ChangeNotifier {
     }
     _useSession(token);
     _isLoadingConversations = true;
-    final loadSequence = ++_conversationLoadSequence;
     final loadCompleter = Completer<void>();
     _conversationLoadCompleter = loadCompleter;
     _conversationError = null;
     notifyListeners();
     try {
       final conversations = await repository.fetchConversations(token: token);
-      if (_sessionToken == token) {
-        _conversations = conversations;
-        for (final conversation in conversations) {
-          _lastConversationLoadById[conversation.id] = loadSequence;
-        }
-      }
+      if (_sessionToken == token) _conversations = conversations;
     } on ChatRepositoryException catch (error) {
       if (_sessionToken == token) _conversationError = error.message;
     } catch (_) {
@@ -274,14 +264,12 @@ class ChatProvider extends ChangeNotifier {
     _useSession(token);
     final pending = _markingReadOperations[conversation.id];
     if (pending != null) return pending;
-    final latestLoadAtStart = _conversationLoadSequence;
 
     late final Future<bool> operation;
     operation =
         _markConversationReadNow(
           conversation: conversation,
           token: token,
-          latestLoadAtStart: latestLoadAtStart,
         ).whenComplete(() {
           if (identical(_markingReadOperations[conversation.id], operation)) {
             _markingReadOperations.remove(conversation.id);
@@ -294,7 +282,6 @@ class ChatProvider extends ChangeNotifier {
   Future<bool> _markConversationReadNow({
     required ChatConversationModel conversation,
     required String token,
-    required int latestLoadAtStart,
   }) async {
     final canonical = conversationById(conversation.id) ?? conversation;
     final previousUnreadCount = canonical.unreadCount;
@@ -313,13 +300,9 @@ class ChatProvider extends ChangeNotifier {
       );
       if (_sessionToken == token) {
         final current = conversationById(conversation.id);
-        final lastAppliedLoad = _lastConversationLoadById[conversation.id] ?? 0;
-        final unreadCameFromPreReadLoad = lastAppliedLoad <= latestLoadAtStart;
-        if (current != null &&
-            current.unreadCount > 0 &&
-            unreadCameFromPreReadLoad) {
-          _replaceConversation(current.copyWith(unreadCount: 0));
-          notifyListeners();
+        if (_isLoadingConversations ||
+            (current != null && current.unreadCount > 0)) {
+          await loadConversations(token, queueIfBusy: true);
         }
       }
       return _sessionToken == token;
