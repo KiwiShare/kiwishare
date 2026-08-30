@@ -5,6 +5,31 @@ import NotificationDailyCap from '../models/NotificationDailyCap';
 import NotificationHistory, { NotificationStatus } from '../models/NotificationHistory';
 import Watchlist from '../models/Watchlist';
 import User from '../models/User';
+import Item from '../models/Item';
+
+export interface ChatPushRequest {
+  receiverId: mongoose.Types.ObjectId;
+  conversationId: string;
+  itemId: string;
+  senderId: string;
+  messageType: 'text' | 'image';
+}
+
+export interface ChatPushPayload extends ChatPushRequest {
+  itemTitle: string;
+  senderName: string;
+}
+
+interface ChatPushDeliveryResult {
+  invalidTokens: string[];
+}
+
+export interface ChatPushGateway {
+  send(tokens: string[], payload: ChatPushPayload): Promise<ChatPushDeliveryResult>;
+}
+
+export const CHAT_PUSH_NOTIFICATION_TITLE = 'New KiwiShare message';
+export const CHAT_PUSH_NOTIFICATION_BODY = 'Open KiwiShare to view it.';
 
 export interface Clock {
   now(): Date;
@@ -76,6 +101,7 @@ export interface PushGateway {
 
 let firebaseApp: App | null | undefined;
 let gatewayOverride: PushGateway | null = null;
+let chatGatewayOverride: ChatPushGateway | null = null;
 
 export type FirebaseCredentialConfiguration =
   | { source: 'inline'; credentials: string }
@@ -208,8 +234,96 @@ const firebaseGateway: PushGateway = {
   }
 };
 
+const firebaseChatGateway: ChatPushGateway = {
+  async send(tokens, payload) {
+    const app = await configuredFirebaseApp();
+    if (!app || tokens.length === 0) return { invalidTokens: [] };
+
+    const { getMessaging } = await import('firebase-admin/messaging');
+    const response = await getMessaging(app).sendEachForMulticast({
+      tokens,
+      notification: {
+        title: CHAT_PUSH_NOTIFICATION_TITLE,
+        body: CHAT_PUSH_NOTIFICATION_BODY
+      },
+      data: {
+        type: 'chat_message',
+        recipientId: payload.receiverId.toString(),
+        conversationId: payload.conversationId,
+        itemId: payload.itemId,
+        itemTitle: payload.itemTitle,
+        participantId: payload.senderId,
+        participantName: payload.senderName
+      },
+      android: {
+        priority: 'high',
+        notification: { sound: 'default' }
+      },
+      apns: {
+        payload: { aps: { sound: 'default', contentAvailable: true } }
+      }
+    });
+
+    const invalidTokens = response.responses.flatMap((result, index) => {
+      const code = result.error?.code;
+      return code === 'messaging/registration-token-not-registered' ||
+        code === 'messaging/invalid-registration-token'
+        ? [tokens[index]]
+        : [];
+    });
+    return { invalidTokens };
+  }
+};
+
 export function setPushGatewayForTests(gateway: PushGateway | null) {
   gatewayOverride = gateway;
+}
+
+export function setChatPushGatewayForTests(gateway: ChatPushGateway | null) {
+  chatGatewayOverride = gateway;
+}
+
+export async function notifyChatReceiver(request: ChatPushRequest): Promise<void> {
+  try {
+    const registrations = await PushDevice.find({
+      userId: request.receiverId,
+      active: true
+    })
+      .select('+token')
+      .sort({ lastSeenAt: -1 })
+      .limit(20)
+      .lean();
+    const tokens = registrations
+      .map((registration: any) => registration.token)
+      .filter((token: unknown): token is string => typeof token === 'string');
+    if (tokens.length === 0) return;
+
+    const [itemResult, senderResult] = await Promise.all([
+      Item.findById(request.itemId).select('title').lean(),
+      User.findById(request.senderId).select('displayName').lean()
+    ]);
+    const item = itemResult as { title?: string } | null;
+    const sender = senderResult as { displayName?: string } | null;
+    const payload: ChatPushPayload = {
+      ...request,
+      itemTitle: item?.title ?? 'an item',
+      senderName: sender?.displayName ?? 'A KiwiShare member'
+    };
+    const result = await (chatGatewayOverride ?? firebaseChatGateway).send(
+      tokens,
+      payload
+    );
+    if (result.invalidTokens.length > 0) {
+      await PushDevice.deleteMany({ token: { $in: result.invalidTokens } });
+    }
+  } catch (error) {
+    // Message persistence is authoritative. Push delivery is best-effort and
+    // must never turn a successfully stored chat message into an API failure.
+    console.warn(
+      '[Push Notification] Chat notification delivery failed.',
+      error instanceof Error ? error.message : 'Unknown delivery error.'
+    );
+  }
 }
 
 export interface PriceDropNotificationRequest {

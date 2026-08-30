@@ -7,10 +7,26 @@ import 'package:kiwishare/models/user_model.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/providers.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
+import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/views/auth/login_view.dart';
 import 'package:kiwishare/main.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
+
+class RecordingPushNotificationSession implements PushNotificationSession {
+  final activations = <String>[];
+  final deactivations = <String>[];
+
+  @override
+  Future<void> activate(String jwt, {String? userId}) async {
+    activations.add(jwt);
+  }
+
+  @override
+  Future<void> deactivate(String jwt) async {
+    deactivations.add(jwt);
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -93,6 +109,26 @@ void main() {
       expect(authProvider.isLoggedIn, isFalse);
       expect(authProvider.currentUser, isNull);
     });
+
+    test(
+      'Direct session clearing also deactivates push notifications',
+      () async {
+        final pushNotifications = RecordingPushNotificationSession();
+        final auth = AuthProvider(
+          userRepository: MockUserRepository(),
+          pushNotifications: pushNotifications,
+        );
+        await auth.verifyOtp('sam@kiwishare.co.nz', '123456');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(pushNotifications.activations, hasLength(1));
+        await auth.clearSession();
+
+        expect(pushNotifications.deactivations, pushNotifications.activations);
+        expect(auth.isLoggedIn, isFalse);
+        expect(auth.jwtToken, isNull);
+      },
+    );
 
     test('Navigation tab index mapping updates', () {
       navProvider.setActiveTab(3);

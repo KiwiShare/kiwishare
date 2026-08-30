@@ -17,6 +17,21 @@ class ChatProvider extends ChangeNotifier {
 
   List<ChatConversationModel> _conversations = const [];
   List<ChatConversationModel> get conversations => _conversations;
+  ChatConversationModel? conversationById(String conversationId) {
+    for (final conversation in _conversations) {
+      if (conversation.id == conversationId) return conversation;
+    }
+    return null;
+  }
+
+  ChatConversationModel? conversationByIdForSession(
+    String conversationId,
+    String? token,
+  ) {
+    if (token == null || !ownsSession(token)) return null;
+    return conversationById(conversationId);
+  }
+
   bool _isLoadingConversations = false;
   bool get isLoadingConversations => _isLoadingConversations;
   String? _conversationError;
@@ -54,6 +69,24 @@ class ChatProvider extends ChangeNotifier {
   int conversationRenderVersionFor(String conversationId) =>
       _conversationRenderVersions[conversationId] ?? 0;
 
+  void _useSession(String token) {
+    if (_sessionToken == token) return;
+    _sessionToken = token;
+    _conversations = const [];
+    _isLoadingConversations = false;
+    _conversationError = null;
+    _messages.clear();
+    _loadingConversationIds.clear();
+    _sendingConversationIds.clear();
+    _startingItemIds.clear();
+    _deletingConversationIds.clear();
+    _messageLoadErrors.clear();
+    _messageSendErrors.clear();
+    _conversationStartErrors.clear();
+    _conversationDeleteErrors.clear();
+    _conversationRenderVersions.clear();
+  }
+
   Future<ChatConversationModel?> startConversation({
     required String itemId,
     required String token,
@@ -62,17 +95,7 @@ class ChatProvider extends ChangeNotifier {
       return null;
     }
 
-    if (_sessionToken != token) {
-      _sessionToken = token;
-      _conversations = const [];
-      _conversationError = null;
-      _messages.clear();
-      _messageLoadErrors.clear();
-      _messageSendErrors.clear();
-      _conversationStartErrors.clear();
-      _conversationDeleteErrors.clear();
-      _conversationRenderVersions.clear();
-    }
+    _useSession(token);
 
     _startingItemIds.add(itemId);
     _conversationStartErrors.remove(itemId);
@@ -107,24 +130,16 @@ class ChatProvider extends ChangeNotifier {
       }
       return null;
     } finally {
-      _startingItemIds.remove(itemId);
-      notifyListeners();
+      if (_sessionToken == token) {
+        _startingItemIds.remove(itemId);
+        notifyListeners();
+      }
     }
   }
 
   Future<void> loadConversations(String token) async {
     if (_isLoadingConversations && _sessionToken == token) return;
-    if (_sessionToken != token) {
-      _sessionToken = token;
-      _conversations = const [];
-      _conversationError = null;
-      _messages.clear();
-      _messageLoadErrors.clear();
-      _messageSendErrors.clear();
-      _conversationStartErrors.clear();
-      _conversationDeleteErrors.clear();
-      _conversationRenderVersions.clear();
-    }
+    _useSession(token);
     _isLoadingConversations = true;
     _conversationError = null;
     notifyListeners();
@@ -149,6 +164,7 @@ class ChatProvider extends ChangeNotifier {
     required ChatConversationModel conversation,
     required String token,
   }) async {
+    _useSession(token);
     if (_loadingConversationIds.contains(conversation.id)) return;
     _loadingConversationIds.add(conversation.id);
     _messageLoadErrors.remove(conversation.id);
@@ -158,6 +174,7 @@ class ChatProvider extends ChangeNotifier {
         conversationId: conversation.id,
         token: token,
       );
+      if (_sessionToken != token) return;
       _messages[conversation.id] = page.messages;
       final hasUnreadIncomingMessage = page.messages.any(
         (message) => !message.isMine && message.status != 'read',
@@ -168,20 +185,27 @@ class ChatProvider extends ChangeNotifier {
             conversationId: conversation.id,
             token: token,
           );
-          _replaceConversation(conversation.copyWith(unreadCount: 0));
+          final canonical = conversationById(conversation.id) ?? conversation;
+          _replaceConversation(canonical.copyWith(unreadCount: 0));
         } catch (_) {
           // History is already available. Keep the unread count so a later
           // visit can retry without replacing usable content with an error.
         }
       }
     } on ChatRepositoryException catch (error) {
-      _messageLoadErrors[conversation.id] = error.message;
+      if (_sessionToken == token) {
+        _messageLoadErrors[conversation.id] = error.message;
+      }
     } catch (_) {
-      _messageLoadErrors[conversation.id] =
-          'Messages could not be loaded. Please try again.';
+      if (_sessionToken == token) {
+        _messageLoadErrors[conversation.id] =
+            'Messages could not be loaded. Please try again.';
+      }
     } finally {
-      _loadingConversationIds.remove(conversation.id);
-      notifyListeners();
+      if (_sessionToken == token) {
+        _loadingConversationIds.remove(conversation.id);
+        notifyListeners();
+      }
     }
   }
 
@@ -190,6 +214,7 @@ class ChatProvider extends ChangeNotifier {
     required String text,
     required String token,
   }) async {
+    if (token.isNotEmpty) _useSession(token);
     final normalized = text.trim();
     if (normalized.isEmpty ||
         normalized.length > 2000 ||
@@ -206,18 +231,25 @@ class ChatProvider extends ChangeNotifier {
         text: normalized,
         token: token,
       );
+      if (_sessionToken != token) return false;
       _appendMessage(conversation, message, preview: message.text);
       return true;
     } on ChatRepositoryException catch (error) {
-      _messageSendErrors[conversation.id] = error.message;
+      if (_sessionToken == token) {
+        _messageSendErrors[conversation.id] = error.message;
+      }
       return false;
     } catch (_) {
-      _messageSendErrors[conversation.id] =
-          'Your message was not sent. Please try again.';
+      if (_sessionToken == token) {
+        _messageSendErrors[conversation.id] =
+            'Your message was not sent. Please try again.';
+      }
       return false;
     } finally {
-      _sendingConversationIds.remove(conversation.id);
-      notifyListeners();
+      if (_sessionToken == token) {
+        _sendingConversationIds.remove(conversation.id);
+        notifyListeners();
+      }
     }
   }
 
@@ -228,6 +260,7 @@ class ChatProvider extends ChangeNotifier {
     required String contentType,
     required String token,
   }) async {
+    if (token.isNotEmpty) _useSession(token);
     const maximumPhotoBytes = 10 * 1024 * 1024;
     if (bytes.isEmpty ||
         bytes.length > maximumPhotoBytes ||
@@ -256,21 +289,30 @@ class ChatProvider extends ChangeNotifier {
         imageUrl: imageUrl,
         token: token,
       );
+      if (_sessionToken != token) return false;
       _appendMessage(conversation, message, preview: 'Photo');
       return true;
     } on ChatPhotoUploadException catch (error) {
-      _messageSendErrors[conversation.id] = error.message;
+      if (_sessionToken == token) {
+        _messageSendErrors[conversation.id] = error.message;
+      }
       return false;
     } on ChatRepositoryException catch (error) {
-      _messageSendErrors[conversation.id] = error.message;
+      if (_sessionToken == token) {
+        _messageSendErrors[conversation.id] = error.message;
+      }
       return false;
     } catch (_) {
-      _messageSendErrors[conversation.id] =
-          'Your photo was not sent. Please try again.';
+      if (_sessionToken == token) {
+        _messageSendErrors[conversation.id] =
+            'Your photo was not sent. Please try again.';
+      }
       return false;
     } finally {
-      _sendingConversationIds.remove(conversation.id);
-      notifyListeners();
+      if (_sessionToken == token) {
+        _sendingConversationIds.remove(conversation.id);
+        notifyListeners();
+      }
     }
   }
 
@@ -302,7 +344,8 @@ class ChatProvider extends ChangeNotifier {
         conversationId: conversation.id,
         token: token,
       );
-      if (_sessionToken == token) _messages.remove(conversation.id);
+      if (_sessionToken != token) return false;
+      _messages.remove(conversation.id);
       return true;
     } on ChatRepositoryException catch (error) {
       if (_sessionToken == token) {
@@ -320,8 +363,10 @@ class ChatProvider extends ChangeNotifier {
       }
       return false;
     } finally {
-      _deletingConversationIds.remove(conversation.id);
-      notifyListeners();
+      if (_sessionToken == token) {
+        _deletingConversationIds.remove(conversation.id);
+        notifyListeners();
+      }
     }
   }
 
@@ -338,8 +383,9 @@ class ChatProvider extends ChangeNotifier {
     if (!messages.any((existing) => existing.id == message.id)) {
       _messages[conversation.id] = [...messages, message];
     }
+    final canonical = conversationById(conversation.id) ?? conversation;
     _replaceConversation(
-      conversation.copyWith(
+      canonical.copyWith(
         lastMessage: preview,
         lastMessageAt: message.createdAt,
       ),

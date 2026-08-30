@@ -20,12 +20,30 @@ PushEnvelope _priceDrop({
   body: 'Price dropped',
 );
 
+PushEnvelope _chatMessage({
+  String conversationId = 'conversation-1',
+  String recipientId = 'user-1',
+}) => PushEnvelope(
+  data: {
+    'type': 'chat_message',
+    'recipientId': recipientId,
+    'conversationId': conversationId,
+    'itemId': _itemId,
+    'itemTitle': 'Test chair',
+    'participantId': 'participant-1',
+    'participantName': 'Test Seller',
+  },
+  body: 'New chat message',
+);
+
 void main() {
   group('PushNotificationService', () {
     late _FakeMessagingClient messaging;
     late _FakePushDeviceRepository repository;
     late List<String> openedItems;
     late List<String> foregroundItems;
+    late List<String> openedChats;
+    late List<String> foregroundChats;
     late PushNotificationService service;
 
     setUp(() {
@@ -33,6 +51,8 @@ void main() {
       repository = _FakePushDeviceRepository();
       openedItems = [];
       foregroundItems = [];
+      openedChats = [];
+      foregroundChats = [];
       service = PushNotificationService(
         messagingClient: messaging,
         deviceRepository: repository,
@@ -40,6 +60,9 @@ void main() {
         onNavigateToItem: openedItems.add,
         onForegroundMessage: (message, _) =>
             foregroundItems.add(message.itemId),
+        onNavigateToChat: (message) => openedChats.add(message.conversationId),
+        onForegroundChatMessage: (message, _) =>
+            foregroundChats.add(message.conversationId),
       );
     });
 
@@ -148,6 +171,40 @@ void main() {
 
       expect(foregroundItems, [_itemId]);
       expect(openedItems, isEmpty);
+    });
+
+    test(
+      'foreground chat messages are dispatched without navigating',
+      () async {
+        await service.activate('jwt-user', userId: 'user-1');
+        messaging.foreground.add(_chatMessage());
+        await _drainEvents();
+
+        expect(foregroundChats, ['conversation-1']);
+        expect(openedChats, isEmpty);
+        expect(foregroundItems, isEmpty);
+      },
+    );
+
+    test('chat notification taps navigate to the conversation', () async {
+      messaging.initialMessage = _chatMessage(conversationId: 'initial-chat');
+      await service.initialize();
+      await service.activate('jwt-user', userId: 'user-1');
+      messaging.opened.add(_chatMessage(conversationId: 'opened-chat'));
+      await _drainEvents();
+
+      expect(openedChats, ['initial-chat', 'opened-chat']);
+      expect(openedItems, isEmpty);
+    });
+
+    test('chat notifications for a previous account are ignored', () async {
+      await service.activate('jwt-user-b', userId: 'user-b');
+      messaging.foreground.add(_chatMessage(recipientId: 'user-a'));
+      messaging.opened.add(_chatMessage(recipientId: 'user-a'));
+      await _drainEvents();
+
+      expect(foregroundChats, isEmpty);
+      expect(openedChats, isEmpty);
     });
 
     test(

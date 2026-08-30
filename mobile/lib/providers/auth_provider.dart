@@ -41,7 +41,10 @@ class AuthProvider extends ChangeNotifier {
         );
         _isLoggedIn = true;
         notifyListeners();
-        unawaited(pushNotifications?.activate(_jwtToken!) ?? Future.value());
+        unawaited(
+          pushNotifications?.activate(_jwtToken!, userId: _currentUser!.id) ??
+              Future.value(),
+        );
       }
     } catch (e) {
       debugPrint('Error loading auth session: $e');
@@ -66,7 +69,9 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
-      unawaited(pushNotifications?.activate(token) ?? Future.value());
+      unawaited(
+        pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+      );
     } catch (e) {
       _currentUser = null;
       _isLoggedIn = false;
@@ -100,7 +105,9 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
-      unawaited(pushNotifications?.activate(token) ?? Future.value());
+      unawaited(
+        pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+      );
     } catch (e) {
       _currentUser = null;
       _isLoggedIn = false;
@@ -145,7 +152,9 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
-      unawaited(pushNotifications?.activate(token) ?? Future.value());
+      unawaited(
+        pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+      );
     } catch (e) {
       _currentUser = null;
       _isLoggedIn = false;
@@ -186,7 +195,9 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
-      unawaited(pushNotifications?.activate(token) ?? Future.value());
+      unawaited(
+        pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+      );
     } catch (e) {
       debugPrint('Google Login Provider Error: $e');
       _currentUser = null;
