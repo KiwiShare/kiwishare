@@ -30,6 +30,7 @@ import 'services/push_notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
+import 'widgets/kiwishare_notification_content.dart';
 
 // Global keys for routing
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
@@ -276,8 +277,10 @@ void _showForegroundPriceDrop(
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(
-          envelope.body ?? 'An item on your watchlist has dropped in price.',
+        content: KiwiShareNotificationContent(
+          title: envelope.title ?? 'Price drop on a saved item',
+          body: envelope.body ?? message.notificationSummary,
+          icon: Icons.trending_down_rounded,
         ),
         action: SnackBarAction(
           label: 'View',

@@ -77,6 +77,19 @@ export interface PriceDropPushPayload {
   newPriceNzd: string;
 }
 
+export const PRICE_DROP_NOTIFICATION_TITLE = 'Price drop on a saved item';
+export const ANDROID_NOTIFICATION_ICON = 'ic_stat_kiwishare';
+export const ANDROID_NOTIFICATION_COLOR = '#064B3A';
+
+export function buildPriceDropNotificationContent(
+  payload: PriceDropPushPayload
+): { title: string; body: string } {
+  return {
+    title: PRICE_DROP_NOTIFICATION_TITLE,
+    body: `${payload.itemTitle} dropped from $${payload.oldPriceNzd} to $${payload.newPriceNzd}`
+  };
+}
+
 export interface PushDeliveryResult {
   invalidTokens: string[];
   successCount: number;
@@ -177,22 +190,25 @@ const firebaseGateway: PushGateway = {
 
     try {
       const { getMessaging } = await import('firebase-admin/messaging');
+      const notification = buildPriceDropNotificationContent(payload);
       const response = await getMessaging(app).sendEachForMulticast({
         tokens,
-        notification: {
-          title: `Price drop: ${payload.itemTitle}`,
-          body: `An item on your watchlist dropped to $${payload.newPriceNzd} NZD (was $${payload.oldPriceNzd} NZD).`
-        },
+        notification,
         data: {
           type: payload.type,
           itemId: payload.itemId,
           eventId: payload.eventId,
+          itemTitle: payload.itemTitle,
           oldPrice: payload.oldPriceNzd,
           newPrice: payload.newPriceNzd
         },
         android: {
           priority: 'high',
-          notification: { sound: 'default' }
+          notification: {
+            sound: 'default',
+            icon: ANDROID_NOTIFICATION_ICON,
+            color: ANDROID_NOTIFICATION_COLOR
+          }
         },
         apns: {
           payload: { aps: { sound: 'default', contentAvailable: true } }
@@ -257,7 +273,11 @@ const firebaseChatGateway: ChatPushGateway = {
       },
       android: {
         priority: 'high',
-        notification: { sound: 'default' }
+        notification: {
+          sound: 'default',
+          icon: ANDROID_NOTIFICATION_ICON,
+          color: ANDROID_NOTIFICATION_COLOR
+        }
       },
       apns: {
         payload: { aps: { sound: 'default', contentAvailable: true } }

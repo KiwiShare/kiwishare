@@ -132,6 +132,16 @@ ThemeData buildKiwiShareTheme() {
       ),
     ),
     dividerColor: AppColors.divider,
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: AppColors.brandPrimary,
+      contentTextStyle: baseTextTheme.bodyMedium?.copyWith(color: Colors.white),
+      actionTextColor: AppColors.brandPrimaryContainer,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.medium)),
+      ),
+      insetPadding: const EdgeInsets.all(AppSpacing.lg),
+    ),
     inputDecorationTheme: const InputDecorationTheme(
       filled: true,
       fillColor: AppColors.surface,
@@ -177,6 +187,18 @@ ThemeData buildKiwiShareDarkTheme() {
       displayColor: kiwiShareDarkColorScheme.onSurface,
     ),
     dividerColor: const Color(0xFF2B3B33),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: kiwiShareDarkColorScheme.primaryContainer,
+      contentTextStyle: baseTextTheme.bodyMedium?.copyWith(
+        color: kiwiShareDarkColorScheme.onPrimaryContainer,
+      ),
+      actionTextColor: kiwiShareDarkColorScheme.primary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.medium)),
+      ),
+      insetPadding: const EdgeInsets.all(AppSpacing.lg),
+    ),
     inputDecorationTheme: const InputDecorationTheme(
       filled: true,
       fillColor: Color(0xFF16231D),
