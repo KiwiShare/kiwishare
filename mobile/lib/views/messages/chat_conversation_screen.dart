@@ -42,6 +42,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   late final ChatVoiceRecorder _voiceRecorder;
   Timer? _recordingTimer;
   bool _isRecording = false;
+  bool _isFinalizingVoice = false;
   int _recordingSeconds = 0;
   String? _loadedToken;
   String? _currentAuthToken;
@@ -176,7 +177,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Future<void> _startVoiceRecording() async {
-    if (_isRecording || _chatProvider.isSending(widget.conversation.id)) {
+    if (_isRecording ||
+        _isFinalizingVoice ||
+        _chatProvider.isSending(widget.conversation.id)) {
       return;
     }
     try {
@@ -216,16 +219,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Future<void> _finishVoiceRecording({required bool send}) async {
-    if (!_isRecording) return;
+    if (!_isRecording || _isFinalizingVoice) return;
     _recordingTimer?.cancel();
-    setState(() => _isRecording = false);
-    if (!send) {
-      await _voiceRecorder.cancel();
-      if (mounted) setState(() => _recordingSeconds = 0);
-      return;
-    }
+    setState(() {
+      _isRecording = false;
+      _isFinalizingVoice = true;
+    });
 
     try {
+      if (!send) {
+        await _voiceRecorder.cancel();
+        return;
+      }
       final recording = await _voiceRecorder.stop();
       final token = _currentAuthToken;
       if (recording == null || token == null || token.isEmpty || !mounted) {
@@ -247,7 +252,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         'The voice message could not be prepared. Please try again.',
       );
     } finally {
-      if (mounted) setState(() => _recordingSeconds = 0);
+      if (mounted) {
+        setState(() {
+          _isFinalizingVoice = false;
+          _recordingSeconds = 0;
+        });
+      }
     }
   }
 
@@ -314,7 +324,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 ),
               _MessageComposer(
                 controller: _messageController,
-                isSending: provider.isSending(widget.conversation.id),
+                isSending:
+                    provider.isSending(widget.conversation.id) ||
+                    _isFinalizingVoice,
                 enabled:
                     widget.conversation.isActive &&
                     (_currentAuthToken?.isNotEmpty ?? false),

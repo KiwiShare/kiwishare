@@ -2,7 +2,10 @@ import { spawnSync } from 'child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import os from 'os';
 import path from 'path';
-import { probeVoiceAudio } from '../src/services/voiceAudio';
+import {
+  acquireVoiceProcessingAdmission,
+  probeVoiceAudio
+} from '../src/services/voiceAudio';
 
 const ffmpegPath = require('ffmpeg-static') as string;
 
@@ -110,13 +113,12 @@ describe('voice audio probing', () => {
     expect(result?.durationMs).toBeGreaterThan(100);
   });
 
-  test('rejects concurrent decoders for the same authenticated user', async () => {
-    const results = await Promise.all([
-      probeVoiceAudio(validAudio, 60000, 'user-a'),
-      probeVoiceAudio(validAudio, 60000, 'user-a')
-    ]);
+  test('rejects concurrent processing admission for the same user', () => {
+    const first = acquireVoiceProcessingAdmission('user-a');
+    const second = acquireVoiceProcessingAdmission('user-a');
 
-    expect(results.filter((result) => result == null)).toHaveLength(1);
-    expect(results.filter((result) => result != null)).toHaveLength(1);
+    expect(first).not.toBeNull();
+    expect(second).toBeNull();
+    first?.release();
   });
 });

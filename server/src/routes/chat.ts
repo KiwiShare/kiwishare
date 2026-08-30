@@ -14,7 +14,10 @@ import {
   MESSAGE_CONTENT_NOT_ALLOWED,
   moderateChatText
 } from '../services/messageModeration';
-import { probeVoiceAudio } from '../services/voiceAudio';
+import {
+  acquireVoiceProcessingAdmission,
+  probeVoiceAudio
+} from '../services/voiceAudio';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -449,6 +452,16 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       return;
     }
 
+    const voiceAdmission = acquireVoiceProcessingAdmission(userId.toString());
+    if (!voiceAdmission) {
+      ctx.status = 429;
+      ctx.body = {
+        status: 'error',
+        message: 'Voice message processing is busy. Please try again shortly.'
+      };
+      return;
+    }
+
     try {
       // Read and validate the exact bytes that will be retained. The client
       // supplied MIME type and duration are not trusted security boundaries.
@@ -459,7 +472,7 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       const verified = await probeVoiceAudio(
         uploaded.bytes,
         MAX_VOICE_DURATION_MS,
-        userId.toString()
+        voiceAdmission
       );
       if (
         verified == null ||
@@ -492,6 +505,8 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
         message: 'The uploaded voice message could not be verified.'
       };
       return;
+    } finally {
+      voiceAdmission.release();
     }
   }
 

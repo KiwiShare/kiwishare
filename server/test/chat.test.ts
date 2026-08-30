@@ -6,7 +6,10 @@ import Conversation from '../src/models/Conversation';
 import Message from '../src/models/Message';
 import Item from '../src/models/Item';
 import { getR2ObjectBytes, storeImmutableVoiceObject } from '../src/config/r2';
-import { probeVoiceAudio } from '../src/services/voiceAudio';
+import {
+  acquireVoiceProcessingAdmission,
+  probeVoiceAudio
+} from '../src/services/voiceAudio';
 
 function mp4Box(type: string, payload: Buffer): Buffer {
   const box = Buffer.alloc(8 + payload.length);
@@ -51,6 +54,7 @@ jest.mock('../src/config/r2', () => {
 });
 
 jest.mock('../src/services/voiceAudio', () => ({
+  acquireVoiceProcessingAdmission: jest.fn(() => ({ release: jest.fn() })),
   probeVoiceAudio: jest.fn(async () => ({
     contentType: 'audio/mp4',
     extension: 'm4a',
@@ -60,6 +64,9 @@ jest.mock('../src/services/voiceAudio', () => ({
 
 const mockedGetR2ObjectBytes = jest.mocked(getR2ObjectBytes);
 const mockedStoreImmutableVoiceObject = jest.mocked(storeImmutableVoiceObject);
+const mockedAcquireVoiceProcessingAdmission = jest.mocked(
+  acquireVoiceProcessingAdmission
+);
 const mockedProbeVoiceAudio = jest.mocked(probeVoiceAudio);
 
 jest.setTimeout(60000);
@@ -77,7 +84,11 @@ describe('KiwiShare text chat API', () => {
   beforeEach(() => {
     mockedGetR2ObjectBytes.mockClear();
     mockedStoreImmutableVoiceObject.mockClear();
+    mockedAcquireVoiceProcessingAdmission.mockReset();
     mockedProbeVoiceAudio.mockReset();
+    mockedAcquireVoiceProcessingAdmission.mockImplementation(() => ({
+      release: jest.fn()
+    }));
     mockedGetR2ObjectBytes.mockResolvedValue({
       bytes: validVoiceMp4(),
       contentType: 'audio/mp4'
@@ -490,7 +501,7 @@ describe('KiwiShare text chat API', () => {
     expect(mockedProbeVoiceAudio).toHaveBeenCalledWith(
       expect.any(Buffer),
       60000,
-      expect.any(String)
+      expect.objectContaining({ release: expect.any(Function) })
     );
 
     const sellerList = await request(app.callback())
@@ -521,6 +532,23 @@ describe('KiwiShare text chat API', () => {
     expect(invalidUrl.status).toBe(400);
     expect(excessiveDuration.status).toBe(400);
     expect(await Message.countDocuments({ conversationId })).toBe(countBefore);
+  });
+
+  test('rejects voice work before downloading when admission is full', async () => {
+    mockedAcquireVoiceProcessingAdmission.mockReturnValueOnce(null);
+
+    const response = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({
+        type: 'voice',
+        audioUrl: 'https://assets.kiwishare.online/audio/chat/busy.m4a',
+        durationMs: 1000
+      });
+
+    expect(response.status).toBe(429);
+    expect(mockedGetR2ObjectBytes).not.toHaveBeenCalled();
+    expect(mockedProbeVoiceAudio).not.toHaveBeenCalled();
   });
 
   test('rejects oversized or invalid R2 bytes before storing voice messages', async () => {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:kiwishare/services/chat_voice_service.dart';
@@ -32,18 +33,24 @@ class FakeChatVoiceUploader implements ChatVoiceUploader {
 }
 
 class FakeChatVoiceRecorder implements ChatVoiceRecorder {
-  FakeChatVoiceRecorder({ChatVoiceRecording? recording, this.startError})
-    : recording =
-          recording ??
-          ChatVoiceRecording(
-            bytes: Uint8List.fromList([7, 8, 9]),
-            fileName: 'voice.m4a',
-            contentType: 'audio/mp4',
-            durationMs: 3200,
-          );
+  FakeChatVoiceRecorder({
+    ChatVoiceRecording? recording,
+    this.startError,
+    this.stopGate,
+    this.cancelGate,
+  }) : recording =
+           recording ??
+           ChatVoiceRecording(
+             bytes: Uint8List.fromList([7, 8, 9]),
+             fileName: 'voice.m4a',
+             contentType: 'audio/mp4',
+             durationMs: 3200,
+           );
 
   final ChatVoiceRecording recording;
   final ChatVoiceException? startError;
+  final Completer<void>? stopGate;
+  final Completer<void>? cancelGate;
   int startCalls = 0;
   int stopCalls = 0;
   int cancelCalls = 0;
@@ -58,12 +65,14 @@ class FakeChatVoiceRecorder implements ChatVoiceRecorder {
   @override
   Future<ChatVoiceRecording?> stop() async {
     stopCalls += 1;
+    await stopGate?.future;
     return recording;
   }
 
   @override
   Future<void> cancel() async {
     cancelCalls += 1;
+    await cancelGate?.future;
   }
 
   @override

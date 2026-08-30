@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -277,6 +278,62 @@ void main() {
     expect(recorder.stopCalls, 1);
     expect(uploader.uploadCalls, 1);
     expect(find.byKey(const Key('chat_voice_recording_timer')), findsNothing);
+  });
+
+  testWidgets('keeps the microphone locked while stop is finalizing', (
+    tester,
+  ) async {
+    final stopGate = Completer<void>();
+    final recorder = FakeChatVoiceRecorder(stopGate: stopGate);
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: FakeChatRepository(),
+        voiceUploader: FakeChatVoiceUploader(),
+        voiceRecorder: recorder,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('chat_send_voice_button')));
+    await tester.pump();
+
+    final microphone = tester.widget<IconButton>(
+      find.byKey(const Key('chat_record_voice_button')),
+    );
+    expect(microphone.onPressed, isNull);
+    stopGate.complete();
+    await tester.pumpAndSettle();
+    expect(recorder.startCalls, 1);
+  });
+
+  testWidgets('keeps the microphone locked while cancel is finalizing', (
+    tester,
+  ) async {
+    final cancelGate = Completer<void>();
+    final recorder = FakeChatVoiceRecorder(cancelGate: cancelGate);
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: FakeChatRepository(),
+        voiceUploader: FakeChatVoiceUploader(),
+        voiceRecorder: recorder,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
+    await tester.pump();
+
+    final microphone = tester.widget<IconButton>(
+      find.byKey(const Key('chat_record_voice_button')),
+    );
+    expect(microphone.onPressed, isNull);
+    cancelGate.complete();
+    await tester.pumpAndSettle();
+    expect(recorder.startCalls, 1);
   });
 
   testWidgets('resolves relative image proxy URLs against the API origin', (

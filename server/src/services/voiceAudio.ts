@@ -24,6 +24,10 @@ let activeDecoders = 0;
 const activeDecodersByUser = new Map<string, number>();
 const probeWindowsByUser = new Map<string, { count: number; resetAt: number }>();
 
+export interface VoiceProcessingAdmission {
+  release(): void;
+}
+
 function acceptsProbe(userId?: string): boolean {
   if (!userId) return true;
   const now = Date.now();
@@ -58,6 +62,14 @@ function acquireDecoder(userId?: string): (() => void) | null {
     if (remaining > 0) activeDecodersByUser.set(userId, remaining);
     else activeDecodersByUser.delete(userId);
   };
+}
+
+export function acquireVoiceProcessingAdmission(
+  userId: string
+): VoiceProcessingAdmission | null {
+  if (!acceptsProbe(userId)) return null;
+  const release = acquireDecoder(userId);
+  return release ? { release } : null;
 }
 
 function boxType(bytes: Buffer, offset: number): string {
@@ -178,11 +190,11 @@ async function decodesAsAudio(
   bytes: Buffer,
   extension: string,
   maximumDurationMs: number,
-  userId?: string
+  admission?: VoiceProcessingAdmission
 ): Promise<number | null> {
   if (!ffmpegPath) return null;
-  const releaseDecoder = acquireDecoder(userId);
-  if (!releaseDecoder) return null;
+  const releaseDecoder = admission == null ? acquireDecoder() : null;
+  if (admission == null && !releaseDecoder) return null;
   const executablePath = ffmpegPath;
   let temporaryDirectory: string | null = null;
   try {
@@ -247,16 +259,15 @@ async function decodesAsAudio(
     if (temporaryDirectory) {
       await rm(temporaryDirectory, { recursive: true, force: true });
     }
-    releaseDecoder();
+    releaseDecoder?.();
   }
 }
 
 export async function probeVoiceAudio(
   bytes: Buffer,
   maximumDurationMs: number,
-  userId?: string
+  admission?: VoiceProcessingAdmission
 ): Promise<VerifiedVoiceAudio | null> {
-  if (!acceptsProbe(userId)) return null;
   const container = inspectVoiceContainer(bytes);
   if (
     container == null ||
@@ -269,7 +280,7 @@ export async function probeVoiceAudio(
     bytes,
     container.extension,
     maximumDurationMs,
-    userId
+    admission
   );
   if (decodedDurationMs == null || decodedDurationMs > maximumDurationMs) return null;
   return { ...container, durationMs: decodedDurationMs };
