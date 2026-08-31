@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -92,6 +94,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   void _openConversation(ChatConversationModel conversation) {
+    final token = _currentAuthToken;
+    if (token != null && token.isNotEmpty && conversation.unreadCount > 0) {
+      unawaited(
+        _chatProvider.markConversationRead(
+          conversation: conversation,
+          token: token,
+        ),
+      );
+    }
     final callback = widget.onConversationPressed;
     if (callback != null) {
       callback(conversation);

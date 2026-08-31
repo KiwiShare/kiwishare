@@ -106,6 +106,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _scrollToEnd();
   }
 
+  Future<void> _retryMarkRead() async {
+    final token = _currentAuthToken;
+    if (token == null || token.isEmpty) return;
+    await _chatProvider.markConversationRead(
+      conversation: widget.conversation,
+      token: token,
+    );
+  }
+
   Future<void> _send() async {
     final token = _currentAuthToken;
     final text = _messageController.text;
@@ -327,8 +336,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           builder: (context, _) => Column(
             children: [
               Expanded(child: _buildHistory(provider)),
+              if (provider.messageReadErrorFor(widget.conversation.id) != null)
+                _InlineChatError(
+                  key: const Key('conversation_read_error'),
+                  message: provider.messageReadErrorFor(
+                    widget.conversation.id,
+                  )!,
+                  actionLabel: 'Retry',
+                  onAction: _retryMarkRead,
+                ),
               if (provider.messageSendErrorFor(widget.conversation.id) != null)
                 _InlineChatError(
+                  key: const Key('conversation_inline_error'),
                   message: provider.messageSendErrorFor(
                     widget.conversation.id,
                   )!,
@@ -856,23 +875,39 @@ String _resolvedChatAssetUrl(String value) {
 String _resolvedChatImageUrl(String value) => _resolvedChatAssetUrl(value);
 
 class _InlineChatError extends StatelessWidget {
-  const _InlineChatError({required this.message});
+  const _InlineChatError({
+    super.key,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
 
   final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      key: const Key('conversation_inline_error'),
       width: double.infinity,
       color: Theme.of(context).colorScheme.errorContainer,
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.sm,
       ),
-      child: Text(
-        message,
-        style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+            ),
+          ),
+          if (actionLabel != null && onAction != null)
+            TextButton(onPressed: onAction, child: Text(actionLabel!)),
+        ],
       ),
     );
   }
