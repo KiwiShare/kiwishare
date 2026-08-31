@@ -32,6 +32,7 @@ import 'services/push_notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
+import 'widgets/kiwishare_notification_content.dart';
 
 // Global keys for routing
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
@@ -175,9 +176,14 @@ void main() async {
         ),
         Provider<ItemRepository>(create: (_) => RestItemRepository()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
-        ChangeNotifierProvider(
+        ChangeNotifierProxyProvider<AuthProvider, WatchlistProvider>(
           create: (_) =>
               WatchlistProvider(repository: RestWatchlistRepository()),
+          update: (_, auth, watchlist) => syncWatchlistAuth(
+            watchlist ??
+                WatchlistProvider(repository: RestWatchlistRepository()),
+            auth.jwtToken,
+          ),
         ),
         ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
@@ -202,6 +208,15 @@ void main() async {
 ChatProvider syncChatAuth(ChatProvider chat, String? authToken) {
   chat.updateAuthToken(authToken);
   return chat;
+}
+
+@visibleForTesting
+WatchlistProvider syncWatchlistAuth(
+  WatchlistProvider watchlist,
+  String? authToken,
+) {
+  watchlist.updateAuthToken(authToken);
+  return watchlist;
 }
 
 void _openWatchlistPriceDrop(String itemId) {
@@ -316,8 +331,10 @@ void _showForegroundPriceDrop(
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(
-          envelope.body ?? 'An item on your watchlist has dropped in price.',
+        content: KiwiShareNotificationContent(
+          title: envelope.title ?? 'Price drop on a saved item',
+          body: envelope.body ?? message.notificationSummary,
+          icon: Icons.trending_down_rounded,
         ),
         action: SnackBarAction(
           label: 'View',

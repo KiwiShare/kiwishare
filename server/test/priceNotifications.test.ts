@@ -16,7 +16,11 @@ import {
   PushGateway,
   PriceDropPushPayload,
   PushDeliveryResult,
-  resolveFirebaseCredentialConfiguration
+  resolveFirebaseCredentialConfiguration,
+  buildPriceDropNotificationContent,
+  PRICE_DROP_NOTIFICATION_TITLE,
+  ANDROID_NOTIFICATION_ICON,
+  ANDROID_NOTIFICATION_COLOR
 } from '../src/services/pushNotification';
 import {
   EXPIRED_TOKEN_CLEANUP_GRACE_SECONDS,
@@ -60,6 +64,25 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
       };
     }
   };
+
+  test('builds accessible branded notification copy and Android styling', () => {
+    const content = buildPriceDropNotificationContent({
+      type: 'watchlist_price_drop',
+      itemId: '64f000000000000000000001',
+      eventId: 'event-1',
+      itemTitle: 'Oak chair',
+      oldPriceNzd: '100.00',
+      newPriceNzd: '80.00'
+    });
+
+    expect(content).toEqual({
+      title: 'Price drop on a saved item',
+      body: 'Oak chair dropped from $100.00 to $80.00'
+    });
+    expect(PRICE_DROP_NOTIFICATION_TITLE).toBe(content.title);
+    expect(ANDROID_NOTIFICATION_ICON).toBe('ic_stat_kiwishare');
+    expect(ANDROID_NOTIFICATION_COLOR).toBe('#064B3A');
+  });
 
   beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
