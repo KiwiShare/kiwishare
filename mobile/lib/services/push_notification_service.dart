@@ -61,12 +61,22 @@ class WatchlistPriceDropMessage {
     required this.eventId,
     required this.oldPrice,
     required this.newPrice,
+    this.itemTitle = 'Saved item',
   });
 
   final String itemId;
   final String eventId;
   final String oldPrice;
   final String newPrice;
+  final String itemTitle;
+
+  String get notificationSummary {
+    final title = itemTitle.trim().isEmpty ? 'Saved item' : itemTitle.trim();
+    if (oldPrice.isEmpty || newPrice.isEmpty) {
+      return '$title has dropped in price.';
+    }
+    return '$title dropped from \$$oldPrice to \$$newPrice';
+  }
 
   static final RegExp _objectId = RegExp(r'^[0-9a-fA-F]{24}$');
 
@@ -79,6 +89,7 @@ class WatchlistPriceDropMessage {
       eventId: data['eventId']?.toString().trim() ?? '',
       oldPrice: data['oldPrice']?.toString().trim() ?? '',
       newPrice: data['newPrice']?.toString().trim() ?? '',
+      itemTitle: data['itemTitle']?.toString().trim() ?? 'Saved item',
     );
   }
 }

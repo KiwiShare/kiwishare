@@ -14,6 +14,7 @@ PushEnvelope _priceDrop({
     'type': type,
     'itemId': ?itemId,
     'eventId': 'evt-1',
+    'itemTitle': 'Test chair',
     'oldPrice': '50.00',
     'newPrice': '40.00',
   },
@@ -63,6 +64,17 @@ void main() {
         onNavigateToChat: (message) => openedChats.add(message.conversationId),
         onForegroundChatMessage: (message, _) =>
             foregroundChats.add(message.conversationId),
+      );
+    });
+
+    test('price-drop payload provides a clear foreground summary', () {
+      final message = WatchlistPriceDropMessage.fromData(_priceDrop().data);
+
+      expect(message, isNotNull);
+      expect(message!.itemTitle, 'Test chair');
+      expect(
+        message.notificationSummary,
+        'Test chair dropped from \$50.00 to \$40.00',
       );
     });
 
