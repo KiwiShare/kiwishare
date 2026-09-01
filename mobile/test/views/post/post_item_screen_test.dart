@@ -873,6 +873,39 @@ void main() {
     );
     expect(titleController.text, 'Updated desk');
   });
+
+  testWidgets(
+    'ignores an authentication failure after the screen is disposed',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final service = PendingListingSuggestionService();
+      await tester.pumpWidget(
+        buildTestApp(
+          onCancel: () {},
+          authToken: 'expired-token',
+          suggestionService: service,
+        ),
+      );
+      await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('post_ai_suggestion_button')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+      await tester.pump();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      service.completeWithAuthenticationError();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<void> completeValidListing(WidgetTester tester) async {
@@ -1150,6 +1183,10 @@ class PendingListingSuggestionService implements ListingSuggestionService {
         priceNzd: '120',
       ),
     );
+  }
+
+  void completeWithAuthenticationError() {
+    _completer.completeError(const ListingSuggestionAuthenticationException());
   }
 }
 

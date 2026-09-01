@@ -429,6 +429,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
         });
       }
     } on ListingSuggestionAuthenticationException catch (error) {
+      if (!mounted) return;
       await context.read<AuthProvider?>()?.clearSession();
       if (mounted) _showPhotoMessage(error.message);
     } on ListingSuggestionException catch (error) {

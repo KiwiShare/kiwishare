@@ -53,6 +53,7 @@ void main() {
 
   test('rejects malformed and adversarial suggestion responses', () async {
     for (final suggestion in [
+      {...validSuggestion, 'title': 'TV'},
       {...validSuggestion, 'category': 'Weapons'},
       {...validSuggestion, 'priceNzd': '-10'},
       {...validSuggestion, 'description': 'Visit https://bad.example'},

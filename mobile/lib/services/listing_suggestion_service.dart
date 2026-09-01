@@ -64,6 +64,11 @@ class ListingSuggestion {
 
   factory ListingSuggestion.fromJson(Map<String, dynamic> json) {
     final title = _requiredText(json['title'], 'title', 120);
+    if (title.length < 3) {
+      throw const ListingSuggestionException(
+        'The server returned an invalid AI suggestion.',
+      );
+    }
     final description = _requiredText(
       json['description'],
       'description',

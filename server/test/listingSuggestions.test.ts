@@ -110,6 +110,26 @@ describe('listing AI suggestions', () => {
     expect(provider.calls).toBe(0);
   });
 
+  test('accepts the publish endpoint maximum description length', async () => {
+    const provider = new FakeSuggestionProvider();
+    setListingSuggestionProviderForTests(provider);
+    const description = 'x'.repeat(2000);
+
+    const accepted = await request(app.callback())
+      .post('/api/listing-suggestions')
+      .set('Authorization', `Bearer ${authToken()}`)
+      .send({ description });
+    const rejected = await request(app.callback())
+      .post('/api/listing-suggestions')
+      .set('Authorization', `Bearer ${authToken()}`)
+      .send({ description: `${description}x` });
+
+    expect(accepted.status).toBe(200);
+    expect(provider.lastInput).toEqual({ description });
+    expect(rejected.status).toBe(400);
+    expect(provider.calls).toBe(1);
+  });
+
   test('rejects malformed or unsafe provider output without reflecting it', async () => {
     setListingSuggestionProviderForTests(
       new FakeSuggestionProvider({
@@ -212,6 +232,9 @@ describe('listing AI suggestions', () => {
     ).toThrow('Price is invalid.');
     expect(() =>
       validateListingSuggestion({ ...validSuggestion, title: 'x'.repeat(121) })
+    ).toThrow('Title is invalid.');
+    expect(() =>
+      validateListingSuggestion({ ...validSuggestion, title: 'TV' })
     ).toThrow('Title is invalid.');
     expect(
       validateListingSuggestion({

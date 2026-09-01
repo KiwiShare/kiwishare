@@ -237,6 +237,9 @@ export function validateListingSuggestion(value: unknown): ListingSuggestion {
   }
   const record = value as Record<string, unknown>;
   const title = requireOutputText(record.title, 'Title', 120);
+  if (title.length < 3) {
+    throw new InvalidListingSuggestionError('Title is invalid.');
+  }
   const description = requireOutputText(
     record.description,
     'Description',

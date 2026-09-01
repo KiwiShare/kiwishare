@@ -42,7 +42,7 @@ function parseInput(body: unknown): ListingSuggestionInput {
   }
   const record = body as Record<string, unknown>;
   const title = optionalText(record.title, 'Title', 120);
-  const description = optionalText(record.description, 'Description', 1000);
+  const description = optionalText(record.description, 'Description', 2000);
   const category = optionalText(record.category, 'Category', 50);
   const condition = optionalText(record.condition, 'Condition', 20);
   const location = optionalText(record.location, 'Location', 120);
