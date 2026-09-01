@@ -906,6 +906,77 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('a stale AI authentication failure cannot clear a new session', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final authProvider = TrackingAuthProvider('old-token');
+    final service = PendingListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authProvider: authProvider,
+        suggestionService: service,
+      ),
+    );
+    await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+
+    authProvider.currentToken = 'new-token';
+    service.completeWithAuthenticationError();
+    await tester.pumpAndSettle();
+
+    expect(authProvider.sessionCleared, isFalse);
+    expect(authProvider.jwtToken, 'new-token');
+  });
+
+  testWidgets('a current AI authentication failure clears its own session', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final authProvider = TrackingAuthProvider('expired-token');
+    final service = PendingListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authProvider: authProvider,
+        suggestionService: service,
+      ),
+    );
+    await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+
+    service.completeWithAuthenticationError();
+    await tester.pumpAndSettle();
+
+    expect(authProvider.sessionCleared, isTrue);
+    expect(authProvider.jwtToken, isNull);
+    expect(
+      find.text('Your session has expired. Please sign in again.'),
+      findsOneWidget,
+    );
+  });
 }
 
 Future<void> completeValidListing(WidgetTester tester) async {
@@ -1127,13 +1198,19 @@ class TrackingListingProvider extends ListingProvider {
 }
 
 class TrackingAuthProvider extends AuthProvider {
-  TrackingAuthProvider() : super(userRepository: MockUserRepository());
+  TrackingAuthProvider([this.currentToken])
+    : super(userRepository: MockUserRepository());
 
   bool sessionCleared = false;
+  String? currentToken;
+
+  @override
+  String? get jwtToken => currentToken;
 
   @override
   Future<void> clearSession() async {
     sessionCleared = true;
+    currentToken = null;
   }
 }
 

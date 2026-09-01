@@ -366,8 +366,10 @@ class _PostItemScreenState extends State<PostItemScreen> {
       return;
     }
 
-    final authToken =
-        widget.authToken ?? context.read<AuthProvider?>()?.jwtToken;
+    final authProvider = widget.authToken == null
+        ? context.read<AuthProvider?>()
+        : null;
+    final authToken = widget.authToken ?? authProvider?.jwtToken;
     if (authToken == null || authToken.trim().isEmpty) {
       _showPhotoMessage('Please sign in to use AI suggestions.');
       return;
@@ -395,8 +397,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
       );
       if (!mounted) return;
       setState(() => _isGeneratingSuggestion = false);
-      if (widget.authToken == null &&
-          context.read<AuthProvider?>()?.jwtToken != authToken) {
+      if (authProvider != null && authProvider.jwtToken != authToken) {
         return;
       }
       final currentDraft = (
@@ -430,7 +431,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
       }
     } on ListingSuggestionAuthenticationException catch (error) {
       if (!mounted) return;
-      await context.read<AuthProvider?>()?.clearSession();
+      if (authProvider == null || authProvider.jwtToken != authToken) return;
+      await authProvider.clearSession();
       if (mounted) _showPhotoMessage(error.message);
     } on ListingSuggestionException catch (error) {
       _showPhotoMessage(error.message);
