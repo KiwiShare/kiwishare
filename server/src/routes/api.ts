@@ -9,6 +9,7 @@ import adminRouter from './admin';
 import uploadRouter from './upload';
 import chatRouter from './chat';
 import notificationsRouter from './notifications';
+import listingSuggestionsRouter from './listingSuggestions';
 
 const router = new Router({ prefix: '/api' });
 
@@ -42,5 +43,8 @@ router.use(chatRouter.allowedMethods());
 
 router.use(notificationsRouter.routes());
 router.use(notificationsRouter.allowedMethods());
+
+router.use(listingSuggestionsRouter.routes());
+router.use(listingSuggestionsRouter.allowedMethods());
 
 export default router;
