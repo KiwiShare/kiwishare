@@ -874,6 +874,48 @@ void main() {
     expect(titleController.text, 'Updated desk');
   });
 
+  testWidgets('does not overwrite a price edited while AI is working', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = PendingListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authToken: 'valid-token',
+        suggestionService: service,
+      ),
+    );
+    await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+    final price = find.byKey(const Key('post_price_field'));
+    await tester.enterText(price, '50');
+    final priceController = tester.widget<TextFormField>(price).controller!;
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+
+    priceController.text = '75';
+    service.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('post_ai_suggestion_sheet')), findsNothing);
+    expect(priceController.text, '75');
+    expect(
+      find.text(
+        'Your listing changed while AI was working. Ask again to use the latest details.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
     'ignores an authentication failure after the screen is disposed',
     (tester) async {

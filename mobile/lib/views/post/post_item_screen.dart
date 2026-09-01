@@ -379,6 +379,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
     final requestedDraft = (
       _titleController.text,
       _descriptionController.text,
+      _priceController.text,
       _category,
       _condition,
       _location?.label,
@@ -403,6 +404,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
       final currentDraft = (
         _titleController.text,
         _descriptionController.text,
+        _priceController.text,
         _category,
         _condition,
         _location?.label,
