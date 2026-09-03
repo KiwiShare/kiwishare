@@ -10,6 +10,7 @@ import '../../providers/listing_provider.dart';
 import '../../services/listing_image_picker.dart';
 import '../../services/listing_location_service.dart';
 import '../../services/listing_publish_service.dart';
+import '../../services/listing_suggestion_service.dart';
 import '../../theme/app_theme.dart';
 
 class PostItemScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class PostItemScreen extends StatefulWidget {
   final ListingImagePicker? imagePicker;
   final ListingLocationService? locationService;
   final ListingPublishService? publishService;
+  final ListingSuggestionService? suggestionService;
   final String? authToken;
 
   const PostItemScreen({
@@ -27,6 +29,7 @@ class PostItemScreen extends StatefulWidget {
     this.imagePicker,
     this.locationService,
     this.publishService,
+    this.suggestionService,
     this.authToken,
   });
 
@@ -55,6 +58,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
   late final ListingImagePicker _imagePicker;
   late final ListingLocationService _locationService;
   late final ListingPublishService _publishService;
+  late final ListingSuggestionService _suggestionService;
 
   String? _category;
   ListingLocation? _location;
@@ -63,6 +67,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
   bool _isPickingPhotos = false;
   bool _isLocating = false;
   bool _isPublishing = false;
+  bool _isGeneratingSuggestion = false;
 
   @override
   void initState() {
@@ -70,6 +75,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _locationService = widget.locationService ?? DeviceListingLocationService();
     _publishService = widget.publishService ?? RestListingPublishService();
+    _suggestionService =
+        widget.suggestionService ?? RestListingSuggestionService();
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhotos());
   }
 
@@ -344,6 +351,104 @@ class _PostItemScreenState extends State<PostItemScreen> {
     );
   }
 
+  Future<void> _requestSuggestion() async {
+    if (_isGeneratingSuggestion || _isPublishing) return;
+    final hasItemContext = [
+      _titleController.text,
+      _descriptionController.text,
+      _category,
+      _condition,
+    ].any((value) => value?.trim().isNotEmpty ?? false);
+    if (!hasItemContext) {
+      _showPhotoMessage(
+        'Add a title, description, category, or condition before asking for help.',
+      );
+      return;
+    }
+
+    final authProvider = widget.authToken == null
+        ? context.read<AuthProvider?>()
+        : null;
+    final authToken = widget.authToken ?? authProvider?.jwtToken;
+    if (authToken == null || authToken.trim().isEmpty) {
+      _showPhotoMessage('Please sign in to use AI suggestions.');
+      return;
+    }
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    final requestedDraft = (
+      _titleController.text,
+      _descriptionController.text,
+      _priceController.text,
+      _category,
+      _condition,
+      _location?.label,
+    );
+    setState(() => _isGeneratingSuggestion = true);
+    try {
+      final suggestion = await _suggestionService.suggest(
+        authToken: authToken,
+        input: ListingSuggestionInput(
+          title: _titleController.text,
+          description: _descriptionController.text,
+          category: _category,
+          condition: _condition,
+          location: _location?.label,
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _isGeneratingSuggestion = false);
+      if (authProvider != null && authProvider.jwtToken != authToken) {
+        return;
+      }
+      final currentDraft = (
+        _titleController.text,
+        _descriptionController.text,
+        _priceController.text,
+        _category,
+        _condition,
+        _location?.label,
+      );
+      if (currentDraft != requestedDraft) {
+        _showPhotoMessage(
+          'Your listing changed while AI was working. Ask again to use the latest details.',
+        );
+        return;
+      }
+      final shouldApply = await showModalBottomSheet<bool>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        builder: (context) => _ListingSuggestionSheet(suggestion: suggestion),
+      );
+      if (shouldApply == true && mounted) {
+        setState(() {
+          _titleController.text = suggestion.title;
+          _descriptionController.text = suggestion.description;
+          _priceController.text = suggestion.priceNzd;
+          _category = suggestion.category;
+          _condition = suggestion.condition;
+        });
+      }
+    } on ListingSuggestionAuthenticationException catch (error) {
+      if (!mounted) return;
+      if (authProvider == null || authProvider.jwtToken != authToken) return;
+      await authProvider.clearSession();
+      if (mounted) _showPhotoMessage(error.message);
+    } on ListingSuggestionException catch (error) {
+      _showPhotoMessage(error.message);
+    } catch (_) {
+      _showPhotoMessage(
+        'AI suggestions could not be generated. Please try again.',
+      );
+    } finally {
+      if (mounted && _isGeneratingSuggestion) {
+        setState(() => _isGeneratingSuggestion = false);
+      }
+    }
+  }
+
   Future<void> _postItem() async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (_isPublishing || !_validateForm(requirePhoto: true)) {
@@ -584,10 +689,42 @@ class _PostItemScreenState extends State<PostItemScreen> {
                       ),
                       validator: _requiredTextValidator,
                     ),
+                    const SizedBox(height: AppSpacing.md),
+                    Semantics(
+                      liveRegion: _isGeneratingSuggestion,
+                      child: OutlinedButton.icon(
+                        key: const Key('post_ai_suggestion_button'),
+                        onPressed: _isPublishing || _isGeneratingSuggestion
+                            ? null
+                            : _requestSuggestion,
+                        icon: _isGeneratingSuggestion
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.auto_awesome_outlined),
+                        label: Text(
+                          _isGeneratingSuggestion
+                              ? 'Creating suggestion…'
+                              : 'Help me write',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Your entered listing details, but not photos, are sent to our AI provider. AI can make mistakes, so review every suggestion.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(height: AppSpacing.xl),
                     FilledButton(
                       key: const Key('post_submit_button'),
-                      onPressed: _isPublishing ? null : _postItem,
+                      onPressed: _isPublishing || _isGeneratingSuggestion
+                          ? null
+                          : _postItem,
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
                         shape: RoundedRectangleBorder(
@@ -607,6 +744,96 @@ class _PostItemScreenState extends State<PostItemScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ListingSuggestionSheet extends StatelessWidget {
+  const _ListingSuggestionSheet({required this.suggestion});
+
+  final ListingSuggestion suggestion;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        key: const Key('post_ai_suggestion_sheet'),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          MediaQuery.viewInsetsOf(context).bottom + AppSpacing.xl,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Review AI suggestion',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Nothing changes until you apply this draft. Your location is never generated or replaced.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _SuggestionValue(label: 'Title', value: suggestion.title),
+            _SuggestionValue(label: 'Category', value: suggestion.category),
+            _SuggestionValue(label: 'Condition', value: suggestion.condition),
+            _SuggestionValue(
+              label: 'Suggested price',
+              value: '\$${suggestion.priceNzd} NZD',
+            ),
+            _SuggestionValue(
+              label: 'Description',
+              value: suggestion.description,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    key: const Key('post_ai_cancel_button'),
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Keep mine'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: FilledButton(
+                    key: const Key('post_ai_apply_button'),
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('Apply draft'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SuggestionValue extends StatelessWidget {
+  const _SuggestionValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: AppSpacing.xs),
+          SelectableText(value),
+        ],
       ),
     );
   }
@@ -1148,6 +1375,7 @@ class _MobileSelectionFormField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FormField<String>(
+      key: ValueKey(value),
       initialValue: value,
       validator: (value) => value == null ? 'Required' : null,
       autovalidateMode: AutovalidateMode.onUserInteraction,
