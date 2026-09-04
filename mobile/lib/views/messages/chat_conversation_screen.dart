@@ -410,20 +410,30 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         message: 'No messages yet. Say hello and ask about the item.',
       );
     }
+    final latestSentIndex = messages.lastIndexWhere(
+      (message) => message.isMine,
+    );
     return ListView.builder(
       key: const Key('conversation_message_list'),
       controller: _scrollController,
       padding: const EdgeInsets.all(AppSpacing.lg),
       itemCount: messages.length,
-      itemBuilder: (context, index) => _MessageBubble(message: messages[index]),
+      itemBuilder: (context, index) {
+        final message = messages[index];
+        return _MessageBubble(
+          message: message,
+          showReadReceipt: index == latestSentIndex && message.status == 'read',
+        );
+      },
     );
   }
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({required this.message, required this.showReadReceipt});
 
   final ChatMessageModel message;
+  final bool showReadReceipt;
 
   @override
   Widget build(BuildContext context) {
@@ -434,7 +444,10 @@ class _MessageBubble extends StatelessWidget {
         ? 'a voice message'
         : message.text;
     return Semantics(
-      label: mine ? 'You sent $semanticContent' : 'They sent $semanticContent',
+      excludeSemantics: true,
+      label: mine
+          ? 'You sent $semanticContent${showReadReceipt ? ', read' : ''}'
+          : 'They sent $semanticContent',
       child: Align(
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -509,6 +522,16 @@ class _MessageBubble extends StatelessWidget {
                       : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (showReadReceipt)
+                Text(
+                  'Read',
+                  key: Key('chat_read_receipt_${message.id}'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onPrimary.withValues(alpha: 0.78),
+                  ),
+                ),
             ],
           ),
         ),

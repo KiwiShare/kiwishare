@@ -18,7 +18,10 @@ import {
   acquireVoiceProcessingAdmission,
   probeVoiceAudio
 } from '../services/voiceAudio';
-import { notifyChatReceiver } from '../services/pushNotification';
+import {
+  notifyChatReadReceipt,
+  notifyChatReceiver
+} from '../services/pushNotification';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -590,6 +593,16 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
       ? { buyerUnreadCount: 0 }
       : { sellerUnreadCount: 0 }
   });
+
+  if (result.modifiedCount > 0) {
+    const receiptRecipientId = readingAsBuyer
+      ? conversation.sellerId
+      : conversation.buyerId;
+    void notifyChatReadReceipt({
+      recipientId: receiptRecipientId,
+      conversationId: conversation.id
+    });
+  }
 
   ctx.status = 200;
   ctx.body = {

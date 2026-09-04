@@ -218,6 +218,61 @@ void main() {
     },
   );
 
+  test(
+    'read receipt refreshes status only for the open account chat',
+    () async {
+      const receipt = ChatReadPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+      );
+      final conversation = testConversation();
+      final repository = FakeChatRepository(
+        conversations: [conversation],
+        messages: {
+          conversation.id: [
+            testMessage(
+              id: '1',
+              text: 'Already viewed',
+              isMine: true,
+              status: 'read',
+              readAt: DateTime.utc(2026, 8, 27, 8, 31),
+            ),
+          ],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+
+      await refreshChatReadReceipt(
+        message: receipt,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+
+      expect(repository.messageFetches, 1);
+      expect(provider.messagesFor(conversation.id).single.status, 'read');
+
+      await refreshChatReadReceipt(
+        message: receipt,
+        activeUserId: 'account-b',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+      await refreshChatReadReceipt(
+        message: receipt,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => 'another-conversation',
+      );
+
+      expect(repository.messageFetches, 1);
+    },
+  );
+
   testWidgets('cold-start notification replaces the pending splash route', (
     tester,
   ) async {

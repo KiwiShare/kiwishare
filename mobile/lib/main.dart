@@ -162,6 +162,7 @@ void main() async {
       onForegroundMessage: _showForegroundPriceDrop,
       onNavigateToChat: _openChatNotification,
       onForegroundChatMessage: _showForegroundChatNotification,
+      onForegroundChatRead: _handleForegroundChatRead,
     );
     await pushNotifications.initialize();
   }
@@ -302,6 +303,22 @@ void _showForegroundChatNotification(
     );
 }
 
+void _handleForegroundChatRead(ChatReadPushMessage message) {
+  final appContext = _scaffoldMessengerKey.currentContext;
+  final auth = appContext?.read<AuthProvider>();
+  final chat = appContext?.read<ChatProvider>();
+  if (auth == null || chat == null) return;
+  unawaited(
+    refreshChatReadReceipt(
+      message: message,
+      activeUserId: auth.currentUser?.id,
+      authToken: auth.jwtToken,
+      chatProvider: chat,
+      activeConversationIdProvider: () => activeChatConversationId(_router),
+    ),
+  );
+}
+
 @visibleForTesting
 Future<void> refreshChatUnreadForMessage({
   required ChatPushMessage message,
@@ -335,6 +352,32 @@ String? activeChatConversationId(GoRouter router) {
   if (segments.length != 2 || segments.first != 'messages') return null;
   final conversationId = segments.last.trim();
   return conversationId.isEmpty ? null : conversationId;
+}
+
+@visibleForTesting
+Future<void> refreshChatReadReceipt({
+  required ChatReadPushMessage message,
+  required String? activeUserId,
+  required String? authToken,
+  required ChatProvider chatProvider,
+  required String? Function() activeConversationIdProvider,
+}) async {
+  if (!message.isForRecipient(activeUserId) ||
+      authToken == null ||
+      authToken.isEmpty ||
+      activeConversationIdProvider() != message.conversationId) {
+    return;
+  }
+  final conversation = chatProvider.conversationByIdForSession(
+    message.conversationId,
+    authToken,
+  );
+  if (conversation == null) return;
+  await chatProvider.loadMessages(
+    conversation: conversation,
+    token: authToken,
+    queueIfBusy: true,
+  );
 }
 
 bool shouldOpenChatNotificationForUser(

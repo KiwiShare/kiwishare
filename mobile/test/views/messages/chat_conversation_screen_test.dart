@@ -80,6 +80,58 @@ void main() {
     expect(find.byKey(const Key('chat_message_2')), findsOneWidget);
   });
 
+  testWidgets('shows Read only under the latest sent message when viewed', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '1',
+            text: 'First sent',
+            isMine: true,
+            status: 'read',
+            readAt: DateTime.utc(2026, 8, 27, 8, 31),
+          ),
+          testMessage(
+            id: '2',
+            text: 'Latest sent',
+            isMine: true,
+            status: 'read',
+            readAt: DateTime.utc(2026, 8, 27, 8, 32),
+          ),
+          testMessage(id: '3', text: 'Reply', isMine: false, status: 'read'),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('chat_read_receipt_1')), findsNothing);
+    expect(find.byKey(const Key('chat_read_receipt_2')), findsOneWidget);
+    expect(find.text('Read'), findsOneWidget);
+    expect(find.bySemanticsLabel('You sent Latest sent, read'), findsOneWidget);
+  });
+
+  testWidgets('does not show a stale receipt when the latest send is unread', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(id: '1', text: 'Viewed', isMine: true, status: 'read'),
+          testMessage(id: '2', text: 'Waiting', isMine: true),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Read'), findsNothing);
+  });
+
   testWidgets('shows the empty state for a newly created conversation', (
     tester,
   ) async {

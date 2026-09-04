@@ -214,6 +214,8 @@ ChatMessageModel testMessage({
   String? imageUrl,
   String? audioUrl,
   int? durationMs,
+  String status = 'sent',
+  DateTime? readAt,
 }) {
   return ChatMessageModel(
     id: id,
@@ -225,8 +227,9 @@ ChatMessageModel testMessage({
     imageUrl: imageUrl,
     audioUrl: audioUrl,
     durationMs: durationMs,
-    status: 'sent',
+    status: status,
     isMine: isMine,
     createdAt: DateTime.utc(2026, 8, 27, 8, int.parse(id)),
+    readAt: readAt,
   );
 }
