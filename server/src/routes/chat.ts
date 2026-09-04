@@ -677,6 +677,19 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   const unreadField = readingAsBuyer
     ? 'buyerUnreadCount'
     : 'sellerUnreadCount';
+  // A legacy client does not send its displayed message id. Capture the best
+  // available fallback once so an automatic transaction retry cannot advance
+  // the read boundary to a message that arrived after this request started.
+  const legacyWatermark =
+    throughMessageId === undefined
+      ? await Message.findOne({
+          conversationId: conversation._id,
+          receiverId: userId,
+          status: { $in: ['sent', 'delivered'] }
+        })
+          .sort({ createdAt: -1, _id: -1 })
+          .select('_id createdAt')
+      : null;
   const session = await mongoose.startSession();
   let invalidWatermark = false;
   let readCount = 0;
@@ -696,14 +709,7 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
           })
             .session(session)
             .select('_id createdAt')
-        : await Message.findOne({
-            conversationId: conversation._id,
-            receiverId: userId,
-            status: { $in: ['sent', 'delivered'] }
-          })
-            .sort({ createdAt: -1, _id: -1 })
-            .session(session)
-            .select('_id createdAt');
+        : legacyWatermark;
 
       if (!watermark) {
         invalidWatermark = throughMessageId !== undefined;

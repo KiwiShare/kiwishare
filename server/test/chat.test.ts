@@ -567,6 +567,59 @@ describe('KiwiShare text chat API', () => {
       .send({ throughMessageId: later.body.message.id });
   });
 
+  test('freezes a legacy watermark across a transaction retry', async () => {
+    const displayed = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Displayed before the legacy read request.' });
+    expect(displayed.status).toBe(201);
+
+    let releaseFirstUpdate!: () => void;
+    const firstUpdateReleased = new Promise<void>((resolve) => {
+      releaseFirstUpdate = resolve;
+    });
+    let signalFirstUpdate!: () => void;
+    const firstUpdateStarted = new Promise<void>((resolve) => {
+      signalFirstUpdate = resolve;
+    });
+    const originalUpdateMany = Message.updateMany.bind(Message);
+    const updateSpy = jest
+      .spyOn(Message, 'updateMany')
+      .mockImplementationOnce((async (...args: any[]) => {
+        signalFirstUpdate();
+        await firstUpdateReleased;
+        return (originalUpdateMany as any)(...args);
+      }) as any);
+
+    try {
+      const legacyRead = request(app.callback())
+        .patch(`/api/conversations/${conversationId}/read`)
+        .set('Authorization', `Bearer ${sellerToken}`);
+      const readResponse = legacyRead.then((response) => response);
+      await firstUpdateStarted;
+
+      const later = await request(app.callback())
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({ text: 'Arrived while the legacy read transaction was active.' });
+      expect(later.status).toBe(201);
+      releaseFirstUpdate();
+
+      const read = await readResponse;
+      expect(read.status).toBe(200);
+      expect((await Message.findById(displayed.body.message.id))?.status).toBe(
+        'read'
+      );
+      expect((await Message.findById(later.body.message.id))?.status).toBe(
+        'sent'
+      );
+      expect(read.body.unreadCount).toBe(1);
+    } finally {
+      releaseFirstUpdate();
+      updateSpy.mockRestore();
+    }
+  });
+
   test('keeps the unread counter consistent during concurrent send and read', async () => {
     const displayed = await request(app.callback())
       .post(`/api/conversations/${conversationId}/messages`)
