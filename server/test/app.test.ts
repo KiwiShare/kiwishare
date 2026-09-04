@@ -6,6 +6,7 @@ import app from '../src/app';
 import Item from '../src/models/Item';
 import User from '../src/models/User';
 import Category from '../src/models/Category';
+import Order from '../src/models/Order';
 import { DEFAULT_CATEGORIES } from '../src/config/seed';
 
 jest.mock('../src/config/r2', () => {
@@ -818,5 +819,96 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.status).toBe(200);
     expect(res.body.key).toContain('audio/chat/');
     expect(res.body.publicUrl).toContain('audio/chat/');
+  });
+
+  describe('Admin Listing Assignment and Stats', () => {
+    let adminToken = '';
+
+    beforeAll(async () => {
+      const loginRes = await request(app.callback())
+        .post('/api/auth/login')
+        .send({
+          email: 'admin@kiwishare.online',
+          password: 'password123'
+        });
+      adminToken = loginRes.body.token;
+    });
+
+    test('POST /api/usedItems - admin can assign listing to another user account', async () => {
+      const res = await request(app.callback())
+        .post('/api/usedItems')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(validPublishPayload({
+          title: 'Admin Assigned Product',
+          targetUserEmail: testUser.email
+        }));
+
+      expect(res.status).toBe(201);
+      expect(res.body.item.ownerId).toBe(userId);
+      expect(res.body.item.sellerId).toBe(userId);
+      expect(res.body.item.seller?.email).toBe(testUser.email);
+    });
+
+    test('POST /api/usedItems - admin assigning to non-existent email returns 400', async () => {
+      const res = await request(app.callback())
+        .post('/api/usedItems')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(validPublishPayload({
+          targetUserEmail: 'nonexistent@example.com'
+        }));
+
+      expect(res.status).toBe(400);
+      expect(res.body.status).toBe('error');
+      expect(res.body.message).toContain('Target user with email');
+    });
+
+    test('PATCH /api/admin/items/:id/assign - admin can reassign existing listing', async () => {
+      const createRes = await request(app.callback())
+        .post('/api/usedItems')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(validPublishPayload({ title: 'Item to Reassign' }));
+
+      const itemId = createRes.body.item.id;
+
+      const assignRes = await request(app.callback())
+        .patch(`/api/admin/items/${itemId}/assign`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ targetUserEmail: testUser.email });
+
+      expect(assignRes.status).toBe(200);
+      expect(assignRes.body.status).toBe('success');
+      expect(assignRes.body.item.ownerId).toBe(userId);
+      expect(assignRes.body.item.sellerId).toBe(userId);
+    });
+
+    test('GET /api/admin/stats - returns orderStats with GMV and KiwiShare fees', async () => {
+      const item = await Item.findOne({ status: 'active' });
+      await Order.create({
+        orderNumber: 'KS-TEST-001',
+        itemId: item?._id,
+        buyerId: new mongoose.Types.ObjectId(userId),
+        sellerId: item?.sellerId,
+        status: 'completed',
+        itemSnapshot: { title: item?.title || 'Test Item' },
+        currency: 'NZD',
+        itemAmount: 10000,
+        buyerFeeAmount: 500,
+        sellerFeeAmount: 500,
+        buyerTotalAmount: 10500,
+        sellerReceiveAmount: 9500
+      });
+
+      const statsRes = await request(app.callback())
+        .get('/api/admin/stats')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(statsRes.status).toBe(200);
+      expect(statsRes.body.stats.orderStats).toBeDefined();
+      expect(statsRes.body.stats.orderStats.totalOrders).toBeGreaterThanOrEqual(1);
+      expect(statsRes.body.stats.orderStats.completedOrders).toBeGreaterThanOrEqual(1);
+      expect(parseFloat(statsRes.body.stats.orderStats.totalGmvNzd)).toBeGreaterThanOrEqual(105);
+      expect(parseFloat(statsRes.body.stats.orderStats.totalPlatformFeesNzd)).toBeGreaterThanOrEqual(10);
+      expect(statsRes.body.stats.orderStats.recentOrders.length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

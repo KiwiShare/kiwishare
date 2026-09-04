@@ -5,6 +5,7 @@ import Item from '../models/Item';
 import Category from '../models/Category';
 import User from '../models/User';
 import { notifyWatchlistPriceDrop } from '../services/pushNotification';
+import { sendAdminItemNotification } from '../services/adminNotification';
 
 const router = new Router();
 
@@ -520,10 +521,53 @@ async function getUsedItemByIdHandler(ctx: any) {
 async function createUsedItemHandler(ctx: any) {
   const body = ctx.request.body as any;
   const ownerId = ctx.state.user.id;
-  if (!mongoose.Types.ObjectId.isValid(ownerId) || !await User.exists({ _id: ownerId })) {
+  const callingUser = mongoose.Types.ObjectId.isValid(ownerId)
+    ? await User.findById(ownerId)
+    : null;
+  if (!callingUser) {
     ctx.status = 401;
     ctx.body = { status: 'error', message: 'The authenticated user no longer exists.' };
     return;
+  }
+
+  let assignedSeller = callingUser;
+  if (callingUser.role === 'admin') {
+    const rawTargetEmail = typeof body.targetUserEmail === 'string' ? body.targetUserEmail.trim() : '';
+    const rawTargetId = typeof body.targetUserId === 'string' ? body.targetUserId.trim() : '';
+
+    if (rawTargetEmail) {
+      const email = rawTargetEmail.toLowerCase();
+      const targetUser = await User.findOne({ email });
+      if (!targetUser) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: `Target user with email "${rawTargetEmail}" not found.` };
+        return;
+      }
+      if (targetUser.status === 'banned' || targetUser.status === 'deleted' || targetUser.isBanned) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: 'Target user account is suspended or banned.' };
+        return;
+      }
+      assignedSeller = targetUser;
+    } else if (rawTargetId) {
+      if (!mongoose.Types.ObjectId.isValid(rawTargetId)) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: `Invalid target user ID "${rawTargetId}".` };
+        return;
+      }
+      const targetUser = await User.findById(rawTargetId);
+      if (!targetUser) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: `Target user with ID "${rawTargetId}" not found.` };
+        return;
+      }
+      if (targetUser.status === 'banned' || targetUser.status === 'deleted' || targetUser.isBanned) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: 'Target user account is suspended or banned.' };
+        return;
+      }
+      assignedSeller = targetUser;
+    }
   }
 
   let validated: {
@@ -583,7 +627,7 @@ async function createUsedItemHandler(ctx: any) {
   }
 
   const newItem = await Item.create({
-    sellerId: new mongoose.Types.ObjectId(ownerId),
+    sellerId: assignedSeller._id,
     title: validated.title,
     description: validated.description,
     condition: validated.condition,
@@ -597,8 +641,25 @@ async function createUsedItemHandler(ctx: any) {
     imageUrl: validated.images[0].url,
     priceNzd: validated.priceNzd,
     isSustainable: validated.isSustainable,
-    ownerId
+    ownerId: assignedSeller._id.toString()
   });
+
+  await newItem.populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+
+  // If created by an admin and assigned to another user, send email & push notification
+  if (callingUser.role === 'admin' && assignedSeller._id.toString() !== callingUser._id.toString()) {
+    sendAdminItemNotification({
+      userId: assignedSeller._id,
+      userEmail: assignedSeller.email,
+      userName: assignedSeller.displayName,
+      eventType: 'transferred_to_user',
+      itemTitle: newItem.title,
+      itemId: newItem._id.toString(),
+      itemPriceNzd: newItem.priceNzd
+    }).catch((err) => {
+      console.warn('[Admin Create Item Assignment Notification] Dispatch failure:', err?.message || err);
+    });
+  }
 
   ctx.status = 201;
   ctx.body = {
