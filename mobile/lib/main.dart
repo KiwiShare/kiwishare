@@ -348,7 +348,7 @@ Future<void> refreshChatUnreadForMessage({
       !(isConversationVisibleProvider?.call() ?? true)) {
     return;
   }
-  final conversation = chatProvider.conversationByIdForSession(
+  final conversation = chatProvider.messageConversationByIdForSession(
     message.conversationId,
     authToken,
   );

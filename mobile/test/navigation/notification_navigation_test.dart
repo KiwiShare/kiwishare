@@ -7,6 +7,7 @@ import 'package:kiwishare/main.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
 import 'package:kiwishare/models/chat_message_model.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
+import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/views/splash/splash_screen.dart';
 
@@ -91,6 +92,46 @@ void main() {
       expect(repository.markReadCalls, 1);
       expect(provider.messagesFor(conversation.id).single.text, 'New message');
       expect(provider.totalUnreadCount, 0);
+    },
+  );
+
+  test(
+    'foreground notification refreshes a directly opened chat when the list fails',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final conversation = testConversation(unreadCount: 1);
+      final repository = FakeChatRepository();
+      final provider = ChatProvider(repository: repository);
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+      final initialMarkReadCalls = repository.markReadCalls;
+      repository
+        ..conversationError = const ChatRepositoryException('List failed')
+        ..messages[conversation.id] = [
+          testMessage(id: '1', text: 'New message', isMine: false),
+        ];
+
+      await refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+
+      expect(repository.conversationFetches, 1);
+      expect(repository.messageFetches, 2);
+      expect(repository.markReadCalls, initialMarkReadCalls + 1);
+      expect(provider.messagesFor(conversation.id).single.text, 'New message');
     },
   );
 
