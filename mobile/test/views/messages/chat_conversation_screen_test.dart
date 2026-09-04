@@ -311,6 +311,42 @@ void main() {
     expect(repository.messageFetches, 1);
   });
 
+  testWidgets('photo sheet removes and restores actual chat visibility', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+    expect(
+      chatVisibilityTracker.isVisible(
+        conversationId: 'conversation-1',
+        sessionToken: 'valid-token',
+      ),
+      isTrue,
+    );
+
+    await tester.tap(find.byKey(const Key('chat_add_photo_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Send a photo'), findsOneWidget);
+    expect(
+      chatVisibilityTracker.isVisible(
+        conversationId: 'conversation-1',
+        sessionToken: 'valid-token',
+      ),
+      isFalse,
+    );
+
+    Navigator.of(tester.element(find.text('Send a photo'))).pop();
+    await tester.pumpAndSettle();
+    expect(
+      chatVisibilityTracker.isVisible(
+        conversationId: 'conversation-1',
+        sessionToken: 'valid-token',
+      ),
+      isTrue,
+    );
+  });
+
   testWidgets('keeps voice playback exposed to accessibility services', (
     tester,
   ) async {

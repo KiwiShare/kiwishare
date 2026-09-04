@@ -52,7 +52,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   String? _currentAuthToken;
   bool _leftForeground = false;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
-  ModalRoute<void>? _subscribedRoute;
+  ModalRoute<dynamic>? _subscribedRoute;
+  final Object _visibilityOwner = Object();
 
   @override
   void initState() {
@@ -68,6 +69,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lifecycleState = state;
+    _syncVisibility();
     if (state != AppLifecycleState.resumed) {
       _leftForeground = true;
       return;
@@ -80,15 +82,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final route = ModalRoute.of<void>(context);
+    final route = ModalRoute.of<dynamic>(context);
     if (identical(route, _subscribedRoute)) return;
     appRouteObserver.unsubscribe(this);
     _subscribedRoute = route;
     if (route != null) appRouteObserver.subscribe(this, route);
+    _syncVisibility();
+  }
+
+  @override
+  void didPushNext() {
+    _syncVisibility();
   }
 
   @override
   void didPopNext() {
+    _syncVisibility();
     unawaited(_refreshAfterResume());
   }
 
@@ -107,12 +116,27 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   bool get _isCurrentRoute =>
       mounted &&
       _lifecycleState == AppLifecycleState.resumed &&
-      (ModalRoute.of<void>(context)?.isCurrent ?? false);
+      (ModalRoute.of<dynamic>(context)?.isCurrent ?? false);
+
+  void _syncVisibility() {
+    final token = _currentAuthToken;
+    if (token == null || token.isEmpty) {
+      chatVisibilityTracker.clear(_visibilityOwner);
+      return;
+    }
+    chatVisibilityTracker.update(
+      owner: _visibilityOwner,
+      conversationId: widget.conversation.id,
+      sessionToken: token,
+      visible: _isCurrentRoute,
+    );
+  }
 
   ChatProvider get _chatProvider =>
       widget.chatProvider ?? context.read<ChatProvider>();
   void _ensureLoaded(String? token) {
     _currentAuthToken = token;
+    _syncVisibility();
     if (token == null || token.isEmpty) {
       _loadedToken = null;
       return;
@@ -133,6 +157,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   @override
   void dispose() {
+    chatVisibilityTracker.clear(_visibilityOwner);
     appRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _recordingTimer?.cancel();

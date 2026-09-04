@@ -126,6 +126,76 @@ void main() {
   );
 
   test(
+    'matching chat route does not refresh while the chat is obscured',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final repository = FakeChatRepository(
+        conversations: [testConversation(unreadCount: 1)],
+      );
+      final provider = ChatProvider(repository: repository);
+
+      await refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => message.conversationId,
+        isConversationVisibleProvider: () => false,
+      );
+
+      expect(repository.conversationFetches, 1);
+      expect(repository.messageFetches, 0);
+      expect(repository.markReadCalls, 0);
+    },
+  );
+
+  test('visibility loss during a push fetch preserves unread state', () async {
+    const message = ChatPushMessage(
+      conversationId: 'conversation-1',
+      recipientId: 'account-a',
+      itemId: 'item-1',
+      itemTitle: 'Chair',
+      participantId: 'seller-1',
+      participantName: 'Seller',
+    );
+    final conversation = testConversation(unreadCount: 1);
+    final messageLoad = Completer<ChatMessagePage>();
+    final repository = FakeChatRepository(conversations: [conversation])
+      ..messageCompleters.add(messageLoad);
+    final provider = ChatProvider(repository: repository);
+    var visible = true;
+
+    final refresh = refreshChatUnreadForMessage(
+      message: message,
+      activeUserId: 'account-a',
+      authToken: 'valid-token',
+      chatProvider: provider,
+      activeConversationIdProvider: () => message.conversationId,
+      isConversationVisibleProvider: () => visible,
+    );
+    await Future<void>.delayed(Duration.zero);
+    visible = false;
+    messageLoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '1', text: 'Unseen', isMine: false)],
+        hasMore: false,
+      ),
+    );
+    await refresh;
+
+    expect(repository.messageFetches, 1);
+    expect(repository.markReadCalls, 0);
+    expect(provider.totalUnreadCount, 1);
+  });
+
+  test(
     'navigation away during refresh does not mark the message read',
     () async {
       const message = ChatPushMessage(

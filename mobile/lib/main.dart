@@ -279,6 +279,10 @@ void _showForegroundChatNotification(
         authToken: auth.jwtToken,
         chatProvider: chat,
         activeConversationIdProvider: () => activeChatConversationId(_router),
+        isConversationVisibleProvider: () => chatVisibilityTracker.isVisible(
+          conversationId: message.conversationId,
+          sessionToken: auth.jwtToken ?? '',
+        ),
       ),
     );
   }
@@ -317,6 +321,10 @@ void _handleForegroundChatRead(ChatReadPushMessage message) {
       authToken: auth.jwtToken,
       chatProvider: chat,
       activeConversationIdProvider: () => activeChatConversationId(_router),
+      isConversationVisibleProvider: () => chatVisibilityTracker.isVisible(
+        conversationId: message.conversationId,
+        sessionToken: auth.jwtToken ?? '',
+      ),
     ),
   );
 }
@@ -328,6 +336,7 @@ Future<void> refreshChatUnreadForMessage({
   required String? authToken,
   required ChatProvider chatProvider,
   String? Function()? activeConversationIdProvider,
+  bool Function()? isConversationVisibleProvider,
 }) async {
   if (!shouldOpenChatNotificationForUser(message, activeUserId) ||
       authToken == null ||
@@ -335,7 +344,10 @@ Future<void> refreshChatUnreadForMessage({
     return;
   }
   await chatProvider.loadConversations(authToken, queueIfBusy: true);
-  if (activeConversationIdProvider?.call() != message.conversationId) return;
+  if (activeConversationIdProvider?.call() != message.conversationId ||
+      !(isConversationVisibleProvider?.call() ?? true)) {
+    return;
+  }
   final conversation = chatProvider.conversationByIdForSession(
     message.conversationId,
     authToken,
@@ -346,7 +358,8 @@ Future<void> refreshChatUnreadForMessage({
     token: authToken,
     queueIfBusy: true,
     shouldMarkRead: () =>
-        activeConversationIdProvider?.call() == message.conversationId,
+        activeConversationIdProvider?.call() == message.conversationId &&
+        (isConversationVisibleProvider?.call() ?? true),
   );
 }
 
@@ -365,11 +378,13 @@ Future<void> refreshChatReadReceipt({
   required String? authToken,
   required ChatProvider chatProvider,
   required String? Function() activeConversationIdProvider,
+  bool Function()? isConversationVisibleProvider,
 }) async {
   if (!message.isForRecipient(activeUserId) ||
       authToken == null ||
       authToken.isEmpty ||
-      activeConversationIdProvider() != message.conversationId) {
+      activeConversationIdProvider() != message.conversationId ||
+      !(isConversationVisibleProvider?.call() ?? true)) {
     return;
   }
   final conversation = chatProvider.messageConversationByIdForSession(
@@ -382,7 +397,8 @@ Future<void> refreshChatReadReceipt({
     token: authToken,
     queueIfBusy: true,
     shouldMarkRead: () =>
-        activeConversationIdProvider() == message.conversationId,
+        activeConversationIdProvider() == message.conversationId &&
+        (isConversationVisibleProvider?.call() ?? true),
   );
 }
 
