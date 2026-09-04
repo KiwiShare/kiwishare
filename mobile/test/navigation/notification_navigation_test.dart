@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kiwishare/main.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
+import 'package:kiwishare/models/chat_message_model.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/views/splash/splash_screen.dart';
@@ -155,6 +156,48 @@ void main() {
 
       expect(repository.messageFetches, 0);
       expect(repository.markReadCalls, 0);
+    },
+  );
+
+  test(
+    'navigation away during message fetch does not mark unseen content read',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final conversation = testConversation(unreadCount: 1);
+      final messageLoad = Completer<ChatMessagePage>();
+      final repository = FakeChatRepository(conversations: [conversation])
+        ..messageCompleters.add(messageLoad);
+      final provider = ChatProvider(repository: repository);
+      String? activeConversationId = conversation.id;
+
+      final refresh = refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => activeConversationId,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.messageFetches, 1);
+
+      activeConversationId = null;
+      messageLoad.complete(
+        ChatMessagePage(
+          messages: [testMessage(id: '1', text: 'Unseen', isMine: false)],
+          hasMore: false,
+        ),
+      );
+      await refresh;
+
+      expect(repository.markReadCalls, 0);
+      expect(provider.totalUnreadCount, 1);
     },
   );
 

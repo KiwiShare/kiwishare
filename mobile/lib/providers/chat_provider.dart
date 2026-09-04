@@ -224,6 +224,7 @@ class ChatProvider extends ChangeNotifier {
     required ChatConversationModel conversation,
     required String token,
     bool queueIfBusy = false,
+    bool Function()? shouldMarkRead,
   }) async {
     _useSession(token);
     if (_loadingConversationIds.contains(conversation.id)) {
@@ -233,10 +234,17 @@ class ChatProvider extends ChangeNotifier {
       if (activeLoad != null) await activeLoad;
       if (_sessionToken == token &&
           _messageRefreshQueued.remove(conversation.id)) {
-        await loadMessages(conversation: conversation, token: token);
+        await loadMessages(
+          conversation: conversation,
+          token: token,
+          shouldMarkRead: shouldMarkRead,
+        );
       }
       return;
     }
+    final messageIdsAtStart = (_messages[conversation.id] ?? const [])
+        .map((message) => message.id)
+        .toSet();
     _loadingConversationIds.add(conversation.id);
     final loadCompleter = Completer<void>();
     _messageLoadCompleters[conversation.id] = loadCompleter;
@@ -248,12 +256,24 @@ class ChatProvider extends ChangeNotifier {
         token: token,
       );
       if (_sessionToken != token) return;
-      _messages[conversation.id] = page.messages;
+      final fetchedIds = page.messages.map((message) => message.id).toSet();
+      final messagesAddedWhileLoading = (_messages[conversation.id] ?? const [])
+          .where(
+            (message) =>
+                !messageIdsAtStart.contains(message.id) &&
+                !fetchedIds.contains(message.id),
+          );
+      _messages[conversation.id] =
+          [...page.messages, ...messagesAddedWhileLoading]..sort((left, right) {
+            final timeOrder = left.createdAt.compareTo(right.createdAt);
+            return timeOrder != 0 ? timeOrder : left.id.compareTo(right.id);
+          });
       final hasUnreadIncomingMessage = page.messages.any(
         (message) => !message.isMine && message.status != 'read',
       );
       final canonical = conversationById(conversation.id) ?? conversation;
-      if (canonical.unreadCount > 0 || hasUnreadIncomingMessage) {
+      if ((shouldMarkRead?.call() ?? true) &&
+          (canonical.unreadCount > 0 || hasUnreadIncomingMessage)) {
         await markConversationRead(conversation: canonical, token: token);
       }
     } on ChatRepositoryException catch (error) {

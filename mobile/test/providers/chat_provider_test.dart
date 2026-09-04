@@ -244,6 +244,47 @@ void main() {
   });
 
   test(
+    'a stale refresh cannot remove a message sent while it was loading',
+    () async {
+      final conversation = testConversation();
+      final refreshLoad = Completer<ChatMessagePage>();
+      final repository = FakeChatRepository()
+        ..messageCompleters.add(refreshLoad);
+      final provider = ChatProvider(repository: repository);
+
+      final refreshing = provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+      final sent = await provider.sendText(
+        conversation: conversation,
+        text: 'Sent during refresh',
+        token: 'valid-token',
+      );
+      expect(sent, isTrue);
+      expect(
+        provider.messagesFor(conversation.id).single.text,
+        'Sent during refresh',
+      );
+
+      refreshLoad.complete(
+        ChatMessagePage(
+          messages: [
+            testMessage(id: '1', text: 'Older snapshot', isMine: false),
+          ],
+          hasMore: false,
+        ),
+      );
+      await refreshing;
+
+      expect(
+        provider.messagesFor(conversation.id).map((message) => message.text),
+        ['Older snapshot', 'Sent during refresh'],
+      );
+    },
+  );
+
+  test(
     'loads a new empty conversation without an unnecessary read request',
     () async {
       final conversation = testConversation(unreadCount: 0);

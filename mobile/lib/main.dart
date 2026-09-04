@@ -343,6 +343,8 @@ Future<void> refreshChatUnreadForMessage({
     conversation: conversation,
     token: authToken,
     queueIfBusy: true,
+    shouldMarkRead: () =>
+        activeConversationIdProvider?.call() == message.conversationId,
   );
 }
 
@@ -377,6 +379,8 @@ Future<void> refreshChatReadReceipt({
     conversation: conversation,
     token: authToken,
     queueIfBusy: true,
+    shouldMarkRead: () =>
+        activeConversationIdProvider() == message.conversationId,
   );
 }
 
