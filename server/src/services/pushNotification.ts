@@ -570,29 +570,22 @@ export async function notifyWatchlistPriceDrop(
         );
 
         if (!capDoc) {
-          const existing = await NotificationDailyCap.findOne({
-            userId,
-            dateKey
-          });
-
-          if (!existing) {
-            try {
-              capDoc = await NotificationDailyCap.create({
-                userId,
-                dateKey,
-                count: 1
-              });
-            } catch (err: any) {
-              if (err.code === 11000) {
-                // Upsert race: retry atomic findOneAndUpdate
-                capDoc = await NotificationDailyCap.findOneAndUpdate(
-                  { userId, dateKey, count: { $lt: 20 } },
-                  { $inc: { count: 1 } },
-                  { new: true }
-                );
-              } else {
-                throw err;
-              }
+          try {
+            capDoc = await NotificationDailyCap.create({
+              userId,
+              dateKey,
+              count: 1
+            });
+          } catch (err: any) {
+            if (err.code === 11000) {
+              // Upsert race: document was created concurrently, retry atomic findOneAndUpdate
+              capDoc = await NotificationDailyCap.findOneAndUpdate(
+                { userId, dateKey, count: { $lt: 20 } },
+                { $inc: { count: 1 } },
+                { new: true }
+              );
+            } else {
+              throw err;
             }
           }
         }
