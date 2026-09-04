@@ -1,6 +1,6 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import app from '../src/app';
 import Conversation from '../src/models/Conversation';
 import Item from '../src/models/Item';
@@ -8,7 +8,7 @@ import Item from '../src/models/Item';
 jest.setTimeout(60000);
 
 describe('KiwiShare per-member chat removal', () => {
-  let mongoServer: MongoMemoryServer;
+  let mongoServer: MongoMemoryReplSet;
   let buyerId = '';
   let buyerToken = '';
   let sellerToken = '';
@@ -17,7 +17,9 @@ describe('KiwiShare per-member chat removal', () => {
   let conversationId = '';
 
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryReplSet.create({
+      replSet: { count: 1, storageEngine: 'wiredTiger' }
+    });
     await mongoose.connect(mongoServer.getUri());
 
     const registrations = await Promise.all([

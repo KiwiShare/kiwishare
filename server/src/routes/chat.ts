@@ -516,36 +516,58 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
 
   const sendingAsBuyer = conversation.buyerId.equals(userId);
   const receiverId = sendingAsBuyer ? conversation.sellerId : conversation.buyerId;
-  const message = await Message.create({
-    conversationId: conversation._id,
-    senderId: userId,
-    receiverId,
-    type: messageType,
-    ...(messageType === 'text'
-      ? { text: normalizedText }
-      : messageType === 'image'
-        ? { imageUrl }
-        : { audioUrl, durationMs }),
-    status: 'sent'
-  });
-
   const conversationPreview = messageType === 'image'
     ? 'Photo'
     : messageType === 'voice'
       ? 'Voice message'
       : normalizedText;
+  const session = await mongoose.startSession();
+  let message: InstanceType<typeof Message> | null = null;
+  try {
+    await session.withTransaction(async () => {
+      const [createdMessage] = await Message.create(
+        [
+          {
+            conversationId: conversation._id,
+            senderId: userId,
+            receiverId,
+            type: messageType,
+            ...(messageType === 'text'
+              ? { text: normalizedText }
+              : messageType === 'image'
+                ? { imageUrl }
+                : { audioUrl, durationMs }),
+            status: 'sent'
+          }
+        ],
+        { session }
+      );
+      message = createdMessage;
 
-  await Conversation.findByIdAndUpdate(conversation._id, {
-    $set: {
-      lastMessageText: conversationPreview,
-      lastMessageAt: message.createdAt,
-      lastMessageSenderId: userId
-    },
-    $inc: sendingAsBuyer
-      ? { sellerUnreadCount: 1 }
-      : { buyerUnreadCount: 1 },
-    $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
-  });
+      await Conversation.findByIdAndUpdate(
+        conversation._id,
+        {
+          $set: {
+            lastMessageText: conversationPreview,
+            lastMessageAt: createdMessage.createdAt,
+            lastMessageSenderId: userId
+          },
+          $inc: sendingAsBuyer
+            ? { sellerUnreadCount: 1 }
+            : { buyerUnreadCount: 1 },
+          $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+        },
+        { session }
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (!message) {
+    ctx.throw(500, 'Message transaction completed without a message.');
+    return;
+  }
 
   void notifyChatReceiver({
     receiverId,
@@ -591,20 +613,71 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
     };
     return;
   }
-  const watermark = throughMessageId
-    ? await Message.findOne({
-        _id: new mongoose.Types.ObjectId(throughMessageId),
-        conversationId: conversation._id,
-        status: { $ne: 'deleted' }
-      }).select('_id')
-    : await Message.findOne({
+  const readingAsBuyer = conversation.buyerId.equals(userId);
+  const unreadField = readingAsBuyer
+    ? 'buyerUnreadCount'
+    : 'sellerUnreadCount';
+  const session = await mongoose.startSession();
+  let invalidWatermark = false;
+  let readCount = 0;
+  let unreadCount = 0;
+  try {
+    await session.withTransaction(async () => {
+      // withTransaction may retry this callback after a write conflict.
+      invalidWatermark = false;
+      readCount = 0;
+      unreadCount = 0;
+
+      const watermark = throughMessageId
+        ? await Message.findOne({
+            _id: new mongoose.Types.ObjectId(throughMessageId),
+            conversationId: conversation._id,
+            status: { $ne: 'deleted' }
+          })
+            .session(session)
+            .select('_id')
+        : await Message.findOne({
+            conversationId: conversation._id,
+            receiverId: userId,
+            status: { $in: ['sent', 'delivered'] }
+          })
+            .sort({ _id: -1 })
+            .session(session)
+            .select('_id');
+
+      if (!watermark) {
+        invalidWatermark = throughMessageId !== undefined;
+        return;
+      }
+
+      const result = await Message.updateMany(
+        {
+          conversationId: conversation._id,
+          receiverId: userId,
+          _id: { $lte: watermark._id },
+          status: { $in: ['sent', 'delivered'] }
+        },
+        { $set: { status: 'read', readAt: new Date() } },
+        { session }
+      );
+      readCount = result.modifiedCount;
+
+      unreadCount = await Message.countDocuments({
         conversationId: conversation._id,
         receiverId: userId,
         status: { $in: ['sent', 'delivered'] }
-      })
-        .sort({ _id: -1 })
-        .select('_id');
-  if (throughMessageId !== undefined && !watermark) {
+      }).session(session);
+      await Conversation.findByIdAndUpdate(
+        conversation._id,
+        { $set: { [unreadField]: unreadCount } },
+        { session }
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (invalidWatermark) {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
@@ -613,31 +686,7 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
     return;
   }
 
-  const readAt = new Date();
-  const result = await Message.updateMany(
-    {
-      conversationId: conversation._id,
-      receiverId: userId,
-      ...(watermark ? { _id: { $lte: watermark._id } } : {}),
-      status: { $in: ['sent', 'delivered'] }
-    },
-    { $set: { status: 'read', readAt } }
-  );
-
-  const readingAsBuyer = conversation.buyerId.equals(userId);
-  const unreadField = readingAsBuyer
-    ? 'buyerUnreadCount'
-    : 'sellerUnreadCount';
-  const unreadCount = await Message.countDocuments({
-    conversationId: conversation._id,
-    receiverId: userId,
-    status: { $in: ['sent', 'delivered'] }
-  });
-  await Conversation.findByIdAndUpdate(conversation._id, {
-    $set: { [unreadField]: unreadCount }
-  });
-
-  if (result.modifiedCount > 0) {
+  if (readCount > 0) {
     const receiptRecipientId = readingAsBuyer
       ? conversation.sellerId
       : conversation.buyerId;
@@ -650,7 +699,7 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   ctx.status = 200;
   ctx.body = {
     status: 'success',
-    readCount: result.modifiedCount,
+    readCount,
     unreadCount
   };
 });

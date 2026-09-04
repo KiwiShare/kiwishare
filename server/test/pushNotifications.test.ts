@@ -1,7 +1,7 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import app from '../src/app';
 import Conversation from '../src/models/Conversation';
 import Item from '../src/models/Item';
@@ -28,7 +28,7 @@ async function waitFor(condition: () => boolean | Promise<boolean>, timeoutMs = 
 }
 
 describe('KiwiShare chat push notifications', () => {
-  let mongoServer: MongoMemoryServer;
+  let mongoServer: MongoMemoryReplSet;
   let buyerId = '';
   let sellerId = '';
   let buyerToken = '';
@@ -39,7 +39,9 @@ describe('KiwiShare chat push notifications', () => {
   const sellerDeviceToken = 'seller-device-token-value-12345678';
 
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryReplSet.create({
+      replSet: { count: 1, storageEngine: 'wiredTiger' }
+    });
     await mongoose.connect(mongoServer.getUri());
 
     const [buyerResponse, sellerResponse] = await Promise.all([
