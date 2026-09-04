@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import Category from '../models/Category';
 import User from '../models/User';
 import Item from '../models/Item';
+import Order from '../models/Order';
 
 export const DEFAULT_CATEGORIES = [
   { name: 'Furniture', slug: 'furniture', icon: 'Armchair', description: 'Chairs, desks, sofas, and home furnishings', sortOrder: 1 },
@@ -204,6 +205,68 @@ export async function seedDatabase() {
 
       await Item.insertMany(sampleItems);
       console.log(`✅ [Seeding] Inserted ${sampleItems.length} demo community items.`);
+    }
+
+    // 5. Seed Demo Escrow Orders if Order collection is empty
+    const orderCount = await Order.countDocuments();
+    if (orderCount === 0) {
+      console.log('🌱 [Seeding] Populating initial demo escrow orders in MongoDB...');
+      const firstItem = await Item.findOne({ title: 'Retro Armchair' }) || await Item.findOne();
+      const secondItem = await Item.findOne({ title: 'Used Specialized Mountain Bike' }) || firstItem;
+
+      if (firstItem && moviegoerUser && adminUser) {
+        const sampleOrders = [
+          {
+            orderNumber: 'KS-20260904-9821',
+            itemId: firstItem._id,
+            buyerId: adminUser._id,
+            sellerId: moviegoerUser._id,
+            status: 'completed',
+            itemSnapshot: {
+              title: firstItem.title,
+              description: firstItem.description,
+              condition: firstItem.condition,
+              imageUrl: firstItem.imageUrl
+            },
+            currency: 'NZD',
+            itemAmount: 6500,
+            buyerFeeAmount: 325,
+            sellerFeeAmount: 325,
+            buyerTotalAmount: 6825,
+            sellerReceiveAmount: 6175,
+            paidAt: new Date(Date.now() - 24 * 3600 * 1000),
+            completedAt: new Date(Date.now() - 2 * 3600 * 1000)
+          },
+          {
+            orderNumber: 'KS-20260904-9844',
+            itemId: secondItem ? secondItem._id : firstItem._id,
+            buyerId: adminUser._id,
+            sellerId: moviegoerUser._id,
+            status: 'meeting_scheduled',
+            itemSnapshot: {
+              title: secondItem ? secondItem.title : firstItem.title,
+              description: secondItem ? secondItem.description : firstItem.description,
+              condition: secondItem ? secondItem.condition : firstItem.condition,
+              imageUrl: secondItem ? secondItem.imageUrl : firstItem.imageUrl
+            },
+            currency: 'NZD',
+            itemAmount: 28000,
+            buyerFeeAmount: 1400,
+            sellerFeeAmount: 1400,
+            buyerTotalAmount: 29400,
+            sellerReceiveAmount: 26600,
+            paidAt: new Date(Date.now() - 6 * 3600 * 1000),
+            meeting: {
+              scheduledAt: new Date(Date.now() + 18 * 3600 * 1000),
+              locationName: 'UOA General Library Ground Floor',
+              latitude: -36.8523,
+              longitude: 174.7691
+            }
+          }
+        ];
+        await Order.insertMany(sampleOrders);
+        console.log(`✅ [Seeding] Inserted ${sampleOrders.length} initial demo escrow orders.`);
+      }
     }
   } catch (error) {
     console.error('❌ [Seeding Error] Failed to seed initial database:', error);

@@ -4,17 +4,22 @@ import os from 'os';
 import path from 'path';
 import {
   acquireVoiceProcessingAdmission,
-  probeVoiceAudio
+  probeVoiceAudio,
+  resolveFfmpegExecutable
 } from '../src/services/voiceAudio';
 
-const ffmpegPath = require('ffmpeg-static') as string;
-
 function generatedM4a(durationSeconds: number): Buffer {
+  const executable = resolveFfmpegExecutable();
+  if (!executable) {
+    throw new Error(
+      'ffmpeg executable not found in test environment. Please install ffmpeg or set FFMPEG_BIN.'
+    );
+  }
   const directory = mkdtempSync(path.join(os.tmpdir(), 'kiwishare-audio-test-'));
   const outputPath = path.join(directory, 'voice.m4a');
   try {
     const result = spawnSync(
-      ffmpegPath,
+      executable,
       [
         '-v', 'error',
         '-f', 'lavfi',
@@ -25,8 +30,12 @@ function generatedM4a(durationSeconds: number): Buffer {
       ],
       { windowsHide: true }
     );
-    if (result.status !== 0) {
-      throw new Error(`Fixture generation failed: ${result.stderr.toString()}`);
+    if (result.error || result.status !== 0) {
+      const errorMsg =
+        result.error?.message ||
+        result.stderr?.toString() ||
+        `Exit code ${result.status}`;
+      throw new Error(`Fixture generation failed: ${errorMsg}`);
     }
     return readFileSync(outputPath);
   } finally {
