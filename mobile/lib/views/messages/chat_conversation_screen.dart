@@ -597,14 +597,27 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (message.isMeetup && message.meetup != null) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-        child: MeetupCardBubble(
-          key: Key('chat_meetup_card_${message.id}'),
-          meetup: message.meetup!,
-          isMine: message.isMine,
-          createdAt: message.createdAt,
-          onStatusChanged: onMeetupStatusChanged,
+      return Align(
+        alignment: message.isMine
+            ? Alignment.centerRight
+            : Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: message.isMine
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            children: [
+              MeetupCardBubble(
+                key: Key('chat_meetup_card_${message.id}'),
+                meetup: message.meetup!,
+                isMine: message.isMine,
+                createdAt: message.createdAt,
+                onStatusChanged: onMeetupStatusChanged,
+              ),
+              if (showReadReceipt) _ReadReceipt(messageId: message.id),
+            ],
+          ),
         ),
       );
     }
@@ -616,11 +629,19 @@ class _MessageBubble extends StatelessWidget {
             : Alignment.centerLeft,
         child: Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: LocationBubble(
-            key: Key('chat_location_${message.id}'),
-            location: message.location!,
-            isMine: message.isMine,
-            createdAt: message.createdAt,
+          child: Column(
+            crossAxisAlignment: message.isMine
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            children: [
+              LocationBubble(
+                key: Key('chat_location_${message.id}'),
+                location: message.location!,
+                isMine: message.isMine,
+                createdAt: message.createdAt,
+              ),
+              if (showReadReceipt) _ReadReceipt(messageId: message.id),
+            ],
           ),
         ),
       );
@@ -726,6 +747,23 @@ class _MessageBubble extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ReadReceipt extends StatelessWidget {
+  const _ReadReceipt({required this.messageId});
+
+  final String messageId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Read',
+      key: Key('chat_read_receipt_$messageId'),
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }

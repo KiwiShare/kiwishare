@@ -249,6 +249,8 @@ ChatMessageModel testMessage({
   String? imageUrl,
   String? audioUrl,
   int? durationMs,
+  ChatLocationPayload? location,
+  ChatMeetupPayload? meetup,
   String status = 'sent',
   DateTime? readAt,
 }) {
@@ -262,6 +264,8 @@ ChatMessageModel testMessage({
     imageUrl: imageUrl,
     audioUrl: audioUrl,
     durationMs: durationMs,
+    location: location,
+    meetup: meetup,
     status: status,
     isMine: isMine,
     createdAt: DateTime.utc(2026, 8, 27, 8, int.parse(id)),

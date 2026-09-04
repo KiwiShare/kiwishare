@@ -245,6 +245,65 @@ void main() {
     expect(find.text('Read'), findsNothing);
   });
 
+  testWidgets('shows a read receipt for the latest sent location', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '1',
+            text: 'Shared location',
+            isMine: true,
+            type: 'location',
+            location: const ChatLocationPayload(
+              name: 'Auckland Library',
+              latitude: -36.8521,
+              longitude: 174.7692,
+            ),
+            status: 'read',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('chat_location_1')), findsOneWidget);
+    expect(find.byKey(const Key('chat_read_receipt_1')), findsOneWidget);
+  });
+
+  testWidgets('shows a read receipt for the latest sent meetup card', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '1',
+            text: 'Meetup proposed',
+            isMine: true,
+            type: 'meetup',
+            meetup: ChatMeetupPayload(
+              orderId: 'order-1',
+              scheduledAt: DateTime.utc(2026, 8, 28, 2),
+              locationName: 'Auckland Library',
+              proposalStatus: 'confirmed',
+            ),
+            status: 'read',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('chat_meetup_card_1')), findsOneWidget);
+    expect(find.byKey(const Key('chat_read_receipt_1')), findsOneWidget);
+  });
+
   testWidgets('refreshes read receipts after returning from the background', (
     tester,
   ) async {
