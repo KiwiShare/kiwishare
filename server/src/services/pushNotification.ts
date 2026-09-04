@@ -138,7 +138,7 @@ export function resolveFirebaseCredentialConfiguration(
   };
 }
 
-async function configuredFirebaseApp(): Promise<App | null> {
+export async function configuredFirebaseApp(): Promise<App | null> {
   if (firebaseApp !== undefined) return firebaseApp;
 
   try {

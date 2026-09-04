@@ -79,7 +79,9 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
   Future<void> _submitProposal() async {
     final location = _locationController.text.trim();
     if (location.isEmpty) {
-      setState(() => _errorMessage = 'Please enter or select a meetup location.');
+      setState(
+        () => _errorMessage = 'Please enter or select a meetup location.',
+      );
       return;
     }
 
@@ -155,7 +157,11 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.handshake_outlined, color: colors.primary, size: 26),
+                  Icon(
+                    Icons.handshake_outlined,
+                    color: colors.primary,
+                    size: 26,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -201,7 +207,9 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
                       onPressed: _pickDate,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 12),
+                          horizontal: 10,
+                          vertical: 12,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -216,7 +224,9 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
                       onPressed: _pickTime,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 12),
+                          horizontal: 10,
+                          vertical: 12,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -246,8 +256,10 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -293,8 +305,10 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
               ),
 
@@ -326,7 +340,9 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
                           ),
                         )
                       : const Icon(Icons.send_rounded),
-                  label: Text(_isSubmitting ? 'Proposing...' : 'Send Meetup Proposal'),
+                  label: Text(
+                    _isSubmitting ? 'Proposing...' : 'Send Meetup Proposal',
+                  ),
                   style: FilledButton.styleFrom(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

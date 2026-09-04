@@ -274,33 +274,32 @@ class ItemCard extends StatelessWidget {
                             radius: 7.5,
                             backgroundColor:
                                 item.seller?.isStudentVerified == true
-                                    ? const Color(0xFFDBEAFE)
-                                    : colors.primaryContainer,
+                                ? const Color(0xFFDBEAFE)
+                                : colors.primaryContainer,
                             backgroundImage:
                                 item.seller?.avatarUrl != null &&
-                                        item.seller!.avatarUrl!.isNotEmpty
-                                    ? NetworkImage(item.seller!.avatarUrl!)
-                                    : null,
+                                    item.seller!.avatarUrl!.isNotEmpty
+                                ? NetworkImage(item.seller!.avatarUrl!)
+                                : null,
                             child:
                                 item.seller?.avatarUrl == null ||
-                                        item.seller!.avatarUrl!.isEmpty
-                                    ? Text(
-                                      (item.seller?.displayName.isNotEmpty ==
-                                              true)
-                                          ? item.seller!.displayName[0]
+                                    item.seller!.avatarUrl!.isEmpty
+                                ? Text(
+                                    (item.seller?.displayName.isNotEmpty ==
+                                            true)
+                                        ? item.seller!.displayName[0]
                                               .toUpperCase()
-                                          : 'K',
-                                      style: TextStyle(
-                                        fontSize: 7.5,
-                                        fontWeight: FontWeight.w700,
-                                        color:
-                                            item.seller?.isStudentVerified ==
-                                                    true
-                                                ? const Color(0xFF1D4ED8)
-                                                : colors.primary,
-                                      ),
-                                    )
-                                    : null,
+                                        : 'K',
+                                    style: TextStyle(
+                                      fontSize: 7.5,
+                                      fontWeight: FontWeight.w700,
+                                      color:
+                                          item.seller?.isStudentVerified == true
+                                          ? const Color(0xFF1D4ED8)
+                                          : colors.primary,
+                                    ),
+                                  )
+                                : null,
                           ),
                           const SizedBox(width: 4),
                           Expanded(
@@ -348,16 +347,16 @@ class ItemCard extends StatelessWidget {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color:
-                                      isDark
-                                          ? const Color(0xFF064E3B).withOpacity(0.4)
-                                          : const Color(0xFFE8F5E9),
+                                  color: isDark
+                                      ? const Color(0xFF064E3B).withOpacity(0.4)
+                                      : const Color(0xFFE8F5E9),
                                   borderRadius: BorderRadius.circular(5),
                                   border: Border.all(
-                                    color:
-                                        isDark
-                                            ? const Color(0xFF059669).withOpacity(0.5)
-                                            : const Color(0xFFA5D6A7),
+                                    color: isDark
+                                        ? const Color(
+                                            0xFF059669,
+                                          ).withOpacity(0.5)
+                                        : const Color(0xFFA5D6A7),
                                     width: 0.8,
                                   ),
                                 ),
@@ -367,10 +366,9 @@ class ItemCard extends StatelessWidget {
                                     Icon(
                                       Icons.eco_rounded,
                                       size: 10.5,
-                                      color:
-                                          isDark
-                                              ? const Color(0xFF6EE7B7)
-                                              : const Color(0xFF16A34A),
+                                      color: isDark
+                                          ? const Color(0xFF6EE7B7)
+                                          : const Color(0xFF16A34A),
                                     ),
                                     const SizedBox(width: 2.5),
                                     Flexible(
@@ -379,10 +377,9 @@ class ItemCard extends StatelessWidget {
                                         style: TextStyle(
                                           fontSize: 9.5,
                                           fontWeight: FontWeight.w700,
-                                          color:
-                                              isDark
-                                                  ? const Color(0xFF6EE7B7)
-                                                  : const Color(0xFF15803D),
+                                          color: isDark
+                                              ? const Color(0xFF6EE7B7)
+                                              : const Color(0xFF15803D),
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -398,16 +395,16 @@ class ItemCard extends StatelessWidget {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color:
-                                      isDark
-                                          ? const Color(0xFF1E3A8A).withOpacity(0.4)
-                                          : const Color(0xFFEFF6FF),
+                                  color: isDark
+                                      ? const Color(0xFF1E3A8A).withOpacity(0.4)
+                                      : const Color(0xFFEFF6FF),
                                   borderRadius: BorderRadius.circular(5),
                                   border: Border.all(
-                                    color:
-                                        isDark
-                                            ? const Color(0xFF3B82F6).withOpacity(0.5)
-                                            : const Color(0xFF93C5FD),
+                                    color: isDark
+                                        ? const Color(
+                                            0xFF3B82F6,
+                                          ).withOpacity(0.5)
+                                        : const Color(0xFF93C5FD),
                                     width: 0.8,
                                   ),
                                 ),
@@ -426,10 +423,9 @@ class ItemCard extends StatelessWidget {
                                         style: TextStyle(
                                           fontSize: 9.5,
                                           fontWeight: FontWeight.w700,
-                                          color:
-                                              isDark
-                                                  ? const Color(0xFF93C5FD)
-                                                  : const Color(0xFF1D4ED8),
+                                          color: isDark
+                                              ? const Color(0xFF93C5FD)
+                                              : const Color(0xFF1D4ED8),
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -462,9 +458,12 @@ class ItemCard extends StatelessWidget {
   String _formatLabel(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return trimmed;
-    return trimmed.split(RegExp(r'[_\s]+')).map((word) {
-      if (word.isEmpty) return '';
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+    return trimmed
+        .split(RegExp(r'[_\s]+'))
+        .map((word) {
+          if (word.isEmpty) return '';
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
   }
 }

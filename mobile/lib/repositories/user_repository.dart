@@ -142,7 +142,9 @@ class RestUserRepository implements UserRepository {
     if (response.statusCode != 200) {
       try {
         final error = jsonDecode(response.body);
-        final message = (error['message'] as String?) ?? 'Failed to send verification code.';
+        final message =
+            (error['message'] as String?) ??
+            'Failed to send verification code.';
         if (response.statusCode == 429) {
           final cooldown = (error['cooldownSeconds'] as num?)?.toInt() ?? 60;
           throw OtpCooldownException(message, cooldownSeconds: cooldown);

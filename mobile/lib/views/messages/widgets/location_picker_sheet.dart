@@ -71,11 +71,7 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
     if (text.isEmpty) return;
     Navigator.pop(
       context,
-      LocationResult(
-        name: text,
-        latitude: -36.8523,
-        longitude: 174.7691,
-      ),
+      LocationResult(name: text, latitude: -36.8523, longitude: 174.7691),
     );
   }
 
@@ -129,8 +125,10 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
               ),
               onSubmitted: (_) => _submitCustom(),
             ),

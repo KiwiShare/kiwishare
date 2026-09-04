@@ -23,9 +23,7 @@ class LocationBubble extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(maxWidth: 260),
       decoration: BoxDecoration(
-        color: isMine
-            ? colors.primary
-            : colors.surfaceContainerHighest,
+        color: isMine ? colors.primary : colors.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(AppRadius.medium),
         boxShadow: [
           BoxShadow(

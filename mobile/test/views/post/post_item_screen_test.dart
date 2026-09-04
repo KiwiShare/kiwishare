@@ -465,51 +465,52 @@ void main() {
     expect(listingProvider.cachesInvalidated, isTrue);
   });
 
-  testWidgets('defaults isSustainable to false and updates draft when toggled', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'defaults isSustainable to false and updates draft when toggled',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    final publishService = FakeListingPublishService();
-    await tester.pumpWidget(
-      buildTestApp(
-        onCancel: () {},
-        authToken: 'valid-token',
-        publishService: publishService,
-        imagePicker: FakeListingImagePicker(
-          galleryPhotos: [testPhoto('desk.png')],
+      final publishService = FakeListingPublishService();
+      await tester.pumpWidget(
+        buildTestApp(
+          onCancel: () {},
+          authToken: 'valid-token',
+          publishService: publishService,
+          imagePicker: FakeListingImagePicker(
+            galleryPhotos: [testPhoto('desk.png')],
+          ),
         ),
-      ),
-    );
+      );
 
-    await completeValidListing(tester);
+      await completeValidListing(tester);
 
-    // Verify switch exists and is false by default
-    final switchFinder = find.byKey(const Key('post_sustainable_switch'));
-    await tester.scrollUntilVisible(
-      switchFinder,
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(switchFinder, findsOneWidget);
+      // Verify switch exists and is false by default
+      final switchFinder = find.byKey(const Key('post_sustainable_switch'));
+      await tester.scrollUntilVisible(
+        switchFinder,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(switchFinder, findsOneWidget);
 
-    // Toggle switch ON
-    await tester.tap(switchFinder);
-    await tester.pumpAndSettle();
+      // Toggle switch ON
+      await tester.tap(switchFinder);
+      await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('post_submit_button')),
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.byKey(const Key('post_submit_button')));
-    await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('post_submit_button')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('post_submit_button')));
+      await tester.pumpAndSettle();
 
-    expect(publishService.draft?.isSustainable, isTrue);
-  });
+      expect(publishService.draft?.isSustainable, isTrue);
+    },
+  );
 
   testWidgets('keeps the form open and explains a publish failure', (
     tester,

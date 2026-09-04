@@ -250,9 +250,10 @@ class PushNotificationService implements PushNotificationSession {
       _handleNotificationTap,
     );
     try {
-      final initialMessage = await messagingClient
-          .getInitialMessage()
-          .timeout(const Duration(seconds: 3), onTimeout: () => null);
+      final initialMessage = await messagingClient.getInitialMessage().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => null,
+      );
       if (initialMessage != null) {
         if (_currentJwt == null) {
           _pendingInitialMessage = initialMessage;

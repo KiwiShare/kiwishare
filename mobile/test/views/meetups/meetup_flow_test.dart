@@ -93,37 +93,40 @@ class FakeMeetupRepository implements MeetupRepository {
 
 void main() {
   group('Meetup & QR Confirmation Flow Tests', () {
-    test('MeetupModel parses correctly from json and identifies status flags', () {
-      final json = {
-        'id': 'ord-1',
-        'orderNumber': 'ORD-001',
-        'itemId': 'item-1',
-        'itemTitle': 'Calculus Textbook',
-        'itemPriceNzd': '45',
-        'itemImageUrl': 'https://example.com/item.jpg',
-        'status': 'meeting_scheduled',
-        'role': 'buying',
-        'sellerId': 'user-1',
-        'sellerName': 'Sarah',
-        'buyerId': 'user-2',
-        'buyerName': 'Alex',
-        'proposalStatus': 'confirmed',
-        'scheduledAt': '2026-09-10T14:00:00.000Z',
-        'locationName': 'UoA Student Hub',
-        'latitude': -36.8519,
-        'longitude': 174.7686,
-        'proposedBy': 'user-2',
-        'qrToken': 'QR_HANDOVER_TOKEN_ord-1_abc123',
-      };
+    test(
+      'MeetupModel parses correctly from json and identifies status flags',
+      () {
+        final json = {
+          'id': 'ord-1',
+          'orderNumber': 'ORD-001',
+          'itemId': 'item-1',
+          'itemTitle': 'Calculus Textbook',
+          'itemPriceNzd': '45',
+          'itemImageUrl': 'https://example.com/item.jpg',
+          'status': 'meeting_scheduled',
+          'role': 'buying',
+          'sellerId': 'user-1',
+          'sellerName': 'Sarah',
+          'buyerId': 'user-2',
+          'buyerName': 'Alex',
+          'proposalStatus': 'confirmed',
+          'scheduledAt': '2026-09-10T14:00:00.000Z',
+          'locationName': 'UoA Student Hub',
+          'latitude': -36.8519,
+          'longitude': 174.7686,
+          'proposedBy': 'user-2',
+          'qrToken': 'QR_HANDOVER_TOKEN_ord-1_abc123',
+        };
 
-      final meetup = MeetupModel.fromJson(json);
-      expect(meetup.id, 'ord-1');
-      expect(meetup.isConfirmed, isTrue);
-      expect(meetup.isProposed, isFalse);
-      expect(meetup.locationName, 'UoA Student Hub');
-      expect(meetup.hasCoordinates, isTrue);
-      expect(meetup.qrToken, 'QR_HANDOVER_TOKEN_ord-1_abc123');
-    });
+        final meetup = MeetupModel.fromJson(json);
+        expect(meetup.id, 'ord-1');
+        expect(meetup.isConfirmed, isTrue);
+        expect(meetup.isProposed, isFalse);
+        expect(meetup.locationName, 'UoA Student Hub');
+        expect(meetup.hasCoordinates, isTrue);
+        expect(meetup.qrToken, 'QR_HANDOVER_TOKEN_ord-1_abc123');
+      },
+    );
 
     test('MeetupPushMessage parses correctly from push notification data', () {
       final pushData = {
@@ -142,7 +145,9 @@ void main() {
       expect(push.locationName, 'General Library 5 Alfred St');
     });
 
-    testWidgets('LocationBubble renders location pin and coordinates', (tester) async {
+    testWidgets('LocationBubble renders location pin and coordinates', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -159,106 +164,118 @@ void main() {
         ),
       );
 
-      expect(find.text('UoA Student Hub (Alfred Nathan House)'), findsOneWidget);
+      expect(
+        find.text('UoA Student Hub (Alfred Nathan House)'),
+        findsOneWidget,
+      );
       expect(find.textContaining('-36.8519'), findsOneWidget);
       expect(find.byIcon(Icons.location_on), findsOneWidget);
     });
 
-    testWidgets('MeetupCardBubble renders proposal details and action buttons', (tester) async {
-      final fakeRepo = FakeMeetupRepository();
-      final provider = MeetupProvider(repository: fakeRepo);
-      final authProvider = AuthProvider(userRepository: MockUserRepository());
+    testWidgets(
+      'MeetupCardBubble renders proposal details and action buttons',
+      (tester) async {
+        final fakeRepo = FakeMeetupRepository();
+        final provider = MeetupProvider(repository: fakeRepo);
+        final authProvider = AuthProvider(userRepository: MockUserRepository());
 
-      final payload = ChatMeetupPayload(
-        orderId: 'order-123',
-        scheduledAt: DateTime(2026, 9, 10, 14, 0),
-        locationName: 'UoA Engineering Quad',
-        proposalStatus: 'proposed',
-        proposedBy: 'other-user',
-      );
+        final payload = ChatMeetupPayload(
+          orderId: 'order-123',
+          scheduledAt: DateTime(2026, 9, 10, 14, 0),
+          locationName: 'UoA Engineering Quad',
+          proposalStatus: 'proposed',
+          proposedBy: 'other-user',
+        );
 
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: provider),
-            ChangeNotifierProvider.value(value: authProvider),
-          ],
-          child: MaterialApp(
-            home: Scaffold(
-              body: MeetupCardBubble(
-                meetup: payload,
-                isMine: false,
-                createdAt: DateTime.now(),
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: provider),
+              ChangeNotifierProvider.value(value: authProvider),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: MeetupCardBubble(
+                  meetup: payload,
+                  isMine: false,
+                  createdAt: DateTime.now(),
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('Meetup Proposed'), findsOneWidget);
-      expect(find.text('UoA Engineering Quad'), findsOneWidget);
-      expect(find.text('Accept'), findsOneWidget);
-      expect(find.text('Decline'), findsOneWidget);
-    });
+        expect(find.text('Meetup Proposed'), findsOneWidget);
+        expect(find.text('UoA Engineering Quad'), findsOneWidget);
+        expect(find.text('Accept'), findsOneWidget);
+        expect(find.text('Decline'), findsOneWidget);
+      },
+    );
 
-    testWidgets('MeetupQrScreen renders confirmed schedule, QR code, and reserved payment section', (tester) async {
-      final fakeRepo = FakeMeetupRepository();
-      final meetup = MeetupModel(
-        id: 'order-456',
-        orderNumber: 'ORD-456',
-        itemId: 'item-456',
-        itemTitle: 'Vintage Leather Jacket',
-        itemPriceNzd: '120',
-        itemImageUrl: '',
-        status: 'meeting_scheduled',
-        role: 'buying',
-        sellerId: 'seller-1',
-        sellerName: 'Emma Watson',
-        buyerId: 'buyer-1',
-        buyerName: 'Current User',
-        proposalStatus: 'confirmed',
-        scheduledAt: DateTime(2026, 9, 15, 15, 30),
-        locationName: 'Britomart Transport Centre',
-        latitude: -36.8443,
-        longitude: 174.7684,
-        qrToken: 'QR_HANDOVER_TOKEN_order-456_testtoken',
-      );
-      fakeRepo.sampleMeetup = meetup;
+    testWidgets(
+      'MeetupQrScreen renders confirmed schedule, QR code, and reserved payment section',
+      (tester) async {
+        final fakeRepo = FakeMeetupRepository();
+        final meetup = MeetupModel(
+          id: 'order-456',
+          orderNumber: 'ORD-456',
+          itemId: 'item-456',
+          itemTitle: 'Vintage Leather Jacket',
+          itemPriceNzd: '120',
+          itemImageUrl: '',
+          status: 'meeting_scheduled',
+          role: 'buying',
+          sellerId: 'seller-1',
+          sellerName: 'Emma Watson',
+          buyerId: 'buyer-1',
+          buyerName: 'Current User',
+          proposalStatus: 'confirmed',
+          scheduledAt: DateTime(2026, 9, 15, 15, 30),
+          locationName: 'Britomart Transport Centre',
+          latitude: -36.8443,
+          longitude: 174.7684,
+          qrToken: 'QR_HANDOVER_TOKEN_order-456_testtoken',
+        );
+        fakeRepo.sampleMeetup = meetup;
 
-      final provider = MeetupProvider(repository: fakeRepo);
-      final authProvider = AuthProvider(userRepository: MockUserRepository());
+        final provider = MeetupProvider(repository: fakeRepo);
+        final authProvider = AuthProvider(userRepository: MockUserRepository());
 
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: provider),
-            ChangeNotifierProvider.value(value: authProvider),
-          ],
-          child: MaterialApp(
-            home: Scaffold(
-              body: MeetupQrScreen(
-                orderId: 'order-456',
-                initialMeetup: meetup,
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: provider),
+              ChangeNotifierProvider.value(value: authProvider),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: MeetupQrScreen(
+                  orderId: 'order-456',
+                  initialMeetup: meetup,
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      // Check header and item
-      expect(find.text('Vintage Leather Jacket'), findsOneWidget);
-      expect(find.text('Britomart Transport Centre'), findsOneWidget);
-      expect(find.text('Confirmed In-Person Meetup'), findsOneWidget);
+        // Check header and item
+        expect(find.text('Vintage Leather Jacket'), findsOneWidget);
+        expect(find.text('Britomart Transport Centre'), findsOneWidget);
+        expect(find.text('Confirmed In-Person Meetup'), findsOneWidget);
 
-      // Check QR code card
-      expect(find.byKey(const Key('meetup_qr_image')), findsOneWidget);
-      expect(find.text('Copy verification token'), findsOneWidget);
+        // Check QR code card
+        expect(find.byKey(const Key('meetup_qr_image')), findsOneWidget);
+        expect(find.text('Copy verification token'), findsOneWidget);
 
-      // Check Reserved Payment section
-      expect(find.byKey(const Key('reserved_payment_section')), findsOneWidget);
-      expect(find.text('In-Person Settlement'), findsOneWidget);
-    });
+        // Check Reserved Payment section
+        expect(
+          find.byKey(const Key('reserved_payment_section')),
+          findsOneWidget,
+        );
+        expect(find.text('In-Person Settlement'), findsOneWidget);
+      },
+    );
   });
 }

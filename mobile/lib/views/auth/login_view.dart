@@ -190,7 +190,8 @@ class _LoginViewState extends State<LoginView> {
       var errorMsg = e.toString().replaceAll('Exception: ', '');
       if (errorMsg.contains('Please wait') || errorMsg.contains('cooldown')) {
         _startCooldown(60);
-        errorMsg = 'Please wait for the countdown timer to finish before requesting a new code.';
+        errorMsg =
+            'Please wait for the countdown timer to finish before requesting a new code.';
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

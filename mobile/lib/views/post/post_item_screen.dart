@@ -727,23 +727,23 @@ class _PostItemScreenState extends State<PostItemScreen> {
                             : (value) => setState(() => _isSustainable = value),
                         activeColor: const Color(0xFF2E5E4E),
                         secondary: Icon(
-                          _isSustainable
-                              ? Icons.eco
-                              : Icons.eco_outlined,
+                          _isSustainable ? Icons.eco : Icons.eco_outlined,
                           color: _isSustainable
                               ? const Color(0xFF2E5E4E)
                               : Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         title: Text(
                           'Sustainable Item',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         subtitle: Text(
                           'Mark this item as eco-friendly, circular, or pre-loved',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                         ),
                         contentPadding: const EdgeInsets.symmetric(

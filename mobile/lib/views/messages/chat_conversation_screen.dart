@@ -386,9 +386,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             icon: const Icon(Icons.handshake_outlined),
             onPressed:
                 widget.conversation.isActive &&
-                        (_currentAuthToken?.isNotEmpty ?? false)
-                    ? _scheduleMeetup
-                    : null,
+                    (_currentAuthToken?.isNotEmpty ?? false)
+                ? _scheduleMeetup
+                : null,
           ),
         ],
       ),
@@ -496,10 +496,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
-    required this.message,
-    this.onMeetupStatusChanged,
-  });
+  const _MessageBubble({required this.message, this.onMeetupStatusChanged});
 
   final ChatMessageModel message;
   final VoidCallback? onMeetupStatusChanged;
@@ -521,8 +518,9 @@ class _MessageBubble extends StatelessWidget {
 
     if (message.isLocation && message.location != null) {
       return Align(
-        alignment:
-            message.isMine ? Alignment.centerRight : Alignment.centerLeft,
+        alignment: message.isMine
+            ? Alignment.centerRight
+            : Alignment.centerLeft,
         child: Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
           child: LocationBubble(
@@ -695,8 +693,7 @@ class _MessageComposer extends StatelessWidget {
                     child: IconButton(
                       key: const Key('chat_share_location_button'),
                       tooltip: 'Share location',
-                      onPressed:
-                          enabled && !isSending ? onShareLocation : null,
+                      onPressed: enabled && !isSending ? onShareLocation : null,
                       icon: const Icon(Icons.place_outlined),
                     ),
                   ),

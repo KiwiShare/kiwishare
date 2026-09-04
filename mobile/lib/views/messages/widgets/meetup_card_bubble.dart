@@ -111,7 +111,9 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         color: isConfirmed
-            ? (isDark ? const Color(0xFF064E3B).withOpacity(0.35) : const Color(0xFFECFDF5))
+            ? (isDark
+                  ? const Color(0xFF064E3B).withOpacity(0.35)
+                  : const Color(0xFFECFDF5))
             : colors.surfaceContainerHighest.withOpacity(0.6),
         borderRadius: BorderRadius.circular(AppRadius.medium),
         border: Border.all(
@@ -136,7 +138,9 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: isConfirmed
-                  ? (isDark ? const Color(0xFF059669).withOpacity(0.3) : const Color(0xFFD1FAE5))
+                  ? (isDark
+                        ? const Color(0xFF059669).withOpacity(0.3)
+                        : const Color(0xFFD1FAE5))
                   : colors.primaryContainer.withOpacity(0.5),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(AppRadius.medium - 1),
@@ -149,11 +153,13 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                   isConfirmed
                       ? Icons.check_circle_outline
                       : isDeclined
-                          ? Icons.cancel_outlined
-                          : Icons.handshake_outlined,
+                      ? Icons.cancel_outlined
+                      : Icons.handshake_outlined,
                   size: 16,
                   color: isConfirmed
-                      ? (isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857))
+                      ? (isDark
+                            ? const Color(0xFF6EE7B7)
+                            : const Color(0xFF047857))
                       : colors.primary,
                 ),
                 const SizedBox(width: 6),
@@ -161,13 +167,15 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                   isConfirmed
                       ? 'Meetup Confirmed'
                       : isDeclined
-                          ? 'Meetup Declined'
-                          : 'Meetup Proposed',
+                      ? 'Meetup Declined'
+                      : 'Meetup Proposed',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: isConfirmed
-                        ? (isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857))
+                        ? (isDark
+                              ? const Color(0xFF6EE7B7)
+                              : const Color(0xFF047857))
                         : colors.primary,
                   ),
                 ),
@@ -303,7 +311,9 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: FilledButton(
-                            key: Key('accept_meetup_button_${widget.meetup.orderId}'),
+                            key: Key(
+                              'accept_meetup_button_${widget.meetup.orderId}',
+                            ),
                             onPressed: _isLoading ? null : _acceptMeetup,
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 8),

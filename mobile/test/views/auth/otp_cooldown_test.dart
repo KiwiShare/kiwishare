@@ -68,65 +68,57 @@ class FakeCooldownUserRepository implements UserRepository {
 }
 
 void main() {
-  testWidgets('OTP cooldown ticks down dynamically and error messages do not embed fixed seconds', (
-    tester,
-  ) async {
-    final fakeRepo = FakeCooldownUserRepository();
-    final authProvider = AuthProvider(userRepository: fakeRepo);
+  testWidgets(
+    'OTP cooldown ticks down dynamically and error messages do not embed fixed seconds',
+    (tester) async {
+      final fakeRepo = FakeCooldownUserRepository();
+      final authProvider = AuthProvider(userRepository: fakeRepo);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChangeNotifierProvider.value(
-            value: authProvider,
-            child: const LoginView(),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChangeNotifierProvider.value(
+              value: authProvider,
+              child: const LoginView(),
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    // Switch to OTP tab
-    await tester.tap(find.text('Email Code (OTP)'));
-    await tester.pumpAndSettle();
+      // Switch to OTP tab
+      await tester.tap(find.text('Email Code (OTP)'));
+      await tester.pumpAndSettle();
 
-    // Enter email
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Email Address'),
-      'test@example.com',
-    );
-    await tester.pumpAndSettle();
+      // Enter email
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Email Address'),
+        'test@example.com',
+      );
+      await tester.pumpAndSettle();
 
-    // Send OTP
-    await tester.tap(find.text('Send Verification Code'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      // Send OTP
+      await tester.tap(find.text('Send Verification Code'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    // Verify initial cooldown is active at 60s
-    expect(find.text('Resend (60s)'), findsOneWidget);
-    expect(
-      find.text('You can request a new code in 60s'),
-      findsOneWidget,
-    );
+      // Verify initial cooldown is active at 60s
+      expect(find.text('Resend (60s)'), findsOneWidget);
+      expect(find.text('You can request a new code in 60s'), findsOneWidget);
 
-    // Advance 1 second -> should dynamically tick down to 59s
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Resend (59s)'), findsOneWidget);
-    expect(
-      find.text('You can request a new code in 59s'),
-      findsOneWidget,
-    );
+      // Advance 1 second -> should dynamically tick down to 59s
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Resend (59s)'), findsOneWidget);
+      expect(find.text('You can request a new code in 59s'), findsOneWidget);
 
-    // Advance another 5 seconds -> should dynamically tick down to 54s
-    await tester.pump(const Duration(seconds: 5));
-    expect(find.text('Resend (54s)'), findsOneWidget);
-    expect(
-      find.text('You can request a new code in 54s'),
-      findsOneWidget,
-    );
+      // Advance another 5 seconds -> should dynamically tick down to 54s
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.text('Resend (54s)'), findsOneWidget);
+      expect(find.text('You can request a new code in 54s'), findsOneWidget);
 
-    // Tap resend button while disabled or trigger sendOtp
-    // Verify no static number like "42 seconds" in any SnackBar message
-    expect(find.textContaining('Please wait 54 seconds'), findsNothing);
-    expect(find.textContaining('Please wait 54s'), findsNothing);
-  });
+      // Tap resend button while disabled or trigger sendOtp
+      // Verify no static number like "42 seconds" in any SnackBar message
+      expect(find.textContaining('Please wait 54 seconds'), findsNothing);
+      expect(find.textContaining('Please wait 54s'), findsNothing);
+    },
+  );
 }

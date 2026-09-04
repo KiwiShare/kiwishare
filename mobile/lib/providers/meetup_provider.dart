@@ -33,16 +33,19 @@ class MeetupProvider extends ChangeNotifier {
   String? get error => _error;
 
   List<MeetupModel> get upcomingMeetups => _meetups
-      .where((m) =>
-          m.proposalStatus == 'confirmed' ||
-          m.proposalStatus == 'proposed')
+      .where(
+        (m) =>
+            m.proposalStatus == 'confirmed' || m.proposalStatus == 'proposed',
+      )
       .toList();
 
   List<MeetupModel> get pastMeetups => _meetups
-      .where((m) =>
-          m.proposalStatus == 'completed' ||
-          m.proposalStatus == 'declined' ||
-          m.proposalStatus == 'cancelled')
+      .where(
+        (m) =>
+            m.proposalStatus == 'completed' ||
+            m.proposalStatus == 'declined' ||
+            m.proposalStatus == 'cancelled',
+      )
       .toList();
 
   MeetupModel? meetupById(String orderId) => _meetupCache[orderId];

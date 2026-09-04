@@ -9,11 +9,7 @@ import '../../providers/meetup_provider.dart';
 import '../../theme/app_theme.dart';
 
 class MeetupQrScreen extends StatefulWidget {
-  const MeetupQrScreen({
-    super.key,
-    required this.orderId,
-    this.initialMeetup,
-  });
+  const MeetupQrScreen({super.key, required this.orderId, this.initialMeetup});
 
   final String orderId;
   final MeetupModel? initialMeetup;
@@ -94,31 +90,31 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
       body: _isLoading && meetup == null
           ? const Center(child: CircularProgressIndicator())
           : _error != null && meetup == null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline, size: 48, color: colors.error),
-                        const SizedBox(height: 12),
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: _loadDetails,
-                          child: const Text('Retry'),
-                        ),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 48, color: colors.error),
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium,
                     ),
-                  ),
-                )
-              : meetup == null
-                  ? const Center(child: Text('Meetup details unavailable.'))
-                  : _buildContent(context, meetup, colors, isDark),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: _loadDetails,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : meetup == null
+          ? const Center(child: Text('Meetup details unavailable.'))
+          : _buildContent(context, meetup, colors, isDark),
     );
   }
 
@@ -151,7 +147,9 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                   : const Color(0xFFECFDF5),
               borderRadius: BorderRadius.circular(AppRadius.medium),
               border: Border.all(
-                color: isDark ? const Color(0xFF059669) : const Color(0xFF10B981),
+                color: isDark
+                    ? const Color(0xFF059669)
+                    : const Color(0xFF10B981),
                 width: 1.2,
               ),
             ),
@@ -159,7 +157,9 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
               children: [
                 Icon(
                   Icons.verified_outlined,
-                  color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857),
+                  color: isDark
+                      ? const Color(0xFF6EE7B7)
+                      : const Color(0xFF047857),
                   size: 24,
                 ),
                 const SizedBox(width: 10),
@@ -288,7 +288,11 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                           color: colors.primaryContainer.withOpacity(0.5),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.event, color: colors.primary, size: 18),
+                        child: Icon(
+                          Icons.event,
+                          color: colors.primary,
+                          size: 18,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -506,9 +510,7 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
             color: colors.surfaceContainerHighest.withOpacity(0.35),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.medium),
-              side: BorderSide(
-                color: colors.outline.withOpacity(0.2),
-              ),
+              side: BorderSide(color: colors.outline.withOpacity(0.2)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -612,27 +614,27 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
   }
 
   static String _weekday(int day) => switch (day) {
-        1 => 'Monday',
-        2 => 'Tuesday',
-        3 => 'Wednesday',
-        4 => 'Thursday',
-        5 => 'Friday',
-        6 => 'Saturday',
-        _ => 'Sunday',
-      };
+    1 => 'Monday',
+    2 => 'Tuesday',
+    3 => 'Wednesday',
+    4 => 'Thursday',
+    5 => 'Friday',
+    6 => 'Saturday',
+    _ => 'Sunday',
+  };
 
   static String _month(int month) => switch (month) {
-        1 => 'Jan',
-        2 => 'Feb',
-        3 => 'Mar',
-        4 => 'Apr',
-        5 => 'May',
-        6 => 'Jun',
-        7 => 'Jul',
-        8 => 'Aug',
-        9 => 'Sep',
-        10 => 'Oct',
-        11 => 'Nov',
-        _ => 'Dec',
-      };
+    1 => 'Jan',
+    2 => 'Feb',
+    3 => 'Mar',
+    4 => 'Apr',
+    5 => 'May',
+    6 => 'Jun',
+    7 => 'Jul',
+    8 => 'Aug',
+    9 => 'Sep',
+    10 => 'Oct',
+    11 => 'Nov',
+    _ => 'Dec',
+  };
 }

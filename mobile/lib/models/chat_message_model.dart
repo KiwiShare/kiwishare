@@ -57,7 +57,9 @@ class ChatMessageModel {
         _ => int.tryParse(json['durationMs']?.toString() ?? ''),
       },
       location: json['location'] is Map<String, dynamic>
-          ? ChatLocationPayload.fromJson(json['location'] as Map<String, dynamic>)
+          ? ChatLocationPayload.fromJson(
+              json['location'] as Map<String, dynamic>,
+            )
           : null,
       meetup: json['meetup'] is Map<String, dynamic>
           ? ChatMeetupPayload.fromJson(json['meetup'] as Map<String, dynamic>)

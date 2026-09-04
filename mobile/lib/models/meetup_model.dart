@@ -44,7 +44,8 @@ class MeetupModel {
   final String locationName;
   final double? latitude;
   final double? longitude;
-  final String proposalStatus; // 'proposed' | 'confirmed' | 'declined' | 'cancelled'
+  final String
+  proposalStatus; // 'proposed' | 'confirmed' | 'declined' | 'cancelled'
   final String? proposedBy;
   final String? note;
   final String? qrToken;

@@ -31,14 +31,9 @@ abstract class MeetupRepository {
     required String token,
   });
 
-  Future<void> declineMeetup({
-    required String orderId,
-    required String token,
-  });
+  Future<void> declineMeetup({required String orderId, required String token});
 
-  Future<List<MeetupModel>> fetchMyMeetups({
-    required String token,
-  });
+  Future<List<MeetupModel>> fetchMyMeetups({required String token});
 
   Future<MeetupModel> fetchMeetupDetails({
     required String orderId,
@@ -48,15 +43,15 @@ abstract class MeetupRepository {
 
 class RestMeetupRepository implements MeetupRepository {
   RestMeetupRepository({http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
   Map<String, String> _headers(String token) => {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $token',
+  };
 
   @override
   Future<MeetupModel> proposeMeetup({
@@ -85,7 +80,9 @@ class RestMeetupRepository implements MeetupRepository {
     final data = _responseMap(response);
     final meetupJson = data['meetup'];
     if (meetupJson is! Map) {
-      throw const MeetupRepositoryException('Invalid response when proposing meetup.');
+      throw const MeetupRepositoryException(
+        'Invalid response when proposing meetup.',
+      );
     }
     return MeetupModel.fromJson(Map<String, dynamic>.from(meetupJson));
   }
@@ -102,7 +99,9 @@ class RestMeetupRepository implements MeetupRepository {
     final data = _responseMap(response);
     final meetupJson = data['meetup'];
     if (meetupJson is! Map) {
-      throw const MeetupRepositoryException('Invalid response when accepting meetup.');
+      throw const MeetupRepositoryException(
+        'Invalid response when accepting meetup.',
+      );
     }
     return MeetupModel.fromJson(Map<String, dynamic>.from(meetupJson));
   }
@@ -120,9 +119,7 @@ class RestMeetupRepository implements MeetupRepository {
   }
 
   @override
-  Future<List<MeetupModel>> fetchMyMeetups({
-    required String token,
-  }) async {
+  Future<List<MeetupModel>> fetchMyMeetups({required String token}) async {
     final response = await _client.get(
       Uri.parse('${ApiConfig.baseUrl}/api/meetups/my'),
       headers: _headers(token),
@@ -148,7 +145,9 @@ class RestMeetupRepository implements MeetupRepository {
     final data = _responseMap(response);
     final meetupJson = data['meetup'];
     if (meetupJson is! Map) {
-      throw const MeetupRepositoryException('Invalid response fetching meetup.');
+      throw const MeetupRepositoryException(
+        'Invalid response fetching meetup.',
+      );
     }
     return MeetupModel.fromJson(Map<String, dynamic>.from(meetupJson));
   }
@@ -167,7 +166,9 @@ class RestMeetupRepository implements MeetupRepository {
       );
     }
     if (data == null) {
-      throw const MeetupRepositoryException('Invalid response from meetup service.');
+      throw const MeetupRepositoryException(
+        'Invalid response from meetup service.',
+      );
     }
     return data;
   }

@@ -53,12 +53,8 @@ class _UserMeetupsScreenState extends State<UserMeetupsScreen>
           unselectedLabelColor: colors.onSurfaceVariant,
           indicatorColor: colors.primary,
           tabs: [
-            Tab(
-              text: 'Upcoming (${provider.upcomingMeetups.length})',
-            ),
-            Tab(
-              text: 'Past (${provider.pastMeetups.length})',
-            ),
+            Tab(text: 'Upcoming (${provider.upcomingMeetups.length})'),
+            Tab(text: 'Past (${provider.pastMeetups.length})'),
           ],
         ),
       ),
@@ -247,8 +243,10 @@ class _MeetupItemCard extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: isConfirmed
                                     ? (isDark
-                                        ? const Color(0xFF064E3B).withOpacity(0.5)
-                                        : const Color(0xFFD1FAE5))
+                                          ? const Color(
+                                              0xFF064E3B,
+                                            ).withOpacity(0.5)
+                                          : const Color(0xFFD1FAE5))
                                     : colors.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(4),
                               ),
@@ -256,15 +254,15 @@ class _MeetupItemCard extends StatelessWidget {
                                 isConfirmed
                                     ? 'Confirmed'
                                     : meetup.isProposed
-                                        ? 'Pending'
-                                        : 'Ended',
+                                    ? 'Pending'
+                                    : 'Ended',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   color: isConfirmed
                                       ? (isDark
-                                          ? const Color(0xFF6EE7B7)
-                                          : const Color(0xFF047857))
+                                            ? const Color(0xFF6EE7B7)
+                                            : const Color(0xFF047857))
                                       : colors.onSurfaceVariant,
                                 ),
                               ),
@@ -331,10 +329,8 @@ class _MeetupItemCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   FilledButton.tonal(
-                    onPressed: () => context.push(
-                      '/meetups/${meetup.id}/qr',
-                      extra: meetup,
-                    ),
+                    onPressed: () =>
+                        context.push('/meetups/${meetup.id}/qr', extra: meetup),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
