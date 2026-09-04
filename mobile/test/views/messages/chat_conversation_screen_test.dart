@@ -80,6 +80,48 @@ void main() {
     expect(find.byKey(const Key('chat_message_2')), findsOneWidget);
   });
 
+  testWidgets('aligns received content left and sent content right', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(id: '1', text: 'Hi', isMine: false),
+          testMessage(id: '2', text: 'Mine', isMine: true),
+        ],
+      },
+    );
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    final receivedBubble = find.byKey(const Key('chat_message_1'));
+    final sentBubble = find.byKey(const Key('chat_message_2'));
+    expect(
+      tester.getTopLeft(receivedBubble).dx,
+      lessThan(tester.getTopLeft(sentBubble).dx),
+    );
+
+    final receivedLabels = find.descendant(
+      of: receivedBubble,
+      matching: find.byType(Text),
+    );
+    expect(receivedLabels, findsNWidgets(2));
+    expect(
+      tester.getTopLeft(receivedLabels.at(0)).dx,
+      closeTo(tester.getTopLeft(receivedLabels.at(1)).dx, 0.1),
+    );
+
+    final sentLabels = find.descendant(
+      of: sentBubble,
+      matching: find.byType(Text),
+    );
+    expect(sentLabels, findsNWidgets(2));
+    expect(
+      tester.getBottomRight(sentLabels.at(0)).dx,
+      closeTo(tester.getBottomRight(sentLabels.at(1)).dx, 0.1),
+    );
+  });
+
   testWidgets('shows the empty state for a newly created conversation', (
     tester,
   ) async {

@@ -457,7 +457,9 @@ class _MessageBubble extends StatelessWidget {
             ),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: mine
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
             children: [
               if (message.isImage)
                 ClipRRect(
