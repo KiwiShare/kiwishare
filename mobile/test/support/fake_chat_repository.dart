@@ -185,6 +185,36 @@ class FakeChatRepository implements ChatRepository {
     messages.putIfAbsent(conversationId, () => []).add(message);
     return message;
   }
+
+  @override
+  Future<ChatMessageModel> sendLocationMessage({
+    required String conversationId,
+    required String name,
+    required double latitude,
+    required double longitude,
+    required String token,
+  }) async {
+    sendCalls += 1;
+    if (sendError != null) throw sendError!;
+    final message = ChatMessageModel(
+      id: 'sent-$sendCalls',
+      conversationId: conversationId,
+      senderId: 'current-user',
+      receiverId: 'other-user',
+      type: 'location',
+      text: '📍 $name',
+      location: ChatLocationPayload(
+        name: name,
+        latitude: latitude,
+        longitude: longitude,
+      ),
+      status: 'sent',
+      isMine: true,
+      createdAt: DateTime.utc(2026, 8, 27, 8, sendCalls),
+    );
+    messages.putIfAbsent(conversationId, () => []).add(message);
+    return message;
+  }
 }
 
 ChatConversationModel testConversation({

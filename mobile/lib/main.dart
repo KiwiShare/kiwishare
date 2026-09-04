@@ -15,6 +15,8 @@ import 'views/post/post_item_screen.dart';
 import 'views/messages/messages_screen.dart';
 import 'views/messages/chat_conversation_screen.dart';
 import 'views/profile/profile_screen.dart';
+import 'views/profile/user_meetups_screen.dart';
+import 'views/meetups/meetup_qr_screen.dart';
 import 'views/auth/login_view.dart';
 import 'views/products/product_detail_screen.dart';
 import 'models/item_model.dart';
@@ -22,10 +24,12 @@ import 'navigation/app_route_observer.dart';
 
 // State and Repositories
 import 'providers/providers.dart';
+import 'providers/meetup_provider.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 import 'repositories/watchlist_repository.dart';
 import 'repositories/chat_repository.dart';
+import 'repositories/meetup_repository.dart';
 import 'repositories/push_device_repository.dart';
 import 'services/remote_config_service.dart';
 import 'services/firebase_runtime_configuration.dart';
@@ -124,6 +128,19 @@ final GoRouter _router = GoRouter(
         return ChatConversationScreen(conversation: conversation);
       },
     ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: '/meetups',
+      builder: (context, state) => const UserMeetupsScreen(),
+    ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: '/meetups/:orderId/qr',
+      builder: (context, state) {
+        final orderId = state.pathParameters['orderId'] ?? '';
+        return MeetupQrScreen(orderId: orderId);
+      },
+    ),
   ],
 );
 
@@ -165,8 +182,10 @@ void main() async {
       onNavigateToChat: _openChatNotification,
       onForegroundChatMessage: _showForegroundChatNotification,
       onForegroundChatRead: _handleForegroundChatRead,
+      onNavigateToMeetupQrCode: _openMeetupQrNotification,
+      onForegroundMeetupMessage: _showForegroundMeetupNotification,
     );
-    await pushNotifications.initialize();
+    unawaited(pushNotifications.initialize());
   }
   runApp(
     MultiProvider(
@@ -201,10 +220,24 @@ void main() async {
             auth.jwtToken,
           ),
         ),
+        Provider<MeetupRepository>(create: (_) => RestMeetupRepository()),
+        ChangeNotifierProxyProvider<AuthProvider, MeetupProvider>(
+          create: (_) => MeetupProvider(repository: RestMeetupRepository()),
+          update: (_, auth, meetup) => syncMeetupAuth(
+            meetup ?? MeetupProvider(repository: RestMeetupRepository()),
+            auth.jwtToken,
+          ),
+        ),
       ],
       child: const KiwiShareApp(),
     ),
   );
+}
+
+@visibleForTesting
+MeetupProvider syncMeetupAuth(MeetupProvider meetup, String? authToken) {
+  meetup.updateAuthToken(authToken);
+  return meetup;
 }
 
 @visibleForTesting
@@ -246,6 +279,12 @@ void _openChatNotification(ChatPushMessage message) {
         unreadCount: 0,
       ),
     );
+  });
+}
+
+void _openMeetupQrNotification(MeetupPushMessage message) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    navigateToNotificationRoute(_router, '/meetups/${message.orderId}/qr');
   });
 }
 
@@ -327,6 +366,25 @@ void _handleForegroundChatRead(ChatReadPushMessage message) {
       ),
     ),
   );
+}
+
+void _showForegroundMeetupNotification(
+  MeetupPushMessage message,
+  PushEnvelope envelope,
+) {
+  final messenger = _scaffoldMessengerKey.currentState;
+  if (messenger == null) return;
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(envelope.body ?? 'Meetup confirmed! View your QR code.'),
+        action: SnackBarAction(
+          label: 'View QR',
+          onPressed: () => _openMeetupQrNotification(message),
+        ),
+      ),
+    );
 }
 
 @visibleForTesting

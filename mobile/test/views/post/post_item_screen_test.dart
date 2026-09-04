@@ -458,11 +458,59 @@ void main() {
     expect(publishService.draft?.title, 'Solid wood desk');
     expect(publishService.draft?.category, 'Furniture');
     expect(publishService.draft?.condition, 'Good');
+    expect(publishService.draft?.isSustainable, isFalse);
     expect(publishService.draft?.photos.single.fileName, 'listing_photo_1.png');
     expect(publishService.draft?.latitude, -36.8485);
     expect(publishService.draft?.longitude, 174.7633);
     expect(listingProvider.cachesInvalidated, isTrue);
   });
+
+  testWidgets(
+    'defaults isSustainable to false and updates draft when toggled',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final publishService = FakeListingPublishService();
+      await tester.pumpWidget(
+        buildTestApp(
+          onCancel: () {},
+          authToken: 'valid-token',
+          publishService: publishService,
+          imagePicker: FakeListingImagePicker(
+            galleryPhotos: [testPhoto('desk.png')],
+          ),
+        ),
+      );
+
+      await completeValidListing(tester);
+
+      // Verify switch exists and is false by default
+      final switchFinder = find.byKey(const Key('post_sustainable_switch'));
+      await tester.scrollUntilVisible(
+        switchFinder,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(switchFinder, findsOneWidget);
+
+      // Toggle switch ON
+      await tester.tap(switchFinder);
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('post_submit_button')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('post_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(publishService.draft?.isSustainable, isTrue);
+    },
+  );
 
   testWidgets('keeps the form open and explains a publish failure', (
     tester,

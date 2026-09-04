@@ -12,7 +12,7 @@ export interface ChatPushRequest {
   conversationId: string;
   itemId: string;
   senderId: string;
-  messageType: 'text' | 'image' | 'voice';
+  messageType: 'text' | 'image' | 'voice' | 'location';
 }
 
 export interface ChatPushPayload extends ChatPushRequest {
@@ -429,6 +429,79 @@ export async function notifyChatReadReceipt(
   }
 }
 
+export interface MeetupPushRequest {
+  receiverId: mongoose.Types.ObjectId;
+  orderId: string;
+  itemId: string;
+  itemTitle: string;
+  scheduledAt: string;
+  locationName: string;
+}
+
+export async function notifyMeetupConfirmed(request: MeetupPushRequest): Promise<void> {
+  try {
+    const registrations = await PushDevice.find({
+      userId: request.receiverId,
+      active: true
+    })
+      .select('+token')
+      .sort({ lastSeenAt: -1 })
+      .limit(20)
+      .lean();
+    const tokens = registrations
+      .map((registration: any) => registration.token)
+      .filter((token: unknown): token is string => typeof token === 'string');
+    if (tokens.length === 0) return;
+
+    const app = await configuredFirebaseApp();
+    if (!app) return;
+
+    const { getMessaging } = await import('firebase-admin/messaging');
+    const response = await getMessaging(app).sendEachForMulticast({
+      tokens,
+      notification: {
+        title: 'Meetup Confirmed!',
+        body: `Meetup scheduled for ${request.itemTitle} at ${request.locationName}. Tap to view your QR code.`
+      },
+      data: {
+        type: 'meetup_confirmed',
+        orderId: request.orderId,
+        itemId: request.itemId,
+        itemTitle: request.itemTitle,
+        scheduledAt: request.scheduledAt,
+        locationName: request.locationName
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          icon: ANDROID_NOTIFICATION_ICON,
+          color: ANDROID_NOTIFICATION_COLOR
+        }
+      },
+      apns: {
+        payload: { aps: { sound: 'default', contentAvailable: true } }
+      }
+    });
+
+    const invalidTokens = response.responses.flatMap((res, index) => {
+      const code = res.error?.code;
+      return code === 'messaging/registration-token-not-registered' ||
+        code === 'messaging/invalid-registration-token'
+        ? [tokens[index]]
+        : [];
+    });
+    if (invalidTokens.length > 0) {
+      await PushDevice.deleteMany({ token: { $in: invalidTokens } });
+    }
+  } catch (error) {
+    console.warn(
+      '[Push Notification] Meetup notification delivery failed.',
+      error instanceof Error ? error.message : 'Unknown delivery error.'
+    );
+  }
+}
+
 export interface PriceDropNotificationRequest {
   item: {
     _id: mongoose.Types.ObjectId | string;
@@ -579,29 +652,22 @@ export async function notifyWatchlistPriceDrop(
         );
 
         if (!capDoc) {
-          const existing = await NotificationDailyCap.findOne({
-            userId,
-            dateKey
-          });
-
-          if (!existing) {
-            try {
-              capDoc = await NotificationDailyCap.create({
-                userId,
-                dateKey,
-                count: 1
-              });
-            } catch (err: any) {
-              if (err.code === 11000) {
-                // Upsert race: retry atomic findOneAndUpdate
-                capDoc = await NotificationDailyCap.findOneAndUpdate(
-                  { userId, dateKey, count: { $lt: 20 } },
-                  { $inc: { count: 1 } },
-                  { new: true }
-                );
-              } else {
-                throw err;
-              }
+          try {
+            capDoc = await NotificationDailyCap.create({
+              userId,
+              dateKey,
+              count: 1
+            });
+          } catch (err: any) {
+            if (err.code === 11000) {
+              // Upsert race: document was created concurrently, retry atomic findOneAndUpdate
+              capDoc = await NotificationDailyCap.findOneAndUpdate(
+                { userId, dateKey, count: { $lt: 20 } },
+                { $inc: { count: 1 } },
+                { new: true }
+              );
+            } else {
+              throw err;
             }
           }
         }

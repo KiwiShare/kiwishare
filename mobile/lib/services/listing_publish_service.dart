@@ -28,6 +28,7 @@ class ListingDraft {
     required this.condition,
     required this.description,
     required this.photos,
+    this.isSustainable = false,
     this.latitude,
     this.longitude,
   });
@@ -39,6 +40,7 @@ class ListingDraft {
   final String condition;
   final String description;
   final List<ListingPhotoDraft> photos;
+  final bool isSustainable;
   final double? latitude;
   final double? longitude;
 }
@@ -121,6 +123,7 @@ class RestListingPublishService implements ListingPublishService {
         'category': draft.category,
         'condition': _conditionValue(draft.condition),
         'description': draft.description.trim(),
+        'isSustainable': draft.isSustainable,
         'images': [
           for (var index = 0; index < imageUrls.length; index++)
             {

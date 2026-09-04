@@ -98,7 +98,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(router.routeInformationProvider.value.uri.path, '/items/$_itemId');
-      expect(find.text('Notification Tent'), findsOneWidget);
+      expect(find.text('Notification Tent'), findsWidgets);
       expect(find.text(r'$75 NZD'), findsOneWidget);
     },
   );

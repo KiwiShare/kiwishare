@@ -81,6 +81,7 @@ void main() {
         'sortOrder': 0,
       },
     ]);
+    expect(body['isSustainable'], false);
     expect(body['location'], {
       'city': 'Auckland',
       'suburb': 'Mount Eden',
