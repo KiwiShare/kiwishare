@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
+import 'package:kiwishare/models/chat_message_model.dart';
 import 'package:kiwishare/config/api_config.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
@@ -79,6 +80,41 @@ void main() {
     expect(find.text('Ergonomic Office Chair'), findsOneWidget);
     expect(find.byKey(const Key('chat_message_1')), findsOneWidget);
     expect(find.byKey(const Key('chat_message_2')), findsOneWidget);
+  });
+
+  testWidgets('does not mark an in-flight initial load read after navigation', (
+    tester,
+  ) async {
+    final pendingMessages = Completer<ChatMessagePage>();
+    final repository = FakeChatRepository()
+      ..messageCompleters.add(pendingMessages);
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        conversation: testConversation(unreadCount: 1),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(repository.messageFetches, 1);
+
+    final context = tester.element(find.byType(ChatConversationScreen));
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Covering route')),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    pendingMessages.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '1', text: 'Unseen', isMine: false)],
+        hasMore: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.markReadCalls, 0);
   });
 
   testWidgets('shows Read only under the latest sent message when viewed', (
