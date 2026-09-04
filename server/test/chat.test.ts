@@ -490,6 +490,57 @@ describe('KiwiShare text chat API', () => {
     expect(invalidWatermark.status).toBe(400);
   });
 
+  test('bounds reads by history chronology when object ids sort oppositely', async () => {
+    const olderId = new mongoose.Types.ObjectId('68b8f000ffffffffffffffff');
+    const newerId = new mongoose.Types.ObjectId('68b8f0000000000000000000');
+    const olderTime = new Date('2026-09-04T23:20:00.100Z');
+    const newerTime = new Date('2026-09-04T23:20:00.900Z');
+
+    await Message.create([
+      {
+        _id: olderId,
+        conversationId,
+        senderId: buyerId,
+        receiverId: sellerId,
+        type: 'text',
+        text: 'Displayed chronological message.',
+        status: 'sent',
+        createdAt: olderTime,
+        updatedAt: olderTime
+      },
+      {
+        _id: newerId,
+        conversationId,
+        senderId: buyerId,
+        receiverId: sellerId,
+        type: 'text',
+        text: 'Newer message with a lower object id.',
+        status: 'sent',
+        createdAt: newerTime,
+        updatedAt: newerTime
+      }
+    ]);
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { sellerUnreadCount: 2 }
+    });
+
+    const read = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: olderId.toString() });
+
+    expect(read.status).toBe(200);
+    expect(read.body.readCount).toBe(1);
+    expect(read.body.unreadCount).toBe(1);
+    expect((await Message.findById(olderId))?.status).toBe('read');
+    expect((await Message.findById(newerId))?.status).toBe('sent');
+
+    await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: newerId.toString() });
+  });
+
   test('treats an empty legacy read snapshot as a no-op', async () => {
     const emptyRead = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)

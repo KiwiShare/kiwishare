@@ -233,34 +233,45 @@ router.post('/propose', async (ctx: Context) => {
     minute: '2-digit'
   });
 
-  const meetupMessage = await Message.create({
-    conversationId: conversation._id,
-    senderId: userId,
-    receiverId,
-    type: 'meetup',
-    text: `📅 Proposed meetup: ${formattedDate} at ${locationName.trim()}`,
-    meetup: {
-      orderId: order._id,
-      scheduledAt: parsedDate,
-      locationName: locationName.trim(),
-      latitude: typeof latitude === 'number' ? latitude : undefined,
-      longitude: typeof longitude === 'number' ? longitude : undefined,
-      proposalStatus: 'proposed',
-      proposedBy: userId,
-      note: typeof note === 'string' ? note.trim() : undefined
-    },
-    status: 'sent'
-  });
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const meetupMessage = await new Message({
+        conversationId: conversation._id,
+        senderId: userId,
+        receiverId,
+        type: 'meetup',
+        text: `📅 Proposed meetup: ${formattedDate} at ${locationName.trim()}`,
+        meetup: {
+          orderId: order._id,
+          scheduledAt: parsedDate,
+          locationName: locationName.trim(),
+          latitude: typeof latitude === 'number' ? latitude : undefined,
+          longitude: typeof longitude === 'number' ? longitude : undefined,
+          proposalStatus: 'proposed',
+          proposedBy: userId,
+          note: typeof note === 'string' ? note.trim() : undefined
+        },
+        status: 'sent'
+      }).save({ session });
 
-  await Conversation.findByIdAndUpdate(conversation._id, {
-    $set: {
-      lastMessageText: `📅 Meetup proposed: ${formattedDate}`,
-      lastMessageAt: meetupMessage.createdAt,
-      lastMessageSenderId: userId
-    },
-    $inc: isSeller ? { buyerUnreadCount: 1 } : { sellerUnreadCount: 1 },
-    $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
-  });
+      await Conversation.findByIdAndUpdate(
+        conversation._id,
+        {
+          $set: {
+            lastMessageText: `📅 Meetup proposed: ${formattedDate}`,
+            lastMessageAt: meetupMessage.createdAt,
+            lastMessageSenderId: userId
+          },
+          $inc: isSeller ? { buyerUnreadCount: 1 } : { sellerUnreadCount: 1 },
+          $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+        },
+        { session }
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
 
   const populatedOrder = await Order.findById(order._id)
     .populate('buyerId', 'displayName avatarUrl')

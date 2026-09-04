@@ -460,7 +460,7 @@ void main() {
     expect(await second, isTrue);
   });
 
-  test('queues a newer watermark behind an active read request', () async {
+  test('queues a newer watermark even when its id sorts lower', () async {
     final conversation = testConversation(unreadCount: 2);
     final pendingRead = Completer<void>();
     final repository = FakeChatRepository(conversations: [conversation])
@@ -471,12 +471,12 @@ void main() {
     final first = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
-      throughMessageId: '1',
+      throughMessageId: 'z-older-id',
     );
     final second = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
-      throughMessageId: '2',
+      throughMessageId: 'a-newer-id',
     );
 
     expect(repository.markReadCalls, 1);
@@ -484,7 +484,7 @@ void main() {
     expect(await first, isTrue);
     expect(await second, isTrue);
     expect(repository.markReadCalls, 2);
-    expect(repository.readThroughMessageIds, ['1', '2']);
+    expect(repository.readThroughMessageIds, ['z-older-id', 'a-newer-id']);
   });
 
   test(

@@ -356,7 +356,7 @@ router.get('/:conversationId/messages', async (ctx: Context) => {
   }
 
   const messages = await Message.find(filter)
-    .sort({ createdAt: -1 })
+    .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1);
   const hasMore = messages.length > limit;
   const page = messages.slice(0, limit).reverse();
@@ -695,15 +695,15 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
             status: { $ne: 'deleted' }
           })
             .session(session)
-            .select('_id')
+            .select('_id createdAt')
         : await Message.findOne({
             conversationId: conversation._id,
             receiverId: userId,
             status: { $in: ['sent', 'delivered'] }
           })
-            .sort({ _id: -1 })
+            .sort({ createdAt: -1, _id: -1 })
             .session(session)
-            .select('_id');
+            .select('_id createdAt');
 
       if (!watermark) {
         invalidWatermark = throughMessageId !== undefined;
@@ -714,7 +714,10 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
         {
           conversationId: conversation._id,
           receiverId: userId,
-          _id: { $lte: watermark._id },
+          $or: [
+            { createdAt: { $lt: watermark.createdAt } },
+            { createdAt: watermark.createdAt, _id: { $lte: watermark._id } }
+          ],
           status: { $in: ['sent', 'delivered'] }
         },
         { $set: { status: 'read', readAt: new Date() } },

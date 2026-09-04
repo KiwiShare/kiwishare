@@ -65,7 +65,7 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, int> _conversationRenderVersions = {};
   final Map<String, Future<bool>> _markingReadOperations = {};
   final Map<String, String> _activeReadWatermarks = {};
-  final Map<String, String> _queuedReadWatermarks = {};
+  final Map<String, List<String>> _queuedReadWatermarks = {};
   final Map<String, Completer<void>> _messageLoadCompleters = {};
   final Set<String> _messageRefreshQueued = {};
 
@@ -331,11 +331,13 @@ class ChatProvider extends ChangeNotifier {
         throughMessageId ??
         _latestMessageId(_messages[conversation.id] ?? const []);
     if (watermark == null) return Future.value(false);
-    final highestWatermark =
-        _queuedReadWatermarks[conversation.id] ??
-        _activeReadWatermarks[conversation.id];
-    if (highestWatermark == null || watermark.compareTo(highestWatermark) > 0) {
-      _queuedReadWatermarks[conversation.id] = watermark;
+    final queued = _queuedReadWatermarks.putIfAbsent(
+      conversation.id,
+      () => <String>[],
+    );
+    if (_activeReadWatermarks[conversation.id] != watermark &&
+        !queued.contains(watermark)) {
+      queued.add(watermark);
     }
     final pending = _markingReadOperations[conversation.id];
     if (pending != null) return pending;
@@ -360,8 +362,13 @@ class ChatProvider extends ChangeNotifier {
   }) async {
     var succeeded = true;
     while (_sessionToken == token) {
-      final watermark = _queuedReadWatermarks.remove(conversation.id);
-      if (watermark == null) break;
+      final queued = _queuedReadWatermarks[conversation.id];
+      if (queued == null || queued.isEmpty) {
+        _queuedReadWatermarks.remove(conversation.id);
+        break;
+      }
+      final watermark = queued.removeAt(0);
+      if (queued.isEmpty) _queuedReadWatermarks.remove(conversation.id);
       _activeReadWatermarks[conversation.id] = watermark;
       try {
         succeeded = await _markConversationReadNow(
