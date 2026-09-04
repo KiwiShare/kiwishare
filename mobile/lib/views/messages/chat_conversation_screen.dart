@@ -197,6 +197,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     await _chatProvider.markConversationRead(
       conversation: widget.conversation,
       token: token,
+      shouldMarkRead: () => _isCurrentRoute,
     );
   }
 
@@ -317,6 +318,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             _chatProvider.loadMessages(
               conversation: widget.conversation,
               token: token,
+              shouldMarkRead: () => _isCurrentRoute,
             );
             _scrollToEnd();
           }
@@ -574,6 +576,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
               _chatProvider.loadMessages(
                 conversation: widget.conversation,
                 token: token,
+                shouldMarkRead: () => _isCurrentRoute,
               );
             }
           },

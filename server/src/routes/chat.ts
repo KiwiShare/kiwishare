@@ -736,6 +736,11 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
         receiverId: userId,
         status: { $in: ['sent', 'delivered'] }
       }).session(session);
+      const isHidden = await Conversation.exists({
+        _id: conversation._id,
+        hiddenForUserIds: userId
+      }).session(session);
+      if (isHidden) unreadCount = 0;
       await Conversation.findByIdAndUpdate(
         conversation._id,
         { $set: { [unreadField]: unreadCount } },

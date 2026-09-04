@@ -4,12 +4,14 @@ import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import app from '../src/app';
 import Conversation from '../src/models/Conversation';
 import Item from '../src/models/Item';
+import Message from '../src/models/Message';
 
 jest.setTimeout(60000);
 
 describe('KiwiShare per-member chat removal', () => {
   let mongoServer: MongoMemoryReplSet;
   let buyerId = '';
+  let sellerId = '';
   let buyerToken = '';
   let sellerToken = '';
   let outsiderToken = '';
@@ -41,6 +43,7 @@ describe('KiwiShare per-member chat removal', () => {
     ]);
     const [buyer, seller, outsider] = registrations.map((res) => res.body);
     buyerId = buyer.user.id;
+    sellerId = seller.user.id;
     buyerToken = buyer.token;
     sellerToken = seller.token;
     outsiderToken = outsider.token;
@@ -126,5 +129,67 @@ describe('KiwiShare per-member chat removal', () => {
     expect(reopened.status).toBe(200);
     expect(reopened.body.conversation.id).toBe(conversationId);
     expect(await Conversation.countDocuments()).toBe(1);
+  });
+
+  test('a concurrent bounded read cannot restore unread state after removal', async () => {
+    const displayed = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Displayed before removing the seller chat.' });
+    const unseen = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Unseen before removing the seller chat.' });
+    expect(displayed.status).toBe(201);
+    expect(unseen.status).toBe(201);
+
+    let releaseFirstUpdate!: () => void;
+    const firstUpdateReleased = new Promise<void>((resolve) => {
+      releaseFirstUpdate = resolve;
+    });
+    let signalFirstUpdate!: () => void;
+    const firstUpdateStarted = new Promise<void>((resolve) => {
+      signalFirstUpdate = resolve;
+    });
+    const originalUpdateMany = Message.updateMany.bind(Message);
+    const updateSpy = jest
+      .spyOn(Message, 'updateMany')
+      .mockImplementationOnce((async (...args: any[]) => {
+        signalFirstUpdate();
+        await firstUpdateReleased;
+        return (originalUpdateMany as any)(...args);
+      }) as any);
+
+    try {
+      const readResponse = request(app.callback())
+        .patch(`/api/conversations/${conversationId}/read`)
+        .set('Authorization', `Bearer ${sellerToken}`)
+        .send({ throughMessageId: displayed.body.message.id })
+        .then((response) => response);
+      await firstUpdateStarted;
+
+      const removed = await request(app.callback())
+        .delete(`/api/conversations/${conversationId}`)
+        .set('Authorization', `Bearer ${sellerToken}`);
+      expect(removed.status).toBe(200);
+      releaseFirstUpdate();
+      expect((await readResponse).status).toBe(200);
+
+      const hidden = await Conversation.findById(conversationId);
+      expect(hidden?.hiddenForUserIds.map(String)).toContain(sellerId);
+      expect(hidden?.sellerUnreadCount).toBe(0);
+
+      const deliveredAfterRemoval = await request(app.callback())
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({ text: 'Only this message should restore the seller badge.' });
+      expect(deliveredAfterRemoval.status).toBe(201);
+      const restored = await Conversation.findById(conversationId);
+      expect(restored?.hiddenForUserIds.map(String)).not.toContain(sellerId);
+      expect(restored?.sellerUnreadCount).toBe(1);
+    } finally {
+      releaseFirstUpdate();
+      updateSpy.mockRestore();
+    }
   });
 });

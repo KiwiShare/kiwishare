@@ -488,6 +488,40 @@ void main() {
   });
 
   test(
+    'drops a queued read when the conversation is no longer visible',
+    () async {
+      final conversation = testConversation(unreadCount: 2);
+      final pendingRead = Completer<void>();
+      final repository = FakeChatRepository(conversations: [conversation])
+        ..markReadCompleter = pendingRead;
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+      var isVisible = true;
+
+      final first = provider.markConversationRead(
+        conversation: conversation,
+        token: 'valid-token',
+        throughMessageId: 'first',
+        shouldMarkRead: () => isVisible,
+      );
+      final second = provider.markConversationRead(
+        conversation: conversation,
+        token: 'valid-token',
+        throughMessageId: 'second',
+        shouldMarkRead: () => isVisible,
+      );
+
+      expect(repository.markReadCalls, 1);
+      isVisible = false;
+      pendingRead.complete();
+      expect(await first, isTrue);
+      expect(await second, isTrue);
+      expect(repository.markReadCalls, 1);
+      expect(repository.readThroughMessageIds, ['first']);
+    },
+  );
+
+  test(
     'successful read reconciles a stale in-flight conversation load',
     () async {
       final conversation = testConversation(unreadCount: 4);

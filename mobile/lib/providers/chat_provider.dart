@@ -8,6 +8,13 @@ import '../repositories/chat_repository.dart';
 import '../services/chat_photo_upload_service.dart';
 import '../services/chat_voice_service.dart';
 
+class _QueuedReadWatermark {
+  const _QueuedReadWatermark({required this.id, this.shouldMarkRead});
+
+  final String id;
+  final bool Function()? shouldMarkRead;
+}
+
 class ChatProvider extends ChangeNotifier {
   ChatProvider({
     required this.repository,
@@ -65,7 +72,7 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, int> _conversationRenderVersions = {};
   final Map<String, Future<bool>> _markingReadOperations = {};
   final Map<String, String> _activeReadWatermarks = {};
-  final Map<String, List<String>> _queuedReadWatermarks = {};
+  final Map<String, List<_QueuedReadWatermark>> _queuedReadWatermarks = {};
   final Map<String, Completer<void>> _messageLoadCompleters = {};
   final Set<String> _messageRefreshQueued = {};
 
@@ -296,6 +303,7 @@ class ChatProvider extends ChangeNotifier {
             conversation: canonical,
             token: token,
             throughMessageId: readThroughMessageId,
+            shouldMarkRead: shouldMarkRead,
           );
         }
       }
@@ -324,6 +332,7 @@ class ChatProvider extends ChangeNotifier {
     required ChatConversationModel conversation,
     required String token,
     String? throughMessageId,
+    bool Function()? shouldMarkRead,
   }) {
     if (conversation.id.isEmpty || token.isEmpty) return Future.value(false);
     _useSession(token);
@@ -333,11 +342,13 @@ class ChatProvider extends ChangeNotifier {
     if (watermark == null) return Future.value(false);
     final queued = _queuedReadWatermarks.putIfAbsent(
       conversation.id,
-      () => <String>[],
+      () => <_QueuedReadWatermark>[],
     );
     if (_activeReadWatermarks[conversation.id] != watermark &&
-        !queued.contains(watermark)) {
-      queued.add(watermark);
+        !queued.any((entry) => entry.id == watermark)) {
+      queued.add(
+        _QueuedReadWatermark(id: watermark, shouldMarkRead: shouldMarkRead),
+      );
     }
     final pending = _markingReadOperations[conversation.id];
     if (pending != null) return pending;
@@ -367,8 +378,10 @@ class ChatProvider extends ChangeNotifier {
         _queuedReadWatermarks.remove(conversation.id);
         break;
       }
-      final watermark = queued.removeAt(0);
+      final queuedWatermark = queued.removeAt(0);
       if (queued.isEmpty) _queuedReadWatermarks.remove(conversation.id);
+      if (!(queuedWatermark.shouldMarkRead?.call() ?? true)) continue;
+      final watermark = queuedWatermark.id;
       _activeReadWatermarks[conversation.id] = watermark;
       try {
         succeeded = await _markConversationReadNow(
