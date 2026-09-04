@@ -410,6 +410,20 @@ describe('KiwiShare text chat API', () => {
       })
     ).toBe(2);
 
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { sellerUnreadCount: 5 }
+    });
+    const repairedRead = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sellerWatermark!._id.toString() });
+    expect(repairedRead.status).toBe(200);
+    expect(repairedRead.body.readCount).toBe(0);
+    expect(repairedRead.body.unreadCount).toBe(0);
+    expect(
+      (await Conversation.findById(conversationId))?.sellerUnreadCount
+    ).toBe(0);
+
     const reply = await request(app.callback())
       .post(`/api/conversations/${conversationId}/messages`)
       .set('Authorization', `Bearer ${sellerToken}`)
@@ -459,16 +473,19 @@ describe('KiwiShare text chat API', () => {
       (await Conversation.findById(conversationId))?.sellerUnreadCount
     ).toBe(1);
 
-    const missingWatermark = await request(app.callback())
+    const legacyRead = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
-      .set('Authorization', `Bearer ${sellerToken}`)
-      .send({});
-    expect(missingWatermark.status).toBe(400);
+      .set('Authorization', `Bearer ${sellerToken}`);
+    expect(legacyRead.status).toBe(200);
+    expect(legacyRead.body.readCount).toBe(1);
+    expect(legacyRead.body.unreadCount).toBe(0);
+    expect((await Message.findById(later.body.message.id))?.status).toBe('read');
 
-    await request(app.callback())
+    const invalidWatermark = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
       .set('Authorization', `Bearer ${sellerToken}`)
-      .send({ throughMessageId: later.body.message.id });
+      .send({ throughMessageId: 'not-an-object-id' });
+    expect(invalidWatermark.status).toBe(400);
   });
 
   test('stores an R2 image URL and returns it in chat history', async () => {

@@ -580,8 +580,9 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   const throughMessageId = (ctx.request.body as { throughMessageId?: unknown })
     ?.throughMessageId;
   if (
-    typeof throughMessageId !== 'string' ||
-    !mongoose.Types.ObjectId.isValid(throughMessageId)
+    throughMessageId !== undefined &&
+    (typeof throughMessageId !== 'string' ||
+      !mongoose.Types.ObjectId.isValid(throughMessageId))
   ) {
     ctx.status = 400;
     ctx.body = {
@@ -590,12 +591,20 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
     };
     return;
   }
-  const watermark = await Message.findOne({
-    _id: new mongoose.Types.ObjectId(throughMessageId),
-    conversationId: conversation._id,
-    status: { $ne: 'deleted' }
-  }).select('_id');
-  if (!watermark) {
+  const watermark = throughMessageId
+    ? await Message.findOne({
+        _id: new mongoose.Types.ObjectId(throughMessageId),
+        conversationId: conversation._id,
+        status: { $ne: 'deleted' }
+      }).select('_id')
+    : await Message.findOne({
+        conversationId: conversation._id,
+        receiverId: userId,
+        status: { $in: ['sent', 'delivered'] }
+      })
+        .sort({ _id: -1 })
+        .select('_id');
+  if (throughMessageId !== undefined && !watermark) {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
@@ -609,7 +618,7 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
     {
       conversationId: conversation._id,
       receiverId: userId,
-      _id: { $lte: watermark._id },
+      ...(watermark ? { _id: { $lte: watermark._id } } : {}),
       status: { $in: ['sent', 'delivered'] }
     },
     { $set: { status: 'read', readAt } }
@@ -619,30 +628,14 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   const unreadField = readingAsBuyer
     ? 'buyerUnreadCount'
     : 'sellerUnreadCount';
-  const updatedConversation = await Conversation.findByIdAndUpdate(
-    conversation._id,
-    [
-      {
-        $set: {
-          [unreadField]: {
-            $max: [
-              0,
-              {
-                $subtract: [
-                  { $ifNull: [`$${unreadField}`, 0] },
-                  result.modifiedCount
-                ]
-              }
-            ]
-          }
-        }
-      }
-    ],
-    { new: true }
-  );
-  const unreadCount = readingAsBuyer
-    ? updatedConversation?.buyerUnreadCount ?? 0
-    : updatedConversation?.sellerUnreadCount ?? 0;
+  const unreadCount = await Message.countDocuments({
+    conversationId: conversation._id,
+    receiverId: userId,
+    status: { $in: ['sent', 'delivered'] }
+  });
+  await Conversation.findByIdAndUpdate(conversation._id, {
+    $set: { [unreadField]: unreadCount }
+  });
 
   if (result.modifiedCount > 0) {
     const receiptRecipientId = readingAsBuyer

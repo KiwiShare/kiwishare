@@ -64,6 +64,8 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, String> _conversationDeleteErrors = {};
   final Map<String, int> _conversationRenderVersions = {};
   final Map<String, Future<bool>> _markingReadOperations = {};
+  final Map<String, String> _activeReadWatermarks = {};
+  final Map<String, String> _queuedReadWatermarks = {};
   final Map<String, Completer<void>> _messageLoadCompleters = {};
   final Set<String> _messageRefreshQueued = {};
 
@@ -135,6 +137,8 @@ class ChatProvider extends ChangeNotifier {
     _conversationDeleteErrors.clear();
     _conversationRenderVersions.clear();
     _markingReadOperations.clear();
+    _activeReadWatermarks.clear();
+    _queuedReadWatermarks.clear();
     _messageLoadCompleters.clear();
     _messageRefreshQueued.clear();
   }
@@ -327,15 +331,20 @@ class ChatProvider extends ChangeNotifier {
         throughMessageId ??
         _latestMessageId(_messages[conversation.id] ?? const []);
     if (watermark == null) return Future.value(false);
+    final highestWatermark =
+        _queuedReadWatermarks[conversation.id] ??
+        _activeReadWatermarks[conversation.id];
+    if (highestWatermark == null || watermark.compareTo(highestWatermark) > 0) {
+      _queuedReadWatermarks[conversation.id] = watermark;
+    }
     final pending = _markingReadOperations[conversation.id];
     if (pending != null) return pending;
 
     late final Future<bool> operation;
     operation =
-        _markConversationReadNow(
+        _drainMarkConversationRead(
           conversation: conversation,
           token: token,
-          throughMessageId: watermark,
         ).whenComplete(() {
           if (identical(_markingReadOperations[conversation.id], operation)) {
             _markingReadOperations.remove(conversation.id);
@@ -343,6 +352,34 @@ class ChatProvider extends ChangeNotifier {
         });
     _markingReadOperations[conversation.id] = operation;
     return operation;
+  }
+
+  Future<bool> _drainMarkConversationRead({
+    required ChatConversationModel conversation,
+    required String token,
+  }) async {
+    var succeeded = true;
+    while (_sessionToken == token) {
+      final watermark = _queuedReadWatermarks.remove(conversation.id);
+      if (watermark == null) break;
+      _activeReadWatermarks[conversation.id] = watermark;
+      try {
+        succeeded = await _markConversationReadNow(
+          conversation: conversation,
+          token: token,
+          throughMessageId: watermark,
+        );
+      } finally {
+        if (_activeReadWatermarks[conversation.id] == watermark) {
+          _activeReadWatermarks.remove(conversation.id);
+        }
+      }
+      if (!succeeded) {
+        _queuedReadWatermarks.remove(conversation.id);
+        break;
+      }
+    }
+    return succeeded && _sessionToken == token;
   }
 
   Future<bool> _markConversationReadNow({

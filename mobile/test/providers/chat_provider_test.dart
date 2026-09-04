@@ -460,6 +460,33 @@ void main() {
     expect(await second, isTrue);
   });
 
+  test('queues a newer watermark behind an active read request', () async {
+    final conversation = testConversation(unreadCount: 2);
+    final pendingRead = Completer<void>();
+    final repository = FakeChatRepository(conversations: [conversation])
+      ..markReadCompleter = pendingRead;
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+
+    final first = provider.markConversationRead(
+      conversation: conversation,
+      token: 'valid-token',
+      throughMessageId: '1',
+    );
+    final second = provider.markConversationRead(
+      conversation: conversation,
+      token: 'valid-token',
+      throughMessageId: '2',
+    );
+
+    expect(repository.markReadCalls, 1);
+    pendingRead.complete();
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+    expect(repository.markReadCalls, 2);
+    expect(repository.readThroughMessageIds, ['1', '2']);
+  });
+
   test(
     'successful read reconciles a stale in-flight conversation load',
     () async {
