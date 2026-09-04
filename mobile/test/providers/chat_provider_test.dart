@@ -49,6 +49,43 @@ void main() {
   });
 
   test(
+    'message conversation snapshots are scoped to the active session',
+    () async {
+      final conversation = testConversation();
+      final provider = ChatProvider(repository: FakeChatRepository());
+
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'account-a-token',
+      );
+
+      expect(
+        provider.messageConversationByIdForSession(
+          conversation.id,
+          'account-a-token',
+        ),
+        same(conversation),
+      );
+      expect(
+        provider.messageConversationByIdForSession(
+          conversation.id,
+          'account-b-token',
+        ),
+        isNull,
+      );
+
+      provider.updateAuthToken('account-b-token');
+      expect(
+        provider.messageConversationByIdForSession(
+          conversation.id,
+          'account-b-token',
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
     'loads conversations and exposes a recoverable repository error',
     () async {
       final repository = FakeChatRepository(

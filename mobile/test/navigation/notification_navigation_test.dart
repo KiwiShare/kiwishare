@@ -316,6 +316,50 @@ void main() {
     },
   );
 
+  test(
+    'read receipt refreshes a directly opened chat without a list cache',
+    () async {
+      const receipt = ChatReadPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+      );
+      final conversation = testConversation();
+      final repository = FakeChatRepository(
+        messages: {
+          conversation.id: [
+            testMessage(id: '1', text: 'Waiting', isMine: true),
+          ],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+      repository.messages[conversation.id] = [
+        testMessage(
+          id: '1',
+          text: 'Waiting',
+          isMine: true,
+          status: 'read',
+          readAt: DateTime.utc(2026, 8, 27, 8, 31),
+        ),
+      ];
+
+      await refreshChatReadReceipt(
+        message: receipt,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+
+      expect(repository.conversationFetches, 0);
+      expect(repository.messageFetches, 2);
+      expect(provider.messagesFor(conversation.id).single.status, 'read');
+    },
+  );
+
   testWidgets('cold-start notification replaces the pending splash route', (
     tester,
   ) async {

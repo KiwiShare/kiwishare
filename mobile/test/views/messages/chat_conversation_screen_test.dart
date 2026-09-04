@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -130,6 +131,106 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Read'), findsNothing);
+  });
+
+  testWidgets('refreshes read receipts after returning from the background', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [testMessage(id: '1', text: 'Waiting', isMine: true)],
+      },
+    );
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+    expect(find.text('Read'), findsNothing);
+
+    repository.messages['conversation-1'] = [
+      testMessage(
+        id: '1',
+        text: 'Waiting',
+        isMine: true,
+        status: 'read',
+        readAt: DateTime.utc(2026, 8, 27, 8, 31),
+      ),
+    ];
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 2);
+    expect(find.byKey(const Key('chat_read_receipt_1')), findsOneWidget);
+  });
+
+  testWidgets('does not refresh a covered chat when the app resumes', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [testMessage(id: '1', text: 'Waiting', isMine: true)],
+      },
+    );
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(ChatConversationScreen));
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Covering route')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    repository.messages['conversation-1'] = [
+      testMessage(id: '1', text: 'Waiting', isMine: true, status: 'read'),
+    ];
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 1);
+  });
+
+  testWidgets('keeps voice playback exposed to accessibility services', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '1',
+            text: '',
+            isMine: false,
+            type: 'voice',
+            audioUrl: 'https://example.test/voice.m4a',
+            durationMs: 4000,
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    final playButton = find.byKey(const Key('chat_voice_play_1'));
+    expect(playButton, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(playButton)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+    semantics.dispose();
   });
 
   testWidgets('aligns received content left and sent content right', (

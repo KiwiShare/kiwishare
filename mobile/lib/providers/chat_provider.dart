@@ -52,6 +52,7 @@ class ChatProvider extends ChangeNotifier {
   bool _conversationRefreshQueued = false;
 
   final Map<String, List<ChatMessageModel>> _messages = {};
+  final Map<String, ChatConversationModel> _messageConversationSnapshots = {};
   final Set<String> _loadingConversationIds = {};
   final Set<String> _sendingConversationIds = {};
   final Set<String> _startingItemIds = {};
@@ -68,6 +69,15 @@ class ChatProvider extends ChangeNotifier {
 
   List<ChatMessageModel> messagesFor(String conversationId) =>
       List.unmodifiable(_messages[conversationId] ?? const []);
+  ChatConversationModel? messageConversationByIdForSession(
+    String conversationId,
+    String? token,
+  ) {
+    if (token == null || !ownsSession(token)) return null;
+    return conversationById(conversationId) ??
+        _messageConversationSnapshots[conversationId];
+  }
+
   bool isLoadingMessages(String conversationId) =>
       _loadingConversationIds.contains(conversationId);
   bool isSending(String conversationId) =>
@@ -113,6 +123,7 @@ class ChatProvider extends ChangeNotifier {
     _conversationError = null;
     _conversationRefreshQueued = false;
     _messages.clear();
+    _messageConversationSnapshots.clear();
     _loadingConversationIds.clear();
     _sendingConversationIds.clear();
     _startingItemIds.clear();
@@ -227,6 +238,7 @@ class ChatProvider extends ChangeNotifier {
     bool Function()? shouldMarkRead,
   }) async {
     _useSession(token);
+    _messageConversationSnapshots[conversation.id] = conversation;
     if (_loadingConversationIds.contains(conversation.id)) {
       if (!queueIfBusy) return;
       _messageRefreshQueued.add(conversation.id);

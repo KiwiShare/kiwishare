@@ -35,7 +35,8 @@ class ChatConversationScreen extends StatefulWidget {
   State<ChatConversationScreen> createState() => _ChatConversationScreenState();
 }
 
-class _ChatConversationScreenState extends State<ChatConversationScreen> {
+class _ChatConversationScreenState extends State<ChatConversationScreen>
+    with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   late final ListingImagePicker _imagePicker;
@@ -48,14 +49,42 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   int _recordingSeconds = 0;
   String? _loadedToken;
   String? _currentAuthToken;
+  bool _leftForeground = false;
 
   @override
   void initState() {
     super.initState();
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _voiceRecorder = widget.voiceRecorder ?? DeviceChatVoiceRecorder();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhoto());
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _leftForeground = true;
+      return;
+    }
+    if (!_leftForeground) return;
+    _leftForeground = false;
+    unawaited(_refreshAfterResume());
+  }
+
+  Future<void> _refreshAfterResume() async {
+    final token = _currentAuthToken;
+    if (!_isCurrentRoute || token == null || token.isEmpty) return;
+    await _chatProvider.loadMessages(
+      conversation: widget.conversation,
+      token: token,
+      queueIfBusy: true,
+      shouldMarkRead: () => _isCurrentRoute,
+    );
+    if (mounted) _scrollToEnd();
+  }
+
+  bool get _isCurrentRoute =>
+      mounted && (ModalRoute.of(context)?.isCurrent ?? false);
 
   ChatProvider get _chatProvider =>
       widget.chatProvider ?? context.read<ChatProvider>();
@@ -80,6 +109,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _recordingTimer?.cancel();
     if (_isRecording || _isStartingVoice) {
       unawaited(_queueRecorder(_voiceRecorder.cancel));
@@ -444,7 +474,7 @@ class _MessageBubble extends StatelessWidget {
         ? 'a voice message'
         : message.text;
     return Semantics(
-      excludeSemantics: true,
+      excludeSemantics: !message.isVoice,
       label: mine
           ? 'You sent $semanticContent${showReadReceipt ? ', read' : ''}'
           : 'They sent $semanticContent',

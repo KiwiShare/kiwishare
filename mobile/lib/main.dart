@@ -370,7 +370,7 @@ Future<void> refreshChatReadReceipt({
       activeConversationIdProvider() != message.conversationId) {
     return;
   }
-  final conversation = chatProvider.conversationByIdForSession(
+  final conversation = chatProvider.messageConversationByIdForSession(
     message.conversationId,
     authToken,
   );
