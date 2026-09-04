@@ -55,6 +55,109 @@ void main() {
     },
   );
 
+  test(
+    'foreground notification refreshes the open conversation immediately',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final conversation = testConversation(unreadCount: 1);
+      final repository = FakeChatRepository(
+        conversations: [conversation],
+        messages: {
+          conversation.id: [
+            testMessage(id: '1', text: 'New message', isMine: false),
+          ],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+
+      await refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+
+      expect(repository.conversationFetches, 1);
+      expect(repository.messageFetches, 1);
+      expect(repository.markReadCalls, 1);
+      expect(provider.messagesFor(conversation.id).single.text, 'New message');
+      expect(provider.totalUnreadCount, 0);
+    },
+  );
+
+  test(
+    'foreground notification does not mark a conversation read off-screen',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final repository = FakeChatRepository(
+        conversations: [testConversation(unreadCount: 1)],
+      );
+      final provider = ChatProvider(repository: repository);
+
+      await refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => 'another-conversation',
+      );
+
+      expect(repository.conversationFetches, 1);
+      expect(repository.messageFetches, 0);
+      expect(repository.markReadCalls, 0);
+      expect(provider.totalUnreadCount, 1);
+    },
+  );
+
+  test(
+    'navigation away during refresh does not mark the message read',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final conversation = testConversation(unreadCount: 1);
+      final conversationLoad = Completer<List<ChatConversationModel>>();
+      final repository = FakeChatRepository()
+        ..conversationCompleters.add(conversationLoad);
+      final provider = ChatProvider(repository: repository);
+      String? activeConversationId = conversation.id;
+
+      final refresh = refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => activeConversationId,
+      );
+      activeConversationId = null;
+      conversationLoad.complete([conversation]);
+      await refresh;
+
+      expect(repository.messageFetches, 0);
+      expect(repository.markReadCalls, 0);
+    },
+  );
+
   test('notification for another account cannot refresh chat state', () async {
     const message = ChatPushMessage(
       conversationId: 'conversation-1',

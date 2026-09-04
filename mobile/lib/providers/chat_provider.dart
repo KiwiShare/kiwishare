@@ -63,6 +63,8 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, String> _conversationDeleteErrors = {};
   final Map<String, int> _conversationRenderVersions = {};
   final Map<String, Future<bool>> _markingReadOperations = {};
+  final Map<String, Completer<void>> _messageLoadCompleters = {};
+  final Set<String> _messageRefreshQueued = {};
 
   List<ChatMessageModel> messagesFor(String conversationId) =>
       List.unmodifiable(_messages[conversationId] ?? const []);
@@ -122,6 +124,8 @@ class ChatProvider extends ChangeNotifier {
     _conversationDeleteErrors.clear();
     _conversationRenderVersions.clear();
     _markingReadOperations.clear();
+    _messageLoadCompleters.clear();
+    _messageRefreshQueued.clear();
   }
 
   Future<ChatConversationModel?> startConversation({
@@ -219,10 +223,23 @@ class ChatProvider extends ChangeNotifier {
   Future<void> loadMessages({
     required ChatConversationModel conversation,
     required String token,
+    bool queueIfBusy = false,
   }) async {
     _useSession(token);
-    if (_loadingConversationIds.contains(conversation.id)) return;
+    if (_loadingConversationIds.contains(conversation.id)) {
+      if (!queueIfBusy) return;
+      _messageRefreshQueued.add(conversation.id);
+      final activeLoad = _messageLoadCompleters[conversation.id]?.future;
+      if (activeLoad != null) await activeLoad;
+      if (_sessionToken == token &&
+          _messageRefreshQueued.remove(conversation.id)) {
+        await loadMessages(conversation: conversation, token: token);
+      }
+      return;
+    }
     _loadingConversationIds.add(conversation.id);
+    final loadCompleter = Completer<void>();
+    _messageLoadCompleters[conversation.id] = loadCompleter;
     _messageLoadErrors.remove(conversation.id);
     notifyListeners();
     try {
@@ -252,6 +269,10 @@ class ChatProvider extends ChangeNotifier {
       if (_sessionToken == token) {
         _loadingConversationIds.remove(conversation.id);
         notifyListeners();
+      }
+      if (!loadCompleter.isCompleted) loadCompleter.complete();
+      if (identical(_messageLoadCompleters[conversation.id], loadCompleter)) {
+        _messageLoadCompleters.remove(conversation.id);
       }
     }
   }

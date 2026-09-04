@@ -275,6 +275,7 @@ void _showForegroundChatNotification(
         activeUserId: auth.currentUser?.id,
         authToken: auth.jwtToken,
         chatProvider: chat,
+        activeConversationIdProvider: () => activeChatConversationId(_router),
       ),
     );
   }
@@ -307,6 +308,7 @@ Future<void> refreshChatUnreadForMessage({
   required String? activeUserId,
   required String? authToken,
   required ChatProvider chatProvider,
+  String? Function()? activeConversationIdProvider,
 }) async {
   if (!shouldOpenChatNotificationForUser(message, activeUserId) ||
       authToken == null ||
@@ -314,6 +316,25 @@ Future<void> refreshChatUnreadForMessage({
     return;
   }
   await chatProvider.loadConversations(authToken, queueIfBusy: true);
+  if (activeConversationIdProvider?.call() != message.conversationId) return;
+  final conversation = chatProvider.conversationByIdForSession(
+    message.conversationId,
+    authToken,
+  );
+  if (conversation == null) return;
+  await chatProvider.loadMessages(
+    conversation: conversation,
+    token: authToken,
+    queueIfBusy: true,
+  );
+}
+
+@visibleForTesting
+String? activeChatConversationId(GoRouter router) {
+  final segments = router.routerDelegate.currentConfiguration.uri.pathSegments;
+  if (segments.length != 2 || segments.first != 'messages') return null;
+  final conversationId = segments.last.trim();
+  return conversationId.isEmpty ? null : conversationId;
 }
 
 bool shouldOpenChatNotificationForUser(

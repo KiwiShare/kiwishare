@@ -198,6 +198,51 @@ void main() {
     expect(provider.isLoadingMessages(conversation.id), isFalse);
   });
 
+  test('queues one fresh message load behind an in-flight load', () async {
+    final conversation = testConversation();
+    final staleLoad = Completer<ChatMessagePage>();
+    final freshLoad = Completer<ChatMessagePage>();
+    final repository = FakeChatRepository()
+      ..messageCompleters.addAll([staleLoad, freshLoad]);
+    final provider = ChatProvider(repository: repository);
+
+    final loading = provider.loadMessages(
+      conversation: conversation,
+      token: 'valid-token',
+    );
+    final refreshOne = provider.loadMessages(
+      conversation: conversation,
+      token: 'valid-token',
+      queueIfBusy: true,
+    );
+    final refreshTwo = provider.loadMessages(
+      conversation: conversation,
+      token: 'valid-token',
+      queueIfBusy: true,
+    );
+
+    staleLoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '1', text: 'Stale', isMine: true)],
+        hasMore: false,
+      ),
+    );
+    await loading;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.messageFetches, 2);
+    freshLoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '2', text: 'Fresh', isMine: true)],
+        hasMore: false,
+      ),
+    );
+    await Future.wait([refreshOne, refreshTwo]);
+
+    expect(repository.messageFetches, 2);
+    expect(provider.messagesFor(conversation.id).single.text, 'Fresh');
+  });
+
   test(
     'loads a new empty conversation without an unnecessary read request',
     () async {
