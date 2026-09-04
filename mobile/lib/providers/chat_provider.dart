@@ -491,6 +491,52 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> sendLocation({
+    required ChatConversationModel conversation,
+    required String name,
+    required double latitude,
+    required double longitude,
+    required String token,
+  }) async {
+    if (token.isNotEmpty) _useSession(token);
+    if (name.trim().isEmpty ||
+        _sendingConversationIds.contains(conversation.id)) {
+      return false;
+    }
+
+    _sendingConversationIds.add(conversation.id);
+    _messageSendErrors.remove(conversation.id);
+    notifyListeners();
+    try {
+      final message = await repository.sendLocationMessage(
+        conversationId: conversation.id,
+        name: name.trim(),
+        latitude: latitude,
+        longitude: longitude,
+        token: token,
+      );
+      if (_sessionToken != token) return false;
+      _appendMessage(conversation, message, preview: '📍 ${name.trim()}');
+      return true;
+    } on ChatRepositoryException catch (error) {
+      if (_sessionToken == token) {
+        _messageSendErrors[conversation.id] = error.message;
+      }
+      return false;
+    } catch (_) {
+      if (_sessionToken == token) {
+        _messageSendErrors[conversation.id] =
+            'Your location was not sent. Please try again.';
+      }
+      return false;
+    } finally {
+      if (_sessionToken == token) {
+        _sendingConversationIds.remove(conversation.id);
+        notifyListeners();
+      }
+    }
+  }
+
   Future<bool> deleteConversation({
     required ChatConversationModel conversation,
     required String token,

@@ -94,6 +94,41 @@ class WatchlistPriceDropMessage {
   }
 }
 
+class MeetupPushMessage {
+  const MeetupPushMessage({
+    required this.orderId,
+    required this.itemId,
+    required this.itemTitle,
+    required this.scheduledAt,
+    required this.locationName,
+  });
+
+  final String orderId;
+  final String itemId;
+  final String itemTitle;
+  final DateTime scheduledAt;
+  final String locationName;
+
+  static MeetupPushMessage? fromData(Map<String, dynamic> data) {
+    if (data['type'] != 'meetup_confirmed') return null;
+    final orderId = data['orderId']?.toString().trim() ?? '';
+    if (orderId.isEmpty) return null;
+    DateTime date;
+    try {
+      date = DateTime.parse(data['scheduledAt']?.toString() ?? '');
+    } catch (_) {
+      date = DateTime.now();
+    }
+    return MeetupPushMessage(
+      orderId: orderId,
+      itemId: data['itemId']?.toString() ?? '',
+      itemTitle: data['itemTitle']?.toString() ?? 'Item',
+      scheduledAt: date,
+      locationName: data['locationName']?.toString() ?? '',
+    );
+  }
+}
+
 /// Firebase Messaging boundary. Tests implement this without initializing
 /// Firebase or constructing plugin-specific message/settings objects.
 abstract class PushMessagingClient {
@@ -165,22 +200,29 @@ class PushNotificationService implements PushNotificationSession {
     required this.platform,
     required this.onNavigateToItem,
     this.onNavigateToChat,
+    this.onNavigateToMeetupQrCode,
     void Function(WatchlistPriceDropMessage message, PushEnvelope envelope)?
     onForegroundMessage,
     void Function(ChatPushMessage message, PushEnvelope envelope)?
     onForegroundChatMessage,
+    void Function(MeetupPushMessage message, PushEnvelope envelope)?
+    onForegroundMeetupMessage,
   }) : foregroundMessageHandler = onForegroundMessage,
-       foregroundChatMessageHandler = onForegroundChatMessage;
+       foregroundChatMessageHandler = onForegroundChatMessage,
+       foregroundMeetupMessageHandler = onForegroundMeetupMessage;
 
   final PushMessagingClient messagingClient;
   final PushDeviceRepository deviceRepository;
   final String platform;
   final void Function(String itemId) onNavigateToItem;
   final void Function(ChatPushMessage message)? onNavigateToChat;
+  final void Function(MeetupPushMessage message)? onNavigateToMeetupQrCode;
   final void Function(WatchlistPriceDropMessage, PushEnvelope)?
   foregroundMessageHandler;
   final void Function(ChatPushMessage, PushEnvelope)?
   foregroundChatMessageHandler;
+  final void Function(MeetupPushMessage, PushEnvelope)?
+  foregroundMeetupMessageHandler;
 
   String? _currentToken;
   String? _currentJwt;
@@ -322,6 +364,11 @@ class PushNotificationService implements PushNotificationSession {
 
   void _handleForegroundMessage(PushEnvelope envelope) {
     if (_currentJwt == null) return;
+    final meetupMessage = MeetupPushMessage.fromData(envelope.data);
+    if (meetupMessage != null) {
+      foregroundMeetupMessageHandler?.call(meetupMessage, envelope);
+      return;
+    }
     final chatMessage = ChatPushMessage.fromData(envelope.data);
     if (chatMessage != null && _isForCurrentUser(chatMessage)) {
       foregroundChatMessageHandler?.call(chatMessage, envelope);
@@ -333,6 +380,11 @@ class PushNotificationService implements PushNotificationSession {
 
   void _handleNotificationTap(PushEnvelope envelope) {
     if (_currentJwt == null) return;
+    final meetupMessage = MeetupPushMessage.fromData(envelope.data);
+    if (meetupMessage != null) {
+      onNavigateToMeetupQrCode?.call(meetupMessage);
+      return;
+    }
     final chatMessage = ChatPushMessage.fromData(envelope.data);
     if (chatMessage != null && _isForCurrentUser(chatMessage)) {
       onNavigateToChat?.call(chatMessage);

@@ -83,6 +83,25 @@ function formatMessage(message: any, userId: string) {
     imageUrl: message.imageUrl ?? null,
     audioUrl: message.audioUrl ?? null,
     durationMs: message.durationMs ?? null,
+    location: message.location
+      ? {
+          name: message.location.name ?? '',
+          latitude: message.location.latitude,
+          longitude: message.location.longitude
+        }
+      : null,
+    meetup: message.meetup
+      ? {
+          orderId: objectId(message.meetup.orderId),
+          scheduledAt: message.meetup.scheduledAt,
+          locationName: message.meetup.locationName ?? '',
+          latitude: message.meetup.latitude,
+          longitude: message.meetup.longitude,
+          proposalStatus: message.meetup.proposalStatus ?? 'proposed',
+          proposedBy: objectId(message.meetup.proposedBy),
+          note: message.meetup.note ?? ''
+        }
+      : null,
     status: message.status,
     isMine: senderId === userId,
     readAt: message.readAt ?? null,
@@ -377,13 +396,23 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     imageUrl?: unknown;
     audioUrl?: unknown;
     durationMs?: unknown;
+    location?: {
+      name?: unknown;
+      latitude?: unknown;
+      longitude?: unknown;
+    };
   };
   const messageType = body.type ?? 'text';
-  if (messageType !== 'text' && messageType !== 'image' && messageType !== 'voice') {
+  if (
+    messageType !== 'text' &&
+    messageType !== 'image' &&
+    messageType !== 'voice' &&
+    messageType !== 'location'
+  ) {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: 'Message type must be text, image, or voice.'
+      message: 'Message type must be text, image, voice, or location.'
     };
     return;
   }
@@ -392,7 +421,34 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
   let imageUrl: string | null = null;
   let audioUrl: string | null = null;
   let durationMs: number | null = null;
-  if (messageType === 'text') {
+  let locationData: { name: string; latitude: number; longitude: number } | null = null;
+
+  if (messageType === 'location') {
+    const loc = body.location;
+    if (!loc || typeof loc !== 'object') {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'Location data is required for location messages.'
+      };
+      return;
+    }
+    const name = typeof loc.name === 'string' && loc.name.trim().length > 0
+      ? loc.name.trim()
+      : 'Shared location';
+    const lat = Number(loc.latitude);
+    const lng = Number(loc.longitude);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'Valid latitude and longitude are required.'
+      };
+      return;
+    }
+    locationData = { name, latitude: lat, longitude: lng };
+    normalizedText = `📍 ${name}`;
+  } else if (messageType === 'text') {
     const moderation = moderateChatText(body.text);
     normalizedText = moderation.text;
     if (
@@ -522,7 +578,9 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       ? { text: normalizedText }
       : messageType === 'image'
         ? { imageUrl }
-        : { audioUrl, durationMs }),
+        : messageType === 'location'
+          ? { text: normalizedText, location: locationData! }
+          : { audioUrl, durationMs }),
     status: 'sent'
   });
 
@@ -530,7 +588,9 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     ? 'Photo'
     : messageType === 'voice'
       ? 'Voice message'
-      : normalizedText;
+      : messageType === 'location'
+        ? `📍 ${locationData?.name ?? 'Location'}`
+        : normalizedText;
 
   await Conversation.findByIdAndUpdate(conversation._id, {
     $set: {

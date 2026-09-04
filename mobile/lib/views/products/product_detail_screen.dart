@@ -14,6 +14,7 @@ import '../../repositories/chat_repository.dart';
 import '../../repositories/item_repository.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
+import '../messages/widgets/schedule_meetup_sheet.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String? itemId;
@@ -204,6 +205,35 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
+  Future<void> _scheduleMeetupDirectly(ItemModel product) async {
+    final token = _authToken;
+    if (token == null || token.isEmpty) {
+      final callback = widget.onSignInRequired;
+      if (callback != null) {
+        callback();
+      } else {
+        _showLoginSheet(product);
+      }
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => ScheduleMeetupSheet(
+        itemId: product.id,
+        itemTitle: product.title,
+        counterpartId: product.ownerId,
+        counterpartName: product.ownerName,
+        onProposed: (meetup) {
+          if (mounted) {
+            _messageSeller(product);
+          }
+        },
+      ),
+    );
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -350,6 +380,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           : 'Message seller',
                       onMessageSeller: canMessage
                           ? () => _messageSeller(product)
+                          : null,
+                      onScheduleMeetup: canMessage
+                          ? () => _scheduleMeetupDirectly(product)
                           : null,
                     );
                   },
@@ -1041,6 +1074,7 @@ class _ProductActions extends StatelessWidget {
     required this.messageSellerEnabled,
     required this.isStartingConversation,
     required this.onMessageSeller,
+    this.onScheduleMeetup,
     this.messageSellerLabel = 'Message seller',
   });
 
@@ -1049,6 +1083,7 @@ class _ProductActions extends StatelessWidget {
   final bool messageSellerEnabled;
   final bool isStartingConversation;
   final VoidCallback? onMessageSeller;
+  final VoidCallback? onScheduleMeetup;
   final String messageSellerLabel;
 
   @override
@@ -1056,6 +1091,27 @@ class _ProductActions extends StatelessWidget {
     final theme = Theme.of(context);
     final isWatched = watchlist.isWatched(product.id);
     final useVerticalLayout = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+
+    final meetupButton = IconButton.outlined(
+      key: const Key('detail-schedule-meetup-button'),
+      tooltip: 'Schedule Meetup',
+      style: IconButton.styleFrom(
+        minimumSize: const Size(50, 50),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+        side: BorderSide(
+          color: onScheduleMeetup != null
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline.withOpacity(0.3),
+        ),
+      ),
+      onPressed: onScheduleMeetup,
+      icon: Icon(
+        Icons.handshake_outlined,
+        color: onScheduleMeetup != null ? theme.colorScheme.primary : null,
+      ),
+    );
 
     final watchButton = OutlinedButton.icon(
       key: const Key('detail-watch-action-button'),
@@ -1129,16 +1185,28 @@ class _ProductActions extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  watchButton,
+                  Row(
+                    children: [
+                      if (onScheduleMeetup != null) ...[
+                        meetupButton,
+                        const SizedBox(width: AppSpacing.sm),
+                      ],
+                      Expanded(child: watchButton),
+                    ],
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   messageButton,
                 ],
               )
             : Row(
                 children: [
+                  if (onScheduleMeetup != null) ...[
+                    meetupButton,
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
                   Expanded(child: watchButton),
                   const SizedBox(width: AppSpacing.sm),
-                  Expanded(child: messageButton),
+                  Expanded(flex: 2, child: messageButton),
                 ],
               ),
       ),

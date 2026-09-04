@@ -14,6 +14,10 @@ import '../../providers/chat_provider.dart';
 import '../../services/listing_image_picker.dart';
 import '../../services/chat_voice_service.dart';
 import '../../theme/app_theme.dart';
+import 'widgets/location_bubble.dart';
+import 'widgets/location_picker_sheet.dart';
+import 'widgets/meetup_card_bubble.dart';
+import 'widgets/schedule_meetup_sheet.dart';
 
 class ChatConversationScreen extends StatefulWidget {
   const ChatConversationScreen({
@@ -193,6 +197,53 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     if (sent && mounted) _scrollToEnd();
   }
 
+  Future<void> _shareLocation() async {
+    final selection = await showModalBottomSheet<LocationResult>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => const LocationPickerSheet(),
+    );
+    if (selection == null || !mounted) return;
+    final token = _currentAuthToken;
+    if (token == null || token.isEmpty) return;
+
+    final sent = await _chatProvider.sendLocation(
+      conversation: widget.conversation,
+      name: selection.name,
+      latitude: selection.latitude,
+      longitude: selection.longitude,
+      token: token,
+    );
+    if (sent && mounted) _scrollToEnd();
+  }
+
+  Future<void> _scheduleMeetup() async {
+    final token = _currentAuthToken;
+    if (token == null || token.isEmpty) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => ScheduleMeetupSheet(
+        itemId: widget.conversation.itemId,
+        itemTitle: widget.conversation.itemTitle,
+        counterpartId: widget.conversation.participantId,
+        counterpartName: widget.conversation.participantName,
+        onProposed: (meetup) {
+          if (mounted && token.isNotEmpty) {
+            _chatProvider.loadMessages(
+              conversation: widget.conversation,
+              token: token,
+            );
+            _scrollToEnd();
+          }
+        },
+      ),
+    );
+  }
+
   Future<void> _startVoiceRecording() async {
     if (_isRecording ||
         _isStartingVoice ||
@@ -328,6 +379,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            key: const Key('chat_schedule_meetup_action'),
+            tooltip: 'Schedule Meetup',
+            icon: const Icon(Icons.handshake_outlined),
+            onPressed:
+                widget.conversation.isActive &&
+                        (_currentAuthToken?.isNotEmpty ?? false)
+                    ? _scheduleMeetup
+                    : null,
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -362,6 +425,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     widget.conversation.isActive &&
                     (_currentAuthToken?.isNotEmpty ?? false),
                 onAddPhoto: _addPhoto,
+                onShareLocation: _shareLocation,
                 onSend: _send,
                 isRecording: _isRecording,
                 recordingSeconds: _recordingSeconds,
@@ -415,18 +479,62 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.all(AppSpacing.lg),
       itemCount: messages.length,
-      itemBuilder: (context, index) => _MessageBubble(message: messages[index]),
+      itemBuilder: (context, index) => _MessageBubble(
+        message: messages[index],
+        onMeetupStatusChanged: () {
+          final token = _currentAuthToken;
+          if (token != null && token.isNotEmpty) {
+            _chatProvider.loadMessages(
+              conversation: widget.conversation,
+              token: token,
+            );
+          }
+        },
+      ),
     );
   }
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({
+    required this.message,
+    this.onMeetupStatusChanged,
+  });
 
   final ChatMessageModel message;
+  final VoidCallback? onMeetupStatusChanged;
 
   @override
   Widget build(BuildContext context) {
+    if (message.isMeetup && message.meetup != null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: MeetupCardBubble(
+          key: Key('chat_meetup_card_${message.id}'),
+          meetup: message.meetup!,
+          isMine: message.isMine,
+          createdAt: message.createdAt,
+          onStatusChanged: onMeetupStatusChanged,
+        ),
+      );
+    }
+
+    if (message.isLocation && message.location != null) {
+      return Align(
+        alignment:
+            message.isMine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: LocationBubble(
+            key: Key('chat_location_${message.id}'),
+            location: message.location!,
+            isMine: message.isMine,
+            createdAt: message.createdAt,
+          ),
+        ),
+      );
+    }
+
     final mine = message.isMine;
     final semanticContent = message.isImage
         ? 'a photo'
@@ -529,6 +637,7 @@ class _MessageComposer extends StatelessWidget {
     required this.isSending,
     required this.enabled,
     required this.onAddPhoto,
+    required this.onShareLocation,
     required this.onSend,
     required this.isRecording,
     required this.recordingSeconds,
@@ -541,6 +650,7 @@ class _MessageComposer extends StatelessWidget {
   final bool isSending;
   final bool enabled;
   final VoidCallback onAddPhoto;
+  final VoidCallback onShareLocation;
   final VoidCallback onSend;
   final bool isRecording;
   final int recordingSeconds;
@@ -577,6 +687,17 @@ class _MessageComposer extends StatelessWidget {
                       tooltip: 'Add photo',
                       onPressed: enabled && !isSending ? onAddPhoto : null,
                       icon: const Icon(Icons.add_photo_alternate_outlined),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 44,
+                    height: 48,
+                    child: IconButton(
+                      key: const Key('chat_share_location_button'),
+                      tooltip: 'Share location',
+                      onPressed:
+                          enabled && !isSending ? onShareLocation : null,
+                      icon: const Icon(Icons.place_outlined),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.xs),
