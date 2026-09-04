@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/chat_conversation_model.dart';
+import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
@@ -21,6 +24,7 @@ class ProductDetailScreen extends StatefulWidget {
   final String? currentUserId;
   final ValueChanged<ChatConversationModel>? onConversationOpened;
   final VoidCallback? onSignInRequired;
+  final ValueChanged<ItemModel>? onSimilarItemTap;
 
   const ProductDetailScreen({
     super.key,
@@ -32,6 +36,7 @@ class ProductDetailScreen extends StatefulWidget {
     this.currentUserId,
     this.onConversationOpened,
     this.onSignInRequired,
+    this.onSimilarItemTap,
   });
 
   @override
@@ -45,6 +50,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   ItemModel? _loadedItem;
   bool _isLoading = false;
   String? _errorMessage;
+  List<ItemModel> _similarItems = const [];
+  bool _isLoadingSimilar = false;
 
   @override
   void initState() {
@@ -61,6 +68,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           if (mounted) _fetchItem(id);
         });
       }
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _loadedItem != null) _loadSimilarItems(_loadedItem!);
+      });
     }
   }
 
@@ -83,6 +94,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           _errorMessage = 'Item not found or no longer available.';
         }
       });
+      if (fetched != null) {
+        _loadSimilarItems(fetched);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -90,6 +104,51 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         _errorMessage =
             'Unable to load item details. Please check your connection and try again.';
       });
+    }
+  }
+
+  Future<void> _loadSimilarItems(ItemModel currentItem) async {
+    if (_isLoadingSimilar) return;
+    setState(() => _isLoadingSimilar = true);
+    try {
+      final repo =
+          widget.itemRepository ??
+          context.read<ItemRepository?>() ??
+          RestItemRepository();
+
+      List<ItemModel> candidates = [];
+      if (currentItem.category.isNotEmpty) {
+        try {
+          candidates = await repo.fetchDiscoveryItems(
+            DiscoveryQuery(category: currentItem.category),
+          );
+        } catch (_) {}
+      }
+
+      var filtered = candidates
+          .where((item) => item.id != currentItem.id)
+          .toList();
+
+      if (filtered.length < 4) {
+        try {
+          final recommended = await repo.fetchRecommendedItems(limit: 6);
+          for (final rec in recommended) {
+            if (rec.id != currentItem.id &&
+                !filtered.any((item) => item.id == rec.id)) {
+              filtered.add(rec);
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _similarItems = filtered.take(6).toList();
+        _isLoadingSimilar = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingSimilar = false);
     }
   }
 
@@ -183,18 +242,54 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  void _shareListing(ItemModel product) {
+    Clipboard.setData(
+      ClipboardData(
+        text:
+            'Check out "${product.title}" for \$${product.priceNzd} NZD on KiwiShare!',
+      ),
+    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Listing link copied to clipboard!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final product = _loadedItem;
+
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
+        scrolledUnderElevation: 1,
+        elevation: 0,
+        backgroundColor: theme.scaffoldBackgroundColor,
         title: Text(
-          'Product details',
-          style: Theme.of(context).textTheme.headlineLarge,
+          product?.title ?? 'Product details',
+          key: const Key('detail-appbar-title'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.inter(
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
         actions: product == null
             ? null
             : [
+                IconButton(
+                  tooltip: 'Share listing',
+                  onPressed: () => _shareListing(product),
+                  icon: const Icon(Icons.share_outlined, size: 22),
+                ),
                 Consumer<WatchlistProvider>(
                   builder: (context, watchlist, _) {
                     final isWatched = watchlist.isWatched(product.id);
@@ -207,12 +302,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           watchlist.toggleWatch(product.id, item: product),
                       icon: Icon(
                         isWatched ? Icons.bookmark : Icons.bookmark_outline,
-                        color: isWatched ? AppColors.brandPrimary : null,
+                        color: isWatched
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface,
                         size: 26,
                       ),
                     );
                   },
                 ),
+                const SizedBox(width: 4),
               ],
       ),
       bottomNavigationBar: product == null
@@ -274,119 +372,664 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   : null,
             )
           : ListView(
-              padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
               children: [
-                // Swipeable Multi-Image Gallery
+                // Multi-Image Gallery
                 _ProductImageGallery(
                   images: product.allImages,
                   activePage: _activePhotoIndex,
                   pageController: _pageController,
+                  status: product.status,
                   onPageChanged: (index) {
                     setState(() => _activePhotoIndex = index);
                   },
                 ),
                 Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      // Tags / Badges Row
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Expanded(
-                            child: Text(
-                              product.title,
-                              style: Theme.of(context).textTheme.headlineMedium,
-                            ),
-                          ),
-                          if (product.isSustainable)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.sm,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.brandPrimaryContainer,
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.small,
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.eco,
-                                    size: 14,
-                                    color: AppColors.brandPrimary,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Eco',
-                                    style: TextStyle(
-                                      color: AppColors.brandPrimary,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          _buildStatusBadge(context, product.status),
+                          _buildCategoryBadge(context, product.category),
+                          if (product.isSustainable) _buildEcoBadge(context),
                         ],
                       ),
+                      const SizedBox(height: AppSpacing.md),
+
+                      // Product Title
+                      Text(
+                        product.title,
+                        key: const Key('detail-product-title'),
+                        style: GoogleFonts.inter(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          height: 1.25,
+                          letterSpacing: -0.3,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
                       const SizedBox(height: AppSpacing.sm),
+
+                      // Price Display (high contrast in both light and dark themes)
                       Text(
                         '\$${product.priceNzd} NZD',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(color: AppColors.textBrand),
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      if (product.seller != null) ...[
-                        _SellerProfileCard(seller: product.seller!),
-                        const SizedBox(height: AppSpacing.lg),
-                      ],
-                      Text(
-                        'Description',
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        product.description.isEmpty
-                            ? 'No description supplied.'
-                            : product.description,
-                        style: Theme.of(context).textTheme.bodyLarge,
+                        style: GoogleFonts.inter(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.primary,
+                          letterSpacing: -0.5,
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.xl),
+
+                      // Seller Profile Card (theme-adaptive)
+                      if (product.seller != null) ...[
+                        _SellerProfileCard(seller: product.seller!),
+                        const SizedBox(height: AppSpacing.xl),
+                      ],
+
+                      // Key Specifications / Info Grid
+                      _ProductHighlightsGrid(product: product),
+                      const SizedBox(height: AppSpacing.xl),
+
+                      // Description Section
                       Text(
-                        'Item details',
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _DetailRow(
-                        icon: Icons.location_on_outlined,
-                        label: 'Approximate location',
-                        value: product.location,
-                      ),
-                      _DetailRow(
-                        icon: Icons.category_outlined,
-                        label: 'Category',
-                        value: product.category,
-                      ),
-                      _DetailRow(
-                        icon: Icons.inventory_2_outlined,
-                        label: 'Status',
-                        value: _statusLabel(product.status),
-                      ),
-                      if (product.isSustainable)
-                        const _DetailRow(
-                          icon: Icons.eco_outlined,
-                          label: 'Sustainability',
-                          value: 'Pre-loved item',
+                        'Description',
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurface,
                         ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? theme.colorScheme.surfaceContainerHighest
+                                    .withOpacity(0.25)
+                              : theme.colorScheme.surfaceContainerHighest
+                                    .withOpacity(0.35),
+                          borderRadius: BorderRadius.circular(AppRadius.medium),
+                          border: Border.all(
+                            color: theme.colorScheme.outline.withOpacity(0.12),
+                          ),
+                        ),
+                        child: Text(
+                          product.description.isEmpty
+                              ? 'No description supplied by the seller.'
+                              : product.description,
+                          style: GoogleFonts.inter(
+                            fontSize: 15,
+                            height: 1.55,
+                            color: theme.colorScheme.onSurface.withOpacity(
+                              0.85,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+
+                      // Safe Community & Meetup Banner
+                      const _KiwiShareCommunityCard(),
+
+                      // Similar Items Section
+                      if (_isLoadingSimilar || _similarItems.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.xl),
+                        _SimilarItemsSection(
+                          items: _similarItems,
+                          isLoading: _isLoadingSimilar,
+                          onItemTap: (item) {
+                            if (widget.onSimilarItemTap != null) {
+                              widget.onSimilarItemTap!(item);
+                            } else {
+                              context.push('/items/${item.id}', extra: item);
+                            }
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ],
             ),
+    );
+  }
+}
+
+Widget _buildStatusBadge(BuildContext context, ItemStatus status) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final (bgColor, borderColor, textColor, icon) = switch (status) {
+    ItemStatus.active => (
+      isDark
+          ? const Color(0xFF064E3B).withOpacity(0.5)
+          : const Color(0xFFE8F5E9),
+      isDark
+          ? const Color(0xFF059669).withOpacity(0.5)
+          : const Color(0xFFA5D6A7),
+      isDark ? const Color(0xFFA7F3D0) : const Color(0xFF2E7D32),
+      Icons.check_circle_outline,
+    ),
+    ItemStatus.reserved => (
+      isDark
+          ? const Color(0xFF78350F).withOpacity(0.5)
+          : const Color(0xFFFFFBEB),
+      isDark
+          ? const Color(0xFFD97706).withOpacity(0.5)
+          : const Color(0xFFFDE68A),
+      isDark ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+      Icons.access_time_outlined,
+    ),
+    ItemStatus.sold => (
+      isDark
+          ? const Color(0xFF374151).withOpacity(0.5)
+          : const Color(0xFFF3F4F6),
+      isDark
+          ? const Color(0xFF6B7280).withOpacity(0.5)
+          : const Color(0xFFD1D5DB),
+      isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+      Icons.remove_circle_outline,
+    ),
+  };
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(AppRadius.small),
+      border: Border.all(color: borderColor, width: 0.8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: textColor),
+        const SizedBox(width: 4),
+        Text(
+          _statusLabel(status),
+          style: TextStyle(
+            color: textColor,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildCategoryBadge(BuildContext context, String category) {
+  final theme = Theme.of(context);
+  final isDark = theme.brightness == Brightness.dark;
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: isDark
+          ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.4)
+          : theme.colorScheme.surfaceContainerHighest.withOpacity(0.6),
+      borderRadius: BorderRadius.circular(AppRadius.small),
+      border: Border.all(
+        color: theme.colorScheme.outline.withOpacity(0.2),
+        width: 0.8,
+      ),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          _getCategoryIcon(category),
+          size: 14,
+          color: theme.colorScheme.onSurface.withOpacity(0.7),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          category,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface.withOpacity(0.85),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildEcoBadge(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: isDark
+          ? const Color(0xFF065F46).withOpacity(0.4)
+          : const Color(0xFFDCFCE7),
+      borderRadius: BorderRadius.circular(AppRadius.small),
+      border: Border.all(
+        color: isDark
+            ? const Color(0xFF059669).withOpacity(0.5)
+            : const Color(0xFF86EFAC),
+        width: 0.8,
+      ),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.eco_rounded,
+          size: 14,
+          color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF15803D),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          'Eco Choice',
+          style: TextStyle(
+            color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF15803D),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ProductHighlightsGrid extends StatelessWidget {
+  final ItemModel product;
+
+  const _ProductHighlightsGrid({required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    Widget buildTile({
+      required IconData icon,
+      required String label,
+      required String value,
+      Color? iconColor,
+    }) {
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: isDark
+              ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.25)
+              : theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+          border: Border.all(
+            color: theme.colorScheme.outline.withOpacity(0.15),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (iconColor ?? theme.colorScheme.primary).withOpacity(
+                  0.12,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                size: 20,
+                color: iconColor ?? theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.onSurface.withOpacity(0.55),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: buildTile(
+                icon: Icons.location_on_outlined,
+                label: 'Location',
+                value: product.location,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: buildTile(
+                icon: _getCategoryIcon(product.category),
+                label: 'Category',
+                value: product.category,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Expanded(
+              child: buildTile(
+                icon: Icons.inventory_2_outlined,
+                label: 'Status',
+                value: _statusLabel(product.status),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: buildTile(
+                icon: product.isSustainable
+                    ? Icons.eco_outlined
+                    : Icons.check_circle_outline,
+                label: product.isSustainable ? 'Sustainability' : 'Condition',
+                value: product.isSustainable
+                    ? 'Pre-loved'
+                    : (product.condition?.isNotEmpty == true
+                          ? product.condition!
+                          : 'Standard'),
+                iconColor: product.isSustainable
+                    ? (isDark
+                          ? const Color(0xFF6EE7B7)
+                          : const Color(0xFF15803D))
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SellerProfileCard extends StatelessWidget {
+  final SellerInfo seller;
+
+  const _SellerProfileCard({required this.seller});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final cardBg = isDark
+        ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.25)
+        : (seller.isStudentVerified
+              ? const Color(0xFFF0F7FF)
+              : theme.colorScheme.surfaceContainerHighest.withOpacity(0.35));
+
+    final borderColor = isDark
+        ? theme.colorScheme.outline.withOpacity(0.2)
+        : (seller.isStudentVerified
+              ? const Color(0xFFC7DFFB)
+              : theme.colorScheme.outline.withOpacity(0.25));
+
+    final studentTextColor = isDark
+        ? const Color(0xFF93C5FD)
+        : const Color(0xFF1D4ED8);
+    final studentBadgeBg = isDark
+        ? const Color(0xFF1E3A8A).withOpacity(0.5)
+        : const Color(0xFFDBEAFE);
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: borderColor, width: 1.2),
+      ),
+      child: Row(
+        children: [
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: isDark
+                    ? theme.colorScheme.primaryContainer
+                    : (seller.isStudentVerified
+                          ? const Color(0xFFDBEAFE)
+                          : theme.colorScheme.primaryContainer),
+                backgroundImage:
+                    seller.avatarUrl != null && seller.avatarUrl!.isNotEmpty
+                    ? NetworkImage(seller.avatarUrl!)
+                    : null,
+                child: seller.avatarUrl == null || seller.avatarUrl!.isEmpty
+                    ? Text(
+                        seller.displayName.isNotEmpty
+                            ? seller.displayName[0].toUpperCase()
+                            : 'K',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                          color: isDark
+                              ? theme.colorScheme.onPrimaryContainer
+                              : (seller.isStudentVerified
+                                    ? const Color(0xFF1D4ED8)
+                                    : theme.colorScheme.primary),
+                        ),
+                      )
+                    : null,
+              ),
+              if (seller.isStudentVerified || seller.isVerified)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      seller.isStudentVerified ? Icons.school : Icons.verified,
+                      size: 12,
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        seller.displayName,
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (seller.isStudentVerified) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: studentBadgeBg,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Verified Student',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: studentTextColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  seller.isStudentVerified
+                      ? '${seller.studentInstitution ?? "University of Auckland"} Student'
+                      : 'Community Member',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: seller.isStudentVerified
+                        ? studentTextColor
+                        : theme.colorScheme.onSurface.withOpacity(0.65),
+                    fontWeight: seller.isStudentVerified
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? theme.colorScheme.primary.withOpacity(0.12)
+                  : theme.colorScheme.primaryContainer.withOpacity(0.6),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.verified_user_outlined,
+                      size: 11,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      'Trust Score',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: theme.colorScheme.onSurface.withOpacity(0.65),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${seller.trustScore}/100',
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KiwiShareCommunityCard extends StatelessWidget {
+  const _KiwiShareCommunityCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: isDark
+            ? theme.colorScheme.primaryContainer.withOpacity(0.18)
+            : theme.colorScheme.primaryContainer.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(
+          color: theme.colorScheme.primary.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.shield_outlined,
+            color: theme.colorScheme.primary,
+            size: 22,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'KiwiShare Safe & Sustainable Trade',
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Meet in busy, well-lit campus or community spots. By choosing secondhand, you extend item lifecycles and reduce local waste.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -410,16 +1053,42 @@ class _ProductActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final isWatched = watchlist.isWatched(product.id);
     final useVerticalLayout = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+
     final watchButton = OutlinedButton.icon(
       key: const Key('detail-watch-action-button'),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 50),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+        side: BorderSide(
+          color: isWatched
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline.withOpacity(0.5),
+        ),
+      ),
       onPressed: () => watchlist.toggleWatch(product.id, item: product),
-      icon: Icon(isWatched ? Icons.bookmark : Icons.bookmark_outline),
-      label: Text(isWatched ? 'Watching' : 'Watch Item'),
+      icon: Icon(
+        isWatched ? Icons.bookmark : Icons.bookmark_outline,
+        color: isWatched ? theme.colorScheme.primary : null,
+      ),
+      label: Text(
+        isWatched ? 'Watching' : 'Watch Item',
+        style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+      ),
     );
+
     final messageButton = FilledButton.icon(
       key: const Key('detail-message-seller-button'),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 50),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+      ),
       onPressed: messageSellerEnabled && !isStartingConversation
           ? onMessageSeller
           : null,
@@ -433,18 +1102,22 @@ class _ProductActions extends StatelessWidget {
               ),
             )
           : const Icon(Icons.chat_bubble_outline),
-      label: Text(isStartingConversation ? 'Opening chat' : messageSellerLabel),
+      label: Text(
+        isStartingConversation ? 'Opening chat' : messageSellerLabel,
+        style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+      ),
     );
+
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.md,
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: theme.colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: Colors.black.withOpacity(0.06),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),
@@ -478,25 +1151,45 @@ class _ProductImageGallery extends StatelessWidget {
   final int activePage;
   final PageController pageController;
   final ValueChanged<int> onPageChanged;
+  final ItemStatus status;
 
   const _ProductImageGallery({
     required this.images,
     required this.activePage,
     required this.pageController,
     required this.onPageChanged,
+    required this.status,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     if (images.isEmpty) {
-      return const AspectRatio(
+      return AspectRatio(
         aspectRatio: 4 / 3,
-        child: ColoredBox(
-          color: AppColors.surfaceMuted,
-          child: Icon(
-            Icons.image_not_supported_outlined,
-            size: 56,
-            color: AppColors.brandPrimary,
+        child: Container(
+          color: isDark
+              ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.3)
+              : AppColors.surfaceMuted,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.image_not_supported_outlined,
+                size: 56,
+                color: theme.colorScheme.primary.withOpacity(0.4),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'No photos provided',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  fontSize: 13,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -513,18 +1206,37 @@ class _ProductImageGallery extends StatelessWidget {
             itemCount: images.length,
             itemBuilder: (context, index) {
               return ColoredBox(
-                color: AppColors.surfaceMuted,
+                color: isDark
+                    ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.3)
+                    : AppColors.surfaceMuted,
                 child: Image.network(
                   images[index],
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.image_not_supported_outlined,
-                    size: 56,
-                    color: AppColors.brandPrimary,
+                  errorBuilder: (context, error, stackTrace) => Center(
+                    child: Icon(
+                      Icons.image_not_supported_outlined,
+                      size: 56,
+                      color: theme.colorScheme.primary.withOpacity(0.4),
+                    ),
                   ),
                 ),
               );
             },
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 50,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.4)],
+                ),
+              ),
+            ),
           ),
           if (images.length > 1)
             Positioned(
@@ -535,21 +1247,65 @@ class _ProductImageGallery extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
+                  color: Colors.black.withOpacity(0.65),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.25),
+                    width: 0.5,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    const Icon(
+                      Icons.photo_camera_outlined,
+                      color: Colors.white,
+                      size: 13,
+                    ),
+                    const SizedBox(width: 5),
                     Text(
                       '${activePage + 1} / ${images.length}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+          if (status != ItemStatus.active)
+            Positioned(
+              top: 16,
+              left: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: status == ItemStatus.reserved
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFFDC2626),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  _statusLabel(status).toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    letterSpacing: 1.0,
+                  ),
                 ),
               ),
             ),
@@ -565,153 +1321,42 @@ String _statusLabel(ItemStatus status) => switch (status) {
   ItemStatus.sold => 'Sold',
 };
 
-class _DetailRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _DetailRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: AppColors.brandPrimary),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelSmall),
-              const SizedBox(height: AppSpacing.xs),
-              Text(value, style: Theme.of(context).textTheme.bodyLarge),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _SellerProfileCard extends StatelessWidget {
-  final SellerInfo seller;
-
-  const _SellerProfileCard({required this.seller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: seller.isStudentVerified
-            ? const Color(0xFFEFF6FF)
-            : AppColors.surfaceMuted,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: seller.isStudentVerified
-              ? const Color(0xFFBFDBFE)
-              : AppColors.border,
-          width: 1.2,
-        ),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: seller.isStudentVerified
-                ? const Color(0xFFDBEAFE)
-                : AppColors.brandPrimaryContainer,
-            backgroundImage:
-                seller.avatarUrl != null && seller.avatarUrl!.isNotEmpty
-                ? NetworkImage(seller.avatarUrl!)
-                : null,
-            child: seller.avatarUrl == null || seller.avatarUrl!.isEmpty
-                ? Text(
-                    seller.displayName.isNotEmpty
-                        ? seller.displayName[0].toUpperCase()
-                        : 'K',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: seller.isStudentVerified
-                          ? const Color(0xFF1D4ED8)
-                          : AppColors.brandPrimary,
-                    ),
-                  )
-                : null,
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        seller.displayName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (seller.isStudentVerified) ...[
-                      const SizedBox(width: 6),
-                      const Icon(
-                        Icons.school,
-                        size: 16,
-                        color: Color(0xFF2563EB),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  seller.isStudentVerified
-                      ? '${seller.studentInstitution ?? "University of Auckland"} Student'
-                      : 'Community Member',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: seller.isStudentVerified
-                        ? const Color(0xFF1E40AF)
-                        : AppColors.textSecondary,
-                    fontWeight: seller.isStudentVerified
-                        ? FontWeight.w600
-                        : FontWeight.normal,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Text(
-                'Trust Score',
-                style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '${seller.trustScore}/100',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  color: AppColors.brandPrimary,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+IconData _getCategoryIcon(String category) {
+  final normalized = category.toLowerCase().trim();
+  if (normalized.contains('furnitur') ||
+      normalized.contains('chair') ||
+      normalized.contains('table') ||
+      normalized.contains('desk')) {
+    return Icons.chair_outlined;
   }
+  if (normalized.contains('plant') ||
+      normalized.contains('garden') ||
+      normalized.contains('flower') ||
+      normalized.contains('tree')) {
+    return Icons.yard_outlined;
+  }
+  if (normalized.contains('camp') ||
+      normalized.contains('tent') ||
+      normalized.contains('outdoor')) {
+    return Icons.terrain_outlined;
+  }
+  if (normalized.contains('book') ||
+      normalized.contains('study') ||
+      normalized.contains('note')) {
+    return Icons.menu_book_outlined;
+  }
+  if (normalized.contains('electr') ||
+      normalized.contains('phone') ||
+      normalized.contains('tech') ||
+      normalized.contains('laptop')) {
+    return Icons.devices_outlined;
+  }
+  if (normalized.contains('cloth') ||
+      normalized.contains('apparel') ||
+      normalized.contains('wear')) {
+    return Icons.checkroom_outlined;
+  }
+  return Icons.category_outlined;
 }
 
 class _UnavailableProduct extends StatelessWidget {
@@ -754,4 +1399,296 @@ class _UnavailableProduct extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _SimilarItemsSection extends StatelessWidget {
+  final List<ItemModel> items;
+  final bool isLoading;
+  final ValueChanged<ItemModel> onItemTap;
+
+  const _SimilarItemsSection({
+    required this.items,
+    required this.isLoading,
+    required this.onItemTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.auto_awesome_outlined,
+              size: 20,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Similar Items',
+              key: const Key('detail-similar-items-header'),
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const Spacer(),
+            if (!isLoading && items.isNotEmpty)
+              Text(
+                '${items.length} recommended',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withOpacity(0.55),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        SizedBox(
+          height: 215,
+          child: isLoading && items.isEmpty
+              ? ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: 3,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: AppSpacing.md),
+                  itemBuilder: (_, index) =>
+                      _SimilarItemSkeletonCard(isDark: isDark),
+                )
+              : ListView.separated(
+                  key: const Key('detail-similar-items-list'),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: items.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: AppSpacing.md),
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return _SimilarItemCard(
+                      item: item,
+                      onTap: () => onItemTap(item),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SimilarItemCard extends StatelessWidget {
+  final ItemModel item;
+  final VoidCallback onTap;
+
+  const _SimilarItemCard({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      width: 155,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(
+          color: colors.outline.withOpacity(isDark ? 0.2 : 0.15),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: Key('similar-item-${item.id}'),
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 105,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ColoredBox(
+                      color: colors.surfaceContainerHighest,
+                      child: Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Icon(
+                          Icons.image_not_supported_outlined,
+                          color: colors.primary,
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                    if (item.isSustainable)
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.primaryContainer.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.eco_outlined,
+                            size: 11,
+                            color: colors.primary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: colors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '\$${item.priceNzd} NZD',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: colors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on_outlined,
+                          size: 11,
+                          color: colors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 2),
+                        Expanded(
+                          child: Text(
+                            item.location,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        if (item.seller?.isStudentVerified == true) ...[
+                          const SizedBox(width: 2),
+                          const Icon(
+                            Icons.verified,
+                            size: 11,
+                            color: Color(0xFF2563EB),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SimilarItemSkeletonCard extends StatelessWidget {
+  final bool isDark;
+
+  const _SimilarItemSkeletonCard({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final shimmerColor = isDark
+        ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.3)
+        : theme.colorScheme.surfaceContainerHighest.withOpacity(0.5);
+
+    return Container(
+      width: 155,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(height: 105, width: double.infinity, color: shimmerColor),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 12,
+                  width: 100,
+                  decoration: BoxDecoration(
+                    color: shimmerColor,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  height: 14,
+                  width: 60,
+                  decoration: BoxDecoration(
+                    color: shimmerColor,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  height: 10,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: shimmerColor,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

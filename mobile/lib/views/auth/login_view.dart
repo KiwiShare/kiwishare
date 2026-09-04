@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/providers.dart';
+import '../../repositories/user_repository.dart';
 
 enum AuthMode { password, otp }
 
@@ -142,11 +143,11 @@ class _LoginViewState extends State<LoginView> {
 
     if (_cooldownSeconds > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Please wait $_cooldownSeconds seconds before requesting a new code.',
+            'Please wait for the countdown timer to finish before requesting a new code.',
           ),
-          backgroundColor: const Color(0xFFC96B4A),
+          backgroundColor: Color(0xFFC96B4A),
         ),
       );
       return;
@@ -173,8 +174,24 @@ class _LoginViewState extends State<LoginView> {
           ),
         );
       }
+    } on OtpCooldownException catch (e) {
+      _startCooldown(e.cooldownSeconds);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please wait for the countdown timer to finish before requesting a new code.',
+            ),
+            backgroundColor: Color(0xFFC96B4A),
+          ),
+        );
+      }
     } catch (e) {
-      final errorMsg = e.toString().replaceAll('Exception: ', '');
+      var errorMsg = e.toString().replaceAll('Exception: ', '');
+      if (errorMsg.contains('Please wait') || errorMsg.contains('cooldown')) {
+        _startCooldown(60);
+        errorMsg = 'Please wait for the countdown timer to finish before requesting a new code.';
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -672,6 +689,41 @@ class _LoginViewState extends State<LoginView> {
                             ),
                           ),
                   ),
+                  if (_cooldownSeconds > 0) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC96B4A).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFFC96B4A).withOpacity(0.2),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.timer_outlined,
+                            size: 16,
+                            color: Color(0xFFC96B4A),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Cooldown active: ${_cooldownSeconds}s remaining',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFC96B4A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ] else ...[
                 // OTP Code Input State
@@ -752,6 +804,41 @@ class _LoginViewState extends State<LoginView> {
                     ),
                   ],
                 ),
+                if (_cooldownSeconds > 0) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC96B4A).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFC96B4A).withOpacity(0.2),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.timer_outlined,
+                          size: 15,
+                          color: Color(0xFFC96B4A),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'You can request a new code in ${_cooldownSeconds}s',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFC96B4A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
 
                 // Verify and Login / Register Button

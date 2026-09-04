@@ -163,7 +163,7 @@ void main() async {
       onNavigateToChat: _openChatNotification,
       onForegroundChatMessage: _showForegroundChatNotification,
     );
-    await pushNotifications.initialize();
+    unawaited(pushNotifications.initialize());
   }
   runApp(
     MultiProvider(

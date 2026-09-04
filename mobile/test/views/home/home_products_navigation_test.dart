@@ -73,7 +73,7 @@ void main() {
     await tester.tap(find.text('Monstera Plant'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Product details'), findsOneWidget);
+    expect(find.byType(ProductDetailScreen), findsOneWidget);
     final detailScreen = tester.widget<ProductDetailScreen>(
       find.byType(ProductDetailScreen),
     );

@@ -64,6 +64,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
   ListingLocation? _location;
   String? _condition;
   final List<_SelectedPhoto> _photos = [];
+  bool _isSustainable = false;
   bool _isPickingPhotos = false;
   bool _isLocating = false;
   bool _isPublishing = false;
@@ -336,6 +337,41 @@ class _PostItemScreenState extends State<PostItemScreen> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (_isSustainable) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2E5E4E).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: const Color(0xFF2E5E4E).withOpacity(0.3),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.eco_outlined,
+                          size: 14,
+                          color: Color(0xFF2E5E4E),
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Sustainable Item',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2E5E4E),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (_descriptionController.text.trim().isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.lg),
                   Text(
@@ -475,6 +511,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
           category: _category!,
           condition: _condition!,
           description: _descriptionController.text,
+          isSustainable: _isSustainable,
           photos: [
             for (var index = 0; index < _photos.length; index++)
               ListingPhotoDraft(
@@ -668,6 +705,51 @@ class _PostItemScreenState extends State<PostItemScreen> {
                         options: _conditions,
                         onChanged: (value) =>
                             setState(() => _condition = value),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Material(
+                      color: Theme.of(context).colorScheme.surfaceContainerLow,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.medium),
+                        side: BorderSide(
+                          color: _isSustainable
+                              ? const Color(0xFF2E5E4E)
+                              : Theme.of(context).colorScheme.outlineVariant,
+                          width: _isSustainable ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: SwitchListTile.adaptive(
+                        key: const Key('post_sustainable_switch'),
+                        value: _isSustainable,
+                        onChanged: _isPublishing
+                            ? null
+                            : (value) => setState(() => _isSustainable = value),
+                        activeColor: const Color(0xFF2E5E4E),
+                        secondary: Icon(
+                          _isSustainable
+                              ? Icons.eco
+                              : Icons.eco_outlined,
+                          color: _isSustainable
+                              ? const Color(0xFF2E5E4E)
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        title: Text(
+                          'Sustainable Item',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        subtitle: Text(
+                          'Mark this item as eco-friendly, circular, or pre-loved',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.xs,
+                        ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.lg),

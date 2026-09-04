@@ -25,6 +25,7 @@ Widget _productDetailApp({
   String? currentUserId,
   ValueChanged<ChatConversationModel>? onConversationOpened,
   VoidCallback? onSignInRequired,
+  ValueChanged<ItemModel>? onSimilarItemTap,
   double textScale = 1,
 }) {
   return MultiProvider(
@@ -52,6 +53,7 @@ Widget _productDetailApp({
         currentUserId: currentUserId,
         onConversationOpened: onConversationOpened,
         onSignInRequired: onSignInRequired,
+        onSimilarItemTap: onSimilarItemTap,
       ),
     ),
   );
@@ -88,7 +90,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // 1. Initial State: not watched
-    expect(find.text('Eco 4-Person Camping Tent'), findsOneWidget);
+    expect(find.text('Eco 4-Person Camping Tent'), findsWidgets);
     expect(find.text('\$95 NZD'), findsOneWidget);
     expect(find.text('Watch Item'), findsOneWidget);
     expect(provider.isWatched('64f000000000000000000001'), isFalse);
@@ -305,7 +307,7 @@ void main() {
       // Settle loads the item
       await tester.pumpAndSettle();
 
-      expect(find.text('Eco 4-Person Camping Tent'), findsOneWidget);
+      expect(find.text('Eco 4-Person Camping Tent'), findsWidgets);
       expect(find.text('\$95 NZD'), findsOneWidget);
       expect(find.byKey(const Key('product-detail-loading')), findsNothing);
     },
@@ -411,8 +413,56 @@ void main() {
       await tester.tap(find.byKey(const Key('product-detail-retry-button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Eco 4-Person Camping Tent'), findsOneWidget);
+      expect(find.text('Eco 4-Person Camping Tent'), findsWidgets);
       expect(find.text('\$95 NZD'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'ProductDetailScreen renders similar items section and handles tapping recommendation',
+    (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = TestItemRepository();
+      final watchlistRepo = TestWatchlistRepository();
+      final watchlistProvider = WatchlistProvider(repository: watchlistRepo);
+      ItemModel? tappedItem;
+
+      await tester.pumpWidget(
+        _productDetailApp(
+          item: _detailItem,
+          itemRepository: repo,
+          watchlistProvider: watchlistProvider,
+          onSimilarItemTap: (item) => tappedItem = item,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify the Similar Items section header is rendered
+      expect(find.text('Similar Items'), findsOneWidget);
+      expect(
+        find.byKey(const Key('detail-similar-items-header')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('detail-similar-items-list')),
+        findsOneWidget,
+      );
+
+      // Verify similar items from the Camping category are shown (Tent - 2 Person)
+      expect(find.text('Tent - 2 Person'), findsOneWidget);
+      expect(find.text('\$65 NZD'), findsOneWidget);
+
+      // Tap on the similar item card
+      await tester.tap(find.byKey(const Key('similar-item-item_4')));
+      await tester.pumpAndSettle();
+
+      expect(tappedItem, isNotNull);
+      expect(tappedItem!.id, 'item_4');
+      expect(tappedItem!.title, 'Tent - 2 Person');
     },
   );
 }
