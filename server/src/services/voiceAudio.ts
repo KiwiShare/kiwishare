@@ -1,8 +1,50 @@
-import { spawn } from 'child_process';
+import fs from 'fs';
+import { spawn, spawnSync } from 'child_process';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import ffmpegPath from 'ffmpeg-static';
+import ffmpegStaticPath from 'ffmpeg-static';
+
+export function resolveFfmpegExecutable(): string | null {
+  // 1. Explicit environment variable override
+  const envBin = process.env.FFMPEG_BIN || process.env.FFMPEG_PATH;
+  if (envBin && fs.existsSync(envBin)) {
+    return envBin;
+  }
+
+  // 2. Check ffmpeg-static if binary actually exists and is executable
+  try {
+    if (typeof ffmpegStaticPath === 'string' && fs.existsSync(ffmpegStaticPath)) {
+      try {
+        fs.chmodSync(ffmpegStaticPath, 0o755);
+      } catch (err) {
+        void err;
+      }
+      return ffmpegStaticPath;
+    }
+  } catch (err) {
+    void err;
+  }
+
+  // 3. Fallback to system ffmpeg available on PATH
+  try {
+    const probe = spawnSync('ffmpeg', ['-version'], { windowsHide: true });
+    if (probe.status === 0) {
+      return 'ffmpeg';
+    }
+  } catch (err) {
+    void err;
+  }
+
+  // 4. Common standard Linux/macOS binary locations
+  for (const candidate of ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg']) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
 
 export interface VerifiedVoiceAudio {
   contentType: 'audio/mp4' | 'audio/aac';
@@ -192,10 +234,10 @@ async function decodesAsAudio(
   maximumDurationMs: number,
   admission?: VoiceProcessingAdmission
 ): Promise<number | null> {
-  if (!ffmpegPath) return null;
+  const executablePath = resolveFfmpegExecutable();
+  if (!executablePath) return null;
   const releaseDecoder = admission == null ? acquireDecoder() : null;
   if (admission == null && !releaseDecoder) return null;
-  const executablePath = ffmpegPath;
   let temporaryDirectory: string | null = null;
   try {
     temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'kiwishare-voice-'));
