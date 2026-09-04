@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
 import 'package:kiwishare/models/chat_message_model.dart';
+import 'package:kiwishare/navigation/app_route_observer.dart';
 import 'package:kiwishare/config/api_config.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
@@ -31,6 +32,7 @@ Widget _buildSubject({
 }) {
   final value = conversation ?? testConversation();
   return MaterialApp(
+    navigatorObservers: [appRouteObserver],
     theme: ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF064B3A)),
@@ -115,6 +117,80 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.markReadCalls, 0);
+  });
+
+  testWidgets('marks deferred messages after returning to the chat', (
+    tester,
+  ) async {
+    final pendingMessages = Completer<ChatMessagePage>();
+    final incoming = testMessage(id: '1', text: 'Deferred', isMine: false);
+    final repository = FakeChatRepository()
+      ..messageCompleters.add(pendingMessages);
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        conversation: testConversation(unreadCount: 1),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final context = tester.element(find.byType(ChatConversationScreen));
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Covering route')),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    repository.messages['conversation-1'] = [incoming];
+    pendingMessages.complete(
+      ChatMessagePage(messages: [incoming], hasMore: false),
+    );
+    await tester.pump();
+    expect(repository.markReadCalls, 0);
+
+    Navigator.of(tester.element(find.text('Covering route'))).pop();
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 2);
+    expect(repository.markReadCalls, 1);
+  });
+
+  testWidgets('does not mark an in-flight load read while backgrounded', (
+    tester,
+  ) async {
+    final pendingMessages = Completer<ChatMessagePage>();
+    final incoming = testMessage(id: '1', text: 'Backgrounded', isMine: false);
+    final repository = FakeChatRepository()
+      ..messageCompleters.add(pendingMessages);
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        conversation: testConversation(unreadCount: 1),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    repository.messages['conversation-1'] = [incoming];
+    pendingMessages.complete(
+      ChatMessagePage(messages: [incoming], hasMore: false),
+    );
+    await tester.pump();
+
+    expect(repository.markReadCalls, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 2);
+    expect(repository.markReadCalls, 1);
   });
 
   testWidgets('shows Read only under the latest sent message when viewed', (

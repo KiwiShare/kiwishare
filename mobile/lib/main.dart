@@ -18,6 +18,7 @@ import 'views/profile/profile_screen.dart';
 import 'views/auth/login_view.dart';
 import 'views/products/product_detail_screen.dart';
 import 'models/item_model.dart';
+import 'navigation/app_route_observer.dart';
 
 // State and Repositories
 import 'providers/providers.dart';
@@ -50,6 +51,7 @@ final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
 final GoRouter _router = GoRouter(
   initialLocation: '/splash',
   navigatorKey: _rootNavigatorKey,
+  observers: [appRouteObserver],
   routes: [
     GoRoute(
       path: '/splash',

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../models/chat_conversation_model.dart';
 import '../../models/chat_message_model.dart';
 import '../../config/api_config.dart';
+import '../../navigation/app_route_observer.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../services/listing_image_picker.dart';
@@ -36,7 +37,7 @@ class ChatConversationScreen extends StatefulWidget {
 }
 
 class _ChatConversationScreenState extends State<ChatConversationScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   late final ListingImagePicker _imagePicker;
@@ -50,24 +51,44 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   String? _loadedToken;
   String? _currentAuthToken;
   bool _leftForeground = false;
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+  ModalRoute<void>? _subscribedRoute;
 
   @override
   void initState() {
     super.initState();
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _voiceRecorder = widget.voiceRecorder ?? DeviceChatVoiceRecorder();
+    _lifecycleState =
+        WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhoto());
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
     if (state != AppLifecycleState.resumed) {
       _leftForeground = true;
       return;
     }
     if (!_leftForeground) return;
     _leftForeground = false;
+    unawaited(_refreshAfterResume());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of<void>(context);
+    if (identical(route, _subscribedRoute)) return;
+    appRouteObserver.unsubscribe(this);
+    _subscribedRoute = route;
+    if (route != null) appRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void didPopNext() {
     unawaited(_refreshAfterResume());
   }
 
@@ -84,7 +105,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   }
 
   bool get _isCurrentRoute =>
-      mounted && (ModalRoute.of(context)?.isCurrent ?? false);
+      mounted &&
+      _lifecycleState == AppLifecycleState.resumed &&
+      (ModalRoute.of<void>(context)?.isCurrent ?? false);
 
   ChatProvider get _chatProvider =>
       widget.chatProvider ?? context.read<ChatProvider>();
@@ -110,6 +133,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _recordingTimer?.cancel();
     if (_isRecording || _isStartingVoice) {
