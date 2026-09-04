@@ -29,7 +29,17 @@ import {
   Ban,
   UserCheck,
   PlusCircle,
-  MinusCircle
+  MinusCircle,
+  ShoppingCart,
+  DollarSign,
+  CreditCard,
+  Percent,
+  ArrowRightLeft,
+  UserPlus,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  X
 } from 'lucide-react';
 
 export const AdminDashboardPage: React.FC = () => {
@@ -43,6 +53,13 @@ export const AdminDashboardPage: React.FC = () => {
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
+
+  // Reassign / Transfer Modal State
+  const [reassignModalItem, setReassignModalItem] = useState<UsedItem | null>(null);
+  const [reassignTargetEmail, setReassignTargetEmail] = useState('');
+  const [reassignLoading, setReassignLoading] = useState(false);
+  const [reassignError, setReassignError] = useState<string | null>(null);
+  const [reassignSuccess, setReassignSuccess] = useState<string | null>(null);
 
   // New Category Form State
   const [newCatName, setNewCatName] = useState('');
@@ -163,6 +180,39 @@ export const AdminDashboardPage: React.FC = () => {
       if (res.items) setItems(res.items);
     } catch (err: any) {
       alert(err.message || 'Failed to update item status.');
+    }
+  };
+
+  const handleReassignItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const itemId = reassignModalItem?.id || (reassignModalItem as any)?._id;
+    if (!itemId || !reassignTargetEmail.trim()) return;
+
+    try {
+      setReassignLoading(true);
+      setReassignError(null);
+      const res = await adminApi.reassignItem(itemId, {
+        targetUserEmail: reassignTargetEmail.trim(),
+      });
+      setReassignSuccess(res.message || 'Item successfully reassigned.');
+
+      // Refresh items list and overview stats
+      const [itemsRes, statsRes] = await Promise.all([
+        adminApi.getItems({ status: itemStatusFilter, search: itemSearch }).catch(() => ({ items: [] })),
+        adminApi.getStats().catch(() => ({ stats: null })),
+      ]);
+      if (itemsRes.items) setItems(itemsRes.items);
+      if (statsRes.stats) setStats(statsRes.stats);
+
+      setTimeout(() => {
+        setReassignModalItem(null);
+        setReassignTargetEmail('');
+        setReassignSuccess(null);
+      }, 1200);
+    } catch (err: any) {
+      setReassignError(err.message || 'Failed to reassign item.');
+    } finally {
+      setReassignLoading(false);
     }
   };
 
@@ -340,7 +390,303 @@ export const AdminDashboardPage: React.FC = () => {
       {/* TAB 1: Global Overview */}
       {activeTab === 'overview' && stats && (
         <div className="animate-fade-in">
-          {/* Top Metric Cards */}
+          {/* Section Header: Transaction & Financial Intelligence */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <DollarSign size={20} color="var(--primary-600)" />
+              <span>Platform Flow & Transaction Economics</span>
+            </h2>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Real-time aggregated escrow & fee data</span>
+          </div>
+
+          {/* Top Row: Financial & Order Metric Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+            
+            {/* Total Orders */}
+            <div className="glass-card" style={{ padding: '24px', borderLeft: '4px solid #10b981' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Total Orders</span>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ShoppingCart size={18} />
+                </div>
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                {stats.orderStats?.totalOrders ?? 0}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#059669', marginTop: '4px', fontWeight: 600 }}>
+                {stats.orderStats?.completedOrders ?? 0} completed · {stats.orderStats?.activeOrders ?? 0} in progress
+              </div>
+            </div>
+
+            {/* Total GMV / Turnover */}
+            <div className="glass-card" style={{ padding: '24px', borderLeft: '4px solid #3b82f6' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Gross Turnover / GMV</span>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <DollarSign size={18} />
+                </div>
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1d4ed8' }}>
+                ${stats.orderStats?.totalGmvNzd ?? '0.00'} <span style={{ fontSize: '1rem', fontWeight: 600 }}>NZD</span>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Total transacted escrow volume
+              </div>
+            </div>
+
+            {/* KiwiShare Platform Fees */}
+            <div className="glass-card" style={{ padding: '24px', borderLeft: '4px solid #f59e0b' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>KiwiShare Fees</span>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Percent size={18} />
+                </div>
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#b45309' }}>
+                ${stats.orderStats?.totalPlatformFeesNzd ?? '0.00'} <span style={{ fontSize: '1rem', fontWeight: 600 }}>NZD</span>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#b45309', marginTop: '4px', fontWeight: 600 }}>
+                Buyer & seller service fee revenue
+              </div>
+            </div>
+
+            {/* Seller Payouts */}
+            <div className="glass-card" style={{ padding: '24px', borderLeft: '4px solid #8b5cf6' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Seller Payouts</span>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#f3e8ff', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CreditCard size={18} />
+                </div>
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#6d28d9' }}>
+                ${stats.orderStats?.totalSellerPayoutsNzd ?? '0.00'} <span style={{ fontSize: '1rem', fontWeight: 600 }}>NZD</span>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Net received / payable to Kiwi sellers
+              </div>
+            </div>
+
+          </div>
+
+          {/* Section: Transaction Status & Financial Breakdown Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+            
+            {/* Transaction Situation / Status Breakdown */}
+            <div className="glass-card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Transaction Status</h3>
+                <span className="badge" style={{ backgroundColor: '#ecfdf5', color: '#047857' }}>
+                  Live Status Tracking
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Completed / Settled */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', backgroundColor: '#f0fdf4', borderRadius: 'var(--radius-md)', border: '1px solid #bbf7d0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle2 size={16} color="#16a34a" />
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#15803d' }}>Completed & Handed Over</span>
+                      <div style={{ fontSize: '0.75rem', color: '#166534' }}>QR code scanned and payouts released</div>
+                    </div>
+                  </div>
+                  <strong style={{ fontSize: '1.1rem', color: '#15803d' }}>
+                    {(stats.orderStats?.statusBreakdown?.completed || 0) + (stats.orderStats?.statusBreakdown?.seller_paid || 0)}
+                  </strong>
+                </div>
+
+                {/* In Handover / Meeting */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 'var(--radius-md)', border: '1px solid #bfdbfe' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Clock size={16} color="#2563eb" />
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1d4ed8' }}>Meeting & Handover in Progress</span>
+                      <div style={{ fontSize: '0.75rem', color: '#1e40af' }}>Meeting scheduled, arriving, or scanned</div>
+                    </div>
+                  </div>
+                  <strong style={{ fontSize: '1.1rem', color: '#1d4ed8' }}>
+                    {(stats.orderStats?.statusBreakdown?.meeting_scheduled || 0) + 
+                     (stats.orderStats?.statusBreakdown?.meeting_in_progress || 0) + 
+                     (stats.orderStats?.statusBreakdown?.qr_scanned || 0)}
+                  </strong>
+                </div>
+
+                {/* Paid in Escrow */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', backgroundColor: '#faf5ff', borderRadius: 'var(--radius-md)', border: '1px solid #e9d5ff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <DollarSign size={16} color="#7c3aed" />
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#6d28d9' }}>Escrow Secured / Pending</span>
+                      <div style={{ fontSize: '0.75rem', color: '#5b21b6' }}>Payment verified by Stripe, awaiting meetup</div>
+                    </div>
+                  </div>
+                  <strong style={{ fontSize: '1.1rem', color: '#6d28d9' }}>
+                    {(stats.orderStats?.statusBreakdown?.paid || 0) + (stats.orderStats?.statusBreakdown?.transfer_pending || 0)}
+                  </strong>
+                </div>
+
+                {/* Cancelled / Refunded */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', backgroundColor: '#fef2f2', borderRadius: 'var(--radius-md)', border: '1px solid #fecaca' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertCircle size={16} color="#dc2626" />
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#b91c1c' }}>Cancelled / Refunded</span>
+                      <div style={{ fontSize: '0.75rem', color: '#991b1b' }}>Mutually cancelled or dispute refunds</div>
+                    </div>
+                  </div>
+                  <strong style={{ fontSize: '1.1rem', color: '#b91c1c' }}>
+                    {(stats.orderStats?.statusBreakdown?.cancelled || 0) + 
+                     (stats.orderStats?.statusBreakdown?.refunded || 0) + 
+                     (stats.orderStats?.statusBreakdown?.refund_pending || 0)}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Flow & KiwiShare Fee Economics */}
+            <div className="glass-card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Fee & Revenue Flow</h3>
+                <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#b45309' }}>
+                  NZD Currency
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '8px', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Gross Merchandise Value (GMV)</span>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total transacted sum paid by buyers</div>
+                  </div>
+                  <strong style={{ fontSize: '1rem', color: 'var(--text-main)' }}>
+                    ${stats.orderStats?.totalGmvNzd ?? '0.00'} NZD
+                  </strong>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '8px', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#b45309' }}>KiwiShare Total Platform Fees</span>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Buyer platform fee + Seller commission</div>
+                  </div>
+                  <strong style={{ fontSize: '1.05rem', color: '#b45309' }}>
+                    +${stats.orderStats?.totalPlatformFeesNzd ?? '0.00'} NZD
+                  </strong>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '8px', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#047857' }}>Net Seller Disbursements</span>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Transferred to community student sellers</div>
+                  </div>
+                  <strong style={{ fontSize: '1rem', color: '#047857' }}>
+                    ${stats.orderStats?.totalSellerPayoutsNzd ?? '0.00'} NZD
+                  </strong>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-md)' }}>
+                  <div>
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Average Order Value (AOV)</span>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Average price per transaction</div>
+                  </div>
+                  <strong style={{ fontSize: '0.95rem' }}>
+                    {stats.orderStats && stats.orderStats.totalOrders > 0
+                      ? `$${(parseFloat(stats.orderStats.totalGmvNzd || '0') / stats.orderStats.totalOrders).toFixed(2)} NZD`
+                      : '$0.00 NZD'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Section: Recent Orders & Escrow Transactions */}
+          <div className="glass-card" style={{ padding: '0', overflow: 'hidden', marginBottom: '32px' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Recent KiwiShare Orders</h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>Latest transactions facilitated through KiwiShare escrow</p>
+              </div>
+              <span className="badge" style={{ backgroundColor: 'var(--primary-100)', color: 'var(--primary-800)' }}>
+                {stats.orderStats?.recentOrders?.length || 0} Recent Deals
+              </span>
+            </div>
+
+            {stats.orderStats?.recentOrders && stats.orderStats.recentOrders.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                  <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+                    <tr>
+                      <th style={{ padding: '12px 16px' }}>Order / Item</th>
+                      <th style={{ padding: '12px 16px' }}>Buyer</th>
+                      <th style={{ padding: '12px 16px' }}>Seller</th>
+                      <th style={{ padding: '12px 16px' }}>Gross Total</th>
+                      <th style={{ padding: '12px 16px' }}>KiwiShare Fee</th>
+                      <th style={{ padding: '12px 16px' }}>Status</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.orderStats.recentOrders.map((ord) => {
+                      const isCompleted = ord.status === 'completed' || ord.status === 'seller_paid';
+                      const isCancelled = ord.status === 'cancelled' || ord.status === 'refunded';
+                      return (
+                        <tr key={ord.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{ord.itemTitle}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{ord.orderNumber}</div>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: 600 }}>{ord.buyerName}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{ord.buyerEmail}</div>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: 600 }}>{ord.sellerName}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{ord.sellerEmail}</div>
+                          </td>
+                          <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--primary-700)' }}>
+                            ${ord.buyerTotalNzd} NZD
+                          </td>
+                          <td style={{ padding: '12px 16px', fontWeight: 600, color: '#b45309' }}>
+                            ${ord.platformFeeNzd} NZD
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span
+                              className="badge"
+                              style={{
+                                backgroundColor: isCompleted ? '#ecfdf5' : isCancelled ? '#fef2f2' : '#eff6ff',
+                                color: isCompleted ? '#047857' : isCancelled ? '#b91c1c' : '#1d4ed8',
+                              }}
+                            >
+                              {ord.status.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                            {new Date(ord.createdAt).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <ShoppingCart size={32} color="var(--primary-300)" style={{ margin: '0 auto 8px' }} />
+                <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>No orders placed yet</p>
+                <p style={{ fontSize: '0.8rem' }}>When users buy products via KiwiShare Escrow, their transaction and fee status will stream here live.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Section Header: Community & Platform Health */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Users size={20} color="var(--primary-600)" />
+              <span>Community & User Engagement</span>
+            </h2>
+          </div>
+
+          {/* Secondary Metric Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '32px' }}>
             
             <div className="glass-card" style={{ padding: '24px' }}>
@@ -351,7 +697,7 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
               </div>
               <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-main)' }}>{stats.totalUsers}</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--primary-600)', marginTop: '4px' }}>Registered accounts</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--primary-600)', marginTop: '4px' }}>Registered Kiwi accounts</div>
             </div>
 
             <div className="glass-card" style={{ padding: '24px' }}>
@@ -788,6 +1134,22 @@ export const AdminDashboardPage: React.FC = () => {
                               </button>
                             )}
 
+                            {/* Reassign / Transfer Button */}
+                            <button
+                              onClick={() => {
+                                setReassignModalItem(it);
+                                setReassignTargetEmail(it.seller?.email || '');
+                                setReassignError(null);
+                                setReassignSuccess(null);
+                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#2563eb', borderColor: '#bfdbfe' }}
+                              title="Transfer / Reassign Listing to User Account"
+                            >
+                              <ArrowRightLeft size={14} />
+                              <span>Transfer</span>
+                            </button>
+
                             <button
                               onClick={() => handleUpdateItemStatus(itemId, 'deleted')}
                               className="btn btn-secondary"
@@ -956,6 +1318,129 @@ export const AdminDashboardPage: React.FC = () => {
           checkAdminAndFetch();
         }}
       />
+
+      {/* Transfer / Reassign Listing Modal */}
+      {reassignModalItem && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 250,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+          onClick={() => setReassignModalItem(null)}
+        >
+          <div
+            className="glass-card animate-fade-in"
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              backgroundColor: '#ffffff',
+              padding: '28px',
+              position: 'relative',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setReassignModalItem(null)}
+              style={{ position: 'absolute', top: '16px', right: '16px', color: 'var(--text-muted)', cursor: 'pointer', background: 'none', border: 'none' }}
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ArrowRightLeft size={20} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Transfer Listing Ownership</h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Reassign this item to another registered member</p>
+              </div>
+            </div>
+
+            {/* Item Preview */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-md)', marginBottom: '18px', border: '1px solid var(--border-subtle)' }}>
+              <img
+                src={reassignModalItem.imageUrl || (reassignModalItem.images && reassignModalItem.images[0]?.url) || 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=100'}
+                alt=""
+                style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '8px' }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{reassignModalItem.title}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Current Seller: <strong>{reassignModalItem.seller?.displayName || 'Kiwi Member'}</strong> ({reassignModalItem.seller?.email || reassignModalItem.ownerId || 'N/A'})
+                </div>
+              </div>
+            </div>
+
+            {reassignError && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', marginBottom: '16px' }}>
+                <AlertCircle size={16} />
+                <span>{reassignError}</span>
+              </div>
+            )}
+
+            {reassignSuccess && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', marginBottom: '16px' }}>
+                <CheckCircle2 size={16} />
+                <span>{reassignSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleReassignItem}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  Target User Account Email *
+                </label>
+                <input
+                  type="email"
+                  placeholder="e.g. demo@example.com"
+                  value={reassignTargetEmail}
+                  onChange={(e) => setReassignTargetEmail(e.target.value)}
+                  className="form-input"
+                  list="registered-users-list"
+                  required
+                />
+                <datalist id="registered-users-list">
+                  {usersList.map((u) => (
+                    <option key={u.id || u._id} value={u.email}>
+                      {u.displayName} ({u.email})
+                    </option>
+                  ))}
+                </datalist>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  Select an existing registered KiwiShare member from the suggestions or type their email.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setReassignModalItem(null)}
+                  className="btn btn-secondary"
+                  disabled={reassignLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={reassignLoading || !reassignTargetEmail.trim()}
+                >
+                  {reassignLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <UserPlus size={16} />}
+                  <span>Confirm Transfer</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

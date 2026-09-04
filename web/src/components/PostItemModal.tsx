@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { categoriesApi, itemsApi, uploadApi, CategoryItem } from '../api/client';
+import { categoriesApi, itemsApi, uploadApi, adminApi, CategoryItem, UserProfile } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { 
   X, 
@@ -23,6 +23,7 @@ interface PostItemModalProps {
 export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, onItemCreated }) => {
   const { user } = useAuth();
   const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [adminUsersList, setAdminUsersList] = useState<UserProfile[]>([]);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [priceNzd, setPriceNzd] = useState('');
@@ -50,8 +51,14 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
           setCategory((prev) => prev || res.categories[0].name);
         }
       });
+
+      if (user?.role === 'admin') {
+        adminApi.getUsers().then((res) => {
+          if (res.users) setAdminUsersList(res.users);
+        }).catch(() => {});
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, user?.role]);
 
   if (!isOpen) return null;
 
@@ -227,7 +234,15 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
                 onChange={(e) => setTargetUserEmail(e.target.value)}
                 className="form-input"
                 style={{ backgroundColor: '#ffffff' }}
+                list="admin-target-user-list"
               />
+              <datalist id="admin-target-user-list">
+                {adminUsersList.map((u) => (
+                  <option key={u.id || u._id} value={u.email}>
+                    {u.displayName} ({u.email})
+                  </option>
+                ))}
+              </datalist>
               <div style={{ fontSize: '0.75rem', color: '#166534', marginTop: '4px' }}>
                 This product will be publicly listed under this member's profile & student verification badge.
               </div>
