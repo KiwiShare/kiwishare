@@ -313,7 +313,8 @@ describe('KiwiShare chat push notifications', () => {
 
     const read = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
-      .set('Authorization', `Bearer ${sellerToken}`);
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sent.body.message.id });
     expect(read.status).toBe(200);
     expect(read.body.readCount).toBeGreaterThanOrEqual(1);
     await waitFor(() => receipts.length === 1);
@@ -331,7 +332,8 @@ describe('KiwiShare chat push notifications', () => {
 
     const repeated = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
-      .set('Authorization', `Bearer ${sellerToken}`);
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sent.body.message.id });
     expect(repeated.status).toBe(200);
     expect(repeated.body.readCount).toBe(0);
     expect(receipts).toHaveLength(1);
@@ -358,7 +360,8 @@ describe('KiwiShare chat push notifications', () => {
 
     const read = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
-      .set('Authorization', `Bearer ${sellerToken}`);
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sent.body.message.id });
     expect(read.status).toBe(200);
     expect(read.body.readCount).toBeGreaterThanOrEqual(1);
     await waitFor(() => warning.mock.calls.length > 0);

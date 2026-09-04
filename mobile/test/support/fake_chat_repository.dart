@@ -29,6 +29,8 @@ class FakeChatRepository implements ChatRepository {
   int createCalls = 0;
   int messageFetches = 0;
   int markReadCalls = 0;
+  int remainingUnreadCount = 0;
+  final List<String> readThroughMessageIds = [];
   int sendCalls = 0;
   int deleteCalls = 0;
   final List<String> sentTexts = [];
@@ -85,14 +87,17 @@ class FakeChatRepository implements ChatRepository {
   }
 
   @override
-  Future<void> markConversationRead({
+  Future<int> markConversationRead({
     required String conversationId,
+    required String throughMessageId,
     required String token,
   }) async {
     markReadCalls += 1;
+    readThroughMessageIds.add(throughMessageId);
     final completer = markReadCompleter;
     if (completer != null) await completer.future;
     if (markReadError != null) throw markReadError!;
+    return remainingUnreadCount;
   }
 
   @override

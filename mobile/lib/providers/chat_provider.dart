@@ -286,7 +286,14 @@ class ChatProvider extends ChangeNotifier {
       final canonical = conversationById(conversation.id) ?? conversation;
       if ((shouldMarkRead?.call() ?? true) &&
           (canonical.unreadCount > 0 || hasUnreadIncomingMessage)) {
-        await markConversationRead(conversation: canonical, token: token);
+        final readThroughMessageId = _latestMessageId(page.messages);
+        if (readThroughMessageId != null) {
+          await markConversationRead(
+            conversation: canonical,
+            token: token,
+            throughMessageId: readThroughMessageId,
+          );
+        }
       }
     } on ChatRepositoryException catch (error) {
       if (_sessionToken == token) {
@@ -312,9 +319,14 @@ class ChatProvider extends ChangeNotifier {
   Future<bool> markConversationRead({
     required ChatConversationModel conversation,
     required String token,
+    String? throughMessageId,
   }) {
     if (conversation.id.isEmpty || token.isEmpty) return Future.value(false);
     _useSession(token);
+    final watermark =
+        throughMessageId ??
+        _latestMessageId(_messages[conversation.id] ?? const []);
+    if (watermark == null) return Future.value(false);
     final pending = _markingReadOperations[conversation.id];
     if (pending != null) return pending;
 
@@ -323,6 +335,7 @@ class ChatProvider extends ChangeNotifier {
         _markConversationReadNow(
           conversation: conversation,
           token: token,
+          throughMessageId: watermark,
         ).whenComplete(() {
           if (identical(_markingReadOperations[conversation.id], operation)) {
             _markingReadOperations.remove(conversation.id);
@@ -335,6 +348,7 @@ class ChatProvider extends ChangeNotifier {
   Future<bool> _markConversationReadNow({
     required ChatConversationModel conversation,
     required String token,
+    required String throughMessageId,
   }) async {
     final canonical = conversationById(conversation.id) ?? conversation;
     final previousUnreadCount = canonical.unreadCount;
@@ -347,8 +361,9 @@ class ChatProvider extends ChangeNotifier {
     }
 
     try {
-      await repository.markConversationRead(
+      final remainingUnreadCount = await repository.markConversationRead(
         conversationId: conversation.id,
+        throughMessageId: throughMessageId,
         token: token,
       );
       if (_sessionToken == token) {
@@ -356,6 +371,12 @@ class ChatProvider extends ChangeNotifier {
         if (_isLoadingConversations ||
             (current != null && current.unreadCount > 0)) {
           await loadConversations(token, queueIfBusy: true);
+        } else if (current != null &&
+            current.unreadCount != remainingUnreadCount) {
+          _replaceConversation(
+            current.copyWith(unreadCount: remainingUnreadCount),
+          );
+          notifyListeners();
         }
       }
       return _sessionToken == token;
@@ -375,6 +396,19 @@ class ChatProvider extends ChangeNotifier {
       }
       return false;
     }
+  }
+
+  String? _latestMessageId(Iterable<ChatMessageModel> messages) {
+    ChatMessageModel? latest;
+    for (final message in messages) {
+      if (latest == null ||
+          message.createdAt.isAfter(latest.createdAt) ||
+          (message.createdAt == latest.createdAt &&
+              message.id.compareTo(latest.id) > 0)) {
+        latest = message;
+      }
+    }
+    return latest?.id;
   }
 
   Future<bool> sendText({

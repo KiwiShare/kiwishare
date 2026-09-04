@@ -577,22 +577,72 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   );
   if (!conversation) return;
 
+  const throughMessageId = (ctx.request.body as { throughMessageId?: unknown })
+    ?.throughMessageId;
+  if (
+    typeof throughMessageId !== 'string' ||
+    !mongoose.Types.ObjectId.isValid(throughMessageId)
+  ) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'A valid read-through message is required.'
+    };
+    return;
+  }
+  const watermark = await Message.findOne({
+    _id: new mongoose.Types.ObjectId(throughMessageId),
+    conversationId: conversation._id,
+    status: { $ne: 'deleted' }
+  }).select('_id');
+  if (!watermark) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'A valid read-through message is required.'
+    };
+    return;
+  }
+
   const readAt = new Date();
   const result = await Message.updateMany(
     {
       conversationId: conversation._id,
       receiverId: userId,
+      _id: { $lte: watermark._id },
       status: { $in: ['sent', 'delivered'] }
     },
     { $set: { status: 'read', readAt } }
   );
 
   const readingAsBuyer = conversation.buyerId.equals(userId);
-  await Conversation.findByIdAndUpdate(conversation._id, {
-    $set: readingAsBuyer
-      ? { buyerUnreadCount: 0 }
-      : { sellerUnreadCount: 0 }
-  });
+  const unreadField = readingAsBuyer
+    ? 'buyerUnreadCount'
+    : 'sellerUnreadCount';
+  const updatedConversation = await Conversation.findByIdAndUpdate(
+    conversation._id,
+    [
+      {
+        $set: {
+          [unreadField]: {
+            $max: [
+              0,
+              {
+                $subtract: [
+                  { $ifNull: [`$${unreadField}`, 0] },
+                  result.modifiedCount
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    { new: true }
+  );
+  const unreadCount = readingAsBuyer
+    ? updatedConversation?.buyerUnreadCount ?? 0
+    : updatedConversation?.sellerUnreadCount ?? 0;
 
   if (result.modifiedCount > 0) {
     const receiptRecipientId = readingAsBuyer
@@ -607,7 +657,8 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   ctx.status = 200;
   ctx.body = {
     status: 'success',
-    readCount: result.modifiedCount
+    readCount: result.modifiedCount,
+    unreadCount
   };
 });
 

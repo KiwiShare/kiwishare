@@ -402,6 +402,7 @@ void main() {
     final operation = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
 
     expect(provider.conversations.single.unreadCount, 0);
@@ -411,6 +412,27 @@ void main() {
     pendingRead.complete();
     expect(await operation, isTrue);
     expect(provider.messageReadErrorFor(conversation.id), isNull);
+  });
+
+  test('restores unread messages newer than the displayed watermark', () async {
+    final conversation = testConversation(unreadCount: 2);
+    final repository = FakeChatRepository(conversations: [conversation])
+      ..remainingUnreadCount = 1;
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+
+    expect(
+      await provider.markConversationRead(
+        conversation: conversation,
+        token: 'valid-token',
+        throughMessageId: 'displayed-message',
+      ),
+      isTrue,
+    );
+
+    expect(provider.conversations.single.unreadCount, 1);
+    expect(provider.totalUnreadCount, 1);
+    expect(repository.readThroughMessageIds, ['displayed-message']);
   });
 
   test('deduplicates concurrent read requests for one conversation', () async {
@@ -424,10 +446,12 @@ void main() {
     final first = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
     final second = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
 
     expect(repository.markReadCalls, 1);
@@ -453,6 +477,7 @@ void main() {
       final markingRead = provider.markConversationRead(
         conversation: conversation,
         token: 'valid-token',
+        throughMessageId: '1',
       );
       expect(provider.totalUnreadCount, 0);
 
@@ -482,6 +507,7 @@ void main() {
     final markingRead = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
     final loading = provider.loadConversations('valid-token');
     newerLoad.complete([conversation.copyWith(unreadCount: 1)]);
@@ -509,6 +535,7 @@ void main() {
     final markingRead = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
     final loading = provider.loadConversations('valid-token');
 
@@ -534,6 +561,7 @@ void main() {
         await provider.markConversationRead(
           conversation: conversation,
           token: 'valid-token',
+          throughMessageId: '1',
         ),
         isFalse,
       );
@@ -545,6 +573,7 @@ void main() {
       final retry = provider.markConversationRead(
         conversation: conversation,
         token: 'valid-token',
+        throughMessageId: '1',
       );
 
       expect(provider.messageReadErrorFor(conversation.id), isNull);

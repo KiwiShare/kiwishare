@@ -386,12 +386,18 @@ describe('KiwiShare text chat API', () => {
   });
 
   test('marks incoming messages as read and clears only the reader count', async () => {
+    const sellerWatermark = await Message.findOne({
+      conversationId,
+      receiverId: sellerId
+    }).sort({ _id: -1 });
     const read = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
-      .set('Authorization', `Bearer ${sellerToken}`);
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sellerWatermark!._id.toString() });
 
     expect(read.status).toBe(200);
     expect(read.body.readCount).toBe(2);
+    expect(read.body.unreadCount).toBe(0);
 
     const storedConversation = await Conversation.findById(conversationId);
     expect(storedConversation?.sellerUnreadCount).toBe(0);
@@ -418,13 +424,51 @@ describe('KiwiShare text chat API', () => {
 
     const buyerRead = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
-      .set('Authorization', `Bearer ${buyerToken}`);
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ throughMessageId: reply.body.message.id });
     expect(buyerRead.status).toBe(200);
     expect(buyerRead.body.readCount).toBe(1);
+    expect(buyerRead.body.unreadCount).toBe(0);
 
     const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
     expect(messages.filter((message) => message.status === 'read')).toHaveLength(3);
     expect(messages.at(-1)?.receiverId.toString()).toBe(buyerId);
+  });
+
+  test('does not mark a message persisted after the displayed watermark', async () => {
+    const first = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Displayed before the read request.' });
+    const later = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Persisted after the displayed snapshot.' });
+
+    const read = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: first.body.message.id });
+
+    expect(read.status).toBe(200);
+    expect(read.body.readCount).toBe(1);
+    expect(read.body.unreadCount).toBe(1);
+    expect((await Message.findById(first.body.message.id))?.status).toBe('read');
+    expect((await Message.findById(later.body.message.id))?.status).toBe('sent');
+    expect(
+      (await Conversation.findById(conversationId))?.sellerUnreadCount
+    ).toBe(1);
+
+    const missingWatermark = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({});
+    expect(missingWatermark.status).toBe(400);
+
+    await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: later.body.message.id });
   });
 
   test('stores an R2 image URL and returns it in chat history', async () => {

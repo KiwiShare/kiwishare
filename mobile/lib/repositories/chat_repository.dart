@@ -56,8 +56,9 @@ abstract class ChatRepository {
     required String token,
   });
 
-  Future<void> markConversationRead({
+  Future<int> markConversationRead({
     required String conversationId,
+    required String throughMessageId,
     required String token,
   });
 
@@ -233,15 +234,22 @@ class RestChatRepository implements ChatRepository {
   }
 
   @override
-  Future<void> markConversationRead({
+  Future<int> markConversationRead({
     required String conversationId,
+    required String throughMessageId,
     required String token,
   }) async {
     final response = await _client.patch(
       Uri.parse('${ApiConfig.baseUrl}/api/conversations/$conversationId/read'),
       headers: _headers(token),
+      body: jsonEncode({'throughMessageId': throughMessageId}),
     );
-    _responseMap(response);
+    final data = _responseMap(response);
+    final unreadCount = data['unreadCount'];
+    if (unreadCount is! int || unreadCount < 0) {
+      throw const ChatRepositoryException('Invalid unread count response.');
+    }
+    return unreadCount;
   }
 
   @override
