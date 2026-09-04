@@ -617,7 +617,7 @@ async function createUsedItemHandler(ctx: any) {
           ? { city: body.city, suburb: body.suburb }
           : undefined)
       ),
-      isSustainable: body.isSustainable ?? true
+      isSustainable: body.isSustainable ?? false
     };
   } catch (error) {
     if (!(error instanceof ListingValidationError)) throw error;

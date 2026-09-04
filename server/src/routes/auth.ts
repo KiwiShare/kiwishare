@@ -157,7 +157,7 @@ router.post('/auth/send-otp', async (ctx) => {
     ctx.status = 429;
     ctx.body = {
       status: 'error',
-      message: `Please wait ${waitSeconds}s before requesting a new verification code.`,
+      message: 'Please wait for the cooldown timer before requesting a new verification code.',
       cooldownSeconds: waitSeconds
     };
     return;

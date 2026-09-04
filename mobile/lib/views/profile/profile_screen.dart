@@ -6,6 +6,7 @@ import '../../providers/providers.dart';
 import '../auth/login_view.dart';
 import 'report_screen.dart';
 import 'user_listings_screen.dart';
+import 'user_meetups_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -145,6 +146,17 @@ class ProfileScreen extends StatelessWidget {
                     MaterialPageRoute<void>(
                       builder: (_) =>
                           const UserListingsScreen(mode: UserListingsMode.sold),
+                    ),
+                  ),
+                ),
+                _MenuTile(
+                  icon: Icons.qr_code_2_rounded,
+                  title: 'Meetups & QR Codes',
+                  subtitle: 'Confirmed schedule and transaction QR codes',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const UserMeetupsScreen(),
                     ),
                   ),
                 ),

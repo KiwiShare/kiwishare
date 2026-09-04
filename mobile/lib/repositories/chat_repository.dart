@@ -56,6 +56,14 @@ abstract class ChatRepository {
     required String token,
   });
 
+  Future<ChatMessageModel> sendLocationMessage({
+    required String conversationId,
+    required String name,
+    required double latitude,
+    required double longitude,
+    required String token,
+  });
+
   Future<void> markConversationRead({
     required String conversationId,
     required String token,
@@ -220,6 +228,38 @@ class RestChatRepository implements ChatRepository {
         'type': 'voice',
         'audioUrl': audioUrl,
         'durationMs': durationMs,
+      }),
+    );
+    final data = _responseMap(response);
+    final message = data['message'];
+    if (message is! Map) {
+      throw const ChatRepositoryException(
+        'The chat service returned an invalid message.',
+      );
+    }
+    return ChatMessageModel.fromJson(Map<String, dynamic>.from(message));
+  }
+
+  @override
+  Future<ChatMessageModel> sendLocationMessage({
+    required String conversationId,
+    required String name,
+    required double latitude,
+    required double longitude,
+    required String token,
+  }) async {
+    final response = await _client.post(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/api/conversations/$conversationId/messages',
+      ),
+      headers: _headers(token),
+      body: jsonEncode({
+        'type': 'location',
+        'location': {
+          'name': name,
+          'latitude': latitude,
+          'longitude': longitude,
+        },
       }),
     );
     final data = _responseMap(response);
