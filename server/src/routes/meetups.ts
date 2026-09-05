@@ -360,31 +360,37 @@ router.post('/:orderId/accept', async (ctx: Context) => {
   });
 
   if (conversation) {
-    const confirmationMessage = await Message.create({
-      conversationId: conversation._id,
-      senderId: userId,
-      receiverId: new mongoose.Types.ObjectId(counterpartyId),
-      type: 'meetup',
-      text: `✅ Meetup confirmed: ${formattedDate} at ${order.meeting.locationName}`,
-      meetup: {
-        orderId: order._id,
-        scheduledAt: order.meeting.scheduledAt,
-        locationName: order.meeting.locationName,
-        latitude: order.meeting.latitude,
-        longitude: order.meeting.longitude,
-        proposalStatus: 'confirmed',
-        proposedBy: order.meeting.proposedBy
-      },
-      status: 'sent'
-    });
+    await runMongoTransaction(async (session) => {
+      const confirmationMessage = await new Message({
+        conversationId: conversation._id,
+        senderId: userId,
+        receiverId: new mongoose.Types.ObjectId(counterpartyId),
+        type: 'meetup',
+        text: `✅ Meetup confirmed: ${formattedDate} at ${order.meeting.locationName}`,
+        meetup: {
+          orderId: order._id,
+          scheduledAt: order.meeting.scheduledAt,
+          locationName: order.meeting.locationName,
+          latitude: order.meeting.latitude,
+          longitude: order.meeting.longitude,
+          proposalStatus: 'confirmed',
+          proposedBy: order.meeting.proposedBy
+        },
+        status: 'sent'
+      }).save(session ? { session } : {});
 
-    await Conversation.findByIdAndUpdate(conversation._id, {
-      $set: {
-        lastMessageText: `✅ Meetup confirmed: ${formattedDate}`,
-        lastMessageAt: confirmationMessage.createdAt,
-        lastMessageId: confirmationMessage._id,
-        lastMessageSenderId: userId
-      }
+      await Conversation.findByIdAndUpdate(
+        conversation._id,
+        {
+          $set: {
+            lastMessageText: `✅ Meetup confirmed: ${formattedDate}`,
+            lastMessageAt: confirmationMessage.createdAt,
+            lastMessageId: confirmationMessage._id,
+            lastMessageSenderId: userId
+          }
+        },
+        session ? { session } : {}
+      );
     });
   }
 

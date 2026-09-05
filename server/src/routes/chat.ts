@@ -708,7 +708,7 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
                 }
               ]
             }
-          : { createdAt: { $lte: legacyBoundaryAt } }
+          : { createdAt: { $lt: legacyBoundaryAt } }
         : { _id: { $exists: false } };
       const legacyWatermarkQuery = Message.findOne({
         conversationId: conversation._id,

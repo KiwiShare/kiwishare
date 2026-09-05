@@ -877,6 +877,44 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(meetup.status).toBe(200);
     expect(meetup.body.meetup.proposalStatus).toBe('proposed');
 
+    let releaseConfirmationBlocker!: () => void;
+    let signalConfirmationBlocker!: () => void;
+    const confirmationBlockerStarted = new Promise<void>((resolve) => {
+      signalConfirmationBlocker = resolve;
+    });
+    const confirmationBlocker = new Promise<void>((resolve) => {
+      releaseConfirmationBlocker = resolve;
+    });
+    const blockedConfirmationWork = runMongoTransaction(async () => {
+      signalConfirmationBlocker();
+      await confirmationBlocker;
+    });
+    await confirmationBlockerStarted;
+    const confirmationsBefore = await Message.countDocuments({
+      conversationId,
+      'meetup.proposalStatus': 'confirmed'
+    });
+    const confirmation = request(app.callback())
+      .post(`/api/meetups/${meetup.body.meetup.id}/accept`)
+      .set('Authorization', `Bearer ${seller.body.token}`)
+      .then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      await Message.countDocuments({
+        conversationId,
+        'meetup.proposalStatus': 'confirmed'
+      })
+    ).toBe(confirmationsBefore);
+    releaseConfirmationBlocker();
+    expect((await confirmation).status).toBe(200);
+    await blockedConfirmationWork;
+    expect(
+      await Message.countDocuments({
+        conversationId,
+        'meetup.proposalStatus': 'confirmed'
+      })
+    ).toBe(confirmationsBefore + 1);
+
     const sequence: string[] = [];
     let startSecond!: () => void;
     const secondMayStart = new Promise<void>((resolve) => {
@@ -978,6 +1016,27 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
       releasePartialSend();
       conversationUpdateSpy.mockRestore();
     }
+
+    const legacyTimestamp = new Date();
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { lastMessageAt: legacyTimestamp },
+      $unset: { lastMessageId: 1 }
+    });
+    const equalTimeMessage = await Message.create({
+      conversationId,
+      senderId: new mongoose.Types.ObjectId(userId),
+      receiverId: new mongoose.Types.ObjectId(seller.body.user.id),
+      type: 'text',
+      text: 'Same-millisecond message beyond a legacy boundary.',
+      status: 'sent',
+      createdAt: legacyTimestamp,
+      updatedAt: legacyTimestamp
+    });
+    const equalTimeRead = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${seller.body.token}`);
+    expect(equalTimeRead.status).toBe(200);
+    expect((await Message.findById(equalTimeMessage._id))?.status).toBe('sent');
 
     let releaseRemovalBlocker!: () => void;
     let signalRemovalBlocker!: () => void;
