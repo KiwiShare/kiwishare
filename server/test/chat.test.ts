@@ -541,7 +541,11 @@ describe('KiwiShare text chat API', () => {
       .send({ throughMessageId: newerId.toString() });
   });
 
-  test('treats an empty legacy read snapshot as a no-op', async () => {
+  test('repairs a stale counter for an empty legacy read snapshot', async () => {
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { sellerUnreadCount: 5 }
+    });
+
     const emptyRead = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
       .set('Authorization', `Bearer ${sellerToken}`);
@@ -549,6 +553,9 @@ describe('KiwiShare text chat API', () => {
     expect(emptyRead.status).toBe(200);
     expect(emptyRead.body.readCount).toBe(0);
     expect(emptyRead.body.unreadCount).toBe(0);
+    expect(
+      (await Conversation.findById(conversationId))?.sellerUnreadCount
+    ).toBe(0);
 
     const later = await request(app.callback())
       .post(`/api/conversations/${conversationId}/messages`)

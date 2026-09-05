@@ -713,23 +713,28 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
 
       if (!watermark) {
         invalidWatermark = throughMessageId !== undefined;
-        return;
       }
 
-      const result = await Message.updateMany(
-        {
-          conversationId: conversation._id,
-          receiverId: userId,
-          $or: [
-            { createdAt: { $lt: watermark.createdAt } },
-            { createdAt: watermark.createdAt, _id: { $lte: watermark._id } }
-          ],
-          status: { $in: ['sent', 'delivered'] }
-        },
-        { $set: { status: 'read', readAt: new Date() } },
-        { session }
-      );
-      readCount = result.modifiedCount;
+      if (watermark) {
+        const result = await Message.updateMany(
+          {
+            conversationId: conversation._id,
+            receiverId: userId,
+            $or: [
+              { createdAt: { $lt: watermark.createdAt } },
+              { createdAt: watermark.createdAt, _id: { $lte: watermark._id } }
+            ],
+            status: { $in: ['sent', 'delivered'] }
+          },
+          { $set: { status: 'read', readAt: new Date() } },
+          { session }
+        );
+        readCount = result.modifiedCount;
+      }
+
+      // A bodyless legacy request can legitimately have no unread watermark.
+      // Still reconcile the cached counter so retries repair stale badges.
+      if (invalidWatermark) return;
 
       unreadCount = await Message.countDocuments({
         conversationId: conversation._id,
