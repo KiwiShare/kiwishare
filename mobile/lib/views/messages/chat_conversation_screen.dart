@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../models/chat_conversation_model.dart';
 import '../../models/chat_message_model.dart';
 import '../../config/api_config.dart';
+import '../../navigation/app_route_observer.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../services/listing_image_picker.dart';
@@ -39,7 +40,8 @@ class ChatConversationScreen extends StatefulWidget {
   State<ChatConversationScreen> createState() => _ChatConversationScreenState();
 }
 
-class _ChatConversationScreenState extends State<ChatConversationScreen> {
+class _ChatConversationScreenState extends State<ChatConversationScreen>
+    with WidgetsBindingObserver, RouteAware {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   late final ListingImagePicker _imagePicker;
@@ -52,19 +54,93 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   int _recordingSeconds = 0;
   String? _loadedToken;
   String? _currentAuthToken;
+  bool _leftForeground = false;
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+  ModalRoute<dynamic>? _subscribedRoute;
+  final Object _visibilityOwner = Object();
 
   @override
   void initState() {
     super.initState();
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _voiceRecorder = widget.voiceRecorder ?? DeviceChatVoiceRecorder();
+    _lifecycleState =
+        WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhoto());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    _syncVisibility();
+    if (state != AppLifecycleState.resumed) {
+      _leftForeground = true;
+      return;
+    }
+    if (!_leftForeground) return;
+    _leftForeground = false;
+    unawaited(_refreshAfterResume());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of<dynamic>(context);
+    if (identical(route, _subscribedRoute)) return;
+    appRouteObserver.unsubscribe(this);
+    _subscribedRoute = route;
+    if (route != null) appRouteObserver.subscribe(this, route);
+    _syncVisibility();
+  }
+
+  @override
+  void didPushNext() {
+    _syncVisibility();
+  }
+
+  @override
+  void didPopNext() {
+    _syncVisibility();
+    unawaited(_refreshAfterResume());
+  }
+
+  Future<void> _refreshAfterResume() async {
+    final token = _currentAuthToken;
+    if (!_isCurrentRoute || token == null || token.isEmpty) return;
+    await _chatProvider.loadMessages(
+      conversation: widget.conversation,
+      token: token,
+      queueIfBusy: true,
+      shouldMarkRead: () => _isCurrentRoute,
+    );
+    if (mounted) _scrollToEnd();
+  }
+
+  bool get _isCurrentRoute =>
+      mounted &&
+      _lifecycleState == AppLifecycleState.resumed &&
+      (ModalRoute.of<dynamic>(context)?.isCurrent ?? false);
+
+  void _syncVisibility() {
+    final token = _currentAuthToken;
+    if (token == null || token.isEmpty) {
+      chatVisibilityTracker.clear(_visibilityOwner);
+      return;
+    }
+    chatVisibilityTracker.update(
+      owner: _visibilityOwner,
+      conversationId: widget.conversation.id,
+      sessionToken: token,
+      visible: _isCurrentRoute,
+    );
   }
 
   ChatProvider get _chatProvider =>
       widget.chatProvider ?? context.read<ChatProvider>();
   void _ensureLoaded(String? token) {
     _currentAuthToken = token;
+    _syncVisibility();
     if (token == null || token.isEmpty) {
       _loadedToken = null;
       return;
@@ -76,6 +152,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         await _chatProvider.loadMessages(
           conversation: widget.conversation,
           token: token,
+          shouldMarkRead: () => _isCurrentRoute,
         );
         _scrollToEnd();
       });
@@ -84,6 +161,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   @override
   void dispose() {
+    chatVisibilityTracker.clear(_visibilityOwner);
+    appRouteObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
     _recordingTimer?.cancel();
     if (_isRecording || _isStartingVoice) {
       unawaited(_queueRecorder(_voiceRecorder.cancel));
@@ -106,6 +186,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     await _chatProvider.loadMessages(
       conversation: widget.conversation,
       token: token,
+      shouldMarkRead: () => _isCurrentRoute,
     );
     _scrollToEnd();
   }
@@ -116,6 +197,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     await _chatProvider.markConversationRead(
       conversation: widget.conversation,
       token: token,
+      shouldMarkRead: () => _isCurrentRoute,
     );
   }
 
@@ -236,6 +318,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             _chatProvider.loadMessages(
               conversation: widget.conversation,
               token: token,
+              shouldMarkRead: () => _isCurrentRoute,
             );
             _scrollToEnd();
           }
@@ -474,44 +557,70 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         message: 'No messages yet. Say hello and ask about the item.',
       );
     }
+    final latestSentIndex = messages.lastIndexWhere(
+      (message) => message.isMine,
+    );
     return ListView.builder(
       key: const Key('conversation_message_list'),
       controller: _scrollController,
       padding: const EdgeInsets.all(AppSpacing.lg),
       itemCount: messages.length,
-      itemBuilder: (context, index) => _MessageBubble(
-        message: messages[index],
-        onMeetupStatusChanged: () {
-          final token = _currentAuthToken;
-          if (token != null && token.isNotEmpty) {
-            _chatProvider.loadMessages(
-              conversation: widget.conversation,
-              token: token,
-            );
-          }
-        },
-      ),
+      itemBuilder: (context, index) {
+        final message = messages[index];
+        return _MessageBubble(
+          message: message,
+          showReadReceipt: index == latestSentIndex && message.status == 'read',
+          onMeetupStatusChanged: () {
+            final token = _currentAuthToken;
+            if (token != null && token.isNotEmpty) {
+              _chatProvider.loadMessages(
+                conversation: widget.conversation,
+                token: token,
+                shouldMarkRead: () => _isCurrentRoute,
+              );
+            }
+          },
+        );
+      },
     );
   }
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, this.onMeetupStatusChanged});
+  const _MessageBubble({
+    required this.message,
+    required this.showReadReceipt,
+    this.onMeetupStatusChanged,
+  });
 
   final ChatMessageModel message;
+  final bool showReadReceipt;
   final VoidCallback? onMeetupStatusChanged;
 
   @override
   Widget build(BuildContext context) {
     if (message.isMeetup && message.meetup != null) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-        child: MeetupCardBubble(
-          key: Key('chat_meetup_card_${message.id}'),
-          meetup: message.meetup!,
-          isMine: message.isMine,
-          createdAt: message.createdAt,
-          onStatusChanged: onMeetupStatusChanged,
+      return Align(
+        alignment: message.isMine
+            ? Alignment.centerRight
+            : Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: message.isMine
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            children: [
+              MeetupCardBubble(
+                key: Key('chat_meetup_card_${message.id}'),
+                meetup: message.meetup!,
+                isMine: message.isMine,
+                createdAt: message.createdAt,
+                onStatusChanged: onMeetupStatusChanged,
+              ),
+              if (showReadReceipt) _ReadReceipt(messageId: message.id),
+            ],
+          ),
         ),
       );
     }
@@ -523,11 +632,19 @@ class _MessageBubble extends StatelessWidget {
             : Alignment.centerLeft,
         child: Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: LocationBubble(
-            key: Key('chat_location_${message.id}'),
-            location: message.location!,
-            isMine: message.isMine,
-            createdAt: message.createdAt,
+          child: Column(
+            crossAxisAlignment: message.isMine
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            children: [
+              LocationBubble(
+                key: Key('chat_location_${message.id}'),
+                location: message.location!,
+                isMine: message.isMine,
+                createdAt: message.createdAt,
+              ),
+              if (showReadReceipt) _ReadReceipt(messageId: message.id),
+            ],
           ),
         ),
       );
@@ -540,7 +657,10 @@ class _MessageBubble extends StatelessWidget {
         ? 'a voice message'
         : message.text;
     return Semantics(
-      label: mine ? 'You sent $semanticContent' : 'They sent $semanticContent',
+      excludeSemantics: !message.isVoice,
+      label: mine
+          ? 'You sent $semanticContent${showReadReceipt ? ', read' : ''}'
+          : 'They sent $semanticContent',
       child: Align(
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -563,7 +683,9 @@ class _MessageBubble extends StatelessWidget {
             ),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: mine
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
             children: [
               if (message.isImage)
                 ClipRRect(
@@ -615,9 +737,36 @@ class _MessageBubble extends StatelessWidget {
                       : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (showReadReceipt)
+                Text(
+                  'Read',
+                  key: Key('chat_read_receipt_${message.id}'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onPrimary.withValues(alpha: 0.78),
+                  ),
+                ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ReadReceipt extends StatelessWidget {
+  const _ReadReceipt({required this.messageId});
+
+  final String messageId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Read',
+      key: Key('chat_read_receipt_$messageId'),
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }

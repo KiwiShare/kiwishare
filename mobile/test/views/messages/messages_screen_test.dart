@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
@@ -132,12 +130,10 @@ void main() {
     expect(selectedChat?.participantName, 'Sophie M.');
   });
 
-  testWidgets('opening an unread conversation clears its badge immediately', (
+  testWidgets('opening a conversation does not mark unseen history as read', (
     tester,
   ) async {
-    final pendingRead = Completer<void>();
-    final repository = FakeChatRepository(conversations: _conversations())
-      ..markReadCompleter = pendingRead;
+    final repository = FakeChatRepository(conversations: _conversations());
     final provider = ChatProvider(repository: repository);
 
     await tester.pumpWidget(
@@ -149,16 +145,14 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chat_unread_badge')), findsOneWidget);
+    final initialUnreadCount = provider.totalUnreadCount;
 
     await tester.tap(find.byKey(const Key('chat_conversation_conversation-1')));
     await tester.pump();
 
-    expect(find.byKey(const Key('chat_unread_badge')), findsNothing);
-    expect(provider.totalUnreadCount, 0);
-    expect(repository.markReadCalls, 1);
-
-    pendingRead.complete();
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chat_unread_badge')), findsOneWidget);
+    expect(provider.totalUnreadCount, initialUnreadCount);
+    expect(repository.markReadCalls, 0);
   });
 
   testWidgets('shows private signed-out and authenticated empty states', (

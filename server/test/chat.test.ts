@@ -1,6 +1,6 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import app from '../src/app';
 import Conversation from '../src/models/Conversation';
 import Message from '../src/models/Message';
@@ -72,7 +72,7 @@ const mockedProbeVoiceAudio = jest.mocked(probeVoiceAudio);
 jest.setTimeout(60000);
 
 describe('KiwiShare text chat API', () => {
-  let mongoServer: MongoMemoryServer;
+  let mongoServer: MongoMemoryReplSet;
   let buyerId = '';
   let sellerId = '';
   let buyerToken = '';
@@ -105,7 +105,9 @@ describe('KiwiShare text chat API', () => {
   });
 
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryReplSet.create({
+      replSet: { count: 1, storageEngine: 'wiredTiger' }
+    });
     await mongoose.connect(mongoServer.getUri());
 
     const registrations = await Promise.all([
@@ -386,12 +388,18 @@ describe('KiwiShare text chat API', () => {
   });
 
   test('marks incoming messages as read and clears only the reader count', async () => {
+    const sellerWatermark = await Message.findOne({
+      conversationId,
+      receiverId: sellerId
+    }).sort({ _id: -1 });
     const read = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
-      .set('Authorization', `Bearer ${sellerToken}`);
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sellerWatermark!._id.toString() });
 
     expect(read.status).toBe(200);
     expect(read.body.readCount).toBe(2);
+    expect(read.body.unreadCount).toBe(0);
 
     const storedConversation = await Conversation.findById(conversationId);
     expect(storedConversation?.sellerUnreadCount).toBe(0);
@@ -403,6 +411,20 @@ describe('KiwiShare text chat API', () => {
         status: 'read'
       })
     ).toBe(2);
+
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { sellerUnreadCount: 5 }
+    });
+    const repairedRead = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sellerWatermark!._id.toString() });
+    expect(repairedRead.status).toBe(200);
+    expect(repairedRead.body.readCount).toBe(0);
+    expect(repairedRead.body.unreadCount).toBe(0);
+    expect(
+      (await Conversation.findById(conversationId))?.sellerUnreadCount
+    ).toBe(0);
 
     const reply = await request(app.callback())
       .post(`/api/conversations/${conversationId}/messages`)
@@ -418,13 +440,232 @@ describe('KiwiShare text chat API', () => {
 
     const buyerRead = await request(app.callback())
       .patch(`/api/conversations/${conversationId}/read`)
-      .set('Authorization', `Bearer ${buyerToken}`);
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ throughMessageId: reply.body.message.id });
     expect(buyerRead.status).toBe(200);
     expect(buyerRead.body.readCount).toBe(1);
+    expect(buyerRead.body.unreadCount).toBe(0);
 
     const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
     expect(messages.filter((message) => message.status === 'read')).toHaveLength(3);
     expect(messages.at(-1)?.receiverId.toString()).toBe(buyerId);
+  });
+
+  test('does not mark a message persisted after the displayed watermark', async () => {
+    const first = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Displayed before the read request.' });
+    const later = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Persisted after the displayed snapshot.' });
+
+    const read = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: first.body.message.id });
+
+    expect(read.status).toBe(200);
+    expect(read.body.readCount).toBe(1);
+    expect(read.body.unreadCount).toBe(1);
+    expect((await Message.findById(first.body.message.id))?.status).toBe('read');
+    expect((await Message.findById(later.body.message.id))?.status).toBe('sent');
+    expect(
+      (await Conversation.findById(conversationId))?.sellerUnreadCount
+    ).toBe(1);
+
+    const legacyRead = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`);
+    expect(legacyRead.status).toBe(200);
+    expect(legacyRead.body.readCount).toBe(1);
+    expect(legacyRead.body.unreadCount).toBe(0);
+    expect((await Message.findById(later.body.message.id))?.status).toBe('read');
+
+    const invalidWatermark = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: 'not-an-object-id' });
+    expect(invalidWatermark.status).toBe(400);
+  });
+
+  test('bounds reads by history chronology when object ids sort oppositely', async () => {
+    const olderId = new mongoose.Types.ObjectId('68b8f000ffffffffffffffff');
+    const newerId = new mongoose.Types.ObjectId('68b8f0000000000000000000');
+    const olderTime = new Date('2026-09-04T23:20:00.100Z');
+    const newerTime = new Date('2026-09-04T23:20:00.900Z');
+
+    await Message.create([
+      {
+        _id: olderId,
+        conversationId,
+        senderId: buyerId,
+        receiverId: sellerId,
+        type: 'text',
+        text: 'Displayed chronological message.',
+        status: 'sent',
+        createdAt: olderTime,
+        updatedAt: olderTime
+      },
+      {
+        _id: newerId,
+        conversationId,
+        senderId: buyerId,
+        receiverId: sellerId,
+        type: 'text',
+        text: 'Newer message with a lower object id.',
+        status: 'sent',
+        createdAt: newerTime,
+        updatedAt: newerTime
+      }
+    ]);
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { sellerUnreadCount: 2 }
+    });
+
+    const read = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: olderId.toString() });
+
+    expect(read.status).toBe(200);
+    expect(read.body.readCount).toBe(1);
+    expect(read.body.unreadCount).toBe(1);
+    expect((await Message.findById(olderId))?.status).toBe('read');
+    expect((await Message.findById(newerId))?.status).toBe('sent');
+
+    await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: newerId.toString() });
+  });
+
+  test('repairs a stale counter for an empty legacy read snapshot', async () => {
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { sellerUnreadCount: 5 }
+    });
+
+    const emptyRead = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`);
+
+    expect(emptyRead.status).toBe(200);
+    expect(emptyRead.body.readCount).toBe(0);
+    expect(emptyRead.body.unreadCount).toBe(0);
+    expect(
+      (await Conversation.findById(conversationId))?.sellerUnreadCount
+    ).toBe(0);
+
+    const later = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Arrived after the empty read snapshot.' });
+
+    expect(later.status).toBe(201);
+    expect((await Message.findById(later.body.message.id))?.status).toBe('sent');
+    expect(
+      (await Conversation.findById(conversationId))?.sellerUnreadCount
+    ).toBe(1);
+
+    await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: later.body.message.id });
+  });
+
+  test('freezes a legacy watermark across a transaction retry', async () => {
+    const displayed = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Displayed before the legacy read request.' });
+    expect(displayed.status).toBe(201);
+
+    let releaseFirstUpdate!: () => void;
+    const firstUpdateReleased = new Promise<void>((resolve) => {
+      releaseFirstUpdate = resolve;
+    });
+    let signalFirstUpdate!: () => void;
+    const firstUpdateStarted = new Promise<void>((resolve) => {
+      signalFirstUpdate = resolve;
+    });
+    const originalUpdateMany = Message.updateMany.bind(Message);
+    const updateSpy = jest
+      .spyOn(Message, 'updateMany')
+      .mockImplementationOnce((async (...args: any[]) => {
+        signalFirstUpdate();
+        await firstUpdateReleased;
+        return (originalUpdateMany as any)(...args);
+      }) as any);
+
+    try {
+      const legacyRead = request(app.callback())
+        .patch(`/api/conversations/${conversationId}/read`)
+        .set('Authorization', `Bearer ${sellerToken}`);
+      const readResponse = legacyRead.then((response) => response);
+      await firstUpdateStarted;
+
+      const later = await request(app.callback())
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({ text: 'Arrived while the legacy read transaction was active.' });
+      expect(later.status).toBe(201);
+      releaseFirstUpdate();
+
+      const read = await readResponse;
+      expect(read.status).toBe(200);
+      expect((await Message.findById(displayed.body.message.id))?.status).toBe(
+        'read'
+      );
+      expect((await Message.findById(later.body.message.id))?.status).toBe(
+        'sent'
+      );
+      expect(read.body.unreadCount).toBe(1);
+    } finally {
+      releaseFirstUpdate();
+      updateSpy.mockRestore();
+    }
+  });
+
+  test('keeps the unread counter consistent during concurrent send and read', async () => {
+    const displayed = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Visible before concurrent delivery.' });
+    expect(displayed.status).toBe(201);
+
+    const [read, later] = await Promise.all([
+      request(app.callback())
+        .patch(`/api/conversations/${conversationId}/read`)
+        .set('Authorization', `Bearer ${sellerToken}`)
+        .send({ throughMessageId: displayed.body.message.id }),
+      request(app.callback())
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({ text: 'Delivered concurrently with the read receipt.' })
+    ]);
+
+    expect(read.status).toBe(200);
+    expect(later.status).toBe(201);
+    expect((await Message.findById(displayed.body.message.id))?.status).toBe(
+      'read'
+    );
+    expect((await Message.findById(later.body.message.id))?.status).toBe('sent');
+
+    const storedUnreadCount = await Message.countDocuments({
+      conversationId,
+      receiverId: sellerId,
+      status: { $in: ['sent', 'delivered'] }
+    });
+    expect(storedUnreadCount).toBe(1);
+    expect(
+      (await Conversation.findById(conversationId))?.sellerUnreadCount
+    ).toBe(storedUnreadCount);
+
+    await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: later.body.message.id });
   });
 
   test('stores an R2 image URL and returns it in chat history', async () => {

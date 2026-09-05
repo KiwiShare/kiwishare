@@ -37,6 +37,17 @@ PushEnvelope _chatMessage({
   body: 'New chat message',
 );
 
+PushEnvelope _chatRead({
+  String conversationId = 'conversation-1',
+  String recipientId = 'user-1',
+}) => PushEnvelope(
+  data: {
+    'type': 'chat_read',
+    'recipientId': recipientId,
+    'conversationId': conversationId,
+  },
+);
+
 void main() {
   group('PushNotificationService', () {
     late _FakeMessagingClient messaging;
@@ -45,6 +56,7 @@ void main() {
     late List<String> foregroundItems;
     late List<String> openedChats;
     late List<String> foregroundChats;
+    late List<String> foregroundChatReads;
     late PushNotificationService service;
 
     setUp(() {
@@ -54,6 +66,7 @@ void main() {
       foregroundItems = [];
       openedChats = [];
       foregroundChats = [];
+      foregroundChatReads = [];
       service = PushNotificationService(
         messagingClient: messaging,
         deviceRepository: repository,
@@ -64,6 +77,8 @@ void main() {
         onNavigateToChat: (message) => openedChats.add(message.conversationId),
         onForegroundChatMessage: (message, _) =>
             foregroundChats.add(message.conversationId),
+        onForegroundChatRead: (message) =>
+            foregroundChatReads.add(message.conversationId),
       );
     });
 
@@ -207,6 +222,30 @@ void main() {
 
       expect(openedChats, ['initial-chat', 'opened-chat']);
       expect(openedItems, isEmpty);
+    });
+
+    test('foreground read receipts refresh only the current account', () async {
+      await service.activate('jwt-user', userId: 'user-1');
+      messaging.foreground
+        ..add(_chatRead())
+        ..add(_chatRead(conversationId: 'wrong-user', recipientId: 'user-2'));
+      await _drainEvents();
+
+      expect(foregroundChatReads, ['conversation-1']);
+      expect(foregroundChats, isEmpty);
+      expect(openedChats, isEmpty);
+    });
+
+    test('read receipt notification taps never navigate', () async {
+      messaging.initialMessage = _chatRead(conversationId: 'initial-read');
+      await service.initialize();
+      await service.activate('jwt-user', userId: 'user-1');
+      messaging.opened.add(_chatRead(conversationId: 'opened-read'));
+      await _drainEvents();
+
+      expect(openedChats, isEmpty);
+      expect(openedItems, isEmpty);
+      expect(foregroundChatReads, isEmpty);
     });
 
     test('chat notifications for a previous account are ignored', () async {

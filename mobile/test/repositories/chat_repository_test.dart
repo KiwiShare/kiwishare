@@ -262,7 +262,10 @@ void main() {
             200,
           );
         }
-        return http.Response(jsonEncode({'status': 'success'}), 200);
+        return http.Response(
+          jsonEncode({'status': 'success', 'unreadCount': 1}),
+          200,
+        );
       }),
     );
     final before = DateTime.utc(2026, 8, 27, 8, 30);
@@ -273,8 +276,9 @@ void main() {
       before: before,
       limit: 25,
     );
-    await repository.markConversationRead(
+    final remainingUnreadCount = await repository.markConversationRead(
       conversationId: 'conversation-1',
+      throughMessageId: 'message-25',
       token: 'valid-token',
     );
 
@@ -285,6 +289,8 @@ void main() {
     expect(requests.last.method, 'PATCH');
     expect(requests.last.url.path, '/api/conversations/conversation-1/read');
     expect(requests.last.headers['Authorization'], 'Bearer valid-token');
+    expect(jsonDecode(requests.last.body), {'throughMessageId': 'message-25'});
+    expect(remainingUnreadCount, 1);
   });
 
   test('rejects malformed successful chat responses', () async {

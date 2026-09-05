@@ -49,6 +49,43 @@ void main() {
   });
 
   test(
+    'message conversation snapshots are scoped to the active session',
+    () async {
+      final conversation = testConversation();
+      final provider = ChatProvider(repository: FakeChatRepository());
+
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'account-a-token',
+      );
+
+      expect(
+        provider.messageConversationByIdForSession(
+          conversation.id,
+          'account-a-token',
+        ),
+        same(conversation),
+      );
+      expect(
+        provider.messageConversationByIdForSession(
+          conversation.id,
+          'account-b-token',
+        ),
+        isNull,
+      );
+
+      provider.updateAuthToken('account-b-token');
+      expect(
+        provider.messageConversationByIdForSession(
+          conversation.id,
+          'account-b-token',
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
     'loads conversations and exposes a recoverable repository error',
     () async {
       final repository = FakeChatRepository(
@@ -198,6 +235,92 @@ void main() {
     expect(provider.isLoadingMessages(conversation.id), isFalse);
   });
 
+  test('queues one fresh message load behind an in-flight load', () async {
+    final conversation = testConversation();
+    final staleLoad = Completer<ChatMessagePage>();
+    final freshLoad = Completer<ChatMessagePage>();
+    final repository = FakeChatRepository()
+      ..messageCompleters.addAll([staleLoad, freshLoad]);
+    final provider = ChatProvider(repository: repository);
+
+    final loading = provider.loadMessages(
+      conversation: conversation,
+      token: 'valid-token',
+    );
+    final refreshOne = provider.loadMessages(
+      conversation: conversation,
+      token: 'valid-token',
+      queueIfBusy: true,
+    );
+    final refreshTwo = provider.loadMessages(
+      conversation: conversation,
+      token: 'valid-token',
+      queueIfBusy: true,
+    );
+
+    staleLoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '1', text: 'Stale', isMine: true)],
+        hasMore: false,
+      ),
+    );
+    await loading;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.messageFetches, 2);
+    freshLoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '2', text: 'Fresh', isMine: true)],
+        hasMore: false,
+      ),
+    );
+    await Future.wait([refreshOne, refreshTwo]);
+
+    expect(repository.messageFetches, 2);
+    expect(provider.messagesFor(conversation.id).single.text, 'Fresh');
+  });
+
+  test(
+    'a stale refresh cannot remove a message sent while it was loading',
+    () async {
+      final conversation = testConversation();
+      final refreshLoad = Completer<ChatMessagePage>();
+      final repository = FakeChatRepository()
+        ..messageCompleters.add(refreshLoad);
+      final provider = ChatProvider(repository: repository);
+
+      final refreshing = provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+      final sent = await provider.sendText(
+        conversation: conversation,
+        text: 'Sent during refresh',
+        token: 'valid-token',
+      );
+      expect(sent, isTrue);
+      expect(
+        provider.messagesFor(conversation.id).single.text,
+        'Sent during refresh',
+      );
+
+      refreshLoad.complete(
+        ChatMessagePage(
+          messages: [
+            testMessage(id: '1', text: 'Older snapshot', isMine: false),
+          ],
+          hasMore: false,
+        ),
+      );
+      await refreshing;
+
+      expect(
+        provider.messagesFor(conversation.id).map((message) => message.text),
+        ['Older snapshot', 'Sent during refresh'],
+      );
+    },
+  );
+
   test(
     'loads a new empty conversation without an unnecessary read request',
     () async {
@@ -279,6 +402,7 @@ void main() {
     final operation = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
 
     expect(provider.conversations.single.unreadCount, 0);
@@ -288,6 +412,27 @@ void main() {
     pendingRead.complete();
     expect(await operation, isTrue);
     expect(provider.messageReadErrorFor(conversation.id), isNull);
+  });
+
+  test('restores unread messages newer than the displayed watermark', () async {
+    final conversation = testConversation(unreadCount: 2);
+    final repository = FakeChatRepository(conversations: [conversation])
+      ..remainingUnreadCount = 1;
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+
+    expect(
+      await provider.markConversationRead(
+        conversation: conversation,
+        token: 'valid-token',
+        throughMessageId: 'displayed-message',
+      ),
+      isTrue,
+    );
+
+    expect(provider.conversations.single.unreadCount, 1);
+    expect(provider.totalUnreadCount, 1);
+    expect(repository.readThroughMessageIds, ['displayed-message']);
   });
 
   test('deduplicates concurrent read requests for one conversation', () async {
@@ -301,10 +446,12 @@ void main() {
     final first = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
     final second = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
 
     expect(repository.markReadCalls, 1);
@@ -312,6 +459,67 @@ void main() {
     expect(await first, isTrue);
     expect(await second, isTrue);
   });
+
+  test('queues a newer watermark even when its id sorts lower', () async {
+    final conversation = testConversation(unreadCount: 2);
+    final pendingRead = Completer<void>();
+    final repository = FakeChatRepository(conversations: [conversation])
+      ..markReadCompleter = pendingRead;
+    final provider = ChatProvider(repository: repository);
+    await provider.loadConversations('valid-token');
+
+    final first = provider.markConversationRead(
+      conversation: conversation,
+      token: 'valid-token',
+      throughMessageId: 'z-older-id',
+    );
+    final second = provider.markConversationRead(
+      conversation: conversation,
+      token: 'valid-token',
+      throughMessageId: 'a-newer-id',
+    );
+
+    expect(repository.markReadCalls, 1);
+    pendingRead.complete();
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+    expect(repository.markReadCalls, 2);
+    expect(repository.readThroughMessageIds, ['z-older-id', 'a-newer-id']);
+  });
+
+  test(
+    'drops a queued read when the conversation is no longer visible',
+    () async {
+      final conversation = testConversation(unreadCount: 2);
+      final pendingRead = Completer<void>();
+      final repository = FakeChatRepository(conversations: [conversation])
+        ..markReadCompleter = pendingRead;
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+      var isVisible = true;
+
+      final first = provider.markConversationRead(
+        conversation: conversation,
+        token: 'valid-token',
+        throughMessageId: 'first',
+        shouldMarkRead: () => isVisible,
+      );
+      final second = provider.markConversationRead(
+        conversation: conversation,
+        token: 'valid-token',
+        throughMessageId: 'second',
+        shouldMarkRead: () => isVisible,
+      );
+
+      expect(repository.markReadCalls, 1);
+      isVisible = false;
+      pendingRead.complete();
+      expect(await first, isTrue);
+      expect(await second, isTrue);
+      expect(repository.markReadCalls, 1);
+      expect(repository.readThroughMessageIds, ['first']);
+    },
+  );
 
   test(
     'successful read reconciles a stale in-flight conversation load',
@@ -330,6 +538,7 @@ void main() {
       final markingRead = provider.markConversationRead(
         conversation: conversation,
         token: 'valid-token',
+        throughMessageId: '1',
       );
       expect(provider.totalUnreadCount, 0);
 
@@ -359,6 +568,7 @@ void main() {
     final markingRead = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
     final loading = provider.loadConversations('valid-token');
     newerLoad.complete([conversation.copyWith(unreadCount: 1)]);
@@ -386,6 +596,7 @@ void main() {
     final markingRead = provider.markConversationRead(
       conversation: conversation,
       token: 'valid-token',
+      throughMessageId: '1',
     );
     final loading = provider.loadConversations('valid-token');
 
@@ -411,6 +622,7 @@ void main() {
         await provider.markConversationRead(
           conversation: conversation,
           token: 'valid-token',
+          throughMessageId: '1',
         ),
         isFalse,
       );
@@ -422,6 +634,7 @@ void main() {
       final retry = provider.markConversationRead(
         conversation: conversation,
         token: 'valid-token',
+        throughMessageId: '1',
       );
 
       expect(provider.messageReadErrorFor(conversation.id), isNull);

@@ -24,6 +24,18 @@ interface ChatPushDeliveryResult {
   invalidTokens: string[];
 }
 
+export interface ChatReadReceiptPushPayload {
+  recipientId: mongoose.Types.ObjectId;
+  conversationId: string;
+}
+
+export interface ChatReadReceiptPushGateway {
+  send(
+    tokens: string[],
+    payload: ChatReadReceiptPushPayload
+  ): Promise<ChatPushDeliveryResult>;
+}
+
 export interface ChatPushGateway {
   send(tokens: string[], payload: ChatPushPayload): Promise<ChatPushDeliveryResult>;
 }
@@ -115,6 +127,7 @@ export interface PushGateway {
 let firebaseApp: App | null | undefined;
 let gatewayOverride: PushGateway | null = null;
 let chatGatewayOverride: ChatPushGateway | null = null;
+let chatReadReceiptGatewayOverride: ChatReadReceiptPushGateway | null = null;
 
 export type FirebaseCredentialConfiguration =
   | { source: 'inline'; credentials: string }
@@ -295,12 +308,49 @@ const firebaseChatGateway: ChatPushGateway = {
   }
 };
 
+const firebaseChatReadReceiptGateway: ChatReadReceiptPushGateway = {
+  async send(tokens, payload) {
+    const app = await configuredFirebaseApp();
+    if (!app || tokens.length === 0) return { invalidTokens: [] };
+
+    const { getMessaging } = await import('firebase-admin/messaging');
+    const response = await getMessaging(app).sendEachForMulticast({
+      tokens,
+      data: {
+        type: 'chat_read',
+        recipientId: payload.recipientId.toString(),
+        conversationId: payload.conversationId
+      },
+      android: { priority: 'high' },
+      apns: {
+        headers: { 'apns-priority': '5' },
+        payload: { aps: { contentAvailable: true } }
+      }
+    });
+
+    const invalidTokens = response.responses.flatMap((result, index) => {
+      const code = result.error?.code;
+      return code === 'messaging/registration-token-not-registered' ||
+        code === 'messaging/invalid-registration-token'
+        ? [tokens[index]]
+        : [];
+    });
+    return { invalidTokens };
+  }
+};
+
 export function setPushGatewayForTests(gateway: PushGateway | null) {
   gatewayOverride = gateway;
 }
 
 export function setChatPushGatewayForTests(gateway: ChatPushGateway | null) {
   chatGatewayOverride = gateway;
+}
+
+export function setChatReadReceiptPushGatewayForTests(
+  gateway: ChatReadReceiptPushGateway | null
+) {
+  chatReadReceiptGatewayOverride = gateway;
 }
 
 export async function notifyChatReceiver(request: ChatPushRequest): Promise<void> {
@@ -341,6 +391,39 @@ export async function notifyChatReceiver(request: ChatPushRequest): Promise<void
     // must never turn a successfully stored chat message into an API failure.
     console.warn(
       '[Push Notification] Chat notification delivery failed.',
+      error instanceof Error ? error.message : 'Unknown delivery error.'
+    );
+  }
+}
+
+export async function notifyChatReadReceipt(
+  payload: ChatReadReceiptPushPayload
+): Promise<void> {
+  try {
+    const registrations = await PushDevice.find({
+      userId: payload.recipientId,
+      active: true
+    })
+      .select('+token')
+      .sort({ lastSeenAt: -1 })
+      .limit(20)
+      .lean();
+    const tokens = registrations
+      .map((registration: any) => registration.token)
+      .filter((token: unknown): token is string => typeof token === 'string');
+    if (tokens.length === 0) return;
+
+    const result = await (
+      chatReadReceiptGatewayOverride ?? firebaseChatReadReceiptGateway
+    ).send(tokens, payload);
+    if (result.invalidTokens.length > 0) {
+      await PushDevice.deleteMany({ token: { $in: result.invalidTokens } });
+    }
+  } catch (error) {
+    // Read persistence is authoritative. A best-effort receipt must not make
+    // the reader retry or misrepresent the server-side read state.
+    console.warn(
+      '[Push Notification] Chat read receipt delivery failed.',
       error instanceof Error ? error.message : 'Unknown delivery error.'
     );
   }
@@ -418,7 +501,6 @@ export async function notifyMeetupConfirmed(request: MeetupPushRequest): Promise
     );
   }
 }
-
 
 export interface PriceDropNotificationRequest {
   item: {

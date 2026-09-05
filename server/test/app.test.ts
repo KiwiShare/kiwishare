@@ -7,7 +7,10 @@ import Item from '../src/models/Item';
 import User from '../src/models/User';
 import Category from '../src/models/Category';
 import Order from '../src/models/Order';
+import Conversation from '../src/models/Conversation';
+import Message from '../src/models/Message';
 import { DEFAULT_CATEGORIES } from '../src/config/seed';
+import { runMongoTransaction } from '../src/services/mongoTransaction';
 
 jest.mock('../src/config/r2', () => {
   const actual = jest.requireActual('../src/config/r2');
@@ -819,6 +822,249 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.status).toBe(200);
     expect(res.body.key).toContain('audio/chat/');
     expect(res.body.publicUrl).toContain('audio/chat/');
+  });
+
+  test('chat and meetup writes work with the default standalone MongoDB topology', async () => {
+    const seller = await request(app.callback())
+      .post('/api/auth/register')
+      .send({
+        email: `standalone_seller_${Date.now()}@kiwishare.co.nz`,
+        password: 'password123',
+        displayName: 'Standalone Seller'
+      });
+    expect(seller.status).toBe(201);
+
+    const item = await Item.create({
+      sellerId: new mongoose.Types.ObjectId(seller.body.user.id),
+      ownerId: seller.body.user.id,
+      title: 'Standalone Chat Item',
+      description: 'Exercises chat writes without replica-set transactions.',
+      category: 'Furniture',
+      condition: 'good',
+      price: 2500,
+      currency: 'NZD',
+      status: 'active'
+    });
+    const conversation = await request(app.callback())
+      .post('/api/conversations')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ itemId: item.id });
+    expect(conversation.status).toBe(201);
+    const conversationId = conversation.body.conversation.id;
+
+    const sent = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ text: 'Standalone delivery test.' });
+    expect(sent.status).toBe(201);
+
+    const read = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${seller.body.token}`)
+      .send({ throughMessageId: sent.body.message.id });
+    expect(read.status).toBe(200);
+    expect(read.body.unreadCount).toBe(0);
+
+    const meetup = await request(app.callback())
+      .post('/api/meetups/propose')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        itemId: item.id,
+        conversationId,
+        scheduledAt: new Date(Date.now() + 86400000).toISOString(),
+        locationName: 'UoA Student Hub'
+      });
+    expect(meetup.status).toBe(200);
+    expect(meetup.body.meetup.proposalStatus).toBe('proposed');
+
+    let releaseConfirmationBlocker!: () => void;
+    let signalConfirmationBlocker!: () => void;
+    const confirmationBlockerStarted = new Promise<void>((resolve) => {
+      signalConfirmationBlocker = resolve;
+    });
+    const confirmationBlocker = new Promise<void>((resolve) => {
+      releaseConfirmationBlocker = resolve;
+    });
+    const blockedConfirmationWork = runMongoTransaction(async () => {
+      signalConfirmationBlocker();
+      await confirmationBlocker;
+    });
+    await confirmationBlockerStarted;
+    const confirmationsBefore = await Message.countDocuments({
+      conversationId,
+      'meetup.proposalStatus': 'confirmed'
+    });
+    const confirmation = request(app.callback())
+      .post(`/api/meetups/${meetup.body.meetup.id}/accept`)
+      .set('Authorization', `Bearer ${seller.body.token}`)
+      .then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      await Message.countDocuments({
+        conversationId,
+        'meetup.proposalStatus': 'confirmed'
+      })
+    ).toBe(confirmationsBefore);
+    releaseConfirmationBlocker();
+    expect((await confirmation).status).toBe(200);
+    await blockedConfirmationWork;
+    expect(
+      await Message.countDocuments({
+        conversationId,
+        'meetup.proposalStatus': 'confirmed'
+      })
+    ).toBe(confirmationsBefore + 1);
+
+    const sequence: string[] = [];
+    let startSecond!: () => void;
+    const secondMayStart = new Promise<void>((resolve) => {
+      startSecond = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstMayFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const first = runMongoTransaction(async (session) => {
+      expect(session).toBeNull();
+      sequence.push('first-start');
+      startSecond();
+      await firstMayFinish;
+      sequence.push('first-end');
+    });
+    await secondMayStart;
+    const second = runMongoTransaction(async (session) => {
+      expect(session).toBeNull();
+      sequence.push('second-start');
+      sequence.push('second-end');
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sequence).toEqual(['first-start']);
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(sequence).toEqual([
+      'first-start',
+      'first-end',
+      'second-start',
+      'second-end'
+    ]);
+
+    let releaseWatermarkBlocker!: () => void;
+    let signalWatermarkBlocker!: () => void;
+    const watermarkBlockerStarted = new Promise<void>((resolve) => {
+      signalWatermarkBlocker = resolve;
+    });
+    const watermarkBlocker = new Promise<void>((resolve) => {
+      releaseWatermarkBlocker = resolve;
+    });
+    const blockedWatermarkWork = runMongoTransaction(async () => {
+      signalWatermarkBlocker();
+      await watermarkBlocker;
+    });
+    await watermarkBlockerStarted;
+    const findMessageSpy = jest.spyOn(Message, 'findOne');
+    const legacyRead = request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${seller.body.token}`)
+      .then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(findMessageSpy).not.toHaveBeenCalled();
+    releaseWatermarkBlocker();
+    expect((await legacyRead).status).toBe(200);
+    await blockedWatermarkWork;
+    findMessageSpy.mockRestore();
+
+    let releasePartialSend!: () => void;
+    let signalPartialSend!: () => void;
+    const partialSendStarted = new Promise<void>((resolve) => {
+      signalPartialSend = resolve;
+    });
+    const partialSendMayFinish = new Promise<void>((resolve) => {
+      releasePartialSend = resolve;
+    });
+    const originalConversationUpdate =
+      Conversation.findByIdAndUpdate.bind(Conversation);
+    const conversationUpdateSpy = jest
+      .spyOn(Conversation, 'findByIdAndUpdate')
+      .mockImplementationOnce((async (...args: any[]) => {
+        signalPartialSend();
+        await partialSendMayFinish;
+        return (originalConversationUpdate as any)(...args);
+      }) as any);
+    try {
+      const partialSend = request(app.callback())
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ text: 'Completed after the legacy read request began.' })
+        .then((response) => response);
+      await partialSendStarted;
+      const overlappingLegacyRead = request(app.callback())
+        .patch(`/api/conversations/${conversationId}/read`)
+        .set('Authorization', `Bearer ${seller.body.token}`)
+        .then((response) => response);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      releasePartialSend();
+      const [sentAfterBoundary, boundedLegacyRead] = await Promise.all([
+        partialSend,
+        overlappingLegacyRead
+      ]);
+      expect(sentAfterBoundary.status).toBe(201);
+      expect(boundedLegacyRead.status).toBe(200);
+      expect(
+        (await Message.findById(sentAfterBoundary.body.message.id))?.status
+      ).toBe('sent');
+    } finally {
+      releasePartialSend();
+      conversationUpdateSpy.mockRestore();
+    }
+
+    const legacyTimestamp = new Date();
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { lastMessageAt: legacyTimestamp },
+      $unset: { lastMessageId: 1 }
+    });
+    const equalTimeMessage = await Message.create({
+      conversationId,
+      senderId: new mongoose.Types.ObjectId(userId),
+      receiverId: new mongoose.Types.ObjectId(seller.body.user.id),
+      type: 'text',
+      text: 'Same-millisecond message beyond a legacy boundary.',
+      status: 'sent',
+      createdAt: legacyTimestamp,
+      updatedAt: legacyTimestamp
+    });
+    const equalTimeRead = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${seller.body.token}`);
+    expect(equalTimeRead.status).toBe(200);
+    expect((await Message.findById(equalTimeMessage._id))?.status).toBe('sent');
+
+    let releaseRemovalBlocker!: () => void;
+    let signalRemovalBlocker!: () => void;
+    const removalBlockerStarted = new Promise<void>((resolve) => {
+      signalRemovalBlocker = resolve;
+    });
+    const removalBlocker = new Promise<void>((resolve) => {
+      releaseRemovalBlocker = resolve;
+    });
+    const blockedRemovalWork = runMongoTransaction(async () => {
+      signalRemovalBlocker();
+      await removalBlocker;
+    });
+    await removalBlockerStarted;
+    const removal = request(app.callback())
+      .delete(`/api/conversations/${conversationId}`)
+      .set('Authorization', `Bearer ${seller.body.token}`)
+      .then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      (await Conversation.findById(conversationId))?.hiddenForUserIds.map(String)
+    ).not.toContain(seller.body.user.id);
+    releaseRemovalBlocker();
+    expect((await removal).status).toBe(200);
+    await blockedRemovalWork;
+    expect(
+      (await Conversation.findById(conversationId))?.hiddenForUserIds.map(String)
+    ).toContain(seller.body.user.id);
   });
 
   describe('Admin Listing Assignment and Stats', () => {

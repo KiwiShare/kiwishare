@@ -30,12 +30,14 @@ function generatedM4a(durationSeconds: number): Buffer {
       ],
       { windowsHide: true }
     );
-    if (result.error || result.status !== 0) {
-      const errorMsg =
-        result.error?.message ||
-        result.stderr?.toString() ||
-        `Exit code ${result.status}`;
-      throw new Error(`Fixture generation failed: ${errorMsg}`);
+    if (result.error) {
+      throw new Error(`Fixture generation failed: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+      const stderr = result.stderr?.toString().trim();
+      throw new Error(
+        `Fixture generation failed with exit code ${result.status}: ${stderr || 'no stderr'}`
+      );
     }
     return readFileSync(outputPath);
   } finally {

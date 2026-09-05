@@ -55,6 +55,34 @@ class ChatPushMessage {
   }
 }
 
+class ChatReadPushMessage {
+  const ChatReadPushMessage({
+    required this.conversationId,
+    required this.recipientId,
+  });
+
+  final String conversationId;
+  final String recipientId;
+
+  bool isForRecipient(String? userId) {
+    final normalizedUserId = userId?.trim();
+    return normalizedUserId != null &&
+        normalizedUserId.isNotEmpty &&
+        recipientId == normalizedUserId;
+  }
+
+  static ChatReadPushMessage? fromData(Map<String, dynamic> data) {
+    if (data['type'] != 'chat_read') return null;
+    final conversationId = data['conversationId']?.toString().trim() ?? '';
+    final recipientId = data['recipientId']?.toString().trim() ?? '';
+    if (conversationId.isEmpty || recipientId.isEmpty) return null;
+    return ChatReadPushMessage(
+      conversationId: conversationId,
+      recipientId: recipientId,
+    );
+  }
+}
+
 class WatchlistPriceDropMessage {
   const WatchlistPriceDropMessage({
     required this.itemId,
@@ -205,10 +233,12 @@ class PushNotificationService implements PushNotificationSession {
     onForegroundMessage,
     void Function(ChatPushMessage message, PushEnvelope envelope)?
     onForegroundChatMessage,
+    void Function(ChatReadPushMessage message)? onForegroundChatRead,
     void Function(MeetupPushMessage message, PushEnvelope envelope)?
     onForegroundMeetupMessage,
   }) : foregroundMessageHandler = onForegroundMessage,
        foregroundChatMessageHandler = onForegroundChatMessage,
+       foregroundChatReadHandler = onForegroundChatRead,
        foregroundMeetupMessageHandler = onForegroundMeetupMessage;
 
   final PushMessagingClient messagingClient;
@@ -221,6 +251,7 @@ class PushNotificationService implements PushNotificationSession {
   foregroundMessageHandler;
   final void Function(ChatPushMessage, PushEnvelope)?
   foregroundChatMessageHandler;
+  final void Function(ChatReadPushMessage)? foregroundChatReadHandler;
   final void Function(MeetupPushMessage, PushEnvelope)?
   foregroundMeetupMessageHandler;
 
@@ -375,6 +406,11 @@ class PushNotificationService implements PushNotificationSession {
       foregroundChatMessageHandler?.call(chatMessage, envelope);
       return;
     }
+    final readMessage = ChatReadPushMessage.fromData(envelope.data);
+    if (readMessage != null && _isReadReceiptForCurrentUser(readMessage)) {
+      foregroundChatReadHandler?.call(readMessage);
+      return;
+    }
     final message = WatchlistPriceDropMessage.fromData(envelope.data);
     if (message != null) foregroundMessageHandler?.call(message, envelope);
   }
@@ -420,6 +456,10 @@ class PushNotificationService implements PushNotificationSession {
   }
 
   bool _isForCurrentUser(ChatPushMessage message) {
+    return message.isForRecipient(_currentUserId);
+  }
+
+  bool _isReadReceiptForCurrentUser(ChatReadPushMessage message) {
     return message.isForRecipient(_currentUserId);
   }
 

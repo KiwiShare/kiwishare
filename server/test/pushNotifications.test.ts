@@ -1,7 +1,7 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import app from '../src/app';
 import Conversation from '../src/models/Conversation';
 import Item from '../src/models/Item';
@@ -10,8 +10,10 @@ import PushDevice from '../src/models/PushDevice';
 import {
   CHAT_PUSH_NOTIFICATION_BODY,
   CHAT_PUSH_NOTIFICATION_TITLE,
+  ChatReadReceiptPushPayload,
   ChatPushPayload,
   resolveFirebaseCredentialConfiguration,
+  setChatReadReceiptPushGatewayForTests,
   setChatPushGatewayForTests
 } from '../src/services/pushNotification';
 
@@ -26,7 +28,7 @@ async function waitFor(condition: () => boolean | Promise<boolean>, timeoutMs = 
 }
 
 describe('KiwiShare chat push notifications', () => {
-  let mongoServer: MongoMemoryServer;
+  let mongoServer: MongoMemoryReplSet;
   let buyerId = '';
   let sellerId = '';
   let buyerToken = '';
@@ -37,7 +39,9 @@ describe('KiwiShare chat push notifications', () => {
   const sellerDeviceToken = 'seller-device-token-value-12345678';
 
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryReplSet.create({
+      replSet: { count: 1, storageEngine: 'wiredTiger' }
+    });
     await mongoose.connect(mongoServer.getUri());
 
     const [buyerResponse, sellerResponse] = await Promise.all([
@@ -82,11 +86,13 @@ describe('KiwiShare chat push notifications', () => {
 
   afterEach(async () => {
     setChatPushGatewayForTests(null);
+    setChatReadReceiptPushGatewayForTests(null);
     await PushDevice.deleteMany({});
   });
 
   afterAll(async () => {
     setChatPushGatewayForTests(null);
+    setChatReadReceiptPushGatewayForTests(null);
     await mongoose.disconnect();
     await mongoServer.stop();
   });
@@ -280,6 +286,90 @@ describe('KiwiShare chat push notifications', () => {
     expect(warning).toHaveBeenCalledWith(
       '[Push Notification] Chat notification delivery failed.',
       'Simulated FCM outage'
+    );
+    warning.mockRestore();
+  });
+
+  test('notifies the sender once when newly received messages are read', async () => {
+    await PushDevice.create({
+      userId: new mongoose.Types.ObjectId(buyerId),
+      token: buyerDeviceToken,
+      platform: 'android'
+    });
+    const receipts: Array<{
+      tokens: string[];
+      payload: ChatReadReceiptPushPayload;
+    }> = [];
+    setChatReadReceiptPushGatewayForTests({
+      async send(tokens, payload) {
+        receipts.push({ tokens, payload });
+        return { invalidTokens: [] };
+      }
+    });
+
+    const sent = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Read receipt integration test.' });
+    expect(sent.status).toBe(201);
+
+    const read = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sent.body.message.id });
+    expect(read.status).toBe(200);
+    expect(read.body.readCount).toBeGreaterThanOrEqual(1);
+    await waitFor(() => receipts.length === 1);
+
+    expect(receipts).toEqual([
+      {
+        tokens: [buyerDeviceToken],
+        payload: {
+          recipientId: new mongoose.Types.ObjectId(buyerId),
+          conversationId
+        }
+      }
+    ]);
+    expect(JSON.stringify(receipts)).not.toContain('integration test');
+
+    const repeated = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sent.body.message.id });
+    expect(repeated.status).toBe(200);
+    expect(repeated.body.readCount).toBe(0);
+    expect(receipts).toHaveLength(1);
+  });
+
+  test('keeps the read request successful when receipt delivery fails', async () => {
+    await PushDevice.create({
+      userId: new mongoose.Types.ObjectId(buyerId),
+      token: buyerDeviceToken,
+      platform: 'android'
+    });
+    setChatReadReceiptPushGatewayForTests({
+      async send() {
+        throw new Error('Simulated receipt outage');
+      }
+    });
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const sent = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ text: 'Persist read state if receipt delivery fails.' });
+    expect(sent.status).toBe(201);
+
+    const read = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${sellerToken}`)
+      .send({ throughMessageId: sent.body.message.id });
+    expect(read.status).toBe(200);
+    expect(read.body.readCount).toBeGreaterThanOrEqual(1);
+    await waitFor(() => warning.mock.calls.length > 0);
+    expect(warning).toHaveBeenCalledWith(
+      '[Push Notification] Chat read receipt delivery failed.',
+      'Simulated receipt outage'
     );
     warning.mockRestore();
   });

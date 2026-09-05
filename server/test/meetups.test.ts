@@ -1,15 +1,17 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import app from '../src/app';
 import Item from '../src/models/Item';
 import QrCode from '../src/models/QrCode';
 import Order from '../src/models/Order';
+import Conversation from '../src/models/Conversation';
+import Message from '../src/models/Message';
 
 jest.setTimeout(60000);
 
 describe('Meetup Scheduling & QR Code API', () => {
-  let mongoServer: MongoMemoryServer;
+  let mongoServer: MongoMemoryReplSet;
   let buyerToken = '';
   let sellerToken = '';
   let outsiderToken = '';
@@ -18,7 +20,9 @@ describe('Meetup Scheduling & QR Code API', () => {
   let conversationId = '';
 
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryReplSet.create({
+      replSet: { count: 1, storageEngine: 'wiredTiger' }
+    });
     await mongoose.connect(mongoServer.getUri());
 
     const registrations = await Promise.all([
@@ -150,6 +154,46 @@ describe('Meetup Scheduling & QR Code API', () => {
       );
       expect(meetupMsg).toBeDefined();
       expect(meetupMsg.meetup.locationName).toBe('Auckland University Library');
+    });
+
+    it('keeps unread count consistent during concurrent proposal and read', async () => {
+      const history = await request(app.callback())
+        .get(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${sellerToken}`);
+      const currentWatermark = history.body.messages.at(-1)?.id;
+      expect(currentWatermark).toBeTruthy();
+      await request(app.callback())
+        .patch(`/api/conversations/${conversationId}/read`)
+        .set('Authorization', `Bearer ${sellerToken}`)
+        .send({ throughMessageId: currentWatermark });
+
+      const [proposal, read] = await Promise.all([
+        request(app.callback())
+          .post('/api/meetups/propose')
+          .set('Authorization', `Bearer ${buyerToken}`)
+          .send({
+            itemId,
+            conversationId,
+            scheduledAt: new Date(
+              Date.now() + 3 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+            locationName: 'Auckland University Library'
+          }),
+        request(app.callback())
+          .patch(`/api/conversations/${conversationId}/read`)
+          .set('Authorization', `Bearer ${sellerToken}`)
+      ]);
+
+      expect(proposal.status).toBe(200);
+      expect(read.status).toBe(200);
+      const actualUnread = await Message.countDocuments({
+        conversationId,
+        receiverId: sellerId,
+        status: { $in: ['sent', 'delivered'] }
+      });
+      expect(
+        (await Conversation.findById(conversationId))?.sellerUnreadCount
+      ).toBe(actualUnread);
     });
 
     it('accepts the proposed meetup by seller and generates QR handover token', async () => {

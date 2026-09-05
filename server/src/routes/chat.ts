@@ -18,7 +18,11 @@ import {
   acquireVoiceProcessingAdmission,
   probeVoiceAudio
 } from '../services/voiceAudio';
-import { notifyChatReceiver } from '../services/pushNotification';
+import {
+  notifyChatReadReceipt,
+  notifyChatReceiver
+} from '../services/pushNotification';
+import { runMongoTransaction } from '../services/mongoTransaction';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -353,7 +357,7 @@ router.get('/:conversationId/messages', async (ctx: Context) => {
   }
 
   const messages = await Message.find(filter)
-    .sort({ createdAt: -1 })
+    .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1);
   const hasMore = messages.length > limit;
   const page = messages.slice(0, limit).reverse();
@@ -569,21 +573,6 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
 
   const sendingAsBuyer = conversation.buyerId.equals(userId);
   const receiverId = sendingAsBuyer ? conversation.sellerId : conversation.buyerId;
-  const message = await Message.create({
-    conversationId: conversation._id,
-    senderId: userId,
-    receiverId,
-    type: messageType,
-    ...(messageType === 'text'
-      ? { text: normalizedText }
-      : messageType === 'image'
-        ? { imageUrl }
-        : messageType === 'location'
-          ? { text: normalizedText, location: locationData! }
-          : { audioUrl, durationMs }),
-    status: 'sent'
-  });
-
   const conversationPreview = messageType === 'image'
     ? 'Photo'
     : messageType === 'voice'
@@ -591,18 +580,51 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       : messageType === 'location'
         ? `📍 ${locationData?.name ?? 'Location'}`
         : normalizedText;
+  let message: InstanceType<typeof Message> | null = null;
+  await runMongoTransaction(async (session) => {
+    const [createdMessage] = await Message.create(
+      [
+        {
+          conversationId: conversation._id,
+          senderId: userId,
+          receiverId,
+          type: messageType,
+          ...(messageType === 'text'
+            ? { text: normalizedText }
+            : messageType === 'image'
+              ? { imageUrl }
+              : messageType === 'location'
+                ? { text: normalizedText, location: locationData! }
+                : { audioUrl, durationMs }),
+          status: 'sent'
+        }
+      ],
+      session ? { session } : {}
+    );
+    message = createdMessage;
 
-  await Conversation.findByIdAndUpdate(conversation._id, {
-    $set: {
-      lastMessageText: conversationPreview,
-      lastMessageAt: message.createdAt,
-      lastMessageSenderId: userId
-    },
-    $inc: sendingAsBuyer
-      ? { sellerUnreadCount: 1 }
-      : { buyerUnreadCount: 1 },
-    $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $set: {
+          lastMessageText: conversationPreview,
+          lastMessageAt: createdMessage.createdAt,
+          lastMessageId: createdMessage._id,
+          lastMessageSenderId: userId
+        },
+        $inc: sendingAsBuyer
+          ? { sellerUnreadCount: 1 }
+          : { buyerUnreadCount: 1 },
+        $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+      },
+      session ? { session } : {}
+    );
   });
+
+  if (!message) {
+    ctx.throw(500, 'Message transaction completed without a message.');
+    return;
+  }
 
   void notifyChatReceiver({
     receiverId,
@@ -634,27 +656,153 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   );
   if (!conversation) return;
 
-  const readAt = new Date();
-  const result = await Message.updateMany(
-    {
+  const throughMessageId = (ctx.request.body as { throughMessageId?: unknown })
+    ?.throughMessageId;
+  if (
+    throughMessageId !== undefined &&
+    (typeof throughMessageId !== 'string' ||
+      !mongoose.Types.ObjectId.isValid(throughMessageId))
+  ) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'A valid read-through message is required.'
+    };
+    return;
+  }
+  const readingAsBuyer = conversation.buyerId.equals(userId);
+  const unreadField = readingAsBuyer
+    ? 'buyerUnreadCount'
+    : 'sellerUnreadCount';
+  // Freeze the latest fully committed preview at request time. A standalone
+  // send may already have inserted its Message while its Conversation update
+  // is queued; that partial message must remain beyond this legacy boundary.
+  const legacyBoundaryAt =
+    throughMessageId === undefined ? conversation.lastMessageAt : undefined;
+  const legacyBoundaryId =
+    throughMessageId === undefined ? conversation.lastMessageId : undefined;
+  // Capture a legacy client's best available fallback inside the standalone
+  // queue, but only once so replica-set transaction retries cannot advance it.
+  let legacyWatermark:
+    | InstanceType<typeof Message>
+    | null
+    | undefined;
+  let invalidWatermark = false;
+  let readCount = 0;
+  let unreadCount = 0;
+  await runMongoTransaction(async (session) => {
+    // withTransaction may retry this callback after a write conflict.
+    invalidWatermark = false;
+    readCount = 0;
+    unreadCount = 0;
+
+    if (throughMessageId === undefined && legacyWatermark === undefined) {
+      const boundaryFilter = legacyBoundaryAt
+        ? legacyBoundaryId
+          ? {
+              $or: [
+                { createdAt: { $lt: legacyBoundaryAt } },
+                {
+                  createdAt: legacyBoundaryAt,
+                  _id: { $lte: legacyBoundaryId }
+                }
+              ]
+            }
+          : { createdAt: { $lt: legacyBoundaryAt } }
+        : { _id: { $exists: false } };
+      const legacyWatermarkQuery = Message.findOne({
+        conversationId: conversation._id,
+        receiverId: userId,
+        status: { $in: ['sent', 'delivered'] },
+        ...boundaryFilter
+      })
+        .sort({ createdAt: -1, _id: -1 })
+        .select('_id createdAt');
+      if (session) legacyWatermarkQuery.session(session);
+      legacyWatermark = await legacyWatermarkQuery;
+    }
+
+    let watermark = legacyWatermark ?? null;
+    if (throughMessageId) {
+      const watermarkQuery = Message.findOne({
+        _id: new mongoose.Types.ObjectId(throughMessageId),
+        conversationId: conversation._id,
+        status: { $ne: 'deleted' }
+      }).select('_id createdAt');
+      if (session) watermarkQuery.session(session);
+      watermark = await watermarkQuery;
+    }
+
+    if (!watermark) {
+      invalidWatermark = throughMessageId !== undefined;
+    }
+
+    if (watermark) {
+      const result = await Message.updateMany(
+          {
+            conversationId: conversation._id,
+            receiverId: userId,
+            $or: [
+              { createdAt: { $lt: watermark.createdAt } },
+              { createdAt: watermark.createdAt, _id: { $lte: watermark._id } }
+            ],
+            status: { $in: ['sent', 'delivered'] }
+          },
+          { $set: { status: 'read', readAt: new Date() } },
+          session ? { session } : {}
+        );
+      readCount = result.modifiedCount;
+    }
+
+    // A bodyless legacy request can legitimately have no unread watermark.
+    // Still reconcile the cached counter so retries repair stale badges.
+    if (invalidWatermark) return;
+
+    const unreadCountQuery = Message.countDocuments({
       conversationId: conversation._id,
       receiverId: userId,
       status: { $in: ['sent', 'delivered'] }
-    },
-    { $set: { status: 'read', readAt } }
-  );
-
-  const readingAsBuyer = conversation.buyerId.equals(userId);
-  await Conversation.findByIdAndUpdate(conversation._id, {
-    $set: readingAsBuyer
-      ? { buyerUnreadCount: 0 }
-      : { sellerUnreadCount: 0 }
+    });
+    if (session) unreadCountQuery.session(session);
+    unreadCount = await unreadCountQuery;
+    const hiddenQuery = Conversation.exists({
+      _id: conversation._id,
+      hiddenForUserIds: userId
+    });
+    if (session) hiddenQuery.session(session);
+    const isHidden = await hiddenQuery;
+    if (isHidden) unreadCount = 0;
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      { $set: { [unreadField]: unreadCount } },
+      session ? { session } : {}
+    );
   });
+
+  if (invalidWatermark) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'A valid read-through message is required.'
+    };
+    return;
+  }
+
+  if (readCount > 0) {
+    const receiptRecipientId = readingAsBuyer
+      ? conversation.sellerId
+      : conversation.buyerId;
+    void notifyChatReadReceipt({
+      recipientId: receiptRecipientId,
+      conversationId: conversation.id
+    });
+  }
 
   ctx.status = 200;
   ctx.body = {
     status: 'success',
-    readCount: result.modifiedCount
+    readCount,
+    unreadCount
   };
 });
 
@@ -674,11 +822,17 @@ router.delete('/:conversationId', async (ctx: Context) => {
   if (!conversation) return;
 
   const hidingAsBuyer = conversation.buyerId.equals(userId);
-  await Conversation.findByIdAndUpdate(conversation._id, {
-    $addToSet: { hiddenForUserIds: userId },
-    $set: hidingAsBuyer
-      ? { buyerUnreadCount: 0 }
-      : { sellerUnreadCount: 0 }
+  await runMongoTransaction(async (session) => {
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $addToSet: { hiddenForUserIds: userId },
+        $set: hidingAsBuyer
+          ? { buyerUnreadCount: 0 }
+          : { sellerUnreadCount: 0 }
+      },
+      session ? { session } : {}
+    );
   });
 
   ctx.status = 200;

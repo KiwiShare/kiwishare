@@ -5,11 +5,17 @@ on:
     branches: [ main, pre ]
     paths:
       - 'server/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/backend.yml'
   pull_request:
     branches: [ main, pre ]
     paths:
       - 'server/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/backend.yml'
 
 jobs:

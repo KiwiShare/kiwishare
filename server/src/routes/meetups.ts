@@ -9,6 +9,7 @@ import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import QrCode from '../models/QrCode';
 import { notifyMeetupConfirmed } from '../services/pushNotification';
+import { runMongoTransaction } from '../services/mongoTransaction';
 
 const router = new Router({ prefix: '/meetups' });
 router.use(authenticateToken);
@@ -233,33 +234,40 @@ router.post('/propose', async (ctx: Context) => {
     minute: '2-digit'
   });
 
-  const meetupMessage = await Message.create({
-    conversationId: conversation._id,
-    senderId: userId,
-    receiverId,
-    type: 'meetup',
-    text: `📅 Proposed meetup: ${formattedDate} at ${locationName.trim()}`,
-    meetup: {
-      orderId: order._id,
-      scheduledAt: parsedDate,
-      locationName: locationName.trim(),
-      latitude: typeof latitude === 'number' ? latitude : undefined,
-      longitude: typeof longitude === 'number' ? longitude : undefined,
-      proposalStatus: 'proposed',
-      proposedBy: userId,
-      note: typeof note === 'string' ? note.trim() : undefined
-    },
-    status: 'sent'
-  });
+  await runMongoTransaction(async (session) => {
+    const meetupMessage = await new Message({
+        conversationId: conversation._id,
+        senderId: userId,
+        receiverId,
+        type: 'meetup',
+        text: `📅 Proposed meetup: ${formattedDate} at ${locationName.trim()}`,
+        meetup: {
+          orderId: order._id,
+          scheduledAt: parsedDate,
+          locationName: locationName.trim(),
+          latitude: typeof latitude === 'number' ? latitude : undefined,
+          longitude: typeof longitude === 'number' ? longitude : undefined,
+          proposalStatus: 'proposed',
+          proposedBy: userId,
+          note: typeof note === 'string' ? note.trim() : undefined
+        },
+        status: 'sent'
+    }).save(session ? { session } : {});
 
-  await Conversation.findByIdAndUpdate(conversation._id, {
-    $set: {
-      lastMessageText: `📅 Meetup proposed: ${formattedDate}`,
-      lastMessageAt: meetupMessage.createdAt,
-      lastMessageSenderId: userId
-    },
-    $inc: isSeller ? { buyerUnreadCount: 1 } : { sellerUnreadCount: 1 },
-    $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $set: {
+            lastMessageText: `📅 Meetup proposed: ${formattedDate}`,
+            lastMessageAt: meetupMessage.createdAt,
+            lastMessageId: meetupMessage._id,
+            lastMessageSenderId: userId
+        },
+        $inc: isSeller ? { buyerUnreadCount: 1 } : { sellerUnreadCount: 1 },
+        $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+      },
+      session ? { session } : {}
+    );
   });
 
   const populatedOrder = await Order.findById(order._id)
@@ -352,30 +360,37 @@ router.post('/:orderId/accept', async (ctx: Context) => {
   });
 
   if (conversation) {
-    await Message.create({
-      conversationId: conversation._id,
-      senderId: userId,
-      receiverId: new mongoose.Types.ObjectId(counterpartyId),
-      type: 'meetup',
-      text: `✅ Meetup confirmed: ${formattedDate} at ${order.meeting.locationName}`,
-      meetup: {
-        orderId: order._id,
-        scheduledAt: order.meeting.scheduledAt,
-        locationName: order.meeting.locationName,
-        latitude: order.meeting.latitude,
-        longitude: order.meeting.longitude,
-        proposalStatus: 'confirmed',
-        proposedBy: order.meeting.proposedBy
-      },
-      status: 'sent'
-    });
+    await runMongoTransaction(async (session) => {
+      const confirmationMessage = await new Message({
+        conversationId: conversation._id,
+        senderId: userId,
+        receiverId: new mongoose.Types.ObjectId(counterpartyId),
+        type: 'meetup',
+        text: `✅ Meetup confirmed: ${formattedDate} at ${order.meeting.locationName}`,
+        meetup: {
+          orderId: order._id,
+          scheduledAt: order.meeting.scheduledAt,
+          locationName: order.meeting.locationName,
+          latitude: order.meeting.latitude,
+          longitude: order.meeting.longitude,
+          proposalStatus: 'confirmed',
+          proposedBy: order.meeting.proposedBy
+        },
+        status: 'sent'
+      }).save(session ? { session } : {});
 
-    await Conversation.findByIdAndUpdate(conversation._id, {
-      $set: {
-        lastMessageText: `✅ Meetup confirmed: ${formattedDate}`,
-        lastMessageAt: new Date(),
-        lastMessageSenderId: userId
-      }
+      await Conversation.findByIdAndUpdate(
+        conversation._id,
+        {
+          $set: {
+            lastMessageText: `✅ Meetup confirmed: ${formattedDate}`,
+            lastMessageAt: confirmationMessage.createdAt,
+            lastMessageId: confirmationMessage._id,
+            lastMessageSenderId: userId
+          }
+        },
+        session ? { session } : {}
+      );
     });
   }
 

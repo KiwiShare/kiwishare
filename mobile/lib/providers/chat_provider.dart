@@ -8,6 +8,13 @@ import '../repositories/chat_repository.dart';
 import '../services/chat_photo_upload_service.dart';
 import '../services/chat_voice_service.dart';
 
+class _QueuedReadWatermark {
+  const _QueuedReadWatermark({required this.id, this.shouldMarkRead});
+
+  final String id;
+  final bool Function()? shouldMarkRead;
+}
+
 class ChatProvider extends ChangeNotifier {
   ChatProvider({
     required this.repository,
@@ -52,6 +59,7 @@ class ChatProvider extends ChangeNotifier {
   bool _conversationRefreshQueued = false;
 
   final Map<String, List<ChatMessageModel>> _messages = {};
+  final Map<String, ChatConversationModel> _messageConversationSnapshots = {};
   final Set<String> _loadingConversationIds = {};
   final Set<String> _sendingConversationIds = {};
   final Set<String> _startingItemIds = {};
@@ -63,9 +71,22 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, String> _conversationDeleteErrors = {};
   final Map<String, int> _conversationRenderVersions = {};
   final Map<String, Future<bool>> _markingReadOperations = {};
+  final Map<String, String> _activeReadWatermarks = {};
+  final Map<String, List<_QueuedReadWatermark>> _queuedReadWatermarks = {};
+  final Map<String, Completer<void>> _messageLoadCompleters = {};
+  final Set<String> _messageRefreshQueued = {};
 
   List<ChatMessageModel> messagesFor(String conversationId) =>
       List.unmodifiable(_messages[conversationId] ?? const []);
+  ChatConversationModel? messageConversationByIdForSession(
+    String conversationId,
+    String? token,
+  ) {
+    if (token == null || !ownsSession(token)) return null;
+    return conversationById(conversationId) ??
+        _messageConversationSnapshots[conversationId];
+  }
+
   bool isLoadingMessages(String conversationId) =>
       _loadingConversationIds.contains(conversationId);
   bool isSending(String conversationId) =>
@@ -111,6 +132,7 @@ class ChatProvider extends ChangeNotifier {
     _conversationError = null;
     _conversationRefreshQueued = false;
     _messages.clear();
+    _messageConversationSnapshots.clear();
     _loadingConversationIds.clear();
     _sendingConversationIds.clear();
     _startingItemIds.clear();
@@ -122,6 +144,10 @@ class ChatProvider extends ChangeNotifier {
     _conversationDeleteErrors.clear();
     _conversationRenderVersions.clear();
     _markingReadOperations.clear();
+    _activeReadWatermarks.clear();
+    _queuedReadWatermarks.clear();
+    _messageLoadCompleters.clear();
+    _messageRefreshQueued.clear();
   }
 
   Future<ChatConversationModel?> startConversation({
@@ -219,10 +245,32 @@ class ChatProvider extends ChangeNotifier {
   Future<void> loadMessages({
     required ChatConversationModel conversation,
     required String token,
+    bool queueIfBusy = false,
+    bool Function()? shouldMarkRead,
   }) async {
     _useSession(token);
-    if (_loadingConversationIds.contains(conversation.id)) return;
+    _messageConversationSnapshots[conversation.id] = conversation;
+    if (_loadingConversationIds.contains(conversation.id)) {
+      if (!queueIfBusy) return;
+      _messageRefreshQueued.add(conversation.id);
+      final activeLoad = _messageLoadCompleters[conversation.id]?.future;
+      if (activeLoad != null) await activeLoad;
+      if (_sessionToken == token &&
+          _messageRefreshQueued.remove(conversation.id)) {
+        await loadMessages(
+          conversation: conversation,
+          token: token,
+          shouldMarkRead: shouldMarkRead,
+        );
+      }
+      return;
+    }
+    final messageIdsAtStart = (_messages[conversation.id] ?? const [])
+        .map((message) => message.id)
+        .toSet();
     _loadingConversationIds.add(conversation.id);
+    final loadCompleter = Completer<void>();
+    _messageLoadCompleters[conversation.id] = loadCompleter;
     _messageLoadErrors.remove(conversation.id);
     notifyListeners();
     try {
@@ -231,13 +279,33 @@ class ChatProvider extends ChangeNotifier {
         token: token,
       );
       if (_sessionToken != token) return;
-      _messages[conversation.id] = page.messages;
+      final fetchedIds = page.messages.map((message) => message.id).toSet();
+      final messagesAddedWhileLoading = (_messages[conversation.id] ?? const [])
+          .where(
+            (message) =>
+                !messageIdsAtStart.contains(message.id) &&
+                !fetchedIds.contains(message.id),
+          );
+      _messages[conversation.id] =
+          [...page.messages, ...messagesAddedWhileLoading]..sort((left, right) {
+            final timeOrder = left.createdAt.compareTo(right.createdAt);
+            return timeOrder != 0 ? timeOrder : left.id.compareTo(right.id);
+          });
       final hasUnreadIncomingMessage = page.messages.any(
         (message) => !message.isMine && message.status != 'read',
       );
       final canonical = conversationById(conversation.id) ?? conversation;
-      if (canonical.unreadCount > 0 || hasUnreadIncomingMessage) {
-        await markConversationRead(conversation: canonical, token: token);
+      if ((shouldMarkRead?.call() ?? true) &&
+          (canonical.unreadCount > 0 || hasUnreadIncomingMessage)) {
+        final readThroughMessageId = _latestMessageId(page.messages);
+        if (readThroughMessageId != null) {
+          await markConversationRead(
+            conversation: canonical,
+            token: token,
+            throughMessageId: readThroughMessageId,
+            shouldMarkRead: shouldMarkRead,
+          );
+        }
       }
     } on ChatRepositoryException catch (error) {
       if (_sessionToken == token) {
@@ -253,21 +321,41 @@ class ChatProvider extends ChangeNotifier {
         _loadingConversationIds.remove(conversation.id);
         notifyListeners();
       }
+      if (!loadCompleter.isCompleted) loadCompleter.complete();
+      if (identical(_messageLoadCompleters[conversation.id], loadCompleter)) {
+        _messageLoadCompleters.remove(conversation.id);
+      }
     }
   }
 
   Future<bool> markConversationRead({
     required ChatConversationModel conversation,
     required String token,
+    String? throughMessageId,
+    bool Function()? shouldMarkRead,
   }) {
     if (conversation.id.isEmpty || token.isEmpty) return Future.value(false);
     _useSession(token);
+    final watermark =
+        throughMessageId ??
+        _latestMessageId(_messages[conversation.id] ?? const []);
+    if (watermark == null) return Future.value(false);
+    final queued = _queuedReadWatermarks.putIfAbsent(
+      conversation.id,
+      () => <_QueuedReadWatermark>[],
+    );
+    if (_activeReadWatermarks[conversation.id] != watermark &&
+        !queued.any((entry) => entry.id == watermark)) {
+      queued.add(
+        _QueuedReadWatermark(id: watermark, shouldMarkRead: shouldMarkRead),
+      );
+    }
     final pending = _markingReadOperations[conversation.id];
     if (pending != null) return pending;
 
     late final Future<bool> operation;
     operation =
-        _markConversationReadNow(
+        _drainMarkConversationRead(
           conversation: conversation,
           token: token,
         ).whenComplete(() {
@@ -279,9 +367,45 @@ class ChatProvider extends ChangeNotifier {
     return operation;
   }
 
+  Future<bool> _drainMarkConversationRead({
+    required ChatConversationModel conversation,
+    required String token,
+  }) async {
+    var succeeded = true;
+    while (_sessionToken == token) {
+      final queued = _queuedReadWatermarks[conversation.id];
+      if (queued == null || queued.isEmpty) {
+        _queuedReadWatermarks.remove(conversation.id);
+        break;
+      }
+      final queuedWatermark = queued.removeAt(0);
+      if (queued.isEmpty) _queuedReadWatermarks.remove(conversation.id);
+      if (!(queuedWatermark.shouldMarkRead?.call() ?? true)) continue;
+      final watermark = queuedWatermark.id;
+      _activeReadWatermarks[conversation.id] = watermark;
+      try {
+        succeeded = await _markConversationReadNow(
+          conversation: conversation,
+          token: token,
+          throughMessageId: watermark,
+        );
+      } finally {
+        if (_activeReadWatermarks[conversation.id] == watermark) {
+          _activeReadWatermarks.remove(conversation.id);
+        }
+      }
+      if (!succeeded) {
+        _queuedReadWatermarks.remove(conversation.id);
+        break;
+      }
+    }
+    return succeeded && _sessionToken == token;
+  }
+
   Future<bool> _markConversationReadNow({
     required ChatConversationModel conversation,
     required String token,
+    required String throughMessageId,
   }) async {
     final canonical = conversationById(conversation.id) ?? conversation;
     final previousUnreadCount = canonical.unreadCount;
@@ -294,8 +418,9 @@ class ChatProvider extends ChangeNotifier {
     }
 
     try {
-      await repository.markConversationRead(
+      final remainingUnreadCount = await repository.markConversationRead(
         conversationId: conversation.id,
+        throughMessageId: throughMessageId,
         token: token,
       );
       if (_sessionToken == token) {
@@ -303,6 +428,12 @@ class ChatProvider extends ChangeNotifier {
         if (_isLoadingConversations ||
             (current != null && current.unreadCount > 0)) {
           await loadConversations(token, queueIfBusy: true);
+        } else if (current != null &&
+            current.unreadCount != remainingUnreadCount) {
+          _replaceConversation(
+            current.copyWith(unreadCount: remainingUnreadCount),
+          );
+          notifyListeners();
         }
       }
       return _sessionToken == token;
@@ -322,6 +453,19 @@ class ChatProvider extends ChangeNotifier {
       }
       return false;
     }
+  }
+
+  String? _latestMessageId(Iterable<ChatMessageModel> messages) {
+    ChatMessageModel? latest;
+    for (final message in messages) {
+      if (latest == null ||
+          message.createdAt.isAfter(latest.createdAt) ||
+          (message.createdAt == latest.createdAt &&
+              message.id.compareTo(latest.id) > 0)) {
+        latest = message;
+      }
+    }
+    return latest?.id;
   }
 
   Future<bool> sendText({

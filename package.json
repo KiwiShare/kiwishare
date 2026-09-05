@@ -2,6 +2,11 @@
   "name": "kiwishare-monorepo",
   "version": "1.1.0",
   "private": true,
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "ffmpeg-static"
+    ]
+  },
   "description": "Monorepo for KiwiShare - Mobile App (Flutter) and Backend Server (Koa + TypeScript + MongoDB)",
   "scripts": {
     "prepare": "husky install",
@@ -60,10 +65,5 @@
     "concurrently": "^8.2.2",
     "husky": "^9.1.7",
     "standard-version": "^9.5.0"
-  },
-   "pnpm": {
-    "onlyBuiltDependencies": [
-      "ffmpeg-static"
-    ]
   }
 }

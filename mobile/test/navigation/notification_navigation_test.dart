@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kiwishare/main.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
+import 'package:kiwishare/models/chat_message_model.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
+import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/views/splash/splash_screen.dart';
 
@@ -52,6 +54,261 @@ void main() {
 
       expect(repository.conversationFetches, 1);
       expect(provider.totalUnreadCount, 3);
+    },
+  );
+
+  test(
+    'foreground notification refreshes the open conversation immediately',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final conversation = testConversation(unreadCount: 1);
+      final repository = FakeChatRepository(
+        conversations: [conversation],
+        messages: {
+          conversation.id: [
+            testMessage(id: '1', text: 'New message', isMine: false),
+          ],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+
+      await refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+
+      expect(repository.conversationFetches, 1);
+      expect(repository.messageFetches, 1);
+      expect(repository.markReadCalls, 1);
+      expect(provider.messagesFor(conversation.id).single.text, 'New message');
+      expect(provider.totalUnreadCount, 0);
+    },
+  );
+
+  test(
+    'foreground notification refreshes a directly opened chat when the list fails',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final conversation = testConversation(unreadCount: 1);
+      final repository = FakeChatRepository();
+      final provider = ChatProvider(repository: repository);
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+      final initialMarkReadCalls = repository.markReadCalls;
+      repository
+        ..conversationError = const ChatRepositoryException('List failed')
+        ..messages[conversation.id] = [
+          testMessage(id: '1', text: 'New message', isMine: false),
+        ];
+
+      await refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+
+      expect(repository.conversationFetches, 1);
+      expect(repository.messageFetches, 2);
+      expect(repository.markReadCalls, initialMarkReadCalls + 1);
+      expect(provider.messagesFor(conversation.id).single.text, 'New message');
+    },
+  );
+
+  test(
+    'foreground notification does not mark a conversation read off-screen',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final repository = FakeChatRepository(
+        conversations: [testConversation(unreadCount: 1)],
+      );
+      final provider = ChatProvider(repository: repository);
+
+      await refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => 'another-conversation',
+      );
+
+      expect(repository.conversationFetches, 1);
+      expect(repository.messageFetches, 0);
+      expect(repository.markReadCalls, 0);
+      expect(provider.totalUnreadCount, 1);
+    },
+  );
+
+  test(
+    'matching chat route does not refresh while the chat is obscured',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final repository = FakeChatRepository(
+        conversations: [testConversation(unreadCount: 1)],
+      );
+      final provider = ChatProvider(repository: repository);
+
+      await refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => message.conversationId,
+        isConversationVisibleProvider: () => false,
+      );
+
+      expect(repository.conversationFetches, 1);
+      expect(repository.messageFetches, 0);
+      expect(repository.markReadCalls, 0);
+    },
+  );
+
+  test('visibility loss during a push fetch preserves unread state', () async {
+    const message = ChatPushMessage(
+      conversationId: 'conversation-1',
+      recipientId: 'account-a',
+      itemId: 'item-1',
+      itemTitle: 'Chair',
+      participantId: 'seller-1',
+      participantName: 'Seller',
+    );
+    final conversation = testConversation(unreadCount: 1);
+    final messageLoad = Completer<ChatMessagePage>();
+    final repository = FakeChatRepository(conversations: [conversation])
+      ..messageCompleters.add(messageLoad);
+    final provider = ChatProvider(repository: repository);
+    var visible = true;
+
+    final refresh = refreshChatUnreadForMessage(
+      message: message,
+      activeUserId: 'account-a',
+      authToken: 'valid-token',
+      chatProvider: provider,
+      activeConversationIdProvider: () => message.conversationId,
+      isConversationVisibleProvider: () => visible,
+    );
+    await Future<void>.delayed(Duration.zero);
+    visible = false;
+    messageLoad.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '1', text: 'Unseen', isMine: false)],
+        hasMore: false,
+      ),
+    );
+    await refresh;
+
+    expect(repository.messageFetches, 1);
+    expect(repository.markReadCalls, 0);
+    expect(provider.totalUnreadCount, 1);
+  });
+
+  test(
+    'navigation away during refresh does not mark the message read',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final conversation = testConversation(unreadCount: 1);
+      final conversationLoad = Completer<List<ChatConversationModel>>();
+      final repository = FakeChatRepository()
+        ..conversationCompleters.add(conversationLoad);
+      final provider = ChatProvider(repository: repository);
+      String? activeConversationId = conversation.id;
+
+      final refresh = refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => activeConversationId,
+      );
+      activeConversationId = null;
+      conversationLoad.complete([conversation]);
+      await refresh;
+
+      expect(repository.messageFetches, 0);
+      expect(repository.markReadCalls, 0);
+    },
+  );
+
+  test(
+    'navigation away during message fetch does not mark unseen content read',
+    () async {
+      const message = ChatPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+        itemId: 'item-1',
+        itemTitle: 'Chair',
+        participantId: 'seller-1',
+        participantName: 'Seller',
+      );
+      final conversation = testConversation(unreadCount: 1);
+      final messageLoad = Completer<ChatMessagePage>();
+      final repository = FakeChatRepository(conversations: [conversation])
+        ..messageCompleters.add(messageLoad);
+      final provider = ChatProvider(repository: repository);
+      String? activeConversationId = conversation.id;
+
+      final refresh = refreshChatUnreadForMessage(
+        message: message,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => activeConversationId,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.messageFetches, 1);
+
+      activeConversationId = null;
+      messageLoad.complete(
+        ChatMessagePage(
+          messages: [testMessage(id: '1', text: 'Unseen', isMine: false)],
+          hasMore: false,
+        ),
+      );
+      await refresh;
+
+      expect(repository.markReadCalls, 0);
+      expect(provider.totalUnreadCount, 1);
     },
   );
 
@@ -112,6 +369,105 @@ void main() {
       freshLoad.complete([testConversation(unreadCount: 3)]);
       await refreshing;
       expect(provider.totalUnreadCount, 3);
+    },
+  );
+
+  test(
+    'read receipt refreshes status only for the open account chat',
+    () async {
+      const receipt = ChatReadPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+      );
+      final conversation = testConversation();
+      final repository = FakeChatRepository(
+        conversations: [conversation],
+        messages: {
+          conversation.id: [
+            testMessage(
+              id: '1',
+              text: 'Already viewed',
+              isMine: true,
+              status: 'read',
+              readAt: DateTime.utc(2026, 8, 27, 8, 31),
+            ),
+          ],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+      await provider.loadConversations('valid-token');
+
+      await refreshChatReadReceipt(
+        message: receipt,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+
+      expect(repository.messageFetches, 1);
+      expect(provider.messagesFor(conversation.id).single.status, 'read');
+
+      await refreshChatReadReceipt(
+        message: receipt,
+        activeUserId: 'account-b',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+      await refreshChatReadReceipt(
+        message: receipt,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => 'another-conversation',
+      );
+
+      expect(repository.messageFetches, 1);
+    },
+  );
+
+  test(
+    'read receipt refreshes a directly opened chat without a list cache',
+    () async {
+      const receipt = ChatReadPushMessage(
+        conversationId: 'conversation-1',
+        recipientId: 'account-a',
+      );
+      final conversation = testConversation();
+      final repository = FakeChatRepository(
+        messages: {
+          conversation.id: [
+            testMessage(id: '1', text: 'Waiting', isMine: true),
+          ],
+        },
+      );
+      final provider = ChatProvider(repository: repository);
+      await provider.loadMessages(
+        conversation: conversation,
+        token: 'valid-token',
+      );
+      repository.messages[conversation.id] = [
+        testMessage(
+          id: '1',
+          text: 'Waiting',
+          isMine: true,
+          status: 'read',
+          readAt: DateTime.utc(2026, 8, 27, 8, 31),
+        ),
+      ];
+
+      await refreshChatReadReceipt(
+        message: receipt,
+        activeUserId: 'account-a',
+        authToken: 'valid-token',
+        chatProvider: provider,
+        activeConversationIdProvider: () => conversation.id,
+      );
+
+      expect(repository.conversationFetches, 0);
+      expect(repository.messageFetches, 2);
+      expect(provider.messagesFor(conversation.id).single.status, 'read');
     },
   );
 

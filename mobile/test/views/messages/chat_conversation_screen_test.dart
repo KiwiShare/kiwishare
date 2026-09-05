@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
+import 'package:kiwishare/models/chat_message_model.dart';
+import 'package:kiwishare/navigation/app_route_observer.dart';
 import 'package:kiwishare/config/api_config.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
@@ -29,6 +32,7 @@ Widget _buildSubject({
 }) {
   final value = conversation ?? testConversation();
   return MaterialApp(
+    navigatorObservers: [appRouteObserver],
     theme: ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF064B3A)),
@@ -78,6 +82,404 @@ void main() {
     expect(find.text('Ergonomic Office Chair'), findsOneWidget);
     expect(find.byKey(const Key('chat_message_1')), findsOneWidget);
     expect(find.byKey(const Key('chat_message_2')), findsOneWidget);
+  });
+
+  testWidgets('does not mark an in-flight initial load read after navigation', (
+    tester,
+  ) async {
+    final pendingMessages = Completer<ChatMessagePage>();
+    final repository = FakeChatRepository()
+      ..messageCompleters.add(pendingMessages);
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        conversation: testConversation(unreadCount: 1),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(repository.messageFetches, 1);
+
+    final context = tester.element(find.byType(ChatConversationScreen));
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Covering route')),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    pendingMessages.complete(
+      ChatMessagePage(
+        messages: [testMessage(id: '1', text: 'Unseen', isMine: false)],
+        hasMore: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.markReadCalls, 0);
+  });
+
+  testWidgets('marks deferred messages after returning to the chat', (
+    tester,
+  ) async {
+    final pendingMessages = Completer<ChatMessagePage>();
+    final incoming = testMessage(id: '1', text: 'Deferred', isMine: false);
+    final repository = FakeChatRepository()
+      ..messageCompleters.add(pendingMessages);
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        conversation: testConversation(unreadCount: 1),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final context = tester.element(find.byType(ChatConversationScreen));
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Covering route')),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    repository.messages['conversation-1'] = [incoming];
+    pendingMessages.complete(
+      ChatMessagePage(messages: [incoming], hasMore: false),
+    );
+    await tester.pump();
+    expect(repository.markReadCalls, 0);
+
+    Navigator.of(tester.element(find.text('Covering route'))).pop();
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 2);
+    expect(repository.markReadCalls, 1);
+  });
+
+  testWidgets('does not mark an in-flight load read while backgrounded', (
+    tester,
+  ) async {
+    final pendingMessages = Completer<ChatMessagePage>();
+    final incoming = testMessage(id: '1', text: 'Backgrounded', isMine: false);
+    final repository = FakeChatRepository()
+      ..messageCompleters.add(pendingMessages);
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        conversation: testConversation(unreadCount: 1),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    repository.messages['conversation-1'] = [incoming];
+    pendingMessages.complete(
+      ChatMessagePage(messages: [incoming], hasMore: false),
+    );
+    await tester.pump();
+
+    expect(repository.markReadCalls, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 2);
+    expect(repository.markReadCalls, 1);
+  });
+
+  testWidgets('shows Read only under the latest sent message when viewed', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '1',
+            text: 'First sent',
+            isMine: true,
+            status: 'read',
+            readAt: DateTime.utc(2026, 8, 27, 8, 31),
+          ),
+          testMessage(
+            id: '2',
+            text: 'Latest sent',
+            isMine: true,
+            status: 'read',
+            readAt: DateTime.utc(2026, 8, 27, 8, 32),
+          ),
+          testMessage(id: '3', text: 'Reply', isMine: false, status: 'read'),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('chat_read_receipt_1')), findsNothing);
+    expect(find.byKey(const Key('chat_read_receipt_2')), findsOneWidget);
+    expect(find.text('Read'), findsOneWidget);
+    expect(find.bySemanticsLabel('You sent Latest sent, read'), findsOneWidget);
+  });
+
+  testWidgets('does not show a stale receipt when the latest send is unread', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(id: '1', text: 'Viewed', isMine: true, status: 'read'),
+          testMessage(id: '2', text: 'Waiting', isMine: true),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Read'), findsNothing);
+  });
+
+  testWidgets('shows a read receipt for the latest sent location', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '1',
+            text: 'Shared location',
+            isMine: true,
+            type: 'location',
+            location: const ChatLocationPayload(
+              name: 'Auckland Library',
+              latitude: -36.8521,
+              longitude: 174.7692,
+            ),
+            status: 'read',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('chat_location_1')), findsOneWidget);
+    expect(find.byKey(const Key('chat_read_receipt_1')), findsOneWidget);
+  });
+
+  testWidgets('shows a read receipt for the latest sent meetup card', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '1',
+            text: 'Meetup proposed',
+            isMine: true,
+            type: 'meetup',
+            meetup: ChatMeetupPayload(
+              orderId: 'order-1',
+              scheduledAt: DateTime.utc(2026, 8, 28, 2),
+              locationName: 'Auckland Library',
+              proposalStatus: 'confirmed',
+            ),
+            status: 'read',
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('chat_meetup_card_1')), findsOneWidget);
+    expect(find.byKey(const Key('chat_read_receipt_1')), findsOneWidget);
+  });
+
+  testWidgets('refreshes read receipts after returning from the background', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [testMessage(id: '1', text: 'Waiting', isMine: true)],
+      },
+    );
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+    expect(find.text('Read'), findsNothing);
+
+    repository.messages['conversation-1'] = [
+      testMessage(
+        id: '1',
+        text: 'Waiting',
+        isMine: true,
+        status: 'read',
+        readAt: DateTime.utc(2026, 8, 27, 8, 31),
+      ),
+    ];
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 2);
+    expect(find.byKey(const Key('chat_read_receipt_1')), findsOneWidget);
+  });
+
+  testWidgets('does not refresh a covered chat when the app resumes', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [testMessage(id: '1', text: 'Waiting', isMine: true)],
+      },
+    );
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(ChatConversationScreen));
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Covering route')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    repository.messages['conversation-1'] = [
+      testMessage(id: '1', text: 'Waiting', isMine: true, status: 'read'),
+    ];
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(repository.messageFetches, 1);
+  });
+
+  testWidgets('photo sheet removes and restores actual chat visibility', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+    expect(
+      chatVisibilityTracker.isVisible(
+        conversationId: 'conversation-1',
+        sessionToken: 'valid-token',
+      ),
+      isTrue,
+    );
+
+    await tester.tap(find.byKey(const Key('chat_add_photo_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Send a photo'), findsOneWidget);
+    expect(
+      chatVisibilityTracker.isVisible(
+        conversationId: 'conversation-1',
+        sessionToken: 'valid-token',
+      ),
+      isFalse,
+    );
+
+    Navigator.of(tester.element(find.text('Send a photo'))).pop();
+    await tester.pumpAndSettle();
+    expect(
+      chatVisibilityTracker.isVisible(
+        conversationId: 'conversation-1',
+        sessionToken: 'valid-token',
+      ),
+      isTrue,
+    );
+  });
+
+  testWidgets('keeps voice playback exposed to accessibility services', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '1',
+            text: '',
+            isMine: false,
+            type: 'voice',
+            audioUrl: 'https://example.test/voice.m4a',
+            durationMs: 4000,
+          ),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    final playButton = find.byKey(const Key('chat_voice_play_1'));
+    expect(playButton, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(playButton)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('aligns received content left and sent content right', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(id: '1', text: 'Hi', isMine: false),
+          testMessage(id: '2', text: 'Mine', isMine: true),
+        ],
+      },
+    );
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    final receivedBubble = find.byKey(const Key('chat_message_1'));
+    final sentBubble = find.byKey(const Key('chat_message_2'));
+    expect(
+      tester.getTopLeft(receivedBubble).dx,
+      lessThan(tester.getTopLeft(sentBubble).dx),
+    );
+
+    final receivedLabels = find.descendant(
+      of: receivedBubble,
+      matching: find.byType(Text),
+    );
+    expect(receivedLabels, findsNWidgets(2));
+    expect(
+      tester.getTopLeft(receivedLabels.at(0)).dx,
+      closeTo(tester.getTopLeft(receivedLabels.at(1)).dx, 0.1),
+    );
+
+    final sentLabels = find.descendant(
+      of: sentBubble,
+      matching: find.byType(Text),
+    );
+    expect(sentLabels, findsNWidgets(2));
+    expect(
+      tester.getBottomRight(sentLabels.at(0)).dx,
+      closeTo(tester.getBottomRight(sentLabels.at(1)).dx, 0.1),
+    );
   });
 
   testWidgets('shows the empty state for a newly created conversation', (

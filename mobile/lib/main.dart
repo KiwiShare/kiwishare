@@ -20,6 +20,7 @@ import 'views/meetups/meetup_qr_screen.dart';
 import 'views/auth/login_view.dart';
 import 'views/products/product_detail_screen.dart';
 import 'models/item_model.dart';
+import 'navigation/app_route_observer.dart';
 
 // State and Repositories
 import 'providers/providers.dart';
@@ -54,6 +55,7 @@ final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
 final GoRouter _router = GoRouter(
   initialLocation: '/splash',
   navigatorKey: _rootNavigatorKey,
+  observers: [appRouteObserver],
   routes: [
     GoRoute(
       path: '/splash',
@@ -179,6 +181,7 @@ void main() async {
       onForegroundMessage: _showForegroundPriceDrop,
       onNavigateToChat: _openChatNotification,
       onForegroundChatMessage: _showForegroundChatNotification,
+      onForegroundChatRead: _handleForegroundChatRead,
       onNavigateToMeetupQrCode: _openMeetupQrNotification,
       onForegroundMeetupMessage: _showForegroundMeetupNotification,
     );
@@ -314,6 +317,11 @@ void _showForegroundChatNotification(
         activeUserId: auth.currentUser?.id,
         authToken: auth.jwtToken,
         chatProvider: chat,
+        activeConversationIdProvider: () => activeChatConversationId(_router),
+        isConversationVisibleProvider: () => chatVisibilityTracker.isVisible(
+          conversationId: message.conversationId,
+          sessionToken: auth.jwtToken ?? '',
+        ),
       ),
     );
   }
@@ -338,6 +346,26 @@ void _showForegroundChatNotification(
         ),
       ),
     );
+}
+
+void _handleForegroundChatRead(ChatReadPushMessage message) {
+  final appContext = _scaffoldMessengerKey.currentContext;
+  final auth = appContext?.read<AuthProvider>();
+  final chat = appContext?.read<ChatProvider>();
+  if (auth == null || chat == null) return;
+  unawaited(
+    refreshChatReadReceipt(
+      message: message,
+      activeUserId: auth.currentUser?.id,
+      authToken: auth.jwtToken,
+      chatProvider: chat,
+      activeConversationIdProvider: () => activeChatConversationId(_router),
+      isConversationVisibleProvider: () => chatVisibilityTracker.isVisible(
+        conversationId: message.conversationId,
+        sessionToken: auth.jwtToken ?? '',
+      ),
+    ),
+  );
 }
 
 void _showForegroundMeetupNotification(
@@ -365,6 +393,8 @@ Future<void> refreshChatUnreadForMessage({
   required String? activeUserId,
   required String? authToken,
   required ChatProvider chatProvider,
+  String? Function()? activeConversationIdProvider,
+  bool Function()? isConversationVisibleProvider,
 }) async {
   if (!shouldOpenChatNotificationForUser(message, activeUserId) ||
       authToken == null ||
@@ -372,6 +402,62 @@ Future<void> refreshChatUnreadForMessage({
     return;
   }
   await chatProvider.loadConversations(authToken, queueIfBusy: true);
+  if (activeConversationIdProvider?.call() != message.conversationId ||
+      !(isConversationVisibleProvider?.call() ?? true)) {
+    return;
+  }
+  final conversation = chatProvider.messageConversationByIdForSession(
+    message.conversationId,
+    authToken,
+  );
+  if (conversation == null) return;
+  await chatProvider.loadMessages(
+    conversation: conversation,
+    token: authToken,
+    queueIfBusy: true,
+    shouldMarkRead: () =>
+        activeConversationIdProvider?.call() == message.conversationId &&
+        (isConversationVisibleProvider?.call() ?? true),
+  );
+}
+
+@visibleForTesting
+String? activeChatConversationId(GoRouter router) {
+  final segments = router.routerDelegate.currentConfiguration.uri.pathSegments;
+  if (segments.length != 2 || segments.first != 'messages') return null;
+  final conversationId = segments.last.trim();
+  return conversationId.isEmpty ? null : conversationId;
+}
+
+@visibleForTesting
+Future<void> refreshChatReadReceipt({
+  required ChatReadPushMessage message,
+  required String? activeUserId,
+  required String? authToken,
+  required ChatProvider chatProvider,
+  required String? Function() activeConversationIdProvider,
+  bool Function()? isConversationVisibleProvider,
+}) async {
+  if (!message.isForRecipient(activeUserId) ||
+      authToken == null ||
+      authToken.isEmpty ||
+      activeConversationIdProvider() != message.conversationId ||
+      !(isConversationVisibleProvider?.call() ?? true)) {
+    return;
+  }
+  final conversation = chatProvider.messageConversationByIdForSession(
+    message.conversationId,
+    authToken,
+  );
+  if (conversation == null) return;
+  await chatProvider.loadMessages(
+    conversation: conversation,
+    token: authToken,
+    queueIfBusy: true,
+    shouldMarkRead: () =>
+        activeConversationIdProvider() == message.conversationId &&
+        (isConversationVisibleProvider?.call() ?? true),
+  );
 }
 
 bool shouldOpenChatNotificationForUser(
