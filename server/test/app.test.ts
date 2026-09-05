@@ -7,6 +7,8 @@ import Item from '../src/models/Item';
 import User from '../src/models/User';
 import Category from '../src/models/Category';
 import Order from '../src/models/Order';
+import Conversation from '../src/models/Conversation';
+import Message from '../src/models/Message';
 import { DEFAULT_CATEGORIES } from '../src/config/seed';
 import { runMongoTransaction } from '../src/services/mongoTransaction';
 
@@ -907,6 +909,59 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
       'second-start',
       'second-end'
     ]);
+
+    let releaseWatermarkBlocker!: () => void;
+    let signalWatermarkBlocker!: () => void;
+    const watermarkBlockerStarted = new Promise<void>((resolve) => {
+      signalWatermarkBlocker = resolve;
+    });
+    const watermarkBlocker = new Promise<void>((resolve) => {
+      releaseWatermarkBlocker = resolve;
+    });
+    const blockedWatermarkWork = runMongoTransaction(async () => {
+      signalWatermarkBlocker();
+      await watermarkBlocker;
+    });
+    await watermarkBlockerStarted;
+    const findMessageSpy = jest.spyOn(Message, 'findOne');
+    const legacyRead = request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${seller.body.token}`)
+      .then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(findMessageSpy).not.toHaveBeenCalled();
+    releaseWatermarkBlocker();
+    expect((await legacyRead).status).toBe(200);
+    await blockedWatermarkWork;
+    findMessageSpy.mockRestore();
+
+    let releaseRemovalBlocker!: () => void;
+    let signalRemovalBlocker!: () => void;
+    const removalBlockerStarted = new Promise<void>((resolve) => {
+      signalRemovalBlocker = resolve;
+    });
+    const removalBlocker = new Promise<void>((resolve) => {
+      releaseRemovalBlocker = resolve;
+    });
+    const blockedRemovalWork = runMongoTransaction(async () => {
+      signalRemovalBlocker();
+      await removalBlocker;
+    });
+    await removalBlockerStarted;
+    const removal = request(app.callback())
+      .delete(`/api/conversations/${conversationId}`)
+      .set('Authorization', `Bearer ${seller.body.token}`)
+      .then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      (await Conversation.findById(conversationId))?.hiddenForUserIds.map(String)
+    ).not.toContain(seller.body.user.id);
+    releaseRemovalBlocker();
+    expect((await removal).status).toBe(200);
+    await blockedRemovalWork;
+    expect(
+      (await Conversation.findById(conversationId))?.hiddenForUserIds.map(String)
+    ).toContain(seller.body.user.id);
   });
 
   describe('Admin Listing Assignment and Stats', () => {

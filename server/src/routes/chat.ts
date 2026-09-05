@@ -673,19 +673,12 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   const unreadField = readingAsBuyer
     ? 'buyerUnreadCount'
     : 'sellerUnreadCount';
-  // A legacy client does not send its displayed message id. Capture the best
-  // available fallback once so an automatic transaction retry cannot advance
-  // the read boundary to a message that arrived after this request started.
-  const legacyWatermark =
-    throughMessageId === undefined
-      ? await Message.findOne({
-          conversationId: conversation._id,
-          receiverId: userId,
-          status: { $in: ['sent', 'delivered'] }
-        })
-          .sort({ createdAt: -1, _id: -1 })
-          .select('_id createdAt')
-      : null;
+  // Capture a legacy client's best available fallback inside the standalone
+  // queue, but only once so replica-set transaction retries cannot advance it.
+  let legacyWatermark:
+    | InstanceType<typeof Message>
+    | null
+    | undefined;
   let invalidWatermark = false;
   let readCount = 0;
   let unreadCount = 0;
@@ -695,7 +688,19 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
     readCount = 0;
     unreadCount = 0;
 
-    let watermark = legacyWatermark;
+    if (throughMessageId === undefined && legacyWatermark === undefined) {
+      const legacyWatermarkQuery = Message.findOne({
+        conversationId: conversation._id,
+        receiverId: userId,
+        status: { $in: ['sent', 'delivered'] }
+      })
+        .sort({ createdAt: -1, _id: -1 })
+        .select('_id createdAt');
+      if (session) legacyWatermarkQuery.session(session);
+      legacyWatermark = await legacyWatermarkQuery;
+    }
+
+    let watermark = legacyWatermark ?? null;
     if (throughMessageId) {
       const watermarkQuery = Message.findOne({
         _id: new mongoose.Types.ObjectId(throughMessageId),
@@ -795,11 +800,17 @@ router.delete('/:conversationId', async (ctx: Context) => {
   if (!conversation) return;
 
   const hidingAsBuyer = conversation.buyerId.equals(userId);
-  await Conversation.findByIdAndUpdate(conversation._id, {
-    $addToSet: { hiddenForUserIds: userId },
-    $set: hidingAsBuyer
-      ? { buyerUnreadCount: 0 }
-      : { sellerUnreadCount: 0 }
+  await runMongoTransaction(async (session) => {
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $addToSet: { hiddenForUserIds: userId },
+        $set: hidingAsBuyer
+          ? { buyerUnreadCount: 0 }
+          : { sellerUnreadCount: 0 }
+      },
+      session ? { session } : {}
+    );
   });
 
   ctx.status = 200;
