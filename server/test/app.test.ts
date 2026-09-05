@@ -8,6 +8,7 @@ import User from '../src/models/User';
 import Category from '../src/models/Category';
 import Order from '../src/models/Order';
 import { DEFAULT_CATEGORIES } from '../src/config/seed';
+import { runMongoTransaction } from '../src/services/mongoTransaction';
 
 jest.mock('../src/config/r2', () => {
   const actual = jest.requireActual('../src/config/r2');
@@ -873,6 +874,39 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
       });
     expect(meetup.status).toBe(200);
     expect(meetup.body.meetup.proposalStatus).toBe('proposed');
+
+    const sequence: string[] = [];
+    let startSecond!: () => void;
+    const secondMayStart = new Promise<void>((resolve) => {
+      startSecond = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstMayFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const first = runMongoTransaction(async (session) => {
+      expect(session).toBeNull();
+      sequence.push('first-start');
+      startSecond();
+      await firstMayFinish;
+      sequence.push('first-end');
+    });
+    await secondMayStart;
+    const second = runMongoTransaction(async (session) => {
+      expect(session).toBeNull();
+      sequence.push('second-start');
+      sequence.push('second-end');
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sequence).toEqual(['first-start']);
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(sequence).toEqual([
+      'first-start',
+      'first-end',
+      'second-start',
+      'second-end'
+    ]);
   });
 
   describe('Admin Listing Assignment and Stats', () => {
