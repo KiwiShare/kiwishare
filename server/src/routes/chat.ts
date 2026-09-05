@@ -22,6 +22,7 @@ import {
   notifyChatReadReceipt,
   notifyChatReceiver
 } from '../services/pushNotification';
+import { runMongoTransaction } from '../services/mongoTransaction';
 
 const router = new Router({ prefix: '/conversations' });
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -579,50 +580,45 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       : messageType === 'location'
         ? `📍 ${locationData?.name ?? 'Location'}`
         : normalizedText;
-  const session = await mongoose.startSession();
   let message: InstanceType<typeof Message> | null = null;
-  try {
-    await session.withTransaction(async () => {
-      const [createdMessage] = await Message.create(
-        [
-          {
-            conversationId: conversation._id,
-            senderId: userId,
-            receiverId,
-            type: messageType,
-            ...(messageType === 'text'
-              ? { text: normalizedText }
-              : messageType === 'image'
-                ? { imageUrl }
-                : messageType === 'location'
-                  ? { text: normalizedText, location: locationData! }
-                  : { audioUrl, durationMs }),
-            status: 'sent'
-          }
-        ],
-        { session }
-      );
-      message = createdMessage;
-
-      await Conversation.findByIdAndUpdate(
-        conversation._id,
+  await runMongoTransaction(async (session) => {
+    const [createdMessage] = await Message.create(
+      [
         {
-          $set: {
-            lastMessageText: conversationPreview,
-            lastMessageAt: createdMessage.createdAt,
-            lastMessageSenderId: userId
-          },
-          $inc: sendingAsBuyer
-            ? { sellerUnreadCount: 1 }
-            : { buyerUnreadCount: 1 },
-          $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+          conversationId: conversation._id,
+          senderId: userId,
+          receiverId,
+          type: messageType,
+          ...(messageType === 'text'
+            ? { text: normalizedText }
+            : messageType === 'image'
+              ? { imageUrl }
+              : messageType === 'location'
+                ? { text: normalizedText, location: locationData! }
+                : { audioUrl, durationMs }),
+          status: 'sent'
+        }
+      ],
+      session ? { session } : {}
+    );
+    message = createdMessage;
+
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $set: {
+          lastMessageText: conversationPreview,
+          lastMessageAt: createdMessage.createdAt,
+          lastMessageSenderId: userId
         },
-        { session }
-      );
-    });
-  } finally {
-    await session.endSession();
-  }
+        $inc: sendingAsBuyer
+          ? { sellerUnreadCount: 1 }
+          : { buyerUnreadCount: 1 },
+        $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+      },
+      session ? { session } : {}
+    );
+  });
 
   if (!message) {
     ctx.throw(500, 'Message transaction completed without a message.');
@@ -690,33 +686,32 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
           .sort({ createdAt: -1, _id: -1 })
           .select('_id createdAt')
       : null;
-  const session = await mongoose.startSession();
   let invalidWatermark = false;
   let readCount = 0;
   let unreadCount = 0;
-  try {
-    await session.withTransaction(async () => {
-      // withTransaction may retry this callback after a write conflict.
-      invalidWatermark = false;
-      readCount = 0;
-      unreadCount = 0;
+  await runMongoTransaction(async (session) => {
+    // withTransaction may retry this callback after a write conflict.
+    invalidWatermark = false;
+    readCount = 0;
+    unreadCount = 0;
 
-      const watermark = throughMessageId
-        ? await Message.findOne({
-            _id: new mongoose.Types.ObjectId(throughMessageId),
-            conversationId: conversation._id,
-            status: { $ne: 'deleted' }
-          })
-            .session(session)
-            .select('_id createdAt')
-        : legacyWatermark;
+    let watermark = legacyWatermark;
+    if (throughMessageId) {
+      const watermarkQuery = Message.findOne({
+        _id: new mongoose.Types.ObjectId(throughMessageId),
+        conversationId: conversation._id,
+        status: { $ne: 'deleted' }
+      }).select('_id createdAt');
+      if (session) watermarkQuery.session(session);
+      watermark = await watermarkQuery;
+    }
 
-      if (!watermark) {
-        invalidWatermark = throughMessageId !== undefined;
-      }
+    if (!watermark) {
+      invalidWatermark = throughMessageId !== undefined;
+    }
 
-      if (watermark) {
-        const result = await Message.updateMany(
+    if (watermark) {
+      const result = await Message.updateMany(
           {
             conversationId: conversation._id,
             receiverId: userId,
@@ -727,34 +722,35 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
             status: { $in: ['sent', 'delivered'] }
           },
           { $set: { status: 'read', readAt: new Date() } },
-          { session }
+          session ? { session } : {}
         );
-        readCount = result.modifiedCount;
-      }
+      readCount = result.modifiedCount;
+    }
 
-      // A bodyless legacy request can legitimately have no unread watermark.
-      // Still reconcile the cached counter so retries repair stale badges.
-      if (invalidWatermark) return;
+    // A bodyless legacy request can legitimately have no unread watermark.
+    // Still reconcile the cached counter so retries repair stale badges.
+    if (invalidWatermark) return;
 
-      unreadCount = await Message.countDocuments({
-        conversationId: conversation._id,
-        receiverId: userId,
-        status: { $in: ['sent', 'delivered'] }
-      }).session(session);
-      const isHidden = await Conversation.exists({
-        _id: conversation._id,
-        hiddenForUserIds: userId
-      }).session(session);
-      if (isHidden) unreadCount = 0;
-      await Conversation.findByIdAndUpdate(
-        conversation._id,
-        { $set: { [unreadField]: unreadCount } },
-        { session }
-      );
+    const unreadCountQuery = Message.countDocuments({
+      conversationId: conversation._id,
+      receiverId: userId,
+      status: { $in: ['sent', 'delivered'] }
     });
-  } finally {
-    await session.endSession();
-  }
+    if (session) unreadCountQuery.session(session);
+    unreadCount = await unreadCountQuery;
+    const hiddenQuery = Conversation.exists({
+      _id: conversation._id,
+      hiddenForUserIds: userId
+    });
+    if (session) hiddenQuery.session(session);
+    const isHidden = await hiddenQuery;
+    if (isHidden) unreadCount = 0;
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      { $set: { [unreadField]: unreadCount } },
+      session ? { session } : {}
+    );
+  });
 
   if (invalidWatermark) {
     ctx.status = 400;

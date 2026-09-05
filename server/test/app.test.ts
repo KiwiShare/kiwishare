@@ -821,6 +821,60 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.publicUrl).toContain('audio/chat/');
   });
 
+  test('chat and meetup writes work with the default standalone MongoDB topology', async () => {
+    const seller = await request(app.callback())
+      .post('/api/auth/register')
+      .send({
+        email: `standalone_seller_${Date.now()}@kiwishare.co.nz`,
+        password: 'password123',
+        displayName: 'Standalone Seller'
+      });
+    expect(seller.status).toBe(201);
+
+    const item = await Item.create({
+      sellerId: new mongoose.Types.ObjectId(seller.body.user.id),
+      ownerId: seller.body.user.id,
+      title: 'Standalone Chat Item',
+      description: 'Exercises chat writes without replica-set transactions.',
+      category: 'Furniture',
+      condition: 'good',
+      price: 2500,
+      currency: 'NZD',
+      status: 'active'
+    });
+    const conversation = await request(app.callback())
+      .post('/api/conversations')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ itemId: item.id });
+    expect(conversation.status).toBe(201);
+    const conversationId = conversation.body.conversation.id;
+
+    const sent = await request(app.callback())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ text: 'Standalone delivery test.' });
+    expect(sent.status).toBe(201);
+
+    const read = await request(app.callback())
+      .patch(`/api/conversations/${conversationId}/read`)
+      .set('Authorization', `Bearer ${seller.body.token}`)
+      .send({ throughMessageId: sent.body.message.id });
+    expect(read.status).toBe(200);
+    expect(read.body.unreadCount).toBe(0);
+
+    const meetup = await request(app.callback())
+      .post('/api/meetups/propose')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        itemId: item.id,
+        conversationId,
+        scheduledAt: new Date(Date.now() + 86400000).toISOString(),
+        locationName: 'UoA Student Hub'
+      });
+    expect(meetup.status).toBe(200);
+    expect(meetup.body.meetup.proposalStatus).toBe('proposed');
+  });
+
   describe('Admin Listing Assignment and Stats', () => {
     let adminToken = '';
 

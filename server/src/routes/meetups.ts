@@ -9,6 +9,7 @@ import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import QrCode from '../models/QrCode';
 import { notifyMeetupConfirmed } from '../services/pushNotification';
+import { runMongoTransaction } from '../services/mongoTransaction';
 
 const router = new Router({ prefix: '/meetups' });
 router.use(authenticateToken);
@@ -233,10 +234,8 @@ router.post('/propose', async (ctx: Context) => {
     minute: '2-digit'
   });
 
-  const session = await mongoose.startSession();
-  try {
-    await session.withTransaction(async () => {
-      const meetupMessage = await new Message({
+  await runMongoTransaction(async (session) => {
+    const meetupMessage = await new Message({
         conversationId: conversation._id,
         senderId: userId,
         receiverId,
@@ -253,25 +252,22 @@ router.post('/propose', async (ctx: Context) => {
           note: typeof note === 'string' ? note.trim() : undefined
         },
         status: 'sent'
-      }).save({ session });
+    }).save(session ? { session } : {});
 
-      await Conversation.findByIdAndUpdate(
-        conversation._id,
-        {
-          $set: {
-            lastMessageText: `📅 Meetup proposed: ${formattedDate}`,
-            lastMessageAt: meetupMessage.createdAt,
-            lastMessageSenderId: userId
-          },
-          $inc: isSeller ? { buyerUnreadCount: 1 } : { sellerUnreadCount: 1 },
-          $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $set: {
+          lastMessageText: `📅 Meetup proposed: ${formattedDate}`,
+          lastMessageAt: meetupMessage.createdAt,
+          lastMessageSenderId: userId
         },
-        { session }
-      );
-    });
-  } finally {
-    await session.endSession();
-  }
+        $inc: isSeller ? { buyerUnreadCount: 1 } : { sellerUnreadCount: 1 },
+        $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+      },
+      session ? { session } : {}
+    );
+  });
 
   const populatedOrder = await Order.findById(order._id)
     .populate('buyerId', 'displayName avatarUrl')
