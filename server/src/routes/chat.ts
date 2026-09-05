@@ -609,6 +609,7 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
         $set: {
           lastMessageText: conversationPreview,
           lastMessageAt: createdMessage.createdAt,
+          lastMessageId: createdMessage._id,
           lastMessageSenderId: userId
         },
         $inc: sendingAsBuyer
@@ -673,6 +674,13 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
   const unreadField = readingAsBuyer
     ? 'buyerUnreadCount'
     : 'sellerUnreadCount';
+  // Freeze the latest fully committed preview at request time. A standalone
+  // send may already have inserted its Message while its Conversation update
+  // is queued; that partial message must remain beyond this legacy boundary.
+  const legacyBoundaryAt =
+    throughMessageId === undefined ? conversation.lastMessageAt : undefined;
+  const legacyBoundaryId =
+    throughMessageId === undefined ? conversation.lastMessageId : undefined;
   // Capture a legacy client's best available fallback inside the standalone
   // queue, but only once so replica-set transaction retries cannot advance it.
   let legacyWatermark:
@@ -689,10 +697,24 @@ router.patch('/:conversationId/read', async (ctx: Context) => {
     unreadCount = 0;
 
     if (throughMessageId === undefined && legacyWatermark === undefined) {
+      const boundaryFilter = legacyBoundaryAt
+        ? legacyBoundaryId
+          ? {
+              $or: [
+                { createdAt: { $lt: legacyBoundaryAt } },
+                {
+                  createdAt: legacyBoundaryAt,
+                  _id: { $lte: legacyBoundaryId }
+                }
+              ]
+            }
+          : { createdAt: { $lte: legacyBoundaryAt } }
+        : { _id: { $exists: false } };
       const legacyWatermarkQuery = Message.findOne({
         conversationId: conversation._id,
         receiverId: userId,
-        status: { $in: ['sent', 'delivered'] }
+        status: { $in: ['sent', 'delivered'] },
+        ...boundaryFilter
       })
         .sort({ createdAt: -1, _id: -1 })
         .select('_id createdAt');

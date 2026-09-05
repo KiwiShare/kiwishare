@@ -935,6 +935,50 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     await blockedWatermarkWork;
     findMessageSpy.mockRestore();
 
+    let releasePartialSend!: () => void;
+    let signalPartialSend!: () => void;
+    const partialSendStarted = new Promise<void>((resolve) => {
+      signalPartialSend = resolve;
+    });
+    const partialSendMayFinish = new Promise<void>((resolve) => {
+      releasePartialSend = resolve;
+    });
+    const originalConversationUpdate =
+      Conversation.findByIdAndUpdate.bind(Conversation);
+    const conversationUpdateSpy = jest
+      .spyOn(Conversation, 'findByIdAndUpdate')
+      .mockImplementationOnce((async (...args: any[]) => {
+        signalPartialSend();
+        await partialSendMayFinish;
+        return (originalConversationUpdate as any)(...args);
+      }) as any);
+    try {
+      const partialSend = request(app.callback())
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ text: 'Completed after the legacy read request began.' })
+        .then((response) => response);
+      await partialSendStarted;
+      const overlappingLegacyRead = request(app.callback())
+        .patch(`/api/conversations/${conversationId}/read`)
+        .set('Authorization', `Bearer ${seller.body.token}`)
+        .then((response) => response);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      releasePartialSend();
+      const [sentAfterBoundary, boundedLegacyRead] = await Promise.all([
+        partialSend,
+        overlappingLegacyRead
+      ]);
+      expect(sentAfterBoundary.status).toBe(201);
+      expect(boundedLegacyRead.status).toBe(200);
+      expect(
+        (await Message.findById(sentAfterBoundary.body.message.id))?.status
+      ).toBe('sent');
+    } finally {
+      releasePartialSend();
+      conversationUpdateSpy.mockRestore();
+    }
+
     let releaseRemovalBlocker!: () => void;
     let signalRemovalBlocker!: () => void;
     const removalBlockerStarted = new Promise<void>((resolve) => {

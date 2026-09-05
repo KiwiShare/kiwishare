@@ -8,6 +8,7 @@ export interface IConversation extends Document {
   status: 'active' | 'closed' | 'blocked';
   lastMessageText?: string;
   lastMessageAt?: Date;
+  lastMessageId?: mongoose.Types.ObjectId;
   lastMessageSenderId?: mongoose.Types.ObjectId;
   buyerUnreadCount: number;
   sellerUnreadCount: number;
@@ -25,6 +26,7 @@ const ConversationSchema = new Schema<IConversation>(
     status: { type: String, enum: ['active', 'closed', 'blocked'], default: 'active' },
     lastMessageText: { type: String },
     lastMessageAt: { type: Date, index: true },
+    lastMessageId: { type: Schema.Types.ObjectId, ref: 'Message' },
     lastMessageSenderId: { type: Schema.Types.ObjectId, ref: 'User' },
     buyerUnreadCount: { type: Number, default: 0 },
     sellerUnreadCount: { type: Number, default: 0 },

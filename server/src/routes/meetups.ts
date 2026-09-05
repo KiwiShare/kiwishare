@@ -258,9 +258,10 @@ router.post('/propose', async (ctx: Context) => {
       conversation._id,
       {
         $set: {
-          lastMessageText: `📅 Meetup proposed: ${formattedDate}`,
-          lastMessageAt: meetupMessage.createdAt,
-          lastMessageSenderId: userId
+            lastMessageText: `📅 Meetup proposed: ${formattedDate}`,
+            lastMessageAt: meetupMessage.createdAt,
+            lastMessageId: meetupMessage._id,
+            lastMessageSenderId: userId
         },
         $inc: isSeller ? { buyerUnreadCount: 1 } : { sellerUnreadCount: 1 },
         $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
@@ -359,7 +360,7 @@ router.post('/:orderId/accept', async (ctx: Context) => {
   });
 
   if (conversation) {
-    await Message.create({
+    const confirmationMessage = await Message.create({
       conversationId: conversation._id,
       senderId: userId,
       receiverId: new mongoose.Types.ObjectId(counterpartyId),
@@ -380,7 +381,8 @@ router.post('/:orderId/accept', async (ctx: Context) => {
     await Conversation.findByIdAndUpdate(conversation._id, {
       $set: {
         lastMessageText: `✅ Meetup confirmed: ${formattedDate}`,
-        lastMessageAt: new Date(),
+        lastMessageAt: confirmationMessage.createdAt,
+        lastMessageId: confirmationMessage._id,
         lastMessageSenderId: userId
       }
     });
