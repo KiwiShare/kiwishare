@@ -18,7 +18,10 @@ void main() {
 
       expect(repository.readTokens, ['fresh-login-token', 'fresh-login-token']);
 
-      await provider.addToWatchlist('item-1');
+      expect(
+        await provider.addToWatchlist('item-1'),
+        WatchlistMutationResult.added,
+      );
       expect(repository.writeTokens, ['fresh-login-token']);
     },
   );
@@ -69,7 +72,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       repository.completeOldAdd(false);
-      await oldAdd;
+      expect(await oldAdd, WatchlistMutationResult.superseded);
 
       expect(provider.watchedItemIds, {'shared-item'});
     },
@@ -104,11 +107,65 @@ void main() {
     );
 
     final loading = provider.loadWatchlist();
-    await provider.addToWatchlist('new-item');
+    expect(
+      await provider.addToWatchlist('new-item'),
+      WatchlistMutationResult.added,
+    );
     repository.completeLoad();
     await loading;
 
     expect(provider.watchedItemIds, {'new-item'});
+  });
+
+  test(
+    'failed add reports failure after rolling back optimistic state',
+    () async {
+      final provider = WatchlistProvider(
+        repository: _FailedAddWatchlistRepository(),
+        initialToken: 'valid-token',
+      );
+
+      expect(
+        await provider.addToWatchlist('new-item'),
+        WatchlistMutationResult.failed,
+      );
+      expect(provider.isWatched('new-item'), isFalse);
+    },
+  );
+
+  test('already watched add reports unchanged without another write', () async {
+    final repository = _RecordingWatchlistRepository();
+    final provider = WatchlistProvider(
+      repository: repository,
+      initialToken: 'valid-token',
+      initialWatchedIds: {'existing-item'},
+    );
+
+    expect(
+      await provider.addToWatchlist('existing-item'),
+      WatchlistMutationResult.unchanged,
+    );
+    expect(repository.writeTokens, isEmpty);
+  });
+
+  test('rapid removal supersedes an unresolved successful add', () async {
+    final repository = _RapidToggleWatchlistRepository();
+    final provider = WatchlistProvider(
+      repository: repository,
+      initialToken: 'valid-token',
+    );
+
+    final adding = provider.addToWatchlist('shared-item');
+    expect(provider.isWatched('shared-item'), isTrue);
+    final removing = provider.removeFromWatchlist('shared-item');
+    expect(provider.isWatched('shared-item'), isFalse);
+
+    repository.addCompleter.complete(true);
+    repository.removeCompleter.complete(true);
+
+    expect(await adding, WatchlistMutationResult.superseded);
+    expect(await removing, WatchlistMutationResult.removed);
+    expect(provider.isWatched('shared-item'), isFalse);
   });
 
   test('stale load cannot restore a successful same-session removal', () async {
@@ -286,4 +343,22 @@ class _ConcurrentLoadWatchlistRepository implements WatchlistRepository {
 
   @override
   Future<bool> isWatched(String itemId, {String? token}) async => false;
+}
+
+class _FailedAddWatchlistRepository extends TestWatchlistRepository {
+  @override
+  Future<bool> addToWatchlist(String itemId, {String? token}) async => false;
+}
+
+class _RapidToggleWatchlistRepository extends TestWatchlistRepository {
+  final addCompleter = Completer<bool>();
+  final removeCompleter = Completer<bool>();
+
+  @override
+  Future<bool> addToWatchlist(String itemId, {String? token}) =>
+      addCompleter.future;
+
+  @override
+  Future<bool> removeFromWatchlist(String itemId, {String? token}) =>
+      removeCompleter.future;
 }

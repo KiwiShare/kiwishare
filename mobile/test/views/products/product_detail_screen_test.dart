@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/models/discovery_options_model.dart';
@@ -7,6 +9,8 @@ import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/providers/watchlist_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/repositories/watchlist_repository.dart';
+import 'package:kiwishare/services/notification_permission_coordinator.dart';
+import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +30,7 @@ Widget _productDetailApp({
   ValueChanged<ChatConversationModel>? onConversationOpened,
   VoidCallback? onSignInRequired,
   ValueChanged<ItemModel>? onSimilarItemTap,
+  NotificationPermissionCoordinator? permissionCoordinator,
   double textScale = 1,
 }) {
   return MultiProvider(
@@ -54,6 +59,7 @@ Widget _productDetailApp({
         onConversationOpened: onConversationOpened,
         onSignInRequired: onSignInRequired,
         onSimilarItemTap: onSimilarItemTap,
+        permissionCoordinator: permissionCoordinator,
       ),
     ),
   );
@@ -82,10 +88,23 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final repo = TestWatchlistRepository();
-    final provider = WatchlistProvider(repository: repo);
+    final provider = WatchlistProvider(
+      repository: repo,
+      initialToken: 'buyer-token',
+    );
+    final permissionController = _FakePermissionController()
+      ..status = PushPermissionStatus.denied;
 
     await tester.pumpWidget(
-      _productDetailApp(item: _detailItem, watchlistProvider: provider),
+      _productDetailApp(
+        item: _detailItem,
+        watchlistProvider: provider,
+        authToken: 'buyer-token',
+        permissionCoordinator: NotificationPermissionCoordinator(
+          permissionController: permissionController,
+          storage: _MemoryPermissionStorage(),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -106,6 +125,7 @@ void main() {
       provider.watchlistItems.any((i) => i.id == '64f000000000000000000001'),
       isTrue,
     );
+    expect(permissionController.statusCalls, 1);
 
     // 4. Tap AppBar bookmark button to unwatch
     await tester.tap(find.byKey(const Key('detail-favorite-button')));
@@ -114,7 +134,142 @@ void main() {
     // 5. Status changes back to "Watch Item"
     expect(find.text('Watch Item'), findsOneWidget);
     expect(provider.isWatched('64f000000000000000000001'), isFalse);
+    expect(permissionController.statusCalls, 1);
   });
+
+  testWidgets('failed Watchlist add does not offer notification permission', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final permissionController = _FakePermissionController();
+    final provider = WatchlistProvider(
+      repository: _ResultWatchlistRepository(addResult: false),
+      initialToken: 'buyer-token',
+    );
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: _detailItem,
+        watchlistProvider: provider,
+        authToken: 'buyer-token',
+        permissionCoordinator: NotificationPermissionCoordinator(
+          permissionController: permissionController,
+          storage: _MemoryPermissionStorage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('detail-watch-action-button')));
+    await tester.pumpAndSettle();
+
+    expect(provider.isWatched(_detailItem.id), isFalse);
+    expect(permissionController.statusCalls, 0);
+  });
+
+  testWidgets('unauthenticated Watchlist add does not offer permission', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final permissionController = _FakePermissionController();
+    final provider = WatchlistProvider(repository: TestWatchlistRepository());
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: _detailItem,
+        watchlistProvider: provider,
+        authToken: '',
+        permissionCoordinator: NotificationPermissionCoordinator(
+          permissionController: permissionController,
+          storage: _MemoryPermissionStorage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('detail-watch-action-button')));
+    await tester.pumpAndSettle();
+
+    expect(permissionController.statusCalls, 0);
+  });
+
+  testWidgets(
+    'route disposal during Watchlist add does not show permission UI',
+    (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository = _DelayedAddWatchlistRepository();
+      final permissionController = _FakePermissionController();
+      final provider = WatchlistProvider(
+        repository: repository,
+        initialToken: 'buyer-token',
+      );
+
+      await tester.pumpWidget(
+        _productDetailApp(
+          item: _detailItem,
+          watchlistProvider: provider,
+          authToken: 'buyer-token',
+          permissionCoordinator: NotificationPermissionCoordinator(
+            permissionController: permissionController,
+            storage: _MemoryPermissionStorage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('detail-watch-action-button')));
+      await tester.pump();
+      await tester.pumpWidget(const MaterialApp(home: Text('Different route')));
+      repository.addCompleter.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(permissionController.statusCalls, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'permission failure does not roll back a successful Watchlist add',
+    (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final permissionController = _FakePermissionController()
+        ..failRequest = true;
+      final provider = WatchlistProvider(
+        repository: TestWatchlistRepository(),
+        initialToken: 'buyer-token',
+      );
+
+      await tester.pumpWidget(
+        _productDetailApp(
+          item: _detailItem,
+          watchlistProvider: provider,
+          authToken: 'buyer-token',
+          permissionCoordinator: NotificationPermissionCoordinator(
+            permissionController: permissionController,
+            storage: _MemoryPermissionStorage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('detail-watch-action-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('notification-rationale-enable')));
+      await tester.pumpAndSettle();
+
+      expect(provider.isWatched(_detailItem.id), isTrue);
+      expect(find.text('Watching'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('ProductDetailScreen renders unavailable view for null item', (
     tester,
@@ -465,6 +620,68 @@ void main() {
       expect(tappedItem!.title, 'Tent - 2 Person');
     },
   );
+}
+
+class _FakePermissionController implements PushPermissionController {
+  @override
+  int? activeSessionGeneration = 1;
+  @override
+  String? activeUserId = 'buyer-1';
+  PushPermissionStatus status = PushPermissionStatus.notDetermined;
+  bool failRequest = false;
+  int statusCalls = 0;
+
+  @override
+  Future<PushPermissionStatus> getPermissionStatus() async {
+    statusCalls += 1;
+    return status;
+  }
+
+  @override
+  Future<PushPermissionStatus> requestPermissionAndSync({
+    int? expectedSessionGeneration,
+    String? expectedUserId,
+  }) async {
+    if (failRequest) throw StateError('permission failed');
+    return PushPermissionStatus.authorized;
+  }
+
+  @override
+  Future<PushPermissionStatus> synchronizeIfAuthorized({
+    int? expectedSessionGeneration,
+    String? expectedUserId,
+  }) async => status;
+}
+
+class _MemoryPermissionStorage implements NotificationPermissionStorage {
+  int? nextEligibleAtMs;
+
+  @override
+  Future<int?> getNextEligibleAtMs() async => nextEligibleAtMs;
+
+  @override
+  Future<void> setNextEligibleAtMs(int value) async => nextEligibleAtMs = value;
+
+  @override
+  Future<void> removeObsoleteDismissal() async {}
+}
+
+class _ResultWatchlistRepository extends TestWatchlistRepository {
+  _ResultWatchlistRepository({required this.addResult});
+
+  final bool addResult;
+
+  @override
+  Future<bool> addToWatchlist(String itemId, {String? token}) async =>
+      addResult;
+}
+
+class _DelayedAddWatchlistRepository extends TestWatchlistRepository {
+  final addCompleter = Completer<bool>();
+
+  @override
+  Future<bool> addToWatchlist(String itemId, {String? token}) =>
+      addCompleter.future;
 }
 
 class _FailingItemRepository implements ItemRepository {

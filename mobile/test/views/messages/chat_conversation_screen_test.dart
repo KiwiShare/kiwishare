@@ -14,7 +14,10 @@ import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/services/chat_photo_upload_service.dart';
 import 'package:kiwishare/services/chat_voice_service.dart';
 import 'package:kiwishare/services/listing_image_picker.dart';
+import 'package:kiwishare/services/notification_permission_coordinator.dart';
+import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/views/messages/chat_conversation_screen.dart';
+import 'package:kiwishare/widgets/notification_permission_dialog.dart';
 
 import '../../support/fake_chat_photo_uploader.dart';
 import '../../support/fake_chat_repository.dart';
@@ -29,6 +32,7 @@ Widget _buildSubject({
   ListingImagePicker? imagePicker,
   ChatVoiceUploader? voiceUploader,
   ChatVoiceRecorder? voiceRecorder,
+  NotificationPermissionCoordinator? permissionCoordinator,
 }) {
   final value = conversation ?? testConversation();
   return MaterialApp(
@@ -49,6 +53,7 @@ Widget _buildSubject({
         authToken: authToken,
         imagePicker: imagePicker,
         voiceRecorder: voiceRecorder,
+        permissionCoordinator: permissionCoordinator,
       ),
     ),
   );
@@ -541,17 +546,210 @@ void main() {
     },
   );
 
+  testWidgets(
+    'persists a text message before offering permission and decline is independent',
+    (tester) async {
+      final repository = FakeChatRepository();
+      final permissionController = _FakePermissionController();
+      final coordinator = NotificationPermissionCoordinator(
+        permissionController: permissionController,
+        storage: _MemoryPermissionStorage(),
+      );
+      await tester.pumpWidget(
+        _buildSubject(
+          repository: repository,
+          permissionCoordinator: coordinator,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('chat_message_input')),
+        'Persist before permission',
+      );
+      await tester.tap(find.byKey(const Key('chat_send_button')));
+      await tester.pumpAndSettle();
+
+      expect(repository.sentTexts, ['Persist before permission']);
+      expect(find.text('Persist before permission'), findsOneWidget);
+      expect(
+        find.byKey(NotificationPermissionDialogKeys.dialog),
+        findsOneWidget,
+      );
+      expect(permissionController.requestCalls, 0);
+
+      await tester.tap(find.byKey(NotificationPermissionDialogKeys.dismiss));
+      await tester.pumpAndSettle();
+
+      expect(repository.sentTexts, ['Persist before permission']);
+      expect(find.text('Persist before permission'), findsOneWidget);
+      expect(permissionController.requestCalls, 0);
+    },
+  );
+
+  testWidgets(
+    'permission failure cannot turn a successful message into failure',
+    (tester) async {
+      final repository = FakeChatRepository();
+      final permissionController = _FakePermissionController()
+        ..failRequest = true;
+      final coordinator = NotificationPermissionCoordinator(
+        permissionController: permissionController,
+        storage: _MemoryPermissionStorage(),
+      );
+      await tester.pumpWidget(
+        _buildSubject(
+          repository: repository,
+          permissionCoordinator: coordinator,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('chat_message_input')),
+        'Permission is best effort',
+      );
+      await tester.tap(find.byKey(const Key('chat_send_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(NotificationPermissionDialogKeys.enable));
+      await tester.pumpAndSettle();
+
+      expect(repository.sentTexts, ['Permission is best effort']);
+      expect(find.text('Permission is best effort'), findsOneWidget);
+      expect(find.byKey(const Key('conversation_inline_error')), findsNothing);
+      expect(permissionController.requestCalls, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('failed message send never offers notification permission', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository()
+      ..sendError = const ChatRepositoryException('Message send failed.');
+    final permissionController = _FakePermissionController();
+    final coordinator = NotificationPermissionCoordinator(
+      permissionController: permissionController,
+      storage: _MemoryPermissionStorage(),
+    );
+    await tester.pumpWidget(
+      _buildSubject(repository: repository, permissionCoordinator: coordinator),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('chat_message_input')),
+      'This does not persist',
+    );
+    await tester.tap(find.byKey(const Key('chat_send_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('conversation_inline_error')), findsOneWidget);
+    expect(find.byKey(NotificationPermissionDialogKeys.dialog), findsNothing);
+    expect(permissionController.statusCalls, 0);
+    expect(permissionController.requestCalls, 0);
+  });
+
+  testWidgets('rapid text sends create only one contextual rationale', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final permissionController = _FakePermissionController();
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        permissionCoordinator: NotificationPermissionCoordinator(
+          permissionController: permissionController,
+          storage: _MemoryPermissionStorage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('chat_message_input')), 'Once');
+
+    await tester.tap(find.byKey(const Key('chat_send_button')));
+    await tester.tap(find.byKey(const Key('chat_send_button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.sendCalls, 1);
+    expect(find.byKey(NotificationPermissionDialogKeys.dialog), findsOneWidget);
+    expect(permissionController.statusCalls, 1);
+  });
+
+  testWidgets('route disposal while permission status is pending is safe', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final status = Completer<PushPermissionStatus>();
+    final permissionController = _FakePermissionController()
+      ..statusCompleter = status;
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        permissionCoordinator: NotificationPermissionCoordinator(
+          permissionController: permissionController,
+          storage: _MemoryPermissionStorage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('chat_message_input')),
+      'Persist then leave',
+    );
+    await tester.tap(find.byKey(const Key('chat_send_button')));
+    await tester.pump();
+    await tester.pumpWidget(const MaterialApp(home: Text('Different route')));
+    status.complete(PushPermissionStatus.notDetermined);
+    await tester.pumpAndSettle();
+
+    expect(repository.sentTexts, ['Persist then leave']);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('successful location send is rendered before permission lookup', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final permissionController = _FakePermissionController()
+      ..status = PushPermissionStatus.denied;
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        permissionCoordinator: NotificationPermissionCoordinator(
+          permissionController: permissionController,
+          storage: _MemoryPermissionStorage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_share_location_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('UoA General Library (5 Alfred St)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('UoA General Library (5 Alfred St)'), findsOneWidget);
+    expect(permissionController.statusCalls, 1);
+  });
+
   testWidgets('chooses, uploads, sends, and renders a gallery photo', (
     tester,
   ) async {
     final repository = FakeChatRepository();
     final uploader = FakeChatPhotoUploader();
     final picker = _FakeChatImagePicker();
+    final permissionController = _FakePermissionController()
+      ..status = PushPermissionStatus.denied;
     await tester.pumpWidget(
       _buildSubject(
         repository: repository,
         photoUploader: uploader,
         imagePicker: picker,
+        permissionCoordinator: NotificationPermissionCoordinator(
+          permissionController: permissionController,
+          storage: _MemoryPermissionStorage(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -568,6 +766,7 @@ void main() {
     expect(uploader.uploadedContentType, 'image/png');
     expect(repository.sentImageUrls, [uploader.url]);
     expect(find.byKey(const Key('chat_message_image_sent-1')), findsOneWidget);
+    expect(permissionController.statusCalls, 1);
   });
 
   testWidgets('recovers and sends a photo after Android recreates the screen', (
@@ -584,12 +783,17 @@ void main() {
         ),
       ],
     );
+    final permissionController = _FakePermissionController();
 
     await tester.pumpWidget(
       _buildSubject(
         repository: repository,
         photoUploader: uploader,
         imagePicker: picker,
+        permissionCoordinator: NotificationPermissionCoordinator(
+          permissionController: permissionController,
+          storage: _MemoryPermissionStorage(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -599,6 +803,7 @@ void main() {
     expect(uploader.uploadedFileName, endsWith('.jpg'));
     expect(uploader.uploadedBytes, Uint8List.fromList([4, 5, 6]));
     expect(repository.sentImageUrls, [uploader.url]);
+    expect(permissionController.statusCalls, 0);
   });
 
   testWidgets('records, uploads, sends, and renders a voice message', (
@@ -607,11 +812,17 @@ void main() {
     final repository = FakeChatRepository();
     final uploader = FakeChatVoiceUploader();
     final recorder = FakeChatVoiceRecorder();
+    final permissionController = _FakePermissionController()
+      ..status = PushPermissionStatus.denied;
     await tester.pumpWidget(
       _buildSubject(
         repository: repository,
         voiceUploader: uploader,
         voiceRecorder: recorder,
+        permissionCoordinator: NotificationPermissionCoordinator(
+          permissionController: permissionController,
+          storage: _MemoryPermissionStorage(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -629,6 +840,7 @@ void main() {
     expect(repository.sentAudioUrls, [uploader.url]);
     expect(find.byKey(const Key('chat_voice_play_sent-1')), findsOneWidget);
     expect(find.text('0:04'), findsOneWidget);
+    expect(permissionController.statusCalls, 1);
   });
 
   testWidgets('cancels a recording without uploading a message', (
@@ -915,6 +1127,53 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('conversation_message_list')), findsOneWidget);
   });
+}
+
+class _FakePermissionController implements PushPermissionController {
+  @override
+  int? activeSessionGeneration = 1;
+  @override
+  String? activeUserId = 'user-1';
+  PushPermissionStatus status = PushPermissionStatus.notDetermined;
+  bool failRequest = false;
+  Completer<PushPermissionStatus>? statusCompleter;
+  int statusCalls = 0;
+  int requestCalls = 0;
+
+  @override
+  Future<PushPermissionStatus> getPermissionStatus() async {
+    statusCalls += 1;
+    return statusCompleter?.future ?? status;
+  }
+
+  @override
+  Future<PushPermissionStatus> requestPermissionAndSync({
+    int? expectedSessionGeneration,
+    String? expectedUserId,
+  }) async {
+    requestCalls += 1;
+    if (failRequest) throw StateError('Native permission unavailable');
+    return PushPermissionStatus.authorized;
+  }
+
+  @override
+  Future<PushPermissionStatus> synchronizeIfAuthorized({
+    int? expectedSessionGeneration,
+    String? expectedUserId,
+  }) async => status;
+}
+
+class _MemoryPermissionStorage implements NotificationPermissionStorage {
+  int? nextEligibleAtMs;
+
+  @override
+  Future<int?> getNextEligibleAtMs() async => nextEligibleAtMs;
+
+  @override
+  Future<void> setNextEligibleAtMs(int value) async => nextEligibleAtMs = value;
+
+  @override
+  Future<void> removeObsoleteDismissal() async {}
 }
 
 class _FakeChatImagePicker implements ListingImagePicker {

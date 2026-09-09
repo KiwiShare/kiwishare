@@ -5,7 +5,13 @@ import 'package:flutter/foundation.dart';
 
 import '../repositories/push_device_repository.dart';
 
-enum PushPermissionStatus { authorized, denied, provisional, unavailable }
+enum PushPermissionStatus {
+  authorized,
+  denied,
+  provisional,
+  notDetermined,
+  unavailable,
+}
 
 class PushEnvelope {
   const PushEnvelope({required this.data, this.title, this.body});
@@ -160,6 +166,7 @@ class MeetupPushMessage {
 /// Firebase Messaging boundary. Tests implement this without initializing
 /// Firebase or constructing plugin-specific message/settings objects.
 abstract class PushMessagingClient {
+  Future<PushPermissionStatus> getPermissionStatus();
   Future<PushPermissionStatus> requestPermission();
   Future<String?> getToken();
   Future<PushEnvelope?> getInitialMessage();
@@ -180,19 +187,38 @@ class FirebasePushMessagingClient implements PushMessagingClient {
     body: message.notification?.body,
   );
 
+  static PushPermissionStatus _mapStatus(AuthorizationStatus status) =>
+      switch (status) {
+        AuthorizationStatus.authorized => PushPermissionStatus.authorized,
+        AuthorizationStatus.provisional => PushPermissionStatus.provisional,
+        AuthorizationStatus.denied => PushPermissionStatus.denied,
+        AuthorizationStatus.notDetermined => PushPermissionStatus.notDetermined,
+      };
+
+  @override
+  Future<PushPermissionStatus> getPermissionStatus() async {
+    try {
+      final settings = await _messaging.getNotificationSettings();
+      return _mapStatus(settings.authorizationStatus);
+    } catch (error) {
+      debugPrint('Push permission status lookup failed: $error');
+      return PushPermissionStatus.unavailable;
+    }
+  }
+
   @override
   Future<PushPermissionStatus> requestPermission() async {
-    final settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-    return switch (settings.authorizationStatus) {
-      AuthorizationStatus.authorized => PushPermissionStatus.authorized,
-      AuthorizationStatus.provisional => PushPermissionStatus.provisional,
-      AuthorizationStatus.denied => PushPermissionStatus.denied,
-      AuthorizationStatus.notDetermined => PushPermissionStatus.unavailable,
-    };
+    try {
+      final settings = await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      return _mapStatus(settings.authorizationStatus);
+    } catch (error) {
+      debugPrint('Push permission request failed: $error');
+      return PushPermissionStatus.unavailable;
+    }
   }
 
   @override
@@ -221,7 +247,22 @@ abstract class PushNotificationSession {
   Future<void> deactivate(String jwtToken);
 }
 
-class PushNotificationService implements PushNotificationSession {
+abstract interface class PushPermissionController {
+  int? get activeSessionGeneration;
+  String? get activeUserId;
+  Future<PushPermissionStatus> getPermissionStatus();
+  Future<PushPermissionStatus> requestPermissionAndSync({
+    int? expectedSessionGeneration,
+    String? expectedUserId,
+  });
+  Future<PushPermissionStatus> synchronizeIfAuthorized({
+    int? expectedSessionGeneration,
+    String? expectedUserId,
+  });
+}
+
+class PushNotificationService
+    implements PushNotificationSession, PushPermissionController {
   PushNotificationService({
     required this.messagingClient,
     required this.deviceRepository,
@@ -256,11 +297,16 @@ class PushNotificationService implements PushNotificationSession {
   foregroundMeetupMessageHandler;
 
   String? _currentToken;
+  int? _currentTokenGeneration;
   String? _currentJwt;
   String? _currentUserId;
   final Set<String> _registeredSessionTokens = <String>{};
   Future<void> _tokenOperations = Future<void>.value();
+  Future<PushPermissionStatus>? _permissionRequest;
+  int? _permissionRequestGeneration;
+  String? _permissionRequestUserId;
   int _sessionGeneration = 0;
+  bool _tokenRegistrationAllowed = false;
   bool _initialized = false;
   PushEnvelope? _pendingInitialMessage;
   StreamSubscription<String>? _tokenSubscription;
@@ -303,22 +349,25 @@ class PushNotificationService implements PushNotificationSession {
     final generation = ++_sessionGeneration;
     _currentJwt = jwtToken;
     _currentUserId = userId?.trim();
+    final sessionUserId = _currentUserId;
+    _tokenRegistrationAllowed = false;
 
     final pending = _pendingInitialMessage;
     _pendingInitialMessage = null;
     if (pending != null) _handleNotificationTap(pending);
 
     try {
-      final permission = await messagingClient.requestPermission();
+      final permission = await messagingClient.getPermissionStatus();
+      if (!_isCurrentSession(jwtToken, generation, sessionUserId)) return;
       if (permission != PushPermissionStatus.authorized &&
           permission != PushPermissionStatus.provisional) {
         return;
       }
-      if (!_isCurrentSession(jwtToken, generation)) return;
+      _tokenRegistrationAllowed = true;
       final token = (await messagingClient.getToken())?.trim();
       if (token != null && token.isNotEmpty) {
         await _queueTokenOperation(
-          () => _registerForSession(jwtToken, token, generation),
+          () => _registerForSession(jwtToken, token, generation, sessionUserId),
         );
       }
     } catch (error) {
@@ -326,8 +375,141 @@ class PushNotificationService implements PushNotificationSession {
     }
   }
 
-  bool _isCurrentSession(String jwtToken, int generation) =>
-      _currentJwt == jwtToken && _sessionGeneration == generation;
+  /// Contextual permission request and immediate token synchronization.
+  /// If granted (authorized or provisional), immediately synchronizes the token
+  /// for the current active session without requiring a re-login.
+  @override
+  Future<PushPermissionStatus> requestPermissionAndSync({
+    int? expectedSessionGeneration,
+    String? expectedUserId,
+  }) async {
+    if (!_matchesExpectedSession(expectedSessionGeneration, expectedUserId)) {
+      return PushPermissionStatus.unavailable;
+    }
+    final pendingRequest = _permissionRequest;
+    if (pendingRequest != null) {
+      final sameSession =
+          _permissionRequestGeneration == _sessionGeneration &&
+          _permissionRequestUserId == _currentUserId;
+      return sameSession ? pendingRequest : PushPermissionStatus.unavailable;
+    }
+
+    final request = _requestPermissionAndSyncForCurrentSession(
+      expectedSessionGeneration: expectedSessionGeneration,
+      expectedUserId: expectedUserId,
+    );
+    _permissionRequest = request;
+    _permissionRequestGeneration = _sessionGeneration;
+    _permissionRequestUserId = _currentUserId;
+    try {
+      return await request;
+    } finally {
+      if (identical(_permissionRequest, request)) {
+        _permissionRequest = null;
+        _permissionRequestGeneration = null;
+        _permissionRequestUserId = null;
+      }
+    }
+  }
+
+  @override
+  Future<PushPermissionStatus> getPermissionStatus() =>
+      messagingClient.getPermissionStatus();
+
+  @override
+  int? get activeSessionGeneration =>
+      _currentJwt == null ? null : _sessionGeneration;
+
+  @override
+  String? get activeUserId => _currentJwt == null ? null : _currentUserId;
+
+  @override
+  Future<PushPermissionStatus> synchronizeIfAuthorized({
+    int? expectedSessionGeneration,
+    String? expectedUserId,
+  }) async {
+    if (!_matchesExpectedSession(expectedSessionGeneration, expectedUserId)) {
+      return PushPermissionStatus.unavailable;
+    }
+    final jwtToken = _currentJwt;
+    if (jwtToken == null) return PushPermissionStatus.unavailable;
+    final generation = _sessionGeneration;
+    final userId = _currentUserId;
+    try {
+      final permission = await messagingClient.getPermissionStatus();
+      if (!_isCurrentSession(jwtToken, generation, userId)) {
+        return PushPermissionStatus.unavailable;
+      }
+      if (permission != PushPermissionStatus.authorized &&
+          permission != PushPermissionStatus.provisional) {
+        return permission;
+      }
+      _tokenRegistrationAllowed = true;
+      final token = (await messagingClient.getToken())?.trim();
+      if (token != null && token.isNotEmpty) {
+        await _queueTokenOperation(
+          () => _registerForSession(jwtToken, token, generation, userId),
+        );
+      }
+      return _isCurrentSession(jwtToken, generation, userId)
+          ? permission
+          : PushPermissionStatus.unavailable;
+    } catch (error) {
+      debugPrint('Push permission/token synchronization failed: $error');
+      return PushPermissionStatus.unavailable;
+    }
+  }
+
+  Future<PushPermissionStatus> _requestPermissionAndSyncForCurrentSession({
+    int? expectedSessionGeneration,
+    String? expectedUserId,
+  }) async {
+    final jwtToken = _currentJwt;
+    final generation = _sessionGeneration;
+    final userId = _currentUserId;
+    if (jwtToken == null ||
+        (expectedSessionGeneration != null &&
+            generation != expectedSessionGeneration) ||
+        (expectedUserId != null && userId != expectedUserId)) {
+      return PushPermissionStatus.unavailable;
+    }
+
+    try {
+      final permission = await messagingClient.requestPermission();
+      if (permission != PushPermissionStatus.authorized &&
+          permission != PushPermissionStatus.provisional) {
+        return permission;
+      }
+      if (!_isCurrentSession(jwtToken, generation, userId)) {
+        return PushPermissionStatus.unavailable;
+      }
+
+      _tokenRegistrationAllowed = true;
+      final token = (await messagingClient.getToken())?.trim();
+      if (token != null &&
+          token.isNotEmpty &&
+          _isCurrentSession(jwtToken, generation, userId)) {
+        await _queueTokenOperation(
+          () => _registerForSession(jwtToken, token, generation, userId),
+        );
+      }
+      return _isCurrentSession(jwtToken, generation, userId)
+          ? permission
+          : PushPermissionStatus.unavailable;
+    } catch (error) {
+      debugPrint('Push permission/token synchronization failed: $error');
+      return PushPermissionStatus.unavailable;
+    }
+  }
+
+  bool _matchesExpectedSession(int? generation, String? userId) =>
+      (generation == null || generation == activeSessionGeneration) &&
+      (userId == null || userId == activeUserId);
+
+  bool _isCurrentSession(String jwtToken, int generation, String? userId) =>
+      _currentJwt == jwtToken &&
+      _sessionGeneration == generation &&
+      _currentUserId == userId;
 
   Future<void> _queueTokenOperation(Future<void> Function() operation) {
     final result = _tokenOperations.then((_) => operation());
@@ -342,13 +524,20 @@ class PushNotificationService implements PushNotificationSession {
     String jwtToken,
     String token,
     int generation,
+    String? userId,
   ) async {
+    if (_isCurrentSession(jwtToken, generation, userId) &&
+        _currentToken == token &&
+        _currentTokenGeneration == generation &&
+        _registeredSessionTokens.contains(token)) {
+      return;
+    }
     await deviceRepository.registerToken(
       token: token,
       platform: platform,
       jwtToken: jwtToken,
     );
-    if (!_isCurrentSession(jwtToken, generation)) {
+    if (!_isCurrentSession(jwtToken, generation, userId)) {
       if (_currentJwt != jwtToken) {
         try {
           await deviceRepository.unregisterToken(
@@ -364,6 +553,7 @@ class PushNotificationService implements PushNotificationSession {
 
     final previousToken = _currentToken;
     _currentToken = token;
+    _currentTokenGeneration = generation;
     _registeredSessionTokens.add(token);
 
     if (previousToken != null && previousToken != token) {
@@ -383,11 +573,12 @@ class PushNotificationService implements PushNotificationSession {
   void _handleTokenRefresh(String newToken) {
     final jwtToken = _currentJwt;
     final token = newToken.trim();
-    if (jwtToken == null || token.isEmpty) return;
+    if (jwtToken == null || token.isEmpty || !_tokenRegistrationAllowed) return;
     final generation = _sessionGeneration;
+    final userId = _currentUserId;
     unawaited(
       _queueTokenOperation(
-        () => _registerForSession(jwtToken, token, generation),
+        () => _registerForSession(jwtToken, token, generation, userId),
       ).catchError((error) {
         debugPrint('Refreshed push token synchronization failed: $error');
       }),
@@ -437,6 +628,8 @@ class PushNotificationService implements PushNotificationSession {
     _currentJwt = null;
     _currentUserId = null;
     _currentToken = null;
+    _currentTokenGeneration = null;
+    _tokenRegistrationAllowed = false;
 
     // Let registrations already in flight observe the ended session and
     // perform their late-registration cleanup before taking the final snapshot.

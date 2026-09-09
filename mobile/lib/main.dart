@@ -34,6 +34,7 @@ import 'repositories/push_device_repository.dart';
 import 'services/remote_config_service.dart';
 import 'services/firebase_runtime_configuration.dart';
 import 'services/push_notification_service.dart';
+import 'services/notification_permission_coordinator.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
@@ -187,9 +188,17 @@ void main() async {
     );
     unawaited(pushNotifications.initialize());
   }
+
+  final notificationCoordinator = NotificationPermissionCoordinator(
+    permissionController: pushNotifications,
+  );
+
   runApp(
     MultiProvider(
       providers: [
+        Provider<NotificationPermissionCoordinator>.value(
+          value: notificationCoordinator,
+        ),
         ChangeNotifierProvider(
           create: (_) => AuthProvider(
             userRepository: RestUserRepository(),

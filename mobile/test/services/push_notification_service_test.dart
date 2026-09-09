@@ -99,7 +99,7 @@ void main() {
     });
 
     test(
-      'authorized and provisional permissions synchronize initial token',
+      'authorized and provisional permissions synchronize initial token silently',
       () async {
         for (final permission in [
           PushPermissionStatus.authorized,
@@ -112,19 +112,196 @@ void main() {
         expect(repository.registrations, hasLength(2));
         expect(repository.registrations.last.platform, 'android');
         expect(repository.registrations.last.token, 'initial-token-1234567890');
+        expect(messaging.getPermissionStatusCalls, 2);
+        expect(messaging.requestPermissionCalls, 0);
+      },
+    );
+
+    test('token refresh stays silent before permission is granted', () async {
+      messaging.permission = PushPermissionStatus.notDetermined;
+      await service.activate('jwt-user');
+
+      messaging.tokenRefresh.add('refresh-before-permission-1234567890');
+      await _drainEvents();
+      await service.waitForPendingTokenOperations();
+
+      expect(repository.registrations, isEmpty);
+      expect(messaging.requestPermissionCalls, 0);
+    });
+
+    test(
+      'denied, notDetermined, and unavailable permissions do not request or register token',
+      () async {
+        messaging.permission = PushPermissionStatus.denied;
+        await service.activate('jwt-denied');
+        messaging.permission = PushPermissionStatus.notDetermined;
+        await service.activate('jwt-notDetermined');
+        messaging.permission = PushPermissionStatus.unavailable;
+        await service.activate('jwt-unavailable');
+
+        expect(messaging.requestPermissionCalls, 0);
+        expect(messaging.getTokenCalls, 0);
+        expect(repository.registrations, isEmpty);
       },
     );
 
     test(
-      'denied and unavailable permissions do not request or register token',
+      'requestPermissionAndSync requests native permission and synchronizes token when granted',
+      () async {
+        messaging.permission = PushPermissionStatus.notDetermined;
+        await service.activate('jwt-user');
+        messaging.permission = PushPermissionStatus.authorized;
+        repository.registrations.clear();
+        messaging.requestPermissionCalls = 0;
+
+        final status = await service.requestPermissionAndSync();
+        expect(status, PushPermissionStatus.authorized);
+        expect(messaging.requestPermissionCalls, 1);
+        expect(repository.registrations, hasLength(1));
+        expect(
+          repository.registrations.first.token,
+          'initial-token-1234567890',
+        );
+      },
+    );
+
+    test(
+      'requestPermissionAndSync returns denied and does not register token when permission is denied',
       () async {
         messaging.permission = PushPermissionStatus.denied;
-        await service.activate('jwt-denied');
-        messaging.permission = PushPermissionStatus.unavailable;
-        await service.activate('jwt-unavailable');
+        await service.activate('jwt-user');
+        repository.registrations.clear();
+        messaging.requestPermissionCalls = 0;
 
-        expect(messaging.getTokenCalls, 0);
+        final status = await service.requestPermissionAndSync();
+        expect(status, PushPermissionStatus.denied);
+        expect(messaging.requestPermissionCalls, 1);
         expect(repository.registrations, isEmpty);
+      },
+    );
+
+    test(
+      'concurrent permission requests invoke the native prompt once',
+      () async {
+        messaging.permission = PushPermissionStatus.notDetermined;
+        await service.activate('jwt-user', userId: 'user-1');
+        final nativeResult = Completer<PushPermissionStatus>();
+        messaging.requestPermissionCompleter = nativeResult;
+
+        final first = service.requestPermissionAndSync();
+        final second = service.requestPermissionAndSync();
+        await _drainEvents();
+        expect(messaging.requestPermissionCalls, 1);
+
+        nativeResult.complete(PushPermissionStatus.authorized);
+        expect(await first, PushPermissionStatus.authorized);
+        expect(await second, PushPermissionStatus.authorized);
+        expect(repository.registrations, hasLength(1));
+      },
+    );
+
+    test(
+      'permission result completing after logout cannot register the stale session',
+      () async {
+        messaging.permission = PushPermissionStatus.notDetermined;
+        await service.activate('jwt-user-a', userId: 'user-a');
+        final nativeResult = Completer<PushPermissionStatus>();
+        messaging.requestPermissionCompleter = nativeResult;
+
+        final permission = service.requestPermissionAndSync();
+        await _drainEvents();
+        await service.deactivate('jwt-user-a');
+        nativeResult.complete(PushPermissionStatus.authorized);
+
+        expect(await permission, PushPermissionStatus.unavailable);
+        expect(repository.registrations, isEmpty);
+      },
+    );
+
+    test(
+      'permission result completing after account switch cannot register either account',
+      () async {
+        messaging.permission = PushPermissionStatus.notDetermined;
+        await service.activate('jwt-user-a', userId: 'user-a');
+        final nativeResult = Completer<PushPermissionStatus>();
+        messaging.requestPermissionCompleter = nativeResult;
+
+        final permission = service.requestPermissionAndSync();
+        await _drainEvents();
+        await service.activate('jwt-user-b', userId: 'user-b');
+        nativeResult.complete(PushPermissionStatus.authorized);
+
+        expect(await permission, PushPermissionStatus.unavailable);
+        expect(repository.registrations, isEmpty);
+      },
+    );
+
+    test(
+      'settings grant silently synchronizes the active session token',
+      () async {
+        messaging.permission = PushPermissionStatus.notDetermined;
+        await service.activate('jwt-user', userId: 'user-1');
+        messaging.permission = PushPermissionStatus.authorized;
+
+        expect(
+          await service.synchronizeIfAuthorized(
+            expectedSessionGeneration: service.activeSessionGeneration,
+            expectedUserId: 'user-1',
+          ),
+          PushPermissionStatus.authorized,
+        );
+        expect(messaging.requestPermissionCalls, 0);
+        expect(repository.registrations, hasLength(1));
+        expect(repository.registrations.single.jwtToken, 'jwt-user');
+      },
+    );
+
+    test(
+      'an old native request is not reused by a replacement session',
+      () async {
+        messaging.permission = PushPermissionStatus.notDetermined;
+        await service.activate('jwt-user-a', userId: 'user-a');
+        final nativeResult = Completer<PushPermissionStatus>();
+        messaging.requestPermissionCompleter = nativeResult;
+        final oldRequest = service.requestPermissionAndSync(
+          expectedSessionGeneration: service.activeSessionGeneration,
+          expectedUserId: 'user-a',
+        );
+        await _drainEvents();
+
+        await service.activate('jwt-user-b', userId: 'user-b');
+        expect(
+          await service.requestPermissionAndSync(
+            expectedSessionGeneration: service.activeSessionGeneration,
+            expectedUserId: 'user-b',
+          ),
+          PushPermissionStatus.unavailable,
+        );
+        expect(messaging.requestPermissionCalls, 1);
+
+        nativeResult.complete(PushPermissionStatus.authorized);
+        expect(await oldRequest, PushPermissionStatus.unavailable);
+        expect(repository.registrations, isEmpty);
+      },
+    );
+
+    test(
+      'repeated settings refresh does not duplicate token registration',
+      () async {
+        messaging.permission = PushPermissionStatus.notDetermined;
+        await service.activate('jwt-user', userId: 'user-1');
+        messaging.permission = PushPermissionStatus.authorized;
+
+        await service.synchronizeIfAuthorized(
+          expectedSessionGeneration: service.activeSessionGeneration,
+          expectedUserId: 'user-1',
+        );
+        await service.synchronizeIfAuthorized(
+          expectedSessionGeneration: service.activeSessionGeneration,
+          expectedUserId: 'user-1',
+        );
+
+        expect(repository.registrations, hasLength(1));
       },
     );
 
@@ -358,10 +535,19 @@ class _FakeMessagingClient implements PushMessagingClient {
   PushEnvelope? initialMessage;
   int getTokenCalls = 0;
   int initialMessageCalls = 0;
+  int requestPermissionCalls = 0;
+  int getPermissionStatusCalls = 0;
+  Completer<PushPermissionStatus>? requestPermissionCompleter;
 
   final tokenRefresh = StreamController<String>.broadcast();
   final foreground = StreamController<PushEnvelope>.broadcast();
   final opened = StreamController<PushEnvelope>.broadcast();
+
+  @override
+  Future<PushPermissionStatus> getPermissionStatus() async {
+    getPermissionStatusCalls += 1;
+    return permission;
+  }
 
   @override
   Future<String?> getToken() async {
@@ -385,7 +571,10 @@ class _FakeMessagingClient implements PushMessagingClient {
   Stream<String> get onTokenRefresh => tokenRefresh.stream;
 
   @override
-  Future<PushPermissionStatus> requestPermission() async => permission;
+  Future<PushPermissionStatus> requestPermission() async {
+    requestPermissionCalls += 1;
+    return requestPermissionCompleter?.future ?? permission;
+  }
 
   Future<void> dispose() async {
     await tokenRefresh.close();

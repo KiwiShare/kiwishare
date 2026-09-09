@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../models/item_model.dart';
 import '../repositories/watchlist_repository.dart';
 
+enum WatchlistMutationResult { added, removed, unchanged, failed, superseded }
+
 class WatchlistProvider extends ChangeNotifier {
   final WatchlistRepository _repository;
   String? _authToken;
@@ -11,6 +13,7 @@ class WatchlistProvider extends ChangeNotifier {
   int _mutationRevision = 0;
   int _pendingMutationCount = 0;
   int _loadSequence = 0;
+  final Map<String, int> _itemMutationRevisions = <String, int>{};
 
   final Set<String> _watchedItemIds = <String>{};
   List<ItemModel> _watchlistItems = <ItemModel>[];
@@ -45,6 +48,7 @@ class WatchlistProvider extends ChangeNotifier {
     _loadSequence += 1;
     _watchedItemIds.clear();
     _watchlistItems.clear();
+    _itemMutationRevisions.clear();
     _isLoading = false;
     _error = null;
 
@@ -119,22 +123,31 @@ class WatchlistProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleWatch(String itemId, {ItemModel? item}) async {
+  Future<WatchlistMutationResult> toggleWatch(
+    String itemId, {
+    ItemModel? item,
+  }) async {
     if (isWatched(itemId)) {
-      await removeFromWatchlist(itemId);
-    } else {
-      await addToWatchlist(itemId, item: item);
+      return removeFromWatchlist(itemId);
     }
+    return addToWatchlist(itemId, item: item);
   }
 
-  void toggleFavorite(String itemId, [ItemModel? item]) {
-    toggleWatch(itemId, item: item);
-  }
+  Future<WatchlistMutationResult> toggleFavorite(
+    String itemId, [
+    ItemModel? item,
+  ]) => toggleWatch(itemId, item: item);
 
-  Future<void> addToWatchlist(String itemId, {ItemModel? item}) async {
-    if (_watchedItemIds.contains(itemId)) return;
+  Future<WatchlistMutationResult> addToWatchlist(
+    String itemId, {
+    ItemModel? item,
+  }) async {
+    if (_watchedItemIds.contains(itemId)) {
+      return WatchlistMutationResult.unchanged;
+    }
     final requestToken = _authToken;
     final requestGeneration = _authGeneration;
+    final itemRevision = _nextItemMutationRevision(itemId);
     _beginMutation();
 
     // Optimistic UI update
@@ -149,7 +162,9 @@ class WatchlistProvider extends ChangeNotifier {
         itemId,
         token: requestToken,
       );
-      if (!_isCurrentSession(requestToken, requestGeneration)) return;
+      if (!_isCurrentSession(requestToken, requestGeneration)) {
+        return WatchlistMutationResult.superseded;
+      }
 
       if (!success && requestToken != null) {
         // Revert if API failed when user is logged in
@@ -157,15 +172,24 @@ class WatchlistProvider extends ChangeNotifier {
         _watchlistItems.removeWhere((i) => i.id == itemId);
         notifyListeners();
       }
+      if (!success) return WatchlistMutationResult.failed;
+      if (_itemMutationRevisions[itemId] != itemRevision ||
+          !_watchedItemIds.contains(itemId)) {
+        return WatchlistMutationResult.superseded;
+      }
+      return WatchlistMutationResult.added;
     } finally {
       _finishMutation(requestToken, requestGeneration);
     }
   }
 
-  Future<void> removeFromWatchlist(String itemId) async {
-    if (!_watchedItemIds.contains(itemId)) return;
+  Future<WatchlistMutationResult> removeFromWatchlist(String itemId) async {
+    if (!_watchedItemIds.contains(itemId)) {
+      return WatchlistMutationResult.unchanged;
+    }
     final requestToken = _authToken;
     final requestGeneration = _authGeneration;
+    final itemRevision = _nextItemMutationRevision(itemId);
     _beginMutation();
 
     // Optimistic UI update
@@ -182,7 +206,9 @@ class WatchlistProvider extends ChangeNotifier {
         itemId,
         token: requestToken,
       );
-      if (!_isCurrentSession(requestToken, requestGeneration)) return;
+      if (!_isCurrentSession(requestToken, requestGeneration)) {
+        return WatchlistMutationResult.superseded;
+      }
 
       if (!success && requestToken != null) {
         // Revert on API failure
@@ -195,9 +221,21 @@ class WatchlistProvider extends ChangeNotifier {
         }
         notifyListeners();
       }
+      if (!success) return WatchlistMutationResult.failed;
+      if (_itemMutationRevisions[itemId] != itemRevision ||
+          _watchedItemIds.contains(itemId)) {
+        return WatchlistMutationResult.superseded;
+      }
+      return WatchlistMutationResult.removed;
     } finally {
       _finishMutation(requestToken, requestGeneration);
     }
+  }
+
+  int _nextItemMutationRevision(String itemId) {
+    final revision = (_itemMutationRevisions[itemId] ?? 0) + 1;
+    _itemMutationRevisions[itemId] = revision;
+    return revision;
   }
 
   void _beginMutation() {

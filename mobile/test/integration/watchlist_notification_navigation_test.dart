@@ -138,6 +138,10 @@ class _MessagingClient implements PushMessagingClient {
   Stream<String> get onTokenRefresh => const Stream.empty();
 
   @override
+  Future<PushPermissionStatus> getPermissionStatus() async =>
+      PushPermissionStatus.authorized;
+
+  @override
   Future<PushPermissionStatus> requestPermission() async =>
       PushPermissionStatus.authorized;
 

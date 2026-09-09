@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +14,7 @@ import '../../providers/chat_provider.dart';
 import '../../providers/watchlist_provider.dart';
 import '../../repositories/chat_repository.dart';
 import '../../repositories/item_repository.dart';
+import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
 import '../messages/widgets/schedule_meetup_sheet.dart';
@@ -26,6 +29,7 @@ class ProductDetailScreen extends StatefulWidget {
   final ValueChanged<ChatConversationModel>? onConversationOpened;
   final VoidCallback? onSignInRequired;
   final ValueChanged<ItemModel>? onSimilarItemTap;
+  final NotificationPermissionCoordinator? permissionCoordinator;
 
   const ProductDetailScreen({
     super.key,
@@ -38,6 +42,7 @@ class ProductDetailScreen extends StatefulWidget {
     this.onConversationOpened,
     this.onSignInRequired,
     this.onSimilarItemTap,
+    this.permissionCoordinator,
   });
 
   @override
@@ -234,6 +239,32 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  Future<void> _toggleWatchlist(
+    WatchlistProvider watchlist,
+    ItemModel product,
+  ) async {
+    WatchlistMutationResult result;
+    try {
+      result = await watchlist.toggleWatch(product.id, item: product);
+    } catch (error) {
+      debugPrint('Watchlist update failed: $error');
+      return;
+    }
+    if (!mounted || result != WatchlistMutationResult.added) return;
+    final token = _authToken;
+    if (token == null || token.isEmpty) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    await offerContextualNotificationPermission(
+      context,
+      coordinator: widget.permissionCoordinator,
+    );
+  }
+
+  void _requestWatchlistToggle(WatchlistProvider watchlist, ItemModel product) {
+    unawaited(_toggleWatchlist(watchlist, product));
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -329,7 +360,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ? 'Remove from Watchlist'
                           : 'Add to Watchlist',
                       onPressed: () =>
-                          watchlist.toggleWatch(product.id, item: product),
+                          _requestWatchlistToggle(watchlist, product),
                       icon: Icon(
                         isWatched ? Icons.bookmark : Icons.bookmark_outline,
                         color: isWatched
@@ -352,6 +383,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   return _ProductActions(
                     product: product,
                     watchlist: watchlist,
+                    onToggleWatch: () =>
+                        _requestWatchlistToggle(watchlist, product),
                     messageSellerEnabled: false,
                     isStartingConversation: false,
                     onMessageSeller: null,
@@ -370,6 +403,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     return _ProductActions(
                       product: product,
                       watchlist: watchlist,
+                      onToggleWatch: () =>
+                          _requestWatchlistToggle(watchlist, product),
                       messageSellerEnabled: canMessage,
                       isStartingConversation: chatProvider
                           .isStartingConversation(product.id),
@@ -1071,6 +1106,7 @@ class _ProductActions extends StatelessWidget {
   const _ProductActions({
     required this.product,
     required this.watchlist,
+    required this.onToggleWatch,
     required this.messageSellerEnabled,
     required this.isStartingConversation,
     required this.onMessageSeller,
@@ -1080,6 +1116,7 @@ class _ProductActions extends StatelessWidget {
 
   final ItemModel product;
   final WatchlistProvider watchlist;
+  final VoidCallback onToggleWatch;
   final bool messageSellerEnabled;
   final bool isStartingConversation;
   final VoidCallback? onMessageSeller;
@@ -1126,7 +1163,7 @@ class _ProductActions extends StatelessWidget {
               : theme.colorScheme.outline.withOpacity(0.5),
         ),
       ),
-      onPressed: () => watchlist.toggleWatch(product.id, item: product),
+      onPressed: onToggleWatch,
       icon: Icon(
         isWatched ? Icons.bookmark : Icons.bookmark_outline,
         color: isWatched ? theme.colorScheme.primary : null,

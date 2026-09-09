@@ -5,6 +5,7 @@ import '../../models/user_model.dart';
 import '../../providers/providers.dart';
 import '../auth/login_view.dart';
 import 'report_screen.dart';
+import 'notification_settings_screen.dart';
 import 'user_listings_screen.dart';
 import 'user_meetups_screen.dart';
 
@@ -173,6 +174,18 @@ class ProfileScreen extends StatelessWidget {
                 subtitle: _themeLabel(context.watch<ThemeProvider>().themeMode),
                 onTap: () => _showAppearance(context),
               ),
+              if (signedIn)
+                _MenuTile(
+                  icon: Icons.notifications_outlined,
+                  title: 'Notifications',
+                  subtitle: 'System permission and notification access',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const NotificationSettingsScreen(),
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 24),

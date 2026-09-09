@@ -1,15 +1,44 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/item_model.dart';
 import '../../../providers/providers.dart';
+import '../../../services/notification_permission_coordinator.dart';
 
 class ItemCard extends StatelessWidget {
   final ItemModel item;
   final VoidCallback? onTap;
+  final NotificationPermissionCoordinator? permissionCoordinator;
 
-  const ItemCard({super.key, required this.item, this.onTap});
+  const ItemCard({
+    super.key,
+    required this.item,
+    this.onTap,
+    this.permissionCoordinator,
+  });
+
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    FavoritesProvider favorites,
+  ) async {
+    WatchlistMutationResult result;
+    try {
+      result = await favorites.toggleFavorite(item.id);
+    } catch (error) {
+      debugPrint('Watchlist update failed: $error');
+      return;
+    }
+    if (!context.mounted || result != WatchlistMutationResult.added) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) return;
+    await offerContextualNotificationPermission(
+      context,
+      coordinator: permissionCoordinator,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +133,8 @@ class ItemCard extends StatelessWidget {
                           shape: const CircleBorder(),
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
-                            onTap: () => favorites.toggleFavorite(item.id),
+                            onTap: () =>
+                                unawaited(_toggleFavorite(context, favorites)),
                             child: Padding(
                               padding: const EdgeInsets.all(5),
                               child: Icon(

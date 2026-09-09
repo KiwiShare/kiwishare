@@ -14,6 +14,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../services/listing_image_picker.dart';
 import '../../services/chat_voice_service.dart';
+import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import 'widgets/location_bubble.dart';
 import 'widgets/location_picker_sheet.dart';
@@ -28,6 +29,7 @@ class ChatConversationScreen extends StatefulWidget {
     this.authToken,
     this.imagePicker,
     this.voiceRecorder,
+    this.permissionCoordinator,
   });
 
   final ChatConversationModel conversation;
@@ -35,6 +37,7 @@ class ChatConversationScreen extends StatefulWidget {
   final String? authToken;
   final ListingImagePicker? imagePicker;
   final ChatVoiceRecorder? voiceRecorder;
+  final NotificationPermissionCoordinator? permissionCoordinator;
 
   @override
   State<ChatConversationScreen> createState() => _ChatConversationScreenState();
@@ -201,6 +204,21 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     );
   }
 
+  Future<void> _offerNotificationPermissionAfterAction() async {
+    if (!mounted) return;
+    await offerContextualNotificationPermission(
+      context,
+      coordinator: widget.permissionCoordinator,
+    );
+  }
+
+  void _requestNotificationPermissionAfterAction() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_offerNotificationPermissionAfterAction());
+    });
+  }
+
   Future<void> _send() async {
     final token = _currentAuthToken;
     final text = _messageController.text;
@@ -214,6 +232,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     if (sent) {
       _messageController.clear();
       _scrollToEnd();
+      _requestNotificationPermissionAfterAction();
     }
   }
 
@@ -251,7 +270,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     try {
       final files = await _imagePicker.recoverLostPhotos();
       if (files.isEmpty || !mounted) return;
-      await _sendPhoto(files.first);
+      await _sendPhoto(files.first, offerPermission: false);
     } on PlatformException {
       _showPhotoPickerError(
         'The selected photo could not be restored. Please choose it again.',
@@ -263,7 +282,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
   }
 
-  Future<void> _sendPhoto(XFile file) async {
+  Future<void> _sendPhoto(XFile file, {bool offerPermission = true}) async {
     final token = _currentAuthToken;
     if (token == null || token.isEmpty || !mounted) return;
     final contentType = _photoContentType(file);
@@ -276,7 +295,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       contentType: contentType,
       token: token,
     );
-    if (sent && mounted) _scrollToEnd();
+    if (sent && mounted) {
+      _scrollToEnd();
+      if (offerPermission) _requestNotificationPermissionAfterAction();
+    }
   }
 
   Future<void> _shareLocation() async {
@@ -297,7 +319,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       longitude: selection.longitude,
       token: token,
     );
-    if (sent && mounted) _scrollToEnd();
+    if (sent && mounted) {
+      _scrollToEnd();
+      _requestNotificationPermissionAfterAction();
+    }
   }
 
   Future<void> _scheduleMeetup() async {
@@ -398,7 +423,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         durationMs: recording.durationMs,
         token: token,
       );
-      if (sent && mounted) _scrollToEnd();
+      if (sent && mounted) {
+        _scrollToEnd();
+        _requestNotificationPermissionAfterAction();
+      }
     } on ChatVoiceException catch (error) {
       _showComposerError(error.message);
     } catch (_) {
