@@ -85,6 +85,8 @@ class ItemModel {
 
   double get numericPrice => double.tryParse(priceNzd) ?? 0;
 
+  String get ownerName => seller?.displayName ?? 'Seller';
+
   bool get hasMapLocation => latitude != null && longitude != null;
 
   /// Returns the complete list of images, falling back to imageUrl

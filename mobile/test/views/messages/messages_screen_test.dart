@@ -8,6 +8,7 @@ import '../../support/fake_chat_repository.dart';
 
 Widget _buildSubject({
   required FakeChatRepository repository,
+  ChatProvider? chatProvider,
   String? authToken = 'valid-token',
   VoidCallback? onComposePressed,
   ValueChanged<ChatConversationModel>? onConversationPressed,
@@ -26,7 +27,7 @@ Widget _buildSubject({
       data: MediaQueryData(textScaler: textScaler),
       child: MessagesScreen(
         authToken: authToken,
-        chatProvider: ChatProvider(repository: repository),
+        chatProvider: chatProvider ?? ChatProvider(repository: repository),
         onComposePressed: onComposePressed,
         onConversationPressed: onConversationPressed,
       ),
@@ -127,6 +128,31 @@ void main() {
 
     expect(composePressed, isTrue);
     expect(selectedChat?.participantName, 'Sophie M.');
+  });
+
+  testWidgets('opening a conversation does not mark unseen history as read', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(conversations: _conversations());
+    final provider = ChatProvider(repository: repository);
+
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        chatProvider: provider,
+        onConversationPressed: (_) {},
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chat_unread_badge')), findsOneWidget);
+    final initialUnreadCount = provider.totalUnreadCount;
+
+    await tester.tap(find.byKey(const Key('chat_conversation_conversation-1')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('chat_unread_badge')), findsOneWidget);
+    expect(provider.totalUnreadCount, initialUnreadCount);
+    expect(repository.markReadCalls, 0);
   });
 
   testWidgets('shows private signed-out and authenticated empty states', (

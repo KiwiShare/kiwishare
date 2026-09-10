@@ -247,7 +247,7 @@ void main() {
     tester.widget<InkWell>(find.byKey(const Key('home-preview-open'))).onTap!();
     await tester.pumpAndSettle();
 
-    expect(find.text('Product details'), findsOneWidget);
+    expect(find.byType(ProductDetailScreen), findsOneWidget);
     await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
 
@@ -317,7 +317,7 @@ void main() {
           .widget<InkWell>(find.byKey(const Key('home-preview-open')))
           .onTap!();
       await tester.pumpAndSettle();
-      expect(find.text('Product details'), findsOneWidget);
+      expect(find.byType(ProductDetailScreen), findsOneWidget);
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();

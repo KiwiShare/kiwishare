@@ -75,6 +75,35 @@ export interface AuthResponse {
   user: UserProfile;
 }
 
+export interface AdminOrderStats {
+  totalOrders: number;
+  completedOrders: number;
+  activeOrders: number;
+  cancelledOrders: number;
+  totalGmvNzd: string;
+  totalPlatformFeesNzd: string;
+  totalSellerPayoutsNzd: string;
+  statusBreakdown: Record<string, number>;
+  recentOrders: Array<{
+    id: string;
+    orderNumber: string;
+    status: string;
+    itemTitle: string;
+    itemImageUrl: string;
+    buyerName: string;
+    buyerEmail?: string;
+    sellerName: string;
+    sellerEmail?: string;
+    itemAmountNzd: string;
+    buyerFeeNzd: string;
+    sellerFeeNzd: string;
+    platformFeeNzd: string;
+    buyerTotalNzd: string;
+    sellerReceiveNzd: string;
+    createdAt: string;
+  }>;
+}
+
 export interface AdminStats {
   totalUsers: number;
   totalItems: number;
@@ -86,6 +115,7 @@ export interface AdminStats {
   categoryDistribution: Array<{ category: string; count: number }>;
   recentUsers: Array<{ displayName: string; email: string; role: string; registrationPlatform: string; createdAt: string }>;
   recentItems: UsedItem[];
+  orderStats?: AdminOrderStats;
 }
 
 /**
@@ -316,12 +346,18 @@ export const adminApi = {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
+
+  reassignItem: (id: string, body: { targetUserEmail?: string; targetUserId?: string }) =>
+    apiRequest<{ status: string; message: string; item: UsedItem }>(`/admin/items/${id}/assign`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
 };
 
 // Watchlist APIs
 export const watchlistApi = {
   getWatchlist: () =>
-    apiRequest<{ status: string; count: number; items: UsedItem[] }>('/watchlist'),
+    apiRequest<{ status: string; count: number; items?: UsedItem[]; data?: UsedItem[] }>('/watchlist'),
 
   getWatchlistIds: () =>
     apiRequest<{ status: string; itemIds: string[] }>('/watchlist/ids'),

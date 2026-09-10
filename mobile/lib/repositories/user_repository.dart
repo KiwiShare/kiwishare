@@ -3,6 +3,16 @@ import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 import '../config/api_config.dart';
 
+class OtpCooldownException implements Exception {
+  const OtpCooldownException(this.message, {this.cooldownSeconds = 60});
+
+  final String message;
+  final int cooldownSeconds;
+
+  @override
+  String toString() => message;
+}
+
 abstract class UserRepository {
   Future<void> sendOtp(String email);
   Future<Map<String, dynamic>> verifyOtp(
@@ -132,9 +142,14 @@ class RestUserRepository implements UserRepository {
     if (response.statusCode != 200) {
       try {
         final error = jsonDecode(response.body);
-        throw Exception(
-          error['message'] ?? 'Failed to send verification code.',
-        );
+        final message =
+            (error['message'] as String?) ??
+            'Failed to send verification code.';
+        if (response.statusCode == 429) {
+          final cooldown = (error['cooldownSeconds'] as num?)?.toInt() ?? 60;
+          throw OtpCooldownException(message, cooldownSeconds: cooldown);
+        }
+        throw Exception(message);
       } catch (e) {
         if (e is Exception &&
             !e.toString().startsWith('Exception: FormatException')) {

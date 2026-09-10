@@ -43,7 +43,34 @@ abstract class ChatRepository {
     required String token,
   });
 
-  Future<void> markConversationRead({
+  Future<ChatMessageModel> sendImageMessage({
+    required String conversationId,
+    required String imageUrl,
+    required String token,
+  });
+
+  Future<ChatMessageModel> sendVoiceMessage({
+    required String conversationId,
+    required String audioUrl,
+    required int durationMs,
+    required String token,
+  });
+
+  Future<ChatMessageModel> sendLocationMessage({
+    required String conversationId,
+    required String name,
+    required double latitude,
+    required double longitude,
+    required String token,
+  });
+
+  Future<int> markConversationRead({
+    required String conversationId,
+    required String throughMessageId,
+    required String token,
+  });
+
+  Future<void> deleteConversation({
     required String conversationId,
     required String token,
   });
@@ -164,12 +191,114 @@ class RestChatRepository implements ChatRepository {
   }
 
   @override
-  Future<void> markConversationRead({
+  Future<ChatMessageModel> sendImageMessage({
     required String conversationId,
+    required String imageUrl,
+    required String token,
+  }) async {
+    final response = await _client.post(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/api/conversations/$conversationId/messages',
+      ),
+      headers: _headers(token),
+      body: jsonEncode({'type': 'image', 'imageUrl': imageUrl}),
+    );
+    final data = _responseMap(response);
+    final message = data['message'];
+    if (message is! Map) {
+      throw const ChatRepositoryException(
+        'The chat service returned an invalid message.',
+      );
+    }
+    return ChatMessageModel.fromJson(Map<String, dynamic>.from(message));
+  }
+
+  @override
+  Future<ChatMessageModel> sendVoiceMessage({
+    required String conversationId,
+    required String audioUrl,
+    required int durationMs,
+    required String token,
+  }) async {
+    final response = await _client.post(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/api/conversations/$conversationId/messages',
+      ),
+      headers: _headers(token),
+      body: jsonEncode({
+        'type': 'voice',
+        'audioUrl': audioUrl,
+        'durationMs': durationMs,
+      }),
+    );
+    final data = _responseMap(response);
+    final message = data['message'];
+    if (message is! Map) {
+      throw const ChatRepositoryException(
+        'The chat service returned an invalid message.',
+      );
+    }
+    return ChatMessageModel.fromJson(Map<String, dynamic>.from(message));
+  }
+
+  @override
+  Future<ChatMessageModel> sendLocationMessage({
+    required String conversationId,
+    required String name,
+    required double latitude,
+    required double longitude,
+    required String token,
+  }) async {
+    final response = await _client.post(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/api/conversations/$conversationId/messages',
+      ),
+      headers: _headers(token),
+      body: jsonEncode({
+        'type': 'location',
+        'location': {
+          'name': name,
+          'latitude': latitude,
+          'longitude': longitude,
+        },
+      }),
+    );
+    final data = _responseMap(response);
+    final message = data['message'];
+    if (message is! Map) {
+      throw const ChatRepositoryException(
+        'The chat service returned an invalid message.',
+      );
+    }
+    return ChatMessageModel.fromJson(Map<String, dynamic>.from(message));
+  }
+
+  @override
+  Future<int> markConversationRead({
+    required String conversationId,
+    required String throughMessageId,
     required String token,
   }) async {
     final response = await _client.patch(
       Uri.parse('${ApiConfig.baseUrl}/api/conversations/$conversationId/read'),
+      headers: _headers(token),
+      body: jsonEncode({'throughMessageId': throughMessageId}),
+    );
+    final data = _responseMap(response);
+    final unreadCount = data['unreadCount'];
+    if (unreadCount is! int || unreadCount < 0) {
+      throw const ChatRepositoryException('Invalid unread count response.');
+    }
+    return unreadCount;
+  }
+
+  @override
+  Future<void> deleteConversation({
+    required String conversationId,
+    required String token,
+  }) async {
+    final response = await _client.delete(
+      Uri.parse('${ApiConfig.baseUrl}/api/conversations/$conversationId'),
       headers: _headers(token),
     );
     _responseMap(response);

@@ -45,6 +45,25 @@ class R2UploadService implements ListingPhotoUploader {
     String contentType = 'image/jpeg',
     required String authToken,
   }) async {
+    return uploadFile(
+      bytes: bytes,
+      fileName: fileName,
+      contentType: contentType,
+      authToken: authToken,
+      startFailureMessage:
+          'A photo upload could not be started. Please try again.',
+      uploadFailureMessage: 'A photo could not be uploaded. Please try again.',
+    );
+  }
+
+  Future<String> uploadFile({
+    required Uint8List bytes,
+    required String fileName,
+    required String contentType,
+    required String authToken,
+    required String startFailureMessage,
+    required String uploadFailureMessage,
+  }) async {
     final presignResponse = await _client.post(
       Uri.parse('${ApiConfig.baseUrl}/api/upload/presign'),
       headers: {
@@ -66,10 +85,7 @@ class R2UploadService implements ListingPhotoUploader {
     }
     if (presignResponse.statusCode != 200) {
       throw ListingPhotoUploadException(
-        _errorMessage(
-          presignResponse.body,
-          fallback: 'A photo upload could not be started. Please try again.',
-        ),
+        _errorMessage(presignResponse.body, fallback: startFailureMessage),
       );
     }
 
@@ -94,10 +110,7 @@ class R2UploadService implements ListingPhotoUploader {
       );
       if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
         throw ListingPhotoUploadException(
-          _errorMessage(
-            uploadResponse.body,
-            fallback: 'A photo could not be uploaded. Please try again.',
-          ),
+          _errorMessage(uploadResponse.body, fallback: uploadFailureMessage),
         );
       }
       return publicUrl;

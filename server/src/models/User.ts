@@ -35,6 +35,9 @@ export interface IUser extends Document {
   isBanned?: boolean;
   authProvider: string;
   role: 'user' | 'admin';
+  notificationPreferences?: {
+    watchlistPriceDrop: boolean;
+  };
   registrationPlatform: 'web' | 'mobile_ios' | 'mobile_android' | 'mobile' | 'unknown';
   lastUsedPlatform: 'web' | 'mobile_ios' | 'mobile_android' | 'mobile' | 'unknown';
   lastActiveAt?: Date;
@@ -79,6 +82,9 @@ const UserSchema = new Schema<IUser>(
       default: 'unknown' 
     },
     deletedAt: { type: Date },
+    notificationPreferences: {
+      watchlistPriceDrop: { type: Boolean, default: true }
+    },
 
     // Compatibility fields
     googleId: { type: String, unique: true, sparse: true },

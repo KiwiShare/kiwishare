@@ -163,6 +163,90 @@ void main() {
     },
   );
 
+  test('sends an R2 image URL and parses the image message', () async {
+    late http.Request captured;
+    const imageUrl = 'https://assets.kiwishare.online/images/chat/chair.png';
+    final repository = RestChatRepository(
+      client: MockClient((request) async {
+        captured = request;
+        return http.Response(
+          jsonEncode({
+            'status': 'created',
+            'message': {
+              'id': 'message-image-1',
+              'conversationId': 'conversation-1',
+              'senderId': 'buyer-1',
+              'receiverId': 'seller-1',
+              'type': 'image',
+              'text': '',
+              'imageUrl': imageUrl,
+              'status': 'sent',
+              'isMine': true,
+              'createdAt': '2026-08-27T08:31:00.000Z',
+            },
+          }),
+          201,
+        );
+      }),
+    );
+
+    final message = await repository.sendImageMessage(
+      conversationId: 'conversation-1',
+      imageUrl: imageUrl,
+      token: 'valid-token',
+    );
+
+    expect(captured.method, 'POST');
+    expect(jsonDecode(captured.body), {'type': 'image', 'imageUrl': imageUrl});
+    expect(message.isImage, isTrue);
+    expect(message.imageUrl, imageUrl);
+  });
+
+  test('sends voice metadata and parses the voice message', () async {
+    late http.Request captured;
+    const audioUrl = 'https://assets.kiwishare.online/audio/chat/voice.m4a';
+    final repository = RestChatRepository(
+      client: MockClient((request) async {
+        captured = request;
+        return http.Response(
+          jsonEncode({
+            'status': 'created',
+            'message': {
+              'id': 'message-voice-1',
+              'conversationId': 'conversation-1',
+              'senderId': 'buyer-1',
+              'receiverId': 'seller-1',
+              'type': 'voice',
+              'text': '',
+              'audioUrl': audioUrl,
+              'durationMs': 3200,
+              'status': 'sent',
+              'isMine': true,
+              'createdAt': '2026-08-27T08:31:00.000Z',
+            },
+          }),
+          201,
+        );
+      }),
+    );
+
+    final message = await repository.sendVoiceMessage(
+      conversationId: 'conversation-1',
+      audioUrl: audioUrl,
+      durationMs: 3200,
+      token: 'valid-token',
+    );
+
+    expect(captured.method, 'POST');
+    expect(jsonDecode(captured.body), {
+      'type': 'voice',
+      'audioUrl': audioUrl,
+      'durationMs': 3200,
+    });
+    expect(message.isVoice, isTrue);
+    expect(message.durationMs, 3200);
+  });
+
   test('forwards the history cursor and marks a conversation read', () async {
     final requests = <http.Request>[];
     final repository = RestChatRepository(
@@ -178,7 +262,10 @@ void main() {
             200,
           );
         }
-        return http.Response(jsonEncode({'status': 'success'}), 200);
+        return http.Response(
+          jsonEncode({'status': 'success', 'unreadCount': 1}),
+          200,
+        );
       }),
     );
     final before = DateTime.utc(2026, 8, 27, 8, 30);
@@ -189,8 +276,9 @@ void main() {
       before: before,
       limit: 25,
     );
-    await repository.markConversationRead(
+    final remainingUnreadCount = await repository.markConversationRead(
       conversationId: 'conversation-1',
+      throughMessageId: 'message-25',
       token: 'valid-token',
     );
 
@@ -201,6 +289,8 @@ void main() {
     expect(requests.last.method, 'PATCH');
     expect(requests.last.url.path, '/api/conversations/conversation-1/read');
     expect(requests.last.headers['Authorization'], 'Bearer valid-token');
+    expect(jsonDecode(requests.last.body), {'throughMessageId': 'message-25'});
+    expect(remainingUnreadCount, 1);
   });
 
   test('rejects malformed successful chat responses', () async {
@@ -261,6 +351,37 @@ void main() {
           (error) => error.message,
           'message',
           'This conversation is not active.',
+        ),
+      ),
+    );
+  });
+
+  test('preserves the server moderation message for rejected content', () async {
+    final repository = RestChatRepository(
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'status': 'error',
+            'code': 'MESSAGE_CONTENT_NOT_ALLOWED',
+            'message':
+                'Your message contains language that is not allowed. Please edit it and try again.',
+          }),
+          422,
+        ),
+      ),
+    );
+
+    expect(
+      () => repository.sendTextMessage(
+        conversationId: 'conversation-1',
+        text: 'Rejected draft',
+        token: 'valid-token',
+      ),
+      throwsA(
+        isA<ChatRepositoryException>().having(
+          (error) => error.message,
+          'message',
+          'Your message contains language that is not allowed. Please edit it and try again.',
         ),
       ),
     );
