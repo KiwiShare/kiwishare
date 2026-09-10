@@ -1,21 +1,47 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/item_model.dart';
 import '../../../providers/favorites_provider.dart';
+import '../../../providers/watchlist_provider.dart';
+import '../../../services/notification_permission_coordinator.dart';
 import '../../../theme/app_theme.dart';
 
 class HomeProductPreviewCard extends StatelessWidget {
   final ItemModel item;
   final VoidCallback onOpen;
   final VoidCallback onClose;
+  final NotificationPermissionCoordinator? permissionCoordinator;
 
   const HomeProductPreviewCard({
     super.key,
     required this.item,
     required this.onOpen,
     required this.onClose,
+    this.permissionCoordinator,
   });
+
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    FavoritesProvider favorites,
+  ) async {
+    WatchlistMutationResult result;
+    try {
+      result = await favorites.toggleFavorite(item.id);
+    } catch (error) {
+      debugPrint('Watchlist update failed: $error');
+      return;
+    }
+    if (!context.mounted || result != WatchlistMutationResult.added) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) return;
+    await offerContextualNotificationPermission(
+      context,
+      coordinator: permissionCoordinator,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +143,8 @@ class HomeProductPreviewCard extends StatelessWidget {
                     tooltip: isFavorite
                         ? 'Remove from saved items'
                         : 'Save item',
-                    onPressed: () => favorites.toggleFavorite(item.id),
+                    onPressed: () =>
+                        unawaited(_toggleFavorite(context, favorites)),
                     icon: Icon(
                       isFavorite ? Icons.favorite : Icons.favorite_border,
                       color: isFavorite

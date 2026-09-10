@@ -1,13 +1,22 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:kiwishare/models/item_model.dart';
+import 'package:kiwishare/providers/auth_provider.dart';
+import 'package:kiwishare/providers/listing_provider.dart';
+import 'package:kiwishare/repositories/item_repository.dart';
+import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/listing_image_picker.dart';
 import 'package:kiwishare/services/listing_location_service.dart';
+import 'package:kiwishare/services/listing_publish_service.dart';
+import 'package:kiwishare/services/listing_suggestion_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/post/post_item_screen.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   test('coordinate fallback only exposes an approximate area', () {
@@ -22,14 +31,20 @@ void main() {
     TextScaler textScaler = TextScaler.noScaling,
     ListingImagePicker? imagePicker,
     ListingLocationService? locationService,
+    ListingPublishService? publishService,
+    ListingSuggestionService? suggestionService,
+    String? authToken,
+    VoidCallback? onPostItem,
     ThemeMode themeMode = ThemeMode.light,
     EdgeInsets safeAreaPadding = EdgeInsets.zero,
+    AuthProvider? authProvider,
+    ListingProvider? listingProvider,
   }) {
     final darkScheme = ColorScheme.fromSeed(
       seedColor: AppColors.brandSecondary,
       brightness: Brightness.dark,
     );
-    return MaterialApp(
+    final app = MaterialApp(
       themeMode: themeMode,
       theme: buildKiwiShareTheme(),
       darkTheme: ThemeData(
@@ -48,9 +63,27 @@ void main() {
           imagePicker: imagePicker ?? FakeListingImagePicker(),
           locationService:
               locationService ?? FakeListingLocationService.success(),
+          publishService: publishService,
+          suggestionService: suggestionService,
+          authToken: authToken,
+          onPostItem: onPostItem,
         ),
       ),
     );
+    Widget result = app;
+    if (listingProvider != null) {
+      result = ChangeNotifierProvider<ListingProvider>.value(
+        value: listingProvider,
+        child: result,
+      );
+    }
+    if (authProvider != null) {
+      result = ChangeNotifierProvider<AuthProvider>.value(
+        value: authProvider,
+        child: result,
+      );
+    }
+    return result;
   }
 
   testWidgets('renders the Figma listing form and photo slots', (tester) async {
@@ -72,9 +105,10 @@ void main() {
 
     await tester.scrollUntilVisible(
       find.byKey(const Key('post_submit_button')),
-      300,
+      450,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.byKey(const Key('post_submit_button')));
     expect(find.byKey(const Key('post_description_field')), findsOneWidget);
     expect(find.byKey(const Key('post_submit_button')), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -195,9 +229,10 @@ void main() {
 
     await tester.scrollUntilVisible(
       find.byKey(const Key('post_submit_button')),
-      300,
+      450,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.byKey(const Key('post_submit_button')));
     await tester.tap(find.byKey(const Key('post_submit_button')));
     await tester.pump();
 
@@ -388,6 +423,695 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('publishes a complete listing through the real submit boundary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final publishService = FakeListingPublishService();
+    final listingProvider = TrackingListingProvider();
+    var completed = false;
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        onPostItem: () => completed = true,
+        authToken: 'valid-token',
+        publishService: publishService,
+        listingProvider: listingProvider,
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pumpAndSettle();
+
+    expect(completed, isTrue);
+    expect(find.text('Your listing is live.'), findsOneWidget);
+    expect(publishService.authToken, 'valid-token');
+    expect(publishService.draft?.title, 'Solid wood desk');
+    expect(publishService.draft?.category, 'Furniture');
+    expect(publishService.draft?.condition, 'Good');
+    expect(publishService.draft?.isSustainable, isFalse);
+    expect(publishService.draft?.photos.single.fileName, 'listing_photo_1.png');
+    expect(publishService.draft?.latitude, -36.8485);
+    expect(publishService.draft?.longitude, 174.7633);
+    expect(listingProvider.cachesInvalidated, isTrue);
+  });
+
+  testWidgets(
+    'defaults isSustainable to false and updates draft when toggled',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final publishService = FakeListingPublishService();
+      await tester.pumpWidget(
+        buildTestApp(
+          onCancel: () {},
+          authToken: 'valid-token',
+          publishService: publishService,
+          imagePicker: FakeListingImagePicker(
+            galleryPhotos: [testPhoto('desk.png')],
+          ),
+        ),
+      );
+
+      await completeValidListing(tester);
+
+      // Verify switch exists and is false by default
+      final switchFinder = find.byKey(const Key('post_sustainable_switch'));
+      await tester.scrollUntilVisible(
+        switchFinder,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(switchFinder, findsOneWidget);
+
+      // Toggle switch ON
+      await tester.tap(switchFinder);
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('post_submit_button')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('post_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(publishService.draft?.isSustainable, isTrue);
+    },
+  );
+
+  testWidgets('keeps the form open and explains a publish failure', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final publishService = FakeListingPublishService(
+      failure: const ListingPublishException('Upload service unavailable.'),
+    );
+    var completed = false;
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        onPostItem: () => completed = true,
+        authToken: 'valid-token',
+        publishService: publishService,
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pumpAndSettle();
+
+    expect(completed, isFalse);
+    expect(find.text('Upload service unavailable.'), findsOneWidget);
+    expect(find.byKey(const Key('post_item_form')), findsOneWidget);
+  });
+
+  testWidgets(
+    'retries after a transient API failure without duplicating the item',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final publishService = FailOnceListingPublishService();
+      var completed = false;
+      await tester.pumpWidget(
+        buildTestApp(
+          onCancel: () {},
+          onPostItem: () => completed = true,
+          authToken: 'valid-token',
+          publishService: publishService,
+          imagePicker: FakeListingImagePicker(
+            galleryPhotos: [testPhoto('desk.png')],
+          ),
+        ),
+      );
+
+      await completeValidListing(tester);
+      await tester.tap(find.byKey(const Key('post_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(completed, isFalse);
+      expect(publishService.publishCalls, 1);
+      expect(find.byKey(const Key('post_item_form')), findsOneWidget);
+      expect(
+        find.text('Temporary server error. Please try again.'),
+        findsOneWidget,
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('post_submit_button')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('post_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(completed, isTrue);
+      expect(publishService.publishCalls, 2);
+      expect(publishService.createdItems, 1);
+    },
+  );
+
+  testWidgets('disables duplicate submissions while publishing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final publishService = PendingListingPublishService();
+    var cancelled = false;
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () => cancelled = true,
+        authToken: 'valid-token',
+        publishService: publishService,
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pump();
+
+    final button = tester.widget<FilledButton>(
+      find.byKey(const Key('post_submit_button')),
+    );
+    expect(button.onPressed, isNull);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(publishService.publishCalls, 1);
+    final cancelButton = tester.widget<TextButton>(
+      find.byKey(const Key('post_cancel_button')),
+    );
+    expect(cancelButton.onPressed, isNull);
+    expect(cancelled, isFalse);
+
+    publishService.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Post item'), findsOneWidget);
+  });
+
+  testWidgets('clears an expired session and exits the publish form', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final authProvider = TrackingAuthProvider();
+    var cancelled = false;
+
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () => cancelled = true,
+        authProvider: authProvider,
+        authToken: 'expired-token',
+        publishService: FakeListingPublishService(
+          failure: const ListingAuthenticationException(),
+        ),
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(authProvider.sessionCleared, isTrue);
+    expect(cancelled, isTrue);
+    expect(
+      find.text('Your session has expired. Please sign in again.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('requires a signed-in session before publishing', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final publishService = FakeListingPublishService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        publishService: publishService,
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('desk.png')],
+        ),
+      ),
+    );
+
+    await completeValidListing(tester);
+    await tester.tap(find.byKey(const Key('post_submit_button')));
+    await tester.pump();
+
+    expect(
+      find.text('Please sign in before publishing an item.'),
+      findsOneWidget,
+    );
+    expect(publishService.draft, isNull);
+  });
+
+  testWidgets('previews AI suggestions before explicitly applying them', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = FakeListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authToken: 'valid-token',
+        suggestionService: service,
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const Key('post_title_field')),
+      'My old desk',
+    );
+    final titleController = tester
+        .widget<TextFormField>(find.byKey(const Key('post_title_field')))
+        .controller!;
+    final priceController = tester
+        .widget<TextFormField>(find.byKey(const Key('post_price_field')))
+        .controller!;
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pumpAndSettle();
+
+    expect(service.calls, 1);
+    expect(service.authToken, 'valid-token');
+    expect(service.input?.title, 'My old desk');
+    expect(find.byKey(const Key('post_ai_suggestion_sheet')), findsOneWidget);
+    expect(find.text('Review AI suggestion'), findsOneWidget);
+    expect(titleController.text, 'My old desk');
+
+    await tester.tap(find.byKey(const Key('post_ai_apply_button')));
+    await tester.pumpAndSettle();
+
+    expect(titleController.text, 'Solid wood study desk');
+    expect(priceController.text, '120');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_category_field')),
+      -300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Furniture'), findsOneWidget);
+    expect(find.text('Good'), findsOneWidget);
+  });
+
+  testWidgets('keeps the seller draft when an AI suggestion is declined', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authToken: 'valid-token',
+        suggestionService: FakeListingSuggestionService(),
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const Key('post_title_field')),
+      'Keep this title',
+    );
+    final titleController = tester
+        .widget<TextFormField>(find.byKey(const Key('post_title_field')))
+        .controller!;
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('post_ai_cancel_button')));
+    await tester.pumpAndSettle();
+
+    expect(titleController.text, 'Keep this title');
+  });
+
+  testWidgets('requires context and sign-in before requesting AI help', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = FakeListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, suggestionService: service),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+    expect(
+      find.text(
+        'Add a title, description, category, or condition before asking for help.',
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, suggestionService: service),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+    expect(find.text('Please sign in to use AI suggestions.'), findsOneWidget);
+    expect(service.calls, 0);
+  });
+
+  testWidgets('deduplicates AI requests while one is in flight', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = PendingListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authToken: 'valid-token',
+        suggestionService: service,
+      ),
+    );
+    await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+
+    expect(service.calls, 1);
+    expect(find.text('Creating suggestion…'), findsOneWidget);
+    final submit = tester.widget<FilledButton>(
+      find.byKey(const Key('post_submit_button')),
+    );
+    expect(submit.onPressed, isNull);
+
+    service.complete();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('post_ai_suggestion_sheet')), findsOneWidget);
+  });
+
+  testWidgets('discards a stale AI suggestion when the draft changes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = PendingListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authToken: 'valid-token',
+        suggestionService: service,
+      ),
+    );
+    final title = find.byKey(const Key('post_title_field'));
+    await tester.enterText(title, 'Desk');
+    final titleController = tester.widget<TextFormField>(title).controller!;
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+
+    titleController.text = 'Updated desk';
+    service.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('post_ai_suggestion_sheet')), findsNothing);
+    expect(
+      find.text(
+        'Your listing changed while AI was working. Ask again to use the latest details.',
+      ),
+      findsOneWidget,
+    );
+    expect(titleController.text, 'Updated desk');
+  });
+
+  testWidgets('does not overwrite a price edited while AI is working', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = PendingListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authToken: 'valid-token',
+        suggestionService: service,
+      ),
+    );
+    await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+    final price = find.byKey(const Key('post_price_field'));
+    await tester.enterText(price, '50');
+    final priceController = tester.widget<TextFormField>(price).controller!;
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+
+    priceController.text = '75';
+    service.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('post_ai_suggestion_sheet')), findsNothing);
+    expect(priceController.text, '75');
+    expect(
+      find.text(
+        'Your listing changed while AI was working. Ask again to use the latest details.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'ignores an authentication failure after the screen is disposed',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final service = PendingListingSuggestionService();
+      await tester.pumpWidget(
+        buildTestApp(
+          onCancel: () {},
+          authToken: 'expired-token',
+          suggestionService: service,
+        ),
+      );
+      await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('post_ai_suggestion_button')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+      await tester.pump();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      service.completeWithAuthenticationError();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('a stale AI authentication failure cannot clear a new session', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final authProvider = TrackingAuthProvider('old-token');
+    final service = PendingListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authProvider: authProvider,
+        suggestionService: service,
+      ),
+    );
+    await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+
+    authProvider.currentToken = 'new-token';
+    service.completeWithAuthenticationError();
+    await tester.pumpAndSettle();
+
+    expect(authProvider.sessionCleared, isFalse);
+    expect(authProvider.jwtToken, 'new-token');
+  });
+
+  testWidgets('a current AI authentication failure clears its own session', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final authProvider = TrackingAuthProvider('expired-token');
+    final service = PendingListingSuggestionService();
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        authProvider: authProvider,
+        suggestionService: service,
+      ),
+    );
+    await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.pump();
+
+    service.completeWithAuthenticationError();
+    await tester.pumpAndSettle();
+
+    expect(authProvider.sessionCleared, isTrue);
+    expect(authProvider.jwtToken, isNull);
+    expect(
+      find.text('Your session has expired. Please sign in again.'),
+      findsOneWidget,
+    );
+  });
+}
+
+Future<void> completeValidListing(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('post_add_photos_button')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('post_choose_gallery_option')));
+  await tester.pumpAndSettle();
+
+  await tester.enterText(
+    find.byKey(const Key('post_title_field')),
+    'Solid wood desk',
+  );
+  await tester.tap(find.byKey(const Key('post_category_field')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('post_selection_option_Furniture')));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byKey(const Key('post_price_field')), '120');
+
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('post_location_field')),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(find.byKey(const Key('post_location_field')));
+  await tester.pumpAndSettle();
+
+  await tester.tap(find.byKey(const Key('post_condition_field')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('post_selection_option_Good')));
+  await tester.pumpAndSettle();
+
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('post_description_field')),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.enterText(
+    find.byKey(const Key('post_description_field')),
+    'A sturdy study desk.',
+  );
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('post_submit_button')),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
 }
 
 class FakeListingImagePicker implements ListingImagePicker {
@@ -452,6 +1176,184 @@ class FakeListingLocationService implements ListingLocationService {
   Future<bool> openLocationSettings() async {
     locationSettingsRequests += 1;
     return true;
+  }
+}
+
+class FakeListingPublishService implements ListingPublishService {
+  FakeListingPublishService({this.failure});
+
+  final ListingPublishException? failure;
+  ListingDraft? draft;
+  String? authToken;
+
+  @override
+  Future<ItemModel> publish({
+    required ListingDraft draft,
+    required String authToken,
+  }) async {
+    this.draft = draft;
+    this.authToken = authToken;
+    if (failure != null) {
+      throw failure!;
+    }
+    return ItemModel(
+      id: 'published-item',
+      title: draft.title,
+      priceNzd: draft.priceNzd,
+      location: draft.locationLabel,
+      imageUrl: 'https://assets.kiwishare.online/images/desk.png',
+      isSustainable: true,
+      category: draft.category,
+      status: ItemStatus.active,
+      description: draft.description,
+      condition: draft.condition,
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+    );
+  }
+}
+
+class PendingListingPublishService implements ListingPublishService {
+  final Completer<ItemModel> _completer = Completer<ItemModel>();
+  int publishCalls = 0;
+
+  @override
+  Future<ItemModel> publish({
+    required ListingDraft draft,
+    required String authToken,
+  }) {
+    publishCalls += 1;
+    return _completer.future;
+  }
+
+  void complete() {
+    _completer.complete(
+      const ItemModel(
+        id: 'published-item',
+        title: 'Solid wood desk',
+        priceNzd: '120',
+        location: 'Auckland Central, Auckland',
+        imageUrl: 'https://assets.kiwishare.online/images/desk.png',
+        isSustainable: true,
+        category: 'Furniture',
+        status: ItemStatus.active,
+      ),
+    );
+  }
+}
+
+class FailOnceListingPublishService implements ListingPublishService {
+  int publishCalls = 0;
+  int createdItems = 0;
+
+  @override
+  Future<ItemModel> publish({
+    required ListingDraft draft,
+    required String authToken,
+  }) async {
+    publishCalls += 1;
+    if (publishCalls == 1) {
+      throw const ListingPublishException(
+        'Temporary server error. Please try again.',
+      );
+    }
+    createdItems += 1;
+    return ItemModel(
+      id: 'published-item',
+      title: draft.title,
+      priceNzd: draft.priceNzd,
+      location: draft.locationLabel,
+      imageUrl: 'https://assets.kiwishare.online/test/desk.png',
+      isSustainable: true,
+      category: draft.category,
+      status: ItemStatus.active,
+      description: draft.description,
+      condition: draft.condition,
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+    );
+  }
+}
+
+class TrackingListingProvider extends ListingProvider {
+  TrackingListingProvider() : super(itemRepository: RestItemRepository());
+
+  bool cachesInvalidated = false;
+
+  @override
+  void invalidateCaches() {
+    cachesInvalidated = true;
+    super.invalidateCaches();
+  }
+}
+
+class TrackingAuthProvider extends AuthProvider {
+  TrackingAuthProvider([this.currentToken])
+    : super(userRepository: MockUserRepository());
+
+  bool sessionCleared = false;
+  String? currentToken;
+
+  @override
+  String? get jwtToken => currentToken;
+
+  @override
+  Future<void> clearSession() async {
+    sessionCleared = true;
+    currentToken = null;
+  }
+}
+
+class FakeListingSuggestionService implements ListingSuggestionService {
+  int calls = 0;
+  String? authToken;
+  ListingSuggestionInput? input;
+
+  @override
+  Future<ListingSuggestion> suggest({
+    required ListingSuggestionInput input,
+    required String authToken,
+  }) async {
+    calls += 1;
+    this.input = input;
+    this.authToken = authToken;
+    return const ListingSuggestion(
+      title: 'Solid wood study desk',
+      description: 'A sturdy pre-owned desk with light signs of use.',
+      category: 'Furniture',
+      condition: 'Good',
+      priceNzd: '120',
+    );
+  }
+}
+
+class PendingListingSuggestionService implements ListingSuggestionService {
+  final _completer = Completer<ListingSuggestion>();
+  int calls = 0;
+
+  @override
+  Future<ListingSuggestion> suggest({
+    required ListingSuggestionInput input,
+    required String authToken,
+  }) {
+    calls += 1;
+    return _completer.future;
+  }
+
+  void complete() {
+    _completer.complete(
+      const ListingSuggestion(
+        title: 'Solid wood study desk',
+        description: 'A sturdy pre-owned desk with light signs of use.',
+        category: 'Furniture',
+        condition: 'Good',
+        priceNzd: '120',
+      ),
+    );
+  }
+
+  void completeWithAuthenticationError() {
+    _completer.completeError(const ListingSuggestionAuthenticationException());
   }
 }
 

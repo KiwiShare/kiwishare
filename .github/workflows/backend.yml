@@ -5,11 +5,17 @@ on:
     branches: [ main, pre ]
     paths:
       - 'server/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/backend.yml'
   pull_request:
     branches: [ main, pre ]
     paths:
       - 'server/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/backend.yml'
 
 jobs:
@@ -24,6 +30,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -41,3 +50,5 @@ jobs:
 
       - name: Run Jest tests
         run: pnpm --filter server run test
+        env:
+          FFMPEG_BIN: /usr/bin/ffmpeg

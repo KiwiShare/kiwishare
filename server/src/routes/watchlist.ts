@@ -4,6 +4,7 @@ import { Context } from 'koa';
 import Watchlist from '../models/Watchlist';
 import Item from '../models/Item';
 import { authenticateToken } from '../middleware/auth';
+import { formatItem } from './usedItems';
 
 const router = new Router({ prefix: '/watchlist' });
 
@@ -18,17 +19,27 @@ router.get('/', async (ctx: Context) => {
   const userId = ctx.state.user.id;
 
   try {
-    const watchlistEntries = await Watchlist.find({ userId: new mongoose.Types.ObjectId(userId) })
-      .populate('itemId')
+    const userQuery = mongoose.Types.ObjectId.isValid(userId)
+      ? { $in: [new mongoose.Types.ObjectId(userId), userId] }
+      : userId;
+
+    const watchlistEntries = await Watchlist.find({ userId: userQuery })
+      .populate({
+        path: 'itemId',
+        populate: {
+          path: 'sellerId',
+          select: 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role',
+        },
+      })
       .sort({ createdAt: -1 });
 
     // Filter out any items that were deleted or are missing
     const items = watchlistEntries
-      .filter((entry) => entry.itemId != null)
+      .filter((entry) => entry.itemId != null && (entry.itemId as any).status !== 'deleted')
       .map((entry) => {
-        const itemObj = (entry.itemId as any).toJSON ? (entry.itemId as any).toJSON() : entry.itemId;
+        const formatted = formatItem(entry.itemId);
         return {
-          ...itemObj,
+          ...formatted,
           watchedAt: entry.createdAt,
         };
       });
@@ -38,6 +49,7 @@ router.get('/', async (ctx: Context) => {
       status: 'success',
       count: items.length,
       data: items,
+      items: items, // Return both keys for 100% compatibility across mobile and web
     };
   } catch (err: any) {
     ctx.status = 500;
@@ -57,12 +69,18 @@ router.get('/ids', async (ctx: Context) => {
   const userId = ctx.state.user.id;
 
   try {
+    const userQuery = mongoose.Types.ObjectId.isValid(userId)
+      ? { $in: [new mongoose.Types.ObjectId(userId), userId] }
+      : userId;
+
     const entries = await Watchlist.find(
-      { userId: new mongoose.Types.ObjectId(userId) },
+      { userId: userQuery },
       { itemId: 1, _id: 0 }
     );
 
-    const itemIds = entries.map((e) => e.itemId.toString());
+    const itemIds = entries
+      .filter((e) => e.itemId != null)
+      .map((e) => e.itemId.toString());
 
     ctx.status = 200;
     ctx.body = {
@@ -87,16 +105,23 @@ router.get('/check/:itemId', async (ctx: Context) => {
   const userId = ctx.state.user.id;
   const { itemId } = ctx.params;
 
-  if (!mongoose.Types.ObjectId.isValid(itemId)) {
+  if (!itemId) {
     ctx.status = 400;
-    ctx.body = { status: 'error', message: 'Invalid item ID.' };
+    ctx.body = { status: 'error', message: 'Item ID is required.' };
     return;
   }
 
   try {
+    const userQuery = mongoose.Types.ObjectId.isValid(userId)
+      ? { $in: [new mongoose.Types.ObjectId(userId), userId] }
+      : userId;
+    const itemQuery = mongoose.Types.ObjectId.isValid(itemId)
+      ? { $in: [new mongoose.Types.ObjectId(itemId), itemId] }
+      : itemId;
+
     const exists = await Watchlist.exists({
-      userId: new mongoose.Types.ObjectId(userId),
-      itemId: new mongoose.Types.ObjectId(itemId),
+      userId: userQuery,
+      itemId: itemQuery,
     });
 
     ctx.status = 200;
@@ -122,33 +147,42 @@ router.post('/:itemId', async (ctx: Context) => {
   const userId = ctx.state.user.id;
   const { itemId } = ctx.params;
 
-  if (!mongoose.Types.ObjectId.isValid(itemId)) {
+  if (!itemId) {
     ctx.status = 400;
-    ctx.body = { status: 'error', message: 'Invalid item ID.' };
+    ctx.body = { status: 'error', message: 'Item ID is required.' };
     return;
   }
 
   try {
-    const item = await Item.findById(itemId);
+    const item = mongoose.Types.ObjectId.isValid(itemId)
+      ? await Item.findById(itemId)
+      : await Item.findOne({ id: itemId });
+
     if (!item) {
       ctx.status = 404;
       ctx.body = { status: 'error', message: 'Item not found.' };
       return;
     }
 
+    const resolvedItemId = item._id;
+    const userQuery = mongoose.Types.ObjectId.isValid(userId)
+      ? { $in: [new mongoose.Types.ObjectId(userId), userId] }
+      : userId;
+    const itemQuery = { $in: [resolvedItemId, resolvedItemId.toString(), itemId] };
+
     const existing = await Watchlist.findOne({
-      userId: new mongoose.Types.ObjectId(userId),
-      itemId: new mongoose.Types.ObjectId(itemId),
+      userId: userQuery,
+      itemId: itemQuery,
     });
 
     if (!existing) {
       await Watchlist.create({
-        userId: new mongoose.Types.ObjectId(userId),
-        itemId: new mongoose.Types.ObjectId(itemId),
+        userId: mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId,
+        itemId: resolvedItemId,
       });
 
       // Increment favouriteCount on Item
-      await Item.findByIdAndUpdate(itemId, { $inc: { favouriteCount: 1 } });
+      await Item.findByIdAndUpdate(resolvedItemId, { $inc: { favouriteCount: 1 } });
     }
 
     ctx.status = 200;
@@ -175,21 +209,31 @@ router.delete('/:itemId', async (ctx: Context) => {
   const userId = ctx.state.user.id;
   const { itemId } = ctx.params;
 
-  if (!mongoose.Types.ObjectId.isValid(itemId)) {
+  if (!itemId) {
     ctx.status = 400;
-    ctx.body = { status: 'error', message: 'Invalid item ID.' };
+    ctx.body = { status: 'error', message: 'Item ID is required.' };
     return;
   }
 
   try {
+    const item = mongoose.Types.ObjectId.isValid(itemId)
+      ? await Item.findById(itemId)
+      : await Item.findOne({ id: itemId });
+
+    const targetId = item ? item._id : (mongoose.Types.ObjectId.isValid(itemId) ? new mongoose.Types.ObjectId(itemId) : itemId);
+    const userQuery = mongoose.Types.ObjectId.isValid(userId)
+      ? { $in: [new mongoose.Types.ObjectId(userId), userId] }
+      : userId;
+    const itemQuery = { $in: [targetId, targetId.toString(), itemId] };
+
     const deleted = await Watchlist.findOneAndDelete({
-      userId: new mongoose.Types.ObjectId(userId),
-      itemId: new mongoose.Types.ObjectId(itemId),
+      userId: userQuery,
+      itemId: itemQuery,
     });
 
     if (deleted) {
       // Decrement favouriteCount on Item (ensuring not below 0)
-      await Item.findByIdAndUpdate(itemId, [
+      await Item.findByIdAndUpdate(targetId, [
         {
           $set: {
             favouriteCount: {

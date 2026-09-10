@@ -1,5 +1,11 @@
 import 'dotenv/config';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
 
@@ -25,17 +31,41 @@ export function getS3Client(): S3Client {
 
 export const r2S3Client = getS3Client();
 
+export function normalizeR2Folder(folder?: unknown): string {
+  if (folder == null || folder === '') {
+    return 'images';
+  }
+  if (typeof folder !== 'string') {
+    throw new Error('Invalid R2 upload folder.');
+  }
+
+  const normalized = folder.trim().replace(/^\/+|\/+$/g, '');
+  const root = normalized.split('/')[0];
+  if (
+    !/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(normalized) ||
+    !['images', 'audio', 'test'].includes(root)
+  ) {
+    throw new Error('Invalid R2 upload folder.');
+  }
+  return normalized;
+}
+
+function createR2ObjectKey(fileName: string, folder?: unknown): string {
+  const ext = fileName.split('.').pop()?.replace(/[^A-Za-z0-9]/g, '') || 'jpg';
+  const fileBasename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+  return `${normalizeR2Folder(folder)}/${fileBasename}`;
+}
+
 /**
  * Uploads a file buffer directly to Cloudflare R2 bucket `kiwishare`
  */
 export async function uploadToR2(
   fileBuffer: Buffer,
   fileName: string,
-  contentType: string = 'image/jpeg'
+  contentType: string = 'image/jpeg',
+  folder?: unknown
 ): Promise<{ url: string; key: string; bucket: string }> {
-  const ext = fileName.split('.').pop() || 'jpg';
-  const fileBasename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
-  const uniqueKey = `images/${fileBasename}`;
+  const uniqueKey = createR2ObjectKey(fileName, folder);
 
   // Upload directly to Cloudflare R2 S3 bucket
   if (R2_CONFIG.accessKeyId && R2_CONFIG.secretAccessKey) {
@@ -61,7 +91,7 @@ export async function uploadToR2(
   const isAbsolute = R2_CONFIG.publicUrlBase.startsWith('http');
   const url = isAbsolute
     ? `${R2_CONFIG.publicUrlBase.replace(/\/$/, '')}/${uniqueKey}`
-    : `/api/images/${fileBasename}`;
+    : `/api/images/${uniqueKey}`;
 
   return {
     url,
@@ -76,11 +106,10 @@ export async function uploadToR2(
 export async function getPresignedUploadUrl(
   fileName: string,
   contentType: string = 'image/jpeg',
-  expiresInSeconds: number = 3600
+  expiresInSeconds: number = 3600,
+  folder?: unknown
 ): Promise<{ uploadUrl: string; publicUrl: string; key: string }> {
-  const ext = fileName.split('.').pop() || 'jpg';
-  const fileBasename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
-  const uniqueKey = `images/${fileBasename}`;
+  const uniqueKey = createR2ObjectKey(fileName, folder);
 
   const command = new PutObjectCommand({
     Bucket: R2_CONFIG.bucketName,
@@ -100,7 +129,7 @@ export async function getPresignedUploadUrl(
   const isAbsolute = R2_CONFIG.publicUrlBase.startsWith('http');
   const publicUrl = isAbsolute
     ? `${R2_CONFIG.publicUrlBase.replace(/\/$/, '')}/${uniqueKey}`
-    : `/api/images/${fileBasename}`;
+    : `/api/images/${uniqueKey}`;
 
   return {
     uploadUrl,
@@ -118,4 +147,87 @@ export async function getR2ObjectStream(key: string) {
     Key: key,
   });
   return r2S3Client.send(command);
+}
+
+/**
+ * Reads trusted object metadata directly from R2 before a caller persists a
+ * reference supplied by a client.
+ */
+export async function getR2ObjectMetadata(key: string): Promise<{
+  contentLength: number | null;
+  contentType: string | null;
+}> {
+  const result = await r2S3Client.send(
+    new HeadObjectCommand({
+      Bucket: R2_CONFIG.bucketName,
+      Key: key
+    })
+  );
+  return {
+    contentLength: result.ContentLength ?? null,
+    contentType: result.ContentType?.toLowerCase() ?? null
+  };
+}
+
+export async function getR2ObjectBytes(
+  key: string,
+  maximumBytes: number
+): Promise<{ bytes: Buffer; contentType: string | null }> {
+  const result = await r2S3Client.send(
+    new GetObjectCommand({ Bucket: R2_CONFIG.bucketName, Key: key })
+  );
+  if (!result.Body) throw new Error('R2 object has no body.');
+
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  for await (const chunk of result.Body as AsyncIterable<Uint8Array>) {
+    const buffer = Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > maximumBytes) {
+      throw new Error('R2 object exceeds the permitted size.');
+    }
+    chunks.push(buffer);
+  }
+  return {
+    bytes: Buffer.concat(chunks, totalBytes),
+    contentType: result.ContentType?.toLowerCase() ?? null
+  };
+}
+
+export async function storeImmutableVoiceObject(
+  bytes: Buffer,
+  contentType: string,
+  extension: string,
+  sourceKey?: string
+): Promise<{ key: string; url: string }> {
+  const safeExtension = extension.replace(/[^a-z0-9]/gi, '') || 'm4a';
+  const key = `audio/messages/${Date.now()}_${crypto.randomBytes(12).toString('hex')}.${safeExtension}`;
+  await r2S3Client.send(
+    new PutObjectCommand({
+      Bucket: R2_CONFIG.bucketName,
+      Key: key,
+      Body: bytes,
+      ContentType: contentType,
+      CacheControl: 'public, max-age=31536000, immutable'
+    })
+  );
+
+  if (sourceKey && sourceKey !== key) {
+    try {
+      await r2S3Client.send(
+        new DeleteObjectCommand({ Bucket: R2_CONFIG.bucketName, Key: sourceKey })
+      );
+    } catch (error) {
+      console.warn(
+        '[R2 Cleanup] Verified temporary voice object could not be removed:',
+        error instanceof Error ? error.message : 'Unknown cleanup error.'
+      );
+    }
+  }
+
+  const isAbsolute = R2_CONFIG.publicUrlBase.startsWith('http');
+  const url = isAbsolute
+    ? `${R2_CONFIG.publicUrlBase.replace(/\/$/, '')}/${key}`
+    : `/api/images/${key}`;
+  return { key, url };
 }

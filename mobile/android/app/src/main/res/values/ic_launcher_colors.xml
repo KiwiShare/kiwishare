@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#FAF5EA</color>
+    <color name="notification_accent">#064B3A</color>
 </resources>
 

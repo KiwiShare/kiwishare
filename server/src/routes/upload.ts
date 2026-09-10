@@ -9,7 +9,7 @@ const router = new Router();
  * Uploads an image directly to Cloudflare R2 bucket `kiwishare`
  */
 router.post('/upload', authenticateToken, async (ctx) => {
-  const { imageBase64, fileName, contentType } = ctx.request.body as any;
+  const { imageBase64, fileName, contentType, folder } = ctx.request.body as any;
 
   if (!imageBase64) {
     ctx.status = 400;
@@ -27,7 +27,7 @@ router.post('/upload', authenticateToken, async (ctx) => {
     const name = fileName || `kiwishare_item_${Date.now()}.jpg`;
     const mime = contentType || 'image/jpeg';
 
-    const result = await uploadToR2(buffer, name, mime);
+    const result = await uploadToR2(buffer, name, mime, folder);
 
     ctx.status = 201;
     ctx.body = {
@@ -39,7 +39,7 @@ router.post('/upload', authenticateToken, async (ctx) => {
       storageEndpoint: R2_CONFIG.endpoint
     };
   } catch (err: any) {
-    ctx.status = 500;
+    ctx.status = err.message === 'Invalid R2 upload folder.' ? 400 : 500;
     ctx.body = {
       status: 'error',
       message: err.message || 'Failed to upload image.'
@@ -52,13 +52,13 @@ router.post('/upload', authenticateToken, async (ctx) => {
  * Generates an S3 presigned URL for direct client-side upload to Cloudflare R2
  */
 router.post('/upload/presign', authenticateToken, async (ctx) => {
-  const { fileName, contentType } = ctx.request.body as any;
+  const { fileName, contentType, folder } = ctx.request.body as any;
 
   try {
     const name = fileName || `upload_${Date.now()}.jpg`;
     const mime = contentType || 'image/jpeg';
 
-    const result = await getPresignedUploadUrl(name, mime);
+    const result = await getPresignedUploadUrl(name, mime, 3600, folder);
 
     ctx.status = 200;
     ctx.body = {
@@ -70,7 +70,7 @@ router.post('/upload/presign', authenticateToken, async (ctx) => {
       endpoint: R2_CONFIG.endpoint
     };
   } catch (err: any) {
-    ctx.status = 500;
+    ctx.status = err.message === 'Invalid R2 upload folder.' ? 400 : 500;
     ctx.body = {
       status: 'error',
       message: err.message || 'Failed to generate R2 presigned URL.'
@@ -83,15 +83,16 @@ router.post('/upload/presign', authenticateToken, async (ctx) => {
  * Streams image files directly from Cloudflare R2
  */
 router.get('/images/:filename+', async (ctx) => {
-  const rawParam = ctx.params.filename || '';
-  const filename = rawParam.replace(/^images\//, '');
-  if (!filename) {
+  const rawParam = (ctx.params.filename || '').replace(/^\/+/, '');
+  if (!rawParam || rawParam.includes('..')) {
     ctx.status = 404;
     return;
   }
 
+  const objectKey = rawParam.includes('/') ? rawParam : `images/${rawParam}`;
+
   try {
-    const r2Stream = await getR2ObjectStream(`images/${filename}`);
+    const r2Stream = await getR2ObjectStream(objectKey);
     if (r2Stream.Body) {
       ctx.type = r2Stream.ContentType || 'image/jpeg';
       ctx.set('Cache-Control', 'public, max-age=31536000');

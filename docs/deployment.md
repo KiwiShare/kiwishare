@@ -39,15 +39,18 @@ The backend Koa server is deployed to [Render.com](https://render.com) as a Web 
      - **Region**: Select a region close to your users (e.g., `Singapore` or `Oregon`).
      - **Branch**: `main`
      - **Auto-Deploy**: `Yes` *(Render will automatically redeploy on every merge to main)*
-     - **Root Directory**: `server` *(Crucial: Isolates the Node/Koa app package from the monorepo root)*
+     - **Root Directory**: Leave blank so Render builds from the repository root
+       and can read `pnpm-lock.yaml` and `pnpm-workspace.yaml`.
      - **Runtime**: `Node`
      - **Build Command**:
        ```bash
-       npm install -g pnpm && pnpm install --ignore-scripts && pnpm run build
+       npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter server run build
        ```
+       The workspace allowlist permits the `ffmpeg-static` install lifecycle so
+       the voice-message decoder binary is provisioned during deployment.
      - **Start Command**:
        ```bash
-       node dist/index.js
+       node server/dist/index.js
        ```
 
 3. **Configure Environment Variables in Render**:

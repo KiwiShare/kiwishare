@@ -7,6 +7,7 @@ import '../models/discovery_options_model.dart';
 import '../models/item_model.dart';
 
 abstract class ItemRepository {
+  Future<ItemModel?> fetchItemById(String id);
   Future<List<ItemModel>> fetchPopularItems();
   Future<List<ItemModel>> fetchRecommendedItems({int limit = 10});
   Future<DiscoveryOptionsModel> fetchDiscoveryOptions();
@@ -19,6 +20,33 @@ abstract class ItemRepository {
 }
 
 class RestItemRepository implements ItemRepository {
+  final http.Client _client;
+
+  RestItemRepository({http.Client? client}) : _client = client ?? http.Client();
+
+  @override
+  Future<ItemModel?> fetchItemById(String id) async {
+    final trimmedId = id.trim();
+    if (trimmedId.isEmpty) return null;
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/usedItems/$trimmedId');
+    final response = await _client.get(
+      uri,
+      headers: {'Accept': 'application/json'},
+    );
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch item details (${response.statusCode}).');
+    }
+    final data = jsonDecode(response.body);
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid item response.');
+    }
+    final itemData = data['item'] is Map<String, dynamic>
+        ? data['item'] as Map<String, dynamic>
+        : data;
+    return ItemModel.fromMap(itemData);
+  }
+
   @override
   Future<List<ItemModel>> fetchMyItems({
     required bool sold,

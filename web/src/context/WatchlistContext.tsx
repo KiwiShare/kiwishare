@@ -30,15 +30,29 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
       setIsLoading(true);
       const [idsRes, itemsRes] = await Promise.all([
         watchlistApi.getWatchlistIds().catch(() => ({ itemIds: [] })),
-        watchlistApi.getWatchlist().catch(() => ({ items: [] })),
+        watchlistApi.getWatchlist().catch(() => ({ items: [], data: [] })),
       ]);
 
-      if (idsRes.itemIds) {
-        setWatchlistIds(new Set(idsRes.itemIds.map(String)));
+      const rawItems: UsedItem[] = (itemsRes as any)?.items || (itemsRes as any)?.data || [];
+
+      if (idsRes.itemIds && Array.isArray(idsRes.itemIds)) {
+        const idSet = new Set<string>(idsRes.itemIds.map(String));
+        // Also add IDs from loaded items
+        rawItems.forEach((it) => {
+          const id = it.id || it._id;
+          if (id) idSet.add(String(id));
+        });
+        setWatchlistIds(idSet);
+      } else if (rawItems.length > 0) {
+        const idSet = new Set<string>();
+        rawItems.forEach((it) => {
+          const id = it.id || it._id;
+          if (id) idSet.add(String(id));
+        });
+        setWatchlistIds(idSet);
       }
-      if (itemsRes.items) {
-        setWatchlistItems(itemsRes.items);
-      }
+
+      setWatchlistItems(rawItems);
     } catch (err) {
       console.error('Failed to load watchlist:', err);
     } finally {

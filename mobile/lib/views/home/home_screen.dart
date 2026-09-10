@@ -832,6 +832,41 @@ class _HomeJumboCard extends StatelessWidget {
                             ],
                           ),
                         ),
+                      if (item.seller?.isStudentVerified == true)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: AppSpacing.xs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF1E3A8A,
+                            ).withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small,
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.verified,
+                                size: 14,
+                                color: Color(0xFF93C5FD),
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'STUDENT VERIFIED',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1102,6 +1137,49 @@ class _RecommendedProductCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                      if (item.seller?.isStudentVerified == true)
+                        Positioned(
+                          bottom: 6,
+                          left: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF1E3A8A,
+                              ).withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 3,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.verified,
+                                  size: 10,
+                                  color: Color(0xFF93C5FD),
+                                ),
+                                SizedBox(width: 2),
+                                Text(
+                                  'Student',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1138,13 +1216,27 @@ class _RecommendedProductCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        Text(
-                          '\$${item.priceNzd}',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                color: AppColors.brandPrimary,
-                                fontWeight: FontWeight.w800,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '\$${item.priceNzd}',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    color: AppColors.brandPrimary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                            if (item.seller?.isStudentVerified == true)
+                              const Tooltip(
+                                message: 'Student Verified Item',
+                                child: Icon(
+                                  Icons.verified,
+                                  size: 14,
+                                  color: Color(0xFF2563EB),
+                                ),
                               ),
+                          ],
                         ),
                       ],
                     ),
@@ -1346,7 +1438,7 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.70 - (textScale - 1) * 0.18,
+        childAspectRatio: 0.65 - (textScale - 1) * 0.20,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
@@ -1377,7 +1469,7 @@ class _HomeLoadingState extends StatelessWidget {
             maxCrossAxisExtent: 220,
             crossAxisSpacing: AppSpacing.md,
             mainAxisSpacing: AppSpacing.md,
-            childAspectRatio: 0.70,
+            childAspectRatio: 0.65,
           ),
           itemCount: 4,
           itemBuilder: (_, _) => const ItemCardSkeleton(),

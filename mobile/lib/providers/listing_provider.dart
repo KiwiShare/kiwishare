@@ -69,4 +69,12 @@ class ListingProvider extends ChangeNotifier {
     required bool sold,
     required String token,
   }) => itemRepository.fetchMyItems(sold: sold, token: token);
+
+  void invalidateCaches() {
+    _cachedPopularItems = null;
+    _cachedRecommendedItems = null;
+    _cachedDiscoveryOptions = null;
+    _cachedDiscoveryItems.clear();
+    notifyListeners();
+  }
 }

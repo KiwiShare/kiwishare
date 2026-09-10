@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../repositories/user_repository.dart';
+import '../services/push_notification_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final UserRepository userRepository;
 
-  AuthProvider({required this.userRepository}) {
+  AuthProvider({required this.userRepository, this.pushNotifications}) {
     _loadSession();
   }
+
+  final PushNotificationSession? pushNotifications;
 
   bool _isLoggedIn = false;
   bool get isLoggedIn => _isLoggedIn;
@@ -23,6 +27,9 @@ class AuthProvider extends ChangeNotifier {
 
   String? _jwtToken;
   String? get jwtToken => _jwtToken;
+
+  Future<void>? _pendingSessionClear;
+  bool _googleSignOutRequested = false;
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
 
@@ -37,6 +44,10 @@ class AuthProvider extends ChangeNotifier {
         );
         _isLoggedIn = true;
         notifyListeners();
+        unawaited(
+          pushNotifications?.activate(_jwtToken!, userId: _currentUser!.id) ??
+              Future.value(),
+        );
       }
     } catch (e) {
       debugPrint('Error loading auth session: $e');
@@ -44,6 +55,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> login(String email, String password) async {
+    await _waitForSessionClear();
     _isLoggingIn = true;
     notifyListeners();
     try {
@@ -61,6 +73,9 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
+      unawaited(
+        pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+      );
     } catch (e) {
       _currentUser = null;
       _isLoggedIn = false;
@@ -76,6 +91,7 @@ class AuthProvider extends ChangeNotifier {
     String password,
     String displayName,
   ) async {
+    await _waitForSessionClear();
     _isLoggingIn = true;
     notifyListeners();
     try {
@@ -94,6 +110,9 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
+      unawaited(
+        pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+      );
     } catch (e) {
       _currentUser = null;
       _isLoggedIn = false;
@@ -105,6 +124,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> sendOtp(String email) async {
+    await _waitForSessionClear();
     _isLoggingIn = true;
     notifyListeners();
     try {
@@ -120,6 +140,7 @@ class AuthProvider extends ChangeNotifier {
     String code, {
     String? displayName,
   }) async {
+    await _waitForSessionClear();
     _isLoggingIn = true;
     notifyListeners();
     try {
@@ -138,6 +159,9 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
+      unawaited(
+        pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+      );
     } catch (e) {
       _currentUser = null;
       _isLoggedIn = false;
@@ -149,6 +173,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> loginWithGoogle() async {
+    await _waitForSessionClear();
     _isLoggingIn = true;
     notifyListeners();
     try {
@@ -178,6 +203,9 @@ class AuthProvider extends ChangeNotifier {
       _jwtToken = token;
       _currentUser = user;
       _isLoggedIn = true;
+      unawaited(
+        pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+      );
     } catch (e) {
       debugPrint('Google Login Provider Error: $e');
       _currentUser = null;
@@ -189,20 +217,56 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
+  Future<void> logout() {
+    _googleSignOutRequested = true;
+    return _startSessionClear();
+  }
+
+  Future<void> clearSession() => _startSessionClear();
+
+  Future<void> _waitForSessionClear() async {
+    final pending = _pendingSessionClear;
+    if (pending != null) await pending;
+  }
+
+  Future<void> _startSessionClear() {
+    final pending = _pendingSessionClear;
+    if (pending != null) return pending;
+
+    late final Future<void> operation;
+    operation = _clearSessionNow().whenComplete(() {
+      if (identical(_pendingSessionClear, operation)) {
+        _pendingSessionClear = null;
+        _googleSignOutRequested = false;
+      }
+    });
+    _pendingSessionClear = operation;
+    return operation;
+  }
+
+  Future<void> _clearSessionNow() async {
+    final token = _jwtToken;
+    final pushDeactivation = token == null
+        ? null
+        : pushNotifications?.deactivate(token);
     _isLoggedIn = false;
     _currentUser = null;
     _jwtToken = null;
+    // Account-scoped providers must stop exposing the previous session before
+    // storage and push-token cleanup, which may take an arbitrary amount of
+    // time.
+    notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     await prefs.remove('current_user');
+    if (pushDeactivation != null) await pushDeactivation;
 
-    try {
-      await _googleSignIn.signOut();
-    } catch (_) {}
-
-    notifyListeners();
+    if (_googleSignOutRequested) {
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+    }
   }
 
   Future<void> updateDisplayName(String value) async {

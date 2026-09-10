@@ -1,0 +1,845 @@
+import Router from 'koa-router';
+import { Context } from 'koa';
+import mongoose from 'mongoose';
+import { authenticateToken } from '../middleware/auth';
+import Conversation from '../models/Conversation';
+import Message from '../models/Message';
+import Item from '../models/Item';
+import {
+  getR2ObjectBytes,
+  R2_CONFIG,
+  storeImmutableVoiceObject
+} from '../config/r2';
+import {
+  MESSAGE_CONTENT_NOT_ALLOWED,
+  moderateChatText
+} from '../services/messageModeration';
+import {
+  acquireVoiceProcessingAdmission,
+  probeVoiceAudio
+} from '../services/voiceAudio';
+import {
+  notifyChatReadReceipt,
+  notifyChatReceiver
+} from '../services/pushNotification';
+import { runMongoTransaction } from '../services/mongoTransaction';
+
+const router = new Router({ prefix: '/conversations' });
+const DEFAULT_MESSAGE_LIMIT = 50;
+const MAX_MESSAGE_LIMIT = 100;
+const MAX_MESSAGE_LENGTH = 2000;
+const MAX_VOICE_DURATION_MS = 60000;
+const MAX_VOICE_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+
+router.use(authenticateToken);
+
+function currentUserId(ctx: Context): mongoose.Types.ObjectId | null {
+  const value = ctx.state.user?.id;
+  return mongoose.Types.ObjectId.isValid(value)
+    ? new mongoose.Types.ObjectId(value)
+    : null;
+}
+
+function objectId(value: any): string {
+  return (value?._id ?? value)?.toString() ?? '';
+}
+
+function formatConversation(conversation: any, userId: string) {
+  const buyerId = objectId(conversation.buyerId);
+  const buying = buyerId === userId;
+  const participant = buying ? conversation.sellerId : conversation.buyerId;
+  const item = conversation.itemId;
+  const rawImages = Array.isArray(item?.images) ? item.images : [];
+
+  return {
+    id: objectId(conversation),
+    status: conversation.status,
+    direction: buying ? 'buying' : 'selling',
+    unreadCount: buying
+      ? conversation.buyerUnreadCount ?? 0
+      : conversation.sellerUnreadCount ?? 0,
+    lastMessageText: conversation.lastMessageText ?? '',
+    lastMessageAt: conversation.lastMessageAt ?? null,
+    item: {
+      id: objectId(item),
+      title: item?.title ?? 'Unavailable item',
+      imageUrl: item?.imageUrl ?? rawImages[0]?.url ?? ''
+    },
+    participant: {
+      id: objectId(participant),
+      displayName: participant?.displayName ?? 'Kiwi member',
+      avatarUrl: participant?.avatarUrl ?? null
+    },
+    createdAt: conversation.createdAt,
+    updatedAt: conversation.updatedAt
+  };
+}
+
+function formatMessage(message: any, userId: string) {
+  const senderId = objectId(message.senderId);
+  return {
+    id: objectId(message),
+    conversationId: objectId(message.conversationId),
+    senderId,
+    receiverId: objectId(message.receiverId),
+    type: message.type,
+    text: message.text ?? '',
+    imageUrl: message.imageUrl ?? null,
+    audioUrl: message.audioUrl ?? null,
+    durationMs: message.durationMs ?? null,
+    location: message.location
+      ? {
+          name: message.location.name ?? '',
+          latitude: message.location.latitude,
+          longitude: message.location.longitude
+        }
+      : null,
+    meetup: message.meetup
+      ? {
+          orderId: objectId(message.meetup.orderId),
+          scheduledAt: message.meetup.scheduledAt,
+          locationName: message.meetup.locationName ?? '',
+          latitude: message.meetup.latitude,
+          longitude: message.meetup.longitude,
+          proposalStatus: message.meetup.proposalStatus ?? 'proposed',
+          proposedBy: objectId(message.meetup.proposedBy),
+          note: message.meetup.note ?? ''
+        }
+      : null,
+    status: message.status,
+    isMine: senderId === userId,
+    readAt: message.readAt ?? null,
+    createdAt: message.createdAt,
+    updatedAt: message.updatedAt
+  };
+}
+
+function validR2AssetUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (normalized.length < 1 || normalized.length > 2048) return null;
+
+  try {
+    const configuredBase = R2_CONFIG.publicUrlBase.trim();
+    if (!configuredBase.startsWith('http')) {
+      const relativeUrl = new URL(normalized, 'http://kiwishare.local');
+      if (
+        !normalized.startsWith('/api/images/') ||
+        normalized.startsWith('//') ||
+        relativeUrl.origin !== 'http://kiwishare.local' ||
+        !relativeUrl.pathname.startsWith('/api/images/') ||
+        relativeUrl.search.length > 0 ||
+        relativeUrl.hash.length > 0
+      ) {
+        return null;
+      }
+      return relativeUrl.pathname;
+    }
+
+    const imageUrl = new URL(normalized);
+    const publicBase = new URL(configuredBase);
+    const basePath = publicBase.pathname.replace(/\/$/, '');
+    const hasExpectedPath =
+      basePath.length === 0 || imageUrl.pathname.startsWith(`${basePath}/`);
+    if (
+      imageUrl.protocol !== 'https:' ||
+      imageUrl.origin !== publicBase.origin ||
+      !hasExpectedPath
+    ) {
+      return null;
+    }
+    return imageUrl.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
+function voiceR2ObjectKey(audioUrl: string): string | null {
+  try {
+    const configuredBase = R2_CONFIG.publicUrlBase.trim();
+    let encodedKey: string;
+    if (!configuredBase.startsWith('http')) {
+      const prefix = '/api/images/';
+      const pathname = new URL(audioUrl, 'http://kiwishare.local').pathname;
+      if (!pathname.startsWith(prefix)) return null;
+      encodedKey = pathname.slice(prefix.length);
+    } else {
+      const asset = new URL(audioUrl);
+      const publicBase = new URL(configuredBase);
+      const basePath = publicBase.pathname.replace(/\/$/, '');
+      const prefix = `${basePath}/`;
+      if (!asset.pathname.startsWith(prefix)) return null;
+      encodedKey = asset.pathname.slice(prefix.length);
+    }
+
+    const key = decodeURIComponent(encodedKey);
+    return /^audio\/chat\/[A-Za-z0-9_-]+\.[A-Za-z0-9]+$/.test(key)
+      ? key
+      : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function findConversationForUser(
+  ctx: Context,
+  conversationId: string,
+  userId: mongoose.Types.ObjectId
+) {
+  if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Invalid conversation ID.' };
+    return null;
+  }
+
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Conversation not found.' };
+    return null;
+  }
+
+  const userIdText = userId.toString();
+  if (
+    conversation.buyerId.toString() !== userIdText &&
+    conversation.sellerId.toString() !== userIdText
+  ) {
+    ctx.status = 403;
+    ctx.body = {
+      status: 'error',
+      message: 'You do not have access to this conversation.'
+    };
+    return null;
+  }
+
+  return conversation;
+}
+
+router.get('/', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Invalid authenticated user.' };
+    return;
+  }
+
+  const conversations = await Conversation.find({
+    $or: [{ buyerId: userId }, { sellerId: userId }],
+    hiddenForUserIds: { $ne: userId }
+  })
+    .populate('itemId', 'title imageUrl images status')
+    .populate('buyerId', 'displayName avatarUrl')
+    .populate('sellerId', 'displayName avatarUrl')
+    .sort({ lastMessageAt: -1, updatedAt: -1 });
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    conversations: conversations.map((conversation) =>
+      formatConversation(conversation, userId.toString())
+    )
+  };
+});
+
+router.post('/', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Invalid authenticated user.' };
+    return;
+  }
+
+  const { itemId } = ctx.request.body as { itemId?: unknown };
+  if (typeof itemId !== 'string' || !mongoose.Types.ObjectId.isValid(itemId)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'A valid item ID is required.' };
+    return;
+  }
+
+  const item = await Item.findById(itemId);
+  if (!item || ['deleted', 'hidden', 'revoked'].includes(item.status)) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Item not found.' };
+    return;
+  }
+
+  const sellerId = new mongoose.Types.ObjectId(item.sellerId.toString());
+  if (sellerId.equals(userId)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'You cannot message yourself about your own item.' };
+    return;
+  }
+
+  let conversation = await Conversation.findOne({
+    itemId: item._id,
+    buyerId: userId,
+    sellerId
+  });
+  let wasCreated = false;
+
+  if (!conversation) {
+    try {
+      conversation = await Conversation.create({
+        itemId: item._id,
+        buyerId: userId,
+        sellerId,
+        status: 'active'
+      });
+      wasCreated = true;
+    } catch (error: any) {
+      if (error?.code !== 11000) throw error;
+      conversation = await Conversation.findOne({
+        itemId: item._id,
+        buyerId: userId,
+        sellerId
+      });
+    }
+  }
+
+  if (!conversation) {
+    throw new Error('Conversation could not be created.');
+  }
+
+  if (
+    conversation.hiddenForUserIds.some((hiddenId: mongoose.Types.ObjectId) =>
+      hiddenId.equals(userId)
+    )
+  ) {
+    conversation.hiddenForUserIds = conversation.hiddenForUserIds.filter(
+      (hiddenId: mongoose.Types.ObjectId) => !hiddenId.equals(userId)
+    );
+    await conversation.save();
+  }
+
+  await conversation.populate('itemId', 'title imageUrl images status');
+  await conversation.populate('buyerId', 'displayName avatarUrl');
+  await conversation.populate('sellerId', 'displayName avatarUrl');
+
+  ctx.status = wasCreated ? 201 : 200;
+  ctx.body = {
+    status: wasCreated ? 'created' : 'success',
+    conversation: formatConversation(conversation, userId.toString())
+  };
+});
+
+router.get('/:conversationId/messages', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Invalid authenticated user.' };
+    return;
+  }
+
+  const conversation = await findConversationForUser(
+    ctx,
+    ctx.params.conversationId,
+    userId
+  );
+  if (!conversation) return;
+
+  const rawLimit = Number(ctx.query.limit ?? DEFAULT_MESSAGE_LIMIT);
+  const limit = Number.isInteger(rawLimit)
+    ? Math.min(Math.max(rawLimit, 1), MAX_MESSAGE_LIMIT)
+    : DEFAULT_MESSAGE_LIMIT;
+  const filter: any = {
+    conversationId: conversation._id,
+    status: { $ne: 'deleted' }
+  };
+
+  if (ctx.query.before != null) {
+    const before = new Date(String(ctx.query.before));
+    if (Number.isNaN(before.getTime())) {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'The before cursor must be a valid date.' };
+      return;
+    }
+    filter.createdAt = { $lt: before };
+  }
+
+  const messages = await Message.find(filter)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1);
+  const hasMore = messages.length > limit;
+  const page = messages.slice(0, limit).reverse();
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    messages: page.map((message) => formatMessage(message, userId.toString())),
+    pagination: {
+      hasMore,
+      nextBefore: hasMore && page.length > 0 ? page[0].createdAt : null
+    }
+  };
+});
+
+router.post('/:conversationId/messages', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Invalid authenticated user.' };
+    return;
+  }
+
+  const conversation = await findConversationForUser(
+    ctx,
+    ctx.params.conversationId,
+    userId
+  );
+  if (!conversation) return;
+
+  if (conversation.status !== 'active') {
+    ctx.status = 409;
+    ctx.body = { status: 'error', message: 'This conversation is not active.' };
+    return;
+  }
+
+  const body = ctx.request.body as {
+    type?: unknown;
+    text?: unknown;
+    imageUrl?: unknown;
+    audioUrl?: unknown;
+    durationMs?: unknown;
+    location?: {
+      name?: unknown;
+      latitude?: unknown;
+      longitude?: unknown;
+    };
+  };
+  const messageType = body.type ?? 'text';
+  if (
+    messageType !== 'text' &&
+    messageType !== 'image' &&
+    messageType !== 'voice' &&
+    messageType !== 'location'
+  ) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'Message type must be text, image, voice, or location.'
+    };
+    return;
+  }
+
+  let normalizedText = '';
+  let imageUrl: string | null = null;
+  let audioUrl: string | null = null;
+  let durationMs: number | null = null;
+  let locationData: { name: string; latitude: number; longitude: number } | null = null;
+
+  if (messageType === 'location') {
+    const loc = body.location;
+    if (!loc || typeof loc !== 'object') {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'Location data is required for location messages.'
+      };
+      return;
+    }
+    const name = typeof loc.name === 'string' && loc.name.trim().length > 0
+      ? loc.name.trim()
+      : 'Shared location';
+    const lat = Number(loc.latitude);
+    const lng = Number(loc.longitude);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'Valid latitude and longitude are required.'
+      };
+      return;
+    }
+    locationData = { name, latitude: lat, longitude: lng };
+    normalizedText = `📍 ${name}`;
+  } else if (messageType === 'text') {
+    const moderation = moderateChatText(body.text);
+    normalizedText = moderation.text;
+    if (
+      normalizedText.length < 1 ||
+      normalizedText.length > MAX_MESSAGE_LENGTH
+    ) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: `Message text must be between 1 and ${MAX_MESSAGE_LENGTH} characters.`
+      };
+      return;
+    }
+    if (!moderation.isAllowed) {
+      ctx.status = 422;
+      ctx.body = {
+        status: 'error',
+        code: 'MESSAGE_CONTENT_NOT_ALLOWED',
+        message: MESSAGE_CONTENT_NOT_ALLOWED
+      };
+      return;
+    }
+  } else if (messageType === 'image') {
+    imageUrl = validR2AssetUrl(body.imageUrl);
+    if (imageUrl == null) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A valid uploaded image URL is required.'
+      };
+      return;
+    }
+  } else {
+    audioUrl = validR2AssetUrl(body.audioUrl);
+    durationMs = typeof body.durationMs === 'number' ? body.durationMs : null;
+    if (
+      audioUrl == null ||
+      durationMs == null ||
+      !Number.isInteger(durationMs) ||
+      durationMs < 1 ||
+      durationMs > MAX_VOICE_DURATION_MS
+    ) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A valid uploaded voice message up to 60 seconds is required.'
+      };
+      return;
+    }
+
+    const objectKey = voiceR2ObjectKey(audioUrl);
+    if (objectKey == null) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A valid uploaded voice message up to 60 seconds is required.'
+      };
+      return;
+    }
+
+    const voiceAdmission = acquireVoiceProcessingAdmission(userId.toString());
+    if (!voiceAdmission) {
+      ctx.status = 429;
+      ctx.body = {
+        status: 'error',
+        message: 'Voice message processing is busy. Please try again shortly.'
+      };
+      return;
+    }
+
+    try {
+      // Read and validate the exact bytes that will be retained. The client
+      // supplied MIME type and duration are not trusted security boundaries.
+      const uploaded = await getR2ObjectBytes(
+        objectKey,
+        MAX_VOICE_FILE_SIZE_BYTES
+      );
+      const verified = await probeVoiceAudio(
+        uploaded.bytes,
+        MAX_VOICE_DURATION_MS,
+        voiceAdmission
+      );
+      if (
+        verified == null ||
+        verified.durationMs < 1 ||
+        verified.durationMs > MAX_VOICE_DURATION_MS
+      ) {
+        ctx.status = 400;
+        ctx.body = {
+          status: 'error',
+          message: 'The uploaded voice message must be valid audio up to 60 seconds and 5 MB.'
+        };
+        return;
+      }
+
+      // Persist a server-owned copy of the verified bytes under a fresh key.
+      // The original presigned PUT can still expire or be reused, but it can no
+      // longer mutate the object referenced by the chat message.
+      const immutableObject = await storeImmutableVoiceObject(
+        uploaded.bytes,
+        verified.contentType,
+        verified.extension,
+        objectKey
+      );
+      audioUrl = immutableObject.url;
+      durationMs = verified.durationMs;
+    } catch (_) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'The uploaded voice message could not be verified.'
+      };
+      return;
+    } finally {
+      voiceAdmission.release();
+    }
+  }
+
+  const sendingAsBuyer = conversation.buyerId.equals(userId);
+  const receiverId = sendingAsBuyer ? conversation.sellerId : conversation.buyerId;
+  const conversationPreview = messageType === 'image'
+    ? 'Photo'
+    : messageType === 'voice'
+      ? 'Voice message'
+      : messageType === 'location'
+        ? `📍 ${locationData?.name ?? 'Location'}`
+        : normalizedText;
+  let message: InstanceType<typeof Message> | null = null;
+  await runMongoTransaction(async (session) => {
+    const [createdMessage] = await Message.create(
+      [
+        {
+          conversationId: conversation._id,
+          senderId: userId,
+          receiverId,
+          type: messageType,
+          ...(messageType === 'text'
+            ? { text: normalizedText }
+            : messageType === 'image'
+              ? { imageUrl }
+              : messageType === 'location'
+                ? { text: normalizedText, location: locationData! }
+                : { audioUrl, durationMs }),
+          status: 'sent'
+        }
+      ],
+      session ? { session } : {}
+    );
+    message = createdMessage;
+
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $set: {
+          lastMessageText: conversationPreview,
+          lastMessageAt: createdMessage.createdAt,
+          lastMessageId: createdMessage._id,
+          lastMessageSenderId: userId
+        },
+        $inc: sendingAsBuyer
+          ? { sellerUnreadCount: 1 }
+          : { buyerUnreadCount: 1 },
+        $pull: { hiddenForUserIds: { $in: [userId, receiverId] } }
+      },
+      session ? { session } : {}
+    );
+  });
+
+  if (!message) {
+    ctx.throw(500, 'Message transaction completed without a message.');
+    return;
+  }
+
+  void notifyChatReceiver({
+    receiverId,
+    conversationId: conversation.id,
+    itemId: conversation.itemId.toString(),
+    senderId: userId.toString(),
+    messageType
+  });
+
+  ctx.status = 201;
+  ctx.body = {
+    status: 'created',
+    message: formatMessage(message, userId.toString())
+  };
+});
+
+router.patch('/:conversationId/read', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Invalid authenticated user.' };
+    return;
+  }
+
+  const conversation = await findConversationForUser(
+    ctx,
+    ctx.params.conversationId,
+    userId
+  );
+  if (!conversation) return;
+
+  const throughMessageId = (ctx.request.body as { throughMessageId?: unknown })
+    ?.throughMessageId;
+  if (
+    throughMessageId !== undefined &&
+    (typeof throughMessageId !== 'string' ||
+      !mongoose.Types.ObjectId.isValid(throughMessageId))
+  ) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'A valid read-through message is required.'
+    };
+    return;
+  }
+  const readingAsBuyer = conversation.buyerId.equals(userId);
+  const unreadField = readingAsBuyer
+    ? 'buyerUnreadCount'
+    : 'sellerUnreadCount';
+  // Freeze the latest fully committed preview at request time. A standalone
+  // send may already have inserted its Message while its Conversation update
+  // is queued; that partial message must remain beyond this legacy boundary.
+  const legacyBoundaryAt =
+    throughMessageId === undefined ? conversation.lastMessageAt : undefined;
+  const legacyBoundaryId =
+    throughMessageId === undefined ? conversation.lastMessageId : undefined;
+  // Capture a legacy client's best available fallback inside the standalone
+  // queue, but only once so replica-set transaction retries cannot advance it.
+  let legacyWatermark:
+    | InstanceType<typeof Message>
+    | null
+    | undefined;
+  let invalidWatermark = false;
+  let readCount = 0;
+  let unreadCount = 0;
+  await runMongoTransaction(async (session) => {
+    // withTransaction may retry this callback after a write conflict.
+    invalidWatermark = false;
+    readCount = 0;
+    unreadCount = 0;
+
+    if (throughMessageId === undefined && legacyWatermark === undefined) {
+      const boundaryFilter = legacyBoundaryAt
+        ? legacyBoundaryId
+          ? {
+              $or: [
+                { createdAt: { $lt: legacyBoundaryAt } },
+                {
+                  createdAt: legacyBoundaryAt,
+                  _id: { $lte: legacyBoundaryId }
+                }
+              ]
+            }
+          : { createdAt: { $lt: legacyBoundaryAt } }
+        : { _id: { $exists: false } };
+      const legacyWatermarkQuery = Message.findOne({
+        conversationId: conversation._id,
+        receiverId: userId,
+        status: { $in: ['sent', 'delivered'] },
+        ...boundaryFilter
+      })
+        .sort({ createdAt: -1, _id: -1 })
+        .select('_id createdAt');
+      if (session) legacyWatermarkQuery.session(session);
+      legacyWatermark = await legacyWatermarkQuery;
+    }
+
+    let watermark = legacyWatermark ?? null;
+    if (throughMessageId) {
+      const watermarkQuery = Message.findOne({
+        _id: new mongoose.Types.ObjectId(throughMessageId),
+        conversationId: conversation._id,
+        status: { $ne: 'deleted' }
+      }).select('_id createdAt');
+      if (session) watermarkQuery.session(session);
+      watermark = await watermarkQuery;
+    }
+
+    if (!watermark) {
+      invalidWatermark = throughMessageId !== undefined;
+    }
+
+    if (watermark) {
+      const result = await Message.updateMany(
+          {
+            conversationId: conversation._id,
+            receiverId: userId,
+            $or: [
+              { createdAt: { $lt: watermark.createdAt } },
+              { createdAt: watermark.createdAt, _id: { $lte: watermark._id } }
+            ],
+            status: { $in: ['sent', 'delivered'] }
+          },
+          { $set: { status: 'read', readAt: new Date() } },
+          session ? { session } : {}
+        );
+      readCount = result.modifiedCount;
+    }
+
+    // A bodyless legacy request can legitimately have no unread watermark.
+    // Still reconcile the cached counter so retries repair stale badges.
+    if (invalidWatermark) return;
+
+    const unreadCountQuery = Message.countDocuments({
+      conversationId: conversation._id,
+      receiverId: userId,
+      status: { $in: ['sent', 'delivered'] }
+    });
+    if (session) unreadCountQuery.session(session);
+    unreadCount = await unreadCountQuery;
+    const hiddenQuery = Conversation.exists({
+      _id: conversation._id,
+      hiddenForUserIds: userId
+    });
+    if (session) hiddenQuery.session(session);
+    const isHidden = await hiddenQuery;
+    if (isHidden) unreadCount = 0;
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      { $set: { [unreadField]: unreadCount } },
+      session ? { session } : {}
+    );
+  });
+
+  if (invalidWatermark) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'A valid read-through message is required.'
+    };
+    return;
+  }
+
+  if (readCount > 0) {
+    const receiptRecipientId = readingAsBuyer
+      ? conversation.sellerId
+      : conversation.buyerId;
+    void notifyChatReadReceipt({
+      recipientId: receiptRecipientId,
+      conversationId: conversation.id
+    });
+  }
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    readCount,
+    unreadCount
+  };
+});
+
+router.delete('/:conversationId', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Invalid authenticated user.' };
+    return;
+  }
+
+  const conversation = await findConversationForUser(
+    ctx,
+    ctx.params.conversationId,
+    userId
+  );
+  if (!conversation) return;
+
+  const hidingAsBuyer = conversation.buyerId.equals(userId);
+  await runMongoTransaction(async (session) => {
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $addToSet: { hiddenForUserIds: userId },
+        $set: hidingAsBuyer
+          ? { buyerUnreadCount: 0 }
+          : { sellerUnreadCount: 0 }
+      },
+      session ? { session } : {}
+    );
+  });
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    conversationId: conversation.id
+  };
+});
+
+export default router;

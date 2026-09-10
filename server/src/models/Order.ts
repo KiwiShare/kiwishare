@@ -38,6 +38,9 @@ export interface IOrder extends Document {
     locationName?: string;
     latitude?: number;
     longitude?: number;
+    proposedBy?: mongoose.Types.ObjectId;
+    proposalStatus?: 'proposed' | 'confirmed' | 'declined' | 'cancelled';
+    note?: string;
     buyerArrivedAt?: Date;
     sellerArrivedAt?: Date;
   };
@@ -101,6 +104,13 @@ const OrderSchema = new Schema<IOrder>(
       locationName: { type: String },
       latitude: { type: Number },
       longitude: { type: Number },
+      proposedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+      proposalStatus: {
+        type: String,
+        enum: ['proposed', 'confirmed', 'declined', 'cancelled'],
+        default: 'proposed'
+      },
+      note: { type: String },
       buyerArrivedAt: { type: Date },
       sellerArrivedAt: { type: Date }
     },

@@ -8,9 +8,11 @@ export interface IConversation extends Document {
   status: 'active' | 'closed' | 'blocked';
   lastMessageText?: string;
   lastMessageAt?: Date;
+  lastMessageId?: mongoose.Types.ObjectId;
   lastMessageSenderId?: mongoose.Types.ObjectId;
   buyerUnreadCount: number;
   sellerUnreadCount: number;
+  hiddenForUserIds: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,9 +26,11 @@ const ConversationSchema = new Schema<IConversation>(
     status: { type: String, enum: ['active', 'closed', 'blocked'], default: 'active' },
     lastMessageText: { type: String },
     lastMessageAt: { type: Date, index: true },
+    lastMessageId: { type: Schema.Types.ObjectId, ref: 'Message' },
     lastMessageSenderId: { type: Schema.Types.ObjectId, ref: 'User' },
     buyerUnreadCount: { type: Number, default: 0 },
-    sellerUnreadCount: { type: Number, default: 0 }
+    sellerUnreadCount: { type: Number, default: 0 },
+    hiddenForUserIds: [{ type: Schema.Types.ObjectId, ref: 'User' }]
   },
   {
     timestamps: true
@@ -35,6 +39,8 @@ const ConversationSchema = new Schema<IConversation>(
 
 // Avoid duplicate chats for same user-item combination
 ConversationSchema.index({ itemId: 1, buyerId: 1, sellerId: 1 }, { unique: true });
+ConversationSchema.index({ buyerId: 1, lastMessageAt: -1, updatedAt: -1 });
+ConversationSchema.index({ sellerId: 1, lastMessageAt: -1, updatedAt: -1 });
 
 ConversationSchema.virtual('id').get(function (this: IConversation) {
   return this._id.toString();

@@ -2,39 +2,52 @@
   "name": "kiwishare-monorepo",
   "version": "1.1.0",
   "private": true,
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "ffmpeg-static"
+    ]
+  },
   "description": "Monorepo for KiwiShare - Mobile App (Flutter) and Backend Server (Koa + TypeScript + MongoDB)",
   "scripts": {
     "prepare": "husky install",
+
     "release": "standard-version",
     "release:patch": "standard-version --release-as patch",
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major",
+
     "bootstrap": "pnpm install --no-frozen-lockfile && cd mobile && flutter pub get",
+
+    "server:dev": "pnpm --filter server run dev",
+    "server:build": "pnpm --filter server run build",
+    "server:test": "pnpm --filter server run test",
+    "server:lint": "pnpm --filter server run lint",
+
+    "web:dev": "pnpm --filter web run dev",
+    "web:build": "pnpm --filter web run build",
+    "web:lint": "pnpm --filter web run lint",
+
+    "mobile": "node scripts/mobile-dev.mjs",
     "mobile:test": "cd mobile && flutter test",
     "mobile:analyze": "cd mobile && flutter analyze",
     "mobile:format": "cd mobile && dart format --set-exit-if-changed lib/ test/",
     "mobile:build:android": "cd mobile && flutter build apk --release",
     "mobile:build:ios": "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && cd mobile && flutter config --no-enable-swift-package-manager && flutter build ios --release --no-codesign",
-    "mobile:build:all": "pnpm run mobile:build:android && pnpm run mobile:build:ios",
-    "mobile:dev": "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && cd mobile && flutter run --dart-define=API_BASE_URL=https://kiwishare.onrender.com",
-    "mobile:dev:local": "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && cd mobile && flutter run --dart-define=API_BASE_URL=local",
-    "mobile:dev:device": "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && cd mobile && flutter run --dart-define=API_BASE_URL=http://$(ipconfig getifaddr en0 || ipconfig getifaddr en1 || echo localhost):3000",
-    "server:build": "pnpm --filter server run build",
-    "server:test": "pnpm --filter server run test",
-    "server:lint": "pnpm --filter server run lint",
-    "server:dev": "pnpm --filter server run dev",
-    "web:build": "pnpm --filter web run build",
-    "web:lint": "pnpm --filter web run lint",
-    "web:dev": "pnpm --filter web run dev",
-    "dev": "pnpm run mobile:dev",
-    "dev:local": "concurrently \"pnpm server:dev\" \"pnpm mobile:dev:local\"",
-    "dev:device": "concurrently \"pnpm server:dev\" \"pnpm mobile:dev:device\"",
-    "dev:web": "concurrently \"pnpm server:dev\" \"pnpm web:dev\"",
-    "dev:all": "concurrently \"pnpm server:dev\" \"pnpm web:dev\" \"pnpm mobile:dev:local\"",
-    "build:all": "pnpm run server:build && pnpm run web:build && pnpm run mobile:build:all",
-    "test:all": "pnpm run mobile:test && pnpm run server:test",
-    "lint:all": "pnpm run mobile:analyze && pnpm run server:lint && pnpm run web:lint",
-    "format:all": "pnpm run mobile:format",
+    "mobile:build:all": "pnpm mobile:build:android && pnpm mobile:build:ios",
+
+    "dev": "concurrently -i --default-input-target 1 --kill-others-on-fail -n server,mobile \"pnpm server:dev\" \"pnpm mobile chrome local\"",
+    "dev:android": "concurrently -i --default-input-target 1 --kill-others-on-fail -n server,android \"pnpm server:dev\" \"pnpm mobile android local\"",
+    "dev:ios": "concurrently -i --default-input-target 1 --kill-others-on-fail -n server,ios \"pnpm server:dev\" \"pnpm mobile ios-device local\"",
+    "dev:ios:sim": "concurrently -i --default-input-target 1 --kill-others-on-fail -n server,ios-sim \"pnpm server:dev\" \"pnpm mobile ios-sim local\"",
+    "dev:web": "concurrently -i --kill-others-on-fail -n server,web \"pnpm server:dev\" \"pnpm web:dev\"",
+    "dev:all": "concurrently -i --kill-others-on-fail -n server,web,mobile \"pnpm server:dev\" \"pnpm web:dev\" \"pnpm mobile chrome local\"",
+    "dev:remote": "pnpm mobile chrome remote",
+
+    "build:all": "pnpm server:build && pnpm web:build && pnpm mobile:build:all",
+    "test:all": "pnpm mobile:test && pnpm server:test",
+    "lint:all": "pnpm mobile:analyze && pnpm server:lint && pnpm web:lint",
+    "format:all": "pnpm mobile:format",
+
     "emulators": "firebase emulators:start"
   },
   "repository": {
@@ -52,10 +65,5 @@
     "concurrently": "^8.2.2",
     "husky": "^9.1.7",
     "standard-version": "^9.5.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "protobufjs"
-    ]
   }
 }

@@ -3,8 +3,10 @@ import mongoose from 'mongoose';
 import Item from '../models/Item';
 import User from '../models/User';
 import Watchlist from '../models/Watchlist';
+import Order from '../models/Order';
 import { authenticateToken } from '../middleware/auth';
 import { formatItem } from './usedItems';
+import { sendAdminItemNotification } from '../services/adminNotification';
 
 const router = new Router();
 
@@ -48,7 +50,10 @@ router.get('/admin/stats', authenticateToken, requireAdmin, async (ctx) => {
     platformDistribution,
     categoryDistribution,
     recentUsers,
-    recentItems
+    recentItems,
+    totalOrders,
+    orderDistribution,
+    recentOrders
   ] = await Promise.all([
     User.countDocuments({ status: { $ne: 'deleted' } }),
     Item.countDocuments(),
@@ -69,7 +74,28 @@ router.get('/admin/stats', authenticateToken, requireAdmin, async (ctx) => {
     // Recent 5 users
     User.find().sort({ createdAt: -1 }).limit(5).select('displayName email role isStudentVerified studentInstitution trustScore isBanned status registrationPlatform lastUsedPlatform createdAt'),
     // Recent 5 items
-    Item.find().sort({ createdAt: -1 }).limit(5).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role')
+    Item.find().sort({ createdAt: -1 }).limit(5).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role'),
+    // Order statistics
+    Order.countDocuments(),
+    Order.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalItemAmount: { $sum: '$itemAmount' },
+          totalBuyerAmount: { $sum: '$buyerTotalAmount' },
+          totalBuyerFee: { $sum: '$buyerFeeAmount' },
+          totalSellerFee: { $sum: '$sellerFeeAmount' },
+          totalSellerReceive: { $sum: '$sellerReceiveAmount' }
+        }
+      }
+    ]),
+    Order.find()
+      .sort({ createdAt: -1 })
+      .limit(6)
+      .populate('buyerId', 'displayName email avatarUrl')
+      .populate('sellerId', 'displayName email avatarUrl')
+      .populate('itemId', 'title imageUrl price priceNzd category')
   ]);
 
   const platformStats: Record<string, number> = {
@@ -85,6 +111,67 @@ router.get('/admin/stats', authenticateToken, requireAdmin, async (ctx) => {
       platformStats[p._id] = p.count;
     }
   });
+
+  const orderStatusCounts: Record<string, number> = {
+    pending_payment: 0,
+    paid: 0,
+    meeting_scheduled: 0,
+    meeting_in_progress: 0,
+    qr_scanned: 0,
+    completed: 0,
+    cancelled: 0,
+    refund_pending: 0,
+    refunded: 0,
+    transfer_pending: 0,
+    seller_paid: 0,
+    disputed: 0
+  };
+
+  let totalGmvCents = 0;
+  let totalPlatformFeesCents = 0;
+  let totalSellerPayoutsCents = 0;
+  let completedOrders = 0;
+  let activeOrders = 0;
+  let cancelledOrders = 0;
+
+  orderDistribution.forEach((od: any) => {
+    const st = od._id;
+    if (st && orderStatusCounts[st] !== undefined) {
+      orderStatusCounts[st] = od.count;
+    }
+    // Only non-cancelled/non-refunded orders count towards GMV and platform fees
+    if (st !== 'cancelled' && st !== 'refunded' && st !== 'refund_pending' && st !== 'pending_payment') {
+      totalGmvCents += (od.totalBuyerAmount || 0);
+      totalPlatformFeesCents += ((od.totalBuyerFee || 0) + (od.totalSellerFee || 0));
+      totalSellerPayoutsCents += (od.totalSellerReceive || 0);
+    }
+    if (st === 'completed' || st === 'seller_paid') {
+      completedOrders += od.count;
+    } else if (st === 'cancelled' || st === 'refunded') {
+      cancelledOrders += od.count;
+    } else if (st !== 'pending_payment') {
+      activeOrders += od.count;
+    }
+  });
+
+  const formattedRecentOrders = recentOrders.map((ord: any) => ({
+    id: ord._id.toString(),
+    orderNumber: ord.orderNumber,
+    status: ord.status,
+    itemTitle: ord.itemSnapshot?.title || (ord.itemId as any)?.title || 'Used Item',
+    itemImageUrl: ord.itemSnapshot?.imageUrl || (ord.itemId as any)?.imageUrl || '',
+    buyerName: (ord.buyerId as any)?.displayName || 'Kiwi Buyer',
+    buyerEmail: (ord.buyerId as any)?.email,
+    sellerName: (ord.sellerId as any)?.displayName || 'Kiwi Seller',
+    sellerEmail: (ord.sellerId as any)?.email,
+    itemAmountNzd: (ord.itemAmount / 100).toFixed(2),
+    buyerFeeNzd: (ord.buyerFeeAmount / 100).toFixed(2),
+    sellerFeeNzd: (ord.sellerFeeAmount / 100).toFixed(2),
+    platformFeeNzd: ((ord.buyerFeeAmount + ord.sellerFeeAmount) / 100).toFixed(2),
+    buyerTotalNzd: (ord.buyerTotalAmount / 100).toFixed(2),
+    sellerReceiveNzd: (ord.sellerReceiveAmount / 100).toFixed(2),
+    createdAt: ord.createdAt
+  }));
 
   ctx.status = 200;
   ctx.body = {
@@ -102,7 +189,18 @@ router.get('/admin/stats', authenticateToken, requireAdmin, async (ctx) => {
         count: c.count
       })),
       recentUsers,
-      recentItems: recentItems.map((it: any) => formatItem(it))
+      recentItems: recentItems.map((it: any) => formatItem(it)),
+      orderStats: {
+        totalOrders,
+        completedOrders,
+        activeOrders,
+        cancelledOrders,
+        totalGmvNzd: (totalGmvCents / 100).toFixed(2),
+        totalPlatformFeesNzd: (totalPlatformFeesCents / 100).toFixed(2),
+        totalSellerPayoutsNzd: (totalSellerPayoutsCents / 100).toFixed(2),
+        statusBreakdown: orderStatusCounts,
+        recentOrders: formattedRecentOrders
+      }
     }
   };
 });
@@ -313,16 +411,142 @@ router.patch('/admin/items/:id/status', authenticateToken, requireAdmin, async (
     return;
   }
 
+  const previousStatus = item.status;
   item.status = status;
   if (status === 'deleted') {
     item.deletedAt = new Date();
   }
   await item.save();
 
+  // Send email and push notification to the seller/owner when status is changed by admin
+  if (item.sellerId && previousStatus !== status) {
+    const seller: any = item.sellerId;
+    const sellerId = seller._id || seller;
+    const sellerEmail = seller.email;
+    const sellerName = seller.displayName;
+
+    let eventType: 'item_revoked' | 'item_reactivated' | 'item_deleted' | null = null;
+    if (status === 'revoked') {
+      eventType = 'item_revoked';
+    } else if (status === 'active' && previousStatus === 'revoked') {
+      eventType = 'item_reactivated';
+    } else if (status === 'deleted') {
+      eventType = 'item_deleted';
+    }
+
+    if (eventType) {
+      sendAdminItemNotification({
+        userId: sellerId,
+        userEmail: sellerEmail,
+        userName: sellerName,
+        eventType,
+        itemTitle: item.title,
+        itemId: item._id.toString(),
+        itemPriceNzd: item.price ? (item.price / 100).toFixed(2) : undefined
+      }).catch((err) => {
+        console.warn('[Admin Item Status Notification] Non-blocking dispatch failure:', err?.message || err);
+      });
+    }
+  }
+
   ctx.status = 200;
   ctx.body = {
     status: 'success',
     message: `Item status updated to ${status}.`,
+    item: formatItem(item)
+  };
+});
+
+// 7. PATCH /api/admin/items/:id/assign - Reassign / Transfer item to another user account
+router.patch('/admin/items/:id/assign', authenticateToken, requireAdmin, async (ctx) => {
+  const { id } = ctx.params;
+  const { targetUserEmail, targetUserId } = ctx.request.body as any;
+
+  const rawTargetEmail = typeof targetUserEmail === 'string' ? targetUserEmail.trim() : '';
+  const rawTargetId = typeof targetUserId === 'string' ? targetUserId.trim() : '';
+
+  if (!rawTargetEmail && !rawTargetId) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Either targetUserEmail or targetUserId is required.' };
+    return;
+  }
+
+  let targetUser = null;
+  if (rawTargetEmail) {
+    targetUser = await User.findOne({ email: rawTargetEmail.toLowerCase() });
+    if (!targetUser) {
+      ctx.status = 404;
+      ctx.body = { status: 'error', message: `Target user with email "${rawTargetEmail}" not found.` };
+      return;
+    }
+  } else if (rawTargetId) {
+    if (!mongoose.Types.ObjectId.isValid(rawTargetId)) {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: `Invalid target user ID "${rawTargetId}".` };
+      return;
+    }
+    targetUser = await User.findById(rawTargetId);
+    if (!targetUser) {
+      ctx.status = 404;
+      ctx.body = { status: 'error', message: `Target user with ID "${rawTargetId}" not found.` };
+      return;
+    }
+  }
+
+  if (targetUser!.status === 'banned' || targetUser!.status === 'deleted' || targetUser!.isBanned) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Target user account is suspended or banned.' };
+    return;
+  }
+
+  const item = mongoose.Types.ObjectId.isValid(id)
+    ? await Item.findById(id)
+    : await Item.findOne({ id });
+
+  if (!item || item.status === 'deleted') {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Used item not found.' };
+    return;
+  }
+
+  const previousSellerId = item.sellerId ? item.sellerId.toString() : null;
+
+  item.sellerId = targetUser!._id;
+  item.ownerId = targetUser!._id.toString();
+  await item.save();
+
+  await item.populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+
+  // Notify the newly assigned recipient user via Email & Push Notification
+  sendAdminItemNotification({
+    userId: targetUser!._id,
+    userEmail: targetUser!.email,
+    userName: targetUser!.displayName,
+    eventType: 'transferred_to_user',
+    itemTitle: item.title,
+    itemId: item._id.toString(),
+    itemPriceNzd: item.price ? (item.price / 100).toFixed(2) : undefined
+  }).catch((err) => {
+    console.warn('[Admin Transfer Notification Recipient] Dispatch failure:', err?.message || err);
+  });
+
+  // If there was a previous owner different from target user, notify previous owner as well
+  if (previousSellerId && previousSellerId !== targetUser!._id.toString()) {
+    sendAdminItemNotification({
+      userId: previousSellerId,
+      eventType: 'transferred_from_user',
+      itemTitle: item.title,
+      itemId: item._id.toString(),
+      itemPriceNzd: item.price ? (item.price / 100).toFixed(2) : undefined
+    }).catch((err) => {
+      console.warn('[Admin Transfer Notification Previous Owner] Dispatch failure:', err?.message || err);
+    });
+  }
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    message: `Item successfully reassigned to ${targetUser!.displayName} (${targetUser!.email}).`,
     item: formatItem(item)
   };
 });

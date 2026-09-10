@@ -7,6 +7,10 @@ import watchlistRouter from './watchlist';
 import categoriesRouter from './categories';
 import adminRouter from './admin';
 import uploadRouter from './upload';
+import chatRouter from './chat';
+import notificationsRouter from './notifications';
+import listingSuggestionsRouter from './listingSuggestions';
+import meetupsRouter from './meetups';
 
 const router = new Router({ prefix: '/api' });
 
@@ -34,5 +38,17 @@ router.use(adminRouter.allowedMethods());
 
 router.use(uploadRouter.routes());
 router.use(uploadRouter.allowedMethods());
+
+router.use(chatRouter.routes());
+router.use(chatRouter.allowedMethods());
+
+router.use(notificationsRouter.routes());
+router.use(notificationsRouter.allowedMethods());
+
+router.use(listingSuggestionsRouter.routes());
+router.use(listingSuggestionsRouter.allowedMethods());
+
+router.use(meetupsRouter.routes());
+router.use(meetupsRouter.allowedMethods());
 
 export default router;

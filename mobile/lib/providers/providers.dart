@@ -6,3 +6,4 @@ export 'home_discovery_provider.dart';
 export 'search_provider.dart';
 export 'listing_provider.dart';
 export 'theme_provider.dart';
+export 'chat_provider.dart';

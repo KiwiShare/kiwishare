@@ -6,9 +6,9 @@ import { Resend } from 'resend';
 import User from '../models/User';
 import Otp from '../models/Otp';
 import { resolveClientPlatform } from '../middleware/logger';
+import { getJwtSecret } from '../middleware/auth';
 
 const router = new Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'kiwishare_super_secret_key_123_abc';
 
 // --- 1. Authentication Endpoints ---
 
@@ -49,7 +49,7 @@ router.post('/auth/register', async (ctx) => {
     passwordHash
   });
 
-  const token = jwt.sign({ id: newUser._id.toString(), email: newUser.email }, JWT_SECRET, { expiresIn: '2h' });
+  const token = jwt.sign({ id: newUser._id.toString(), email: newUser.email }, getJwtSecret(), { expiresIn: '2h' });
 
   ctx.status = 201;
   ctx.body = {
@@ -95,7 +95,7 @@ router.post('/auth/login', async (ctx) => {
   user.lastActiveAt = new Date();
   await user.save();
 
-  const token = jwt.sign({ id: user._id.toString(), email: user.email }, JWT_SECRET, { expiresIn: '2h' });
+  const token = jwt.sign({ id: user._id.toString(), email: user.email }, getJwtSecret(), { expiresIn: '2h' });
 
   ctx.status = 200;
   ctx.body = {
@@ -157,7 +157,7 @@ router.post('/auth/send-otp', async (ctx) => {
     ctx.status = 429;
     ctx.body = {
       status: 'error',
-      message: `Please wait ${waitSeconds}s before requesting a new verification code.`,
+      message: 'Please wait for the cooldown timer before requesting a new verification code.',
       cooldownSeconds: waitSeconds
     };
     return;
@@ -326,7 +326,7 @@ router.post('/auth/verify-otp', async (ctx) => {
     await user.save();
   }
 
-  const token = jwt.sign({ id: user._id.toString(), email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+  const token = jwt.sign({ id: user._id.toString(), email: user.email }, getJwtSecret(), { expiresIn: '7d' });
 
   ctx.status = 200;
   ctx.body = {
@@ -418,7 +418,7 @@ router.post('/auth/google', async (ctx) => {
     });
   }
 
-  const token = jwt.sign({ id: user._id.toString(), email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+  const token = jwt.sign({ id: user._id.toString(), email: user.email }, getJwtSecret(), { expiresIn: '7d' });
 
   ctx.status = 200;
   ctx.body = {
