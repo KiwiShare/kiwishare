@@ -1,6 +1,6 @@
 {
   "name": "kiwishare-monorepo",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -10,23 +10,18 @@
   "description": "Monorepo for KiwiShare - Mobile App (Flutter) and Backend Server (Koa + TypeScript + MongoDB)",
   "scripts": {
     "prepare": "husky install",
-
     "release": "standard-version",
     "release:patch": "standard-version --release-as patch",
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major",
-
     "bootstrap": "pnpm install --no-frozen-lockfile && cd mobile && flutter pub get",
-
     "server:dev": "pnpm --filter server run dev",
     "server:build": "pnpm --filter server run build",
     "server:test": "pnpm --filter server run test",
     "server:lint": "pnpm --filter server run lint",
-
     "web:dev": "pnpm --filter web run dev",
     "web:build": "pnpm --filter web run build",
     "web:lint": "pnpm --filter web run lint",
-
     "mobile": "node scripts/mobile-dev.mjs",
     "mobile:test": "cd mobile && flutter test",
     "mobile:analyze": "cd mobile && flutter analyze",
@@ -34,7 +29,6 @@
     "mobile:build:android": "cd mobile && flutter build apk --release",
     "mobile:build:ios": "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && cd mobile && flutter config --no-enable-swift-package-manager && flutter build ios --release --no-codesign",
     "mobile:build:all": "pnpm mobile:build:android && pnpm mobile:build:ios",
-
     "dev": "concurrently -i --default-input-target 1 --kill-others-on-fail -n server,mobile \"pnpm server:dev\" \"pnpm mobile chrome local\"",
     "dev:android": "concurrently -i --default-input-target 1 --kill-others-on-fail -n server,android \"pnpm server:dev\" \"pnpm mobile android local\"",
     "dev:ios": "concurrently -i --default-input-target 1 --kill-others-on-fail -n server,ios \"pnpm server:dev\" \"pnpm mobile ios-device local\"",
@@ -42,12 +36,10 @@
     "dev:web": "concurrently -i --kill-others-on-fail -n server,web \"pnpm server:dev\" \"pnpm web:dev\"",
     "dev:all": "concurrently -i --kill-others-on-fail -n server,web,mobile \"pnpm server:dev\" \"pnpm web:dev\" \"pnpm mobile chrome local\"",
     "dev:remote": "pnpm mobile chrome remote",
-
     "build:all": "pnpm server:build && pnpm web:build && pnpm mobile:build:all",
     "test:all": "pnpm mobile:test && pnpm server:test",
     "lint:all": "pnpm mobile:analyze && pnpm server:lint && pnpm web:lint",
     "format:all": "pnpm mobile:format",
-
     "emulators": "firebase emulators:start"
   },
   "repository": {
