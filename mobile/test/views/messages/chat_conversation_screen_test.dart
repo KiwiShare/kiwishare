@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
 import 'package:kiwishare/models/chat_message_model.dart';
+import 'package:kiwishare/models/report_draft.dart';
 import 'package:kiwishare/navigation/app_route_observer.dart';
 import 'package:kiwishare/config/api_config.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
@@ -17,6 +18,7 @@ import 'package:kiwishare/services/listing_image_picker.dart';
 import 'package:kiwishare/services/notification_permission_coordinator.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/views/messages/chat_conversation_screen.dart';
+import 'package:kiwishare/views/profile/report_screen.dart';
 import 'package:kiwishare/widgets/notification_permission_dialog.dart';
 
 import '../../support/fake_chat_photo_uploader.dart';
@@ -87,6 +89,55 @@ void main() {
     expect(find.text('Ergonomic Office Chair'), findsOneWidget);
     expect(find.byKey(const Key('chat_message_1')), findsOneWidget);
     expect(find.byKey(const Key('chat_message_2')), findsOneWidget);
+  });
+
+  testWidgets('opens the shared report form with chat participant context', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildSubject(repository: FakeChatRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_more_actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('Report user'), findsOneWidget);
+
+    await tester.tap(find.text('Report user'));
+    await tester.pumpAndSettle();
+
+    final reportScreen = tester.widget<ReportScreen>(find.byType(ReportScreen));
+    expect(reportScreen.reportContext.targetType, ReportTargetType.user);
+    expect(reportScreen.reportContext.targetId, 'participant-conversation-1');
+    expect(reportScreen.reportContext.targetLabel, 'Sophie M.');
+    expect(reportScreen.reportContext.contextType, ReportContextType.chat);
+    expect(reportScreen.reportContext.contextId, 'conversation-1');
+    expect(
+      reportScreen.reportContext.contextLabel,
+      'Chat about Ergonomic Office Chair',
+    );
+    expect(find.text('Sophie M.'), findsOneWidget);
+    expect(find.text('Chat about Ergonomic Office Chair'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('report_reason_field')));
+    await tester.pumpAndSettle();
+    expect(find.text('Scam or fraud'), findsOneWidget);
+    expect(find.text('Harassment or abusive behaviour'), findsOneWidget);
+    expect(find.text('Unsafe meetup behaviour'), findsOneWidget);
+    expect(find.text('Fake identity or impersonation'), findsOneWidget);
+    expect(find.text('Something else'), findsOneWidget);
+    expect(find.text('Repeatedly did not show up'), findsNothing);
+    expect(find.text('Suspicious payment request'), findsNothing);
+    expect(find.text('Asked to move off KiwiShare'), findsNothing);
+  });
+
+  testWidgets('does not offer reporting when signed out', (tester) async {
+    await tester.pumpWidget(
+      _buildSubject(repository: FakeChatRepository(), authToken: null),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_more_actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('Report user'), findsNothing);
   });
 
   testWidgets('does not mark an in-flight initial load read after navigation', (

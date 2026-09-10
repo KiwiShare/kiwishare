@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/chat_conversation_model.dart';
 import '../../models/chat_message_model.dart';
+import '../../models/report_draft.dart';
 import '../../config/api_config.dart';
 import '../../navigation/app_route_observer.dart';
 import '../../providers/auth_provider.dart';
@@ -16,10 +17,13 @@ import '../../services/listing_image_picker.dart';
 import '../../services/chat_voice_service.dart';
 import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
+import '../profile/report_screen.dart';
 import 'widgets/location_bubble.dart';
 import 'widgets/location_picker_sheet.dart';
 import 'widgets/meetup_card_bubble.dart';
 import 'widgets/schedule_meetup_sheet.dart';
+
+enum _ChatConversationAction { reportUser }
 
 class ChatConversationScreen extends StatefulWidget {
   const ChatConversationScreen({
@@ -352,6 +356,23 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     );
   }
 
+  void _reportUser() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ReportScreen(
+          reportContext: ReportContext(
+            targetType: ReportTargetType.user,
+            targetId: widget.conversation.participantId,
+            targetLabel: widget.conversation.participantName,
+            contextType: ReportContextType.chat,
+            contextId: widget.conversation.id,
+            contextLabel: 'Chat about ${widget.conversation.itemTitle}',
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _startVoiceRecording() async {
     if (_isRecording ||
         _isStartingVoice ||
@@ -500,6 +521,38 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     (_currentAuthToken?.isNotEmpty ?? false)
                 ? _scheduleMeetup
                 : null,
+          ),
+          PopupMenuButton<_ChatConversationAction>(
+            key: const Key('chat_more_actions'),
+            tooltip: 'More chat actions',
+            enabled: _currentAuthToken?.isNotEmpty ?? false,
+            onSelected: (action) {
+              switch (action) {
+                case _ChatConversationAction.reportUser:
+                  _reportUser();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<_ChatConversationAction>(
+                key: const Key('chat_report_user_action'),
+                value: _ChatConversationAction.reportUser,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.flag_outlined,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      'Report user',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
