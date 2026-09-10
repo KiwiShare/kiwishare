@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kiwishare.co.nz/schemas/report.schema.json",
+  "title": "KiwiShare Report",
+  "description": "A confidential moderation report stored by the authenticated report creation endpoint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "reporterId",
+    "targetType",
+    "contextType",
+    "reason",
+    "details",
+    "status",
+    "createdAt"
+  ],
+  "properties": {
+    "id": { "$ref": "#/definitions/objectId" },
+    "reporterId": { "$ref": "#/definitions/objectId" },
+    "targetType": {
+      "type": "string",
+      "enum": ["user", "listing", "general"]
+    },
+    "targetId": { "$ref": "#/definitions/objectId" },
+    "contextType": {
+      "type": "string",
+      "enum": ["profile", "listing", "chat", "transaction", "general"]
+    },
+    "contextId": { "$ref": "#/definitions/objectId" },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "scam_or_fraud",
+        "harassment_or_abusive_behaviour",
+        "unsafe_meetup_behaviour",
+        "did_not_show_up_repeatedly",
+        "fake_identity_or_impersonation",
+        "suspicious_payment_request",
+        "off_platform_communication",
+        "misleading_information",
+        "prohibited_or_unsafe_item",
+        "counterfeit_item",
+        "suspected_stolen_item",
+        "duplicate_listing_or_spam",
+        "other"
+      ]
+    },
+    "details": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 1000
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "reviewed", "dismissed"]
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "targetType": { "const": "general" } } },
+      "then": {
+        "properties": { "contextType": { "const": "general" } },
+        "not": {
+          "anyOf": [
+            { "required": ["targetId"] },
+            { "required": ["contextId"] }
+          ]
+        }
+      },
+      "else": { "required": ["targetId"] }
+    },
+    {
+      "if": { "properties": { "targetType": { "const": "listing" } } },
+      "then": {
+        "properties": {
+          "contextType": { "const": "listing" },
+          "reason": {
+            "enum": [
+              "misleading_information",
+              "prohibited_or_unsafe_item",
+              "counterfeit_item",
+              "suspected_stolen_item",
+              "duplicate_listing_or_spam",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "targetType": { "const": "user" } } },
+      "then": {
+        "properties": {
+          "contextType": {
+            "enum": ["profile", "chat", "transaction"]
+          },
+          "reason": {
+            "enum": [
+              "scam_or_fraud",
+              "harassment_or_abusive_behaviour",
+              "unsafe_meetup_behaviour",
+              "did_not_show_up_repeatedly",
+              "fake_identity_or_impersonation",
+              "suspicious_payment_request",
+              "off_platform_communication",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "contextType": { "enum": ["chat", "transaction"] }
+        }
+      },
+      "then": { "required": ["contextId"] }
+    }
+  ],
+  "definitions": {
+    "objectId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$"
+    }
+  }
+}

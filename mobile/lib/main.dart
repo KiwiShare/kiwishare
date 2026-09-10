@@ -31,6 +31,7 @@ import 'repositories/watchlist_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/meetup_repository.dart';
 import 'repositories/push_device_repository.dart';
+import 'repositories/report_repository.dart';
 import 'services/remote_config_service.dart';
 import 'services/firebase_runtime_configuration.dart';
 import 'services/push_notification_service.dart';
@@ -212,6 +213,7 @@ void main() async {
           ),
         ),
         Provider<ItemRepository>(create: (_) => RestItemRepository()),
+        Provider<ReportRepository>(create: (_) => RestReportRepository()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProxyProvider<AuthProvider, WatchlistProvider>(
           create: (_) =>

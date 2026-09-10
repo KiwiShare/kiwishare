@@ -1,13 +1,15 @@
 # KiwiShare Reporting Feature Proposal
 
-**Status:** Proposal for team discussion  
-**Related issue:** #93 — User can report in the profile page  
+**Status:** Implemented on `feature/102-report-persistence`; pending team review and merge
+**Related issues:** #93 — User can report in the profile page; #102 — User report DB schema
 **Parent issue:** #46 — Me/Profile Module  
 **Prepared:** 14 August 2026
 
-> Implementation note: the reusable Profile report form UI is present on branch
-> `46-me-profile-module`, but persistence is deliberately not claimed as complete.
-> The backend contract and moderation ownership below still require team approval.
+> Implementation note (31 August 2026): Issue #102 implements the authenticated
+> creation endpoint and MongoDB persistence described below. The canonical,
+> test-backed contract is now in `docs/api-spec.md` and
+> `docs/schemas/report.schema.json`. This proposal remains the product-design
+> background and does not claim that a moderator dashboard exists.
 
 ## 1. Decision needed
 
@@ -37,7 +39,7 @@ The current user's Profile should contain a **Safety & support** section with a 
 1. User selects **Report** from a user profile, listing, chat, transaction, or Safety & support.
 2. App explains that reports are confidential and should be accurate.
 3. User selects a reason appropriate to the target.
-4. User adds optional supporting details. A short description may be required for **Other**.
+4. User adds supporting details of 10–1000 characters.
 5. App shows the selected target and asks for confirmation.
 6. Submission is sent once; the submit action is disabled while the request is in progress.
 7. App confirms: **“Thanks for helping keep KiwiShare safe. We’ll review your report.”**
@@ -77,7 +79,7 @@ For the course MVP, implement:
 - Entry points that other feature owners can later add to listing, chat, and public-profile screens.
 - Reason selection, supporting details, validation, loading, success, and failure states.
 - Authenticated `POST /api/reports` submission.
-- Backend storage with an initial `submitted` status.
+- Backend storage with an initial `pending` status.
 - Flutter and Node tests for validation, authentication, successful submission, and server failure.
 
 Do not require the MVP to include:
@@ -96,7 +98,7 @@ If the team later adds history, show only limited information, for example:
 
 - Report type
 - Submitted date
-- High-level status: `submitted`, `reviewing`, or `closed`
+- High-level status: `pending`, `reviewed`, or `dismissed`
 
 Do not expose moderator notes, enforcement details, or unnecessary information about the reported person. A closed report should not imply that a particular punishment occurred.
 
@@ -112,7 +114,7 @@ Do not expose moderator notes, enforcement details, or unnecessary information a
   "contextId": "chat_id",
   "reason": "scam_or_fraud",
   "details": "The seller requested payment before the meetup.",
-  "status": "submitted",
+  "status": "pending",
   "createdAt": "timestamp"
 }
 ```
@@ -142,7 +144,9 @@ Example request:
 }
 ```
 
-The API should validate allowed enum values and text length, require authentication, reject self-reporting where inappropriate, and rate-limit repeated reports against the same target.
+The API validates allowed enum values and the 10–1000 character text limit,
+requires authentication, rejects self-reporting where inappropriate, and
+rejects the same reporter/target/context/reason combination for 10 minutes.
 
 ## 9. Safety, privacy, and moderation considerations
 

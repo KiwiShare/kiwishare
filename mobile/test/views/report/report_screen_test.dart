@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/models/report_draft.dart';
+import 'package:kiwishare/repositories/report_repository.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/profile/report_screen.dart';
 
@@ -8,10 +9,48 @@ void main() {
   Widget buildReportScreen({
     ReportContext reportContext = const ReportContext.general(),
     ReportSubmitter? onSubmit,
+    ReportRepository? reportRepository,
+    String? authToken,
   }) => MaterialApp(
     theme: buildKiwiShareTheme(),
-    home: ReportScreen(reportContext: reportContext, onSubmit: onSubmit),
+    home: ReportScreen(
+      reportContext: reportContext,
+      onSubmit: onSubmit,
+      reportRepository: reportRepository,
+      authToken: authToken,
+    ),
   );
+
+  testWidgets('default submit action waits for a persisted report receipt', (
+    tester,
+  ) async {
+    final repository = _RecordingReportRepository();
+    await tester.pumpWidget(
+      buildReportScreen(
+        reportRepository: repository,
+        authToken: 'signed-in-token',
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('report_reason_field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Something else').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('report_details_field')),
+      'A detailed safety concern that should be stored.',
+    );
+    await tester.ensureVisible(find.byKey(const Key('submit_report_button')));
+    await tester.tap(find.byKey(const Key('submit_report_button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.token, 'signed-in-token');
+    expect(
+      repository.draft?.details,
+      'A detailed safety concern that should be stored.',
+    );
+    expect(find.text('Report submitted'), findsOneWidget);
+  });
 
   testWidgets(
     'report form validates and produces the approved request fields',
@@ -119,4 +158,23 @@ void main() {
     expect(submitButton, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+}
+
+class _RecordingReportRepository extends ReportRepository {
+  ReportDraft? draft;
+  String? token;
+
+  @override
+  Future<ReportSubmission> submitReport({
+    required ReportDraft draft,
+    required String token,
+  }) async {
+    this.draft = draft;
+    this.token = token;
+    return ReportSubmission(
+      id: '66d222222222222222222222',
+      status: 'pending',
+      createdAt: DateTime.utc(2026, 8, 31),
+    );
+  }
 }

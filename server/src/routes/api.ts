@@ -54,4 +54,7 @@ router.use(listingSuggestionsRouter.allowedMethods());
 router.use(meetupsRouter.routes());
 router.use(meetupsRouter.allowedMethods());
 
+router.use(reportsRouter.routes());
+router.use(reportsRouter.allowedMethods());
+
 export default router;
