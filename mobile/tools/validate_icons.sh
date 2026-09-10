@@ -2,7 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ASSET_PACK="$ROOT_DIR/assets/icons/kiwishare-app-icon_V1.5"
+
+case "${1:-}" in
+  ""|--android-only) ;;
+  *) echo "Usage: $0 [--android-only]" >&2; exit 2 ;;
+esac
 
 echo "Validating icon assets..."
 
@@ -16,6 +20,7 @@ check_file() {
   fi
 }
 
+if [ "${1:-}" != "--android-only" ]; then
 # iOS required files (from Contents.json)
 IOS_APPICONSET="$ROOT_DIR/ios/Runner/Assets.xcassets/AppIcon.appiconset"
 for f in Icon-App-20x20@1x.png Icon-App-20x20@2x.png Icon-App-20x20@3x.png \
@@ -27,71 +32,57 @@ for f in Icon-App-20x20@1x.png Icon-App-20x20@2x.png Icon-App-20x20@3x.png \
   check_file "$IOS_APPICONSET/$f"
 done
 
-# Android legacy
-ANDROID_RES_DIR="$ROOT_DIR/android/app/src/main/res"
-for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-  check_file "$ANDROID_RES_DIR/mipmap-$d/ic_launcher.png"
-done
-
-# Adaptive assets
-check_file "$ANDROID_RES_DIR/mipmap-anydpi-v26/ic_launcher.xml"
-check_file "$ANDROID_RES_DIR/mipmap-anydpi-v26/ic_launcher_foreground.png"
-check_file "$ANDROID_RES_DIR/mipmap-anydpi-v26/ic_launcher_background.png"
-check_file "$ANDROID_RES_DIR/drawable-anydpi-v33/ic_launcher_monochrome.png"
-check_file "$ANDROID_RES_DIR/values/ic_launcher_colors.xml"
-
-# XML content checks
-echo "Checking adaptive XML content rules..."
-if [ -f "$ANDROID_RES_DIR/mipmap-anydpi-v26/ic_launcher.xml" ]; then
-  if grep -q "<monochrome" "$ANDROID_RES_DIR/mipmap-anydpi-v26/ic_launcher.xml"; then
-    echo "ERROR: v26 ic_launcher.xml must NOT contain <monochrome>"
-    fail=1
-  else
-    echo "OK: v26 ic_launcher.xml contains no monochrome"
-  fi
 fi
 
-if [ -f "$ANDROID_RES_DIR/mipmap-anydpi-v26/ic_launcher_round.xml" ]; then
-  if grep -q "<monochrome" "$ANDROID_RES_DIR/mipmap-anydpi-v26/ic_launcher_round.xml"; then
-    echo "ERROR: v26 ic_launcher_round.xml must NOT contain <monochrome>"
-    fail=1
-  else
-    echo "OK: v26 ic_launcher_round.xml contains no monochrome"
-  fi
-fi
+# Standard-library checks need no image-generation dependency. Byte equality
+# preserves the reviewed source PNG's colour, alpha, and padding exactly.
+python3 - "$ROOT_DIR" <<'PYTHON'
+from pathlib import Path
+import struct
+import sys
+import xml.etree.ElementTree as ET
 
-if [ -f "$ANDROID_RES_DIR/mipmap-anydpi-v33/ic_launcher.xml" ]; then
-  if grep -q "<monochrome" "$ANDROID_RES_DIR/mipmap-anydpi-v33/ic_launcher.xml"; then
-    if ! grep -q "@drawable/ic_launcher_monochrome" "$ANDROID_RES_DIR/mipmap-anydpi-v33/ic_launcher.xml"; then
-      echo "ERROR: v33 ic_launcher.xml monochrome must reference @drawable/ic_launcher_monochrome"
-      fail=1
-    else
-      echo "OK: v33 ic_launcher.xml contains monochrome referencing @drawable"
-    fi
-  else
-    echo "ERROR: v33 ic_launcher.xml must contain <monochrome> referencing @drawable/ic_launcher_monochrome"
-    fail=1
-  fi
-fi
+root = Path(sys.argv[1])
+res = root / "android/app/src/main/res"
+source = root / "assets/icons/kiwishare-app-icon_V1.5/android"
+android = "{http://schemas.android.com/apk/res/android}"
+
+def png(dst, src, size):
+    data = dst.read_bytes()
+    assert data == src.read_bytes(), f"Source mismatch: {dst}"
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", f"Invalid PNG: {dst}"
+    assert struct.unpack(">II", data[16:24]) == (size, size), f"Wrong dimensions: {dst}"
+
+for density, size in [("mdpi",48),("hdpi",72),("xhdpi",96),("xxhdpi",144),("xxxhdpi",192)]:
+    name = f"mipmap-{density}/ic_launcher.png"
+    png(res / name, source / "legacy" / name, size)
+for name, folder in [("foreground","drawable-xxxhdpi"),("background","drawable-xxxhdpi"),("monochrome","drawable-xxxhdpi-v33")]:
+    filename = f"ic_launcher_{name}.png"
+    png(res / folder / filename, source / "adaptive" / filename, 432)
+# anydpi is for scalable XML here, not density-scaled raster images.
+assert not list(res.glob("*-anydpi*/*.png")), "PNG in anydpi can decode to a tiny bitmap"
+for version in (26, 33):
+    expected = {"background":"@color/ic_launcher_background", "foreground":"@drawable/ic_launcher_foreground"}
+    if version == 33:
+        expected["monochrome"] = "@drawable/ic_launcher_monochrome"
+    for name in ("ic_launcher", "ic_launcher_round"):
+        xml = ET.parse(res / f"mipmap-anydpi-v{version}/{name}.xml").getroot()
+        assert xml.tag == "adaptive-icon"
+        assert len(xml) == len(expected)
+        assert {child.tag:child.get(android + "drawable") for child in xml} == expected
+colors = ET.parse(res / "values/ic_launcher_colors.xml").getroot()
+assert next(c.text for c in colors if c.get("name") == "ic_launcher_background") == "#FAF5EA"
+alias = ET.parse(res / "values/ic_launcher_aliases.xml").getroot().find("item")
+assert alias.attrib == {"type":"mipmap", "name":"ic_launcher_round"}
+assert alias.text == "@mipmap/ic_launcher"
+app = ET.parse(root / "android/app/src/main/AndroidManifest.xml").getroot().find("application")
+assert app.get(android + "icon") == "@mipmap/ic_launcher"
+assert app.get(android + "roundIcon") == "@mipmap/ic_launcher_round"
+print("Android icons passed: approved PNG parity, dimensions, adaptive/themed layers, manifest and legacy round fallback.")
+PYTHON
 
 if [ "$fail" -ne 0 ]; then
   echo "Validation FAILED"
   exit 2
 fi
-
-echo "Validation PASSED: all required files present."
-
-echo "Checking image dimensions (sips on macOS)..."
-check_dim() {
-  if command -v sips >/dev/null 2>&1; then
-    dims=$(sips -g pixelWidth -g pixelHeight "$1" 2>/dev/null | awk '/pixelWidth|pixelHeight/{print $2}' | xargs)
-    echo "$1 -> $dims"
-  else
-    echo "sips not available; skipping dimension checks for $1"
-  fi
-}
-
-check_dim "$IOS_APPICONSET/Icon-App-1024x1024@1x.png" || true
-check_dim "$ANDROID_RES_DIR/mipmap-xxxhdpi/ic_launcher.png" || true
-
 echo "Validation finished."
