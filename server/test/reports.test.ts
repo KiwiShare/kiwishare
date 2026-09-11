@@ -2,6 +2,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import app from '../src/app';
+import Conversation from '../src/models/Conversation';
 import Item from '../src/models/Item';
 import Report from '../src/models/Report';
 
@@ -13,14 +14,16 @@ describe('KiwiShare report persistence API', () => {
   let reportedUserId = '';
   let reporterToken = '';
   let reportedUserToken = '';
+  let outsiderToken = '';
   let listingId = '';
   let ownListingId = '';
+  let conversationId = '';
 
   beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
     await mongoose.connect(mongoServer.getUri());
 
-    const [reporter, reportedUser] = await Promise.all([
+    const [reporter, reportedUser, outsider] = await Promise.all([
       request(app.callback()).post('/api/auth/register').send({
         email: 'reporter@example.com',
         password: 'password123',
@@ -30,6 +33,11 @@ describe('KiwiShare report persistence API', () => {
         email: 'reported-user@example.com',
         password: 'password123',
         displayName: 'Listing Owner'
+      }),
+      request(app.callback()).post('/api/auth/register').send({
+        email: 'report-outsider@example.com',
+        password: 'password123',
+        displayName: 'Unrelated Member'
       })
     ]);
 
@@ -37,6 +45,7 @@ describe('KiwiShare report persistence API', () => {
     reportedUserId = reportedUser.body.user.id;
     reporterToken = reporter.body.token;
     reportedUserToken = reportedUser.body.token;
+    outsiderToken = outsider.body.token;
 
     const [listing, ownListing] = await Promise.all([
       Item.create({
@@ -70,6 +79,14 @@ describe('KiwiShare report persistence API', () => {
     ]);
     listingId = listing._id.toString();
     ownListingId = ownListing._id.toString();
+
+    const conversation = await Conversation.create({
+      itemId: listing._id,
+      buyerId: new mongoose.Types.ObjectId(reporterId),
+      sellerId: new mongoose.Types.ObjectId(reportedUserId),
+      status: 'active'
+    });
+    conversationId = conversation._id.toString();
   });
 
   beforeEach(async () => {
@@ -160,6 +177,52 @@ describe('KiwiShare report persistence API', () => {
         status: 'pending'
       })
     );
+  });
+
+  test('persists a chat report only when both users belong to the conversation', async () => {
+    const response = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`)
+      .send({
+        targetType: 'user',
+        targetId: reportedUserId,
+        contextType: 'chat',
+        contextId: conversationId,
+        reason: 'harassment_or_abusive_behaviour',
+        details: 'The other participant repeatedly sent threatening messages.'
+      });
+
+    expect(response.status).toBe(201);
+    const stored = await Report.findById(response.body.report.id).lean();
+    expect(stored).toEqual(
+      expect.objectContaining({
+        reporterId: new mongoose.Types.ObjectId(reporterId),
+        targetType: 'user',
+        targetId: new mongoose.Types.ObjectId(reportedUserId),
+        contextType: 'chat',
+        contextId: new mongoose.Types.ObjectId(conversationId),
+        reason: 'harassment_or_abusive_behaviour',
+        status: 'submitted'
+      })
+    );
+  });
+
+  test('rejects a chat report from a user outside the conversation', async () => {
+    const response = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${outsiderToken}`)
+      .send({
+        targetType: 'user',
+        targetId: reportedUserId,
+        contextType: 'chat',
+        contextId: conversationId,
+        reason: 'other',
+        details: 'This report should not be accepted without chat access.'
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toContain('not available');
+    expect(await Report.countDocuments()).toBe(0);
   });
 
   test.each([
