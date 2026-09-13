@@ -362,9 +362,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onPressed: () =>
                           _requestWatchlistToggle(watchlist, product),
                       icon: Icon(
-                        isWatched ? Icons.bookmark : Icons.bookmark_outline,
+                        isWatched ? Icons.favorite : Icons.favorite_border,
                         color: isWatched
-                            ? theme.colorScheme.primary
+                            ? const Color(0xFFEF4444)
                             : theme.colorScheme.onSurface,
                         size: 26,
                       ),
@@ -1159,18 +1159,24 @@ class _ProductActions extends StatelessWidget {
         ),
         side: BorderSide(
           color: isWatched
-              ? theme.colorScheme.primary
+              ? const Color(0xFFEF4444)
               : theme.colorScheme.outline.withOpacity(0.5),
         ),
+        backgroundColor: isWatched
+            ? const Color(0xFFEF4444).withOpacity(0.08)
+            : null,
       ),
       onPressed: onToggleWatch,
       icon: Icon(
-        isWatched ? Icons.bookmark : Icons.bookmark_outline,
-        color: isWatched ? theme.colorScheme.primary : null,
+        isWatched ? Icons.favorite : Icons.favorite_border,
+        color: isWatched ? const Color(0xFFEF4444) : null,
       ),
       label: Text(
         isWatched ? 'Watching' : 'Watch Item',
-        style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+        style: GoogleFonts.inter(
+          fontWeight: FontWeight.w600,
+          color: isWatched ? const Color(0xFFEF4444) : null,
+        ),
       ),
     );
 

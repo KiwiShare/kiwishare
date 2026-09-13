@@ -7,6 +7,7 @@ import '../../models/meetup_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/meetup_provider.dart';
 import '../../theme/app_theme.dart';
+import '../scanner/qr_scanner_screen.dart';
 
 class MeetupQrScreen extends StatefulWidget {
   const MeetupQrScreen({super.key, required this.orderId, this.initialMeetup});
@@ -420,20 +421,73 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
               child: Column(
                 children: [
                   Text(
-                    'Handover Verification QR Code',
+                    meetup.isBuying
+                        ? 'Handover Verification'
+                        : 'Seller\'s Handover QR Code',
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Present this QR code to confirm item inspection and handover.',
+                    meetup.isBuying
+                        ? 'Meet the seller, inspect the item in person, and scan the seller\'s QR code to confirm handover.'
+                        : 'Present this QR code to the buyer during in-person inspection to complete the handover.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colors.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  if (meetup.isBuying) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 46,
+                      child: FilledButton.icon(
+                        key: const Key('buyer_scan_qr_button'),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => const QrScannerScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.qr_code_scanner_rounded,
+                          size: 20,
+                        ),
+                        label: const Text(
+                          'Scan Seller\'s QR Code',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.medium,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Divider(),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Backup verification code',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
 
                   // QR Code image
                   Container(

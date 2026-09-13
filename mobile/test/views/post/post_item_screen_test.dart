@@ -139,9 +139,16 @@ void main() {
 
     expect(find.text('1/10'), findsOneWidget);
     expect(imagePicker.lastGalleryLimit, 10);
-    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+    expect(find.byKey(const Key('post_hero_image_card')), findsOneWidget);
 
+    // Tapping thumbnail selects it and does NOT delete it
     await tester.tap(find.byKey(const Key('post_photo_slot_0')));
+    await tester.pump();
+    expect(find.text('1/10'), findsOneWidget);
+
+    // Explicit delete button removes the photo
+    await tester.tap(find.byKey(const Key('post_photo_delete_0')));
     await tester.pump();
     expect(find.text('0/10'), findsOneWidget);
   });
@@ -163,7 +170,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('1/10'), findsOneWidget);
-    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+    expect(find.byKey(const Key('post_hero_image_card')), findsOneWidget);
+  });
+
+  testWidgets('supports Xianyu-style photo selection, set as cover, and thumbnail deletion', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final imagePicker = FakeListingImagePicker(
+      galleryPhotos: [
+        testPhoto('photo1.png'),
+        testPhoto('photo2.png'),
+      ],
+    );
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, imagePicker: imagePicker),
+    );
+
+    // Open picker and add 2 photos
+    await tester.tap(find.byKey(const Key('post_add_photos_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('post_choose_gallery_option')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2/10'), findsOneWidget);
+    // Initially showing Cover badge on photo 1
+    expect(find.text('Cover'), findsWidgets);
+
+    // Tap slot 1 (photo 2) to select it
+    await tester.tap(find.byKey(const Key('post_photo_slot_1')));
+    await tester.pumpAndSettle();
+
+    // Now showing "Set as cover" on hero image
+    expect(find.byKey(const Key('post_photo_set_cover_button')), findsOneWidget);
+
+    // Tap "Set as cover"
+    await tester.tap(find.byKey(const Key('post_photo_set_cover_button')));
+    await tester.pumpAndSettle();
+
+    // Photo 2 is now Cover at index 0
+    expect(find.text('Set as cover photo'), findsOneWidget);
+
+    // Tap thumbnail delete button on slot 1
+    await tester.tap(find.byKey(const Key('post_photo_thumb_delete_1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1/10'), findsOneWidget);
   });
 
   testWidgets('uses a compact mobile sheet for listing selections', (

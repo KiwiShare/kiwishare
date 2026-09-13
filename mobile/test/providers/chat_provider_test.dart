@@ -819,4 +819,69 @@ void main() {
       expect(provider.ownsSession('new-account-token'), isTrue);
     },
   );
+
+  test(
+    'triggers onIncomingChatMessage when an incoming unread message arrives',
+    () async {
+      ChatConversationModel? received;
+      final repository = FakeChatRepository(
+        conversations: [testConversation(id: 'chat-1', unreadCount: 0)],
+      );
+      final provider = ChatProvider(
+        repository: repository,
+        onIncomingChatMessage: (c) => received = c,
+      );
+
+      await provider.loadConversations('valid-token');
+      expect(provider.totalUnreadCount, 0);
+      expect(received, isNull);
+
+      // Simulate new incoming unread message
+      repository.conversations = [
+        testConversation(
+          id: 'chat-1',
+          unreadCount: 1,
+          lastMessage: 'Are you still selling this?',
+        ),
+      ];
+
+      await provider.loadConversations('valid-token');
+
+      expect(provider.totalUnreadCount, 1);
+      expect(received, isNotNull);
+      expect(received?.id, 'chat-1');
+      expect(received?.lastMessage, 'Are you still selling this?');
+    },
+  );
+
+  test('polling can be paused, resumed, and stopped safely', () async {
+    final repository = FakeChatRepository(
+      conversations: [testConversation(id: 'chat-1', unreadCount: 0)],
+    );
+    final provider = ChatProvider(
+      repository: repository,
+      enablePolling: true,
+      pollingInterval: const Duration(milliseconds: 50),
+    );
+
+    provider.updateAuthToken('valid-token');
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    expect(repository.conversationFetches, greaterThanOrEqualTo(2));
+
+    provider.pausePolling();
+    final fetchesWhilePaused = repository.conversationFetches;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(repository.conversationFetches, fetchesWhilePaused);
+
+    provider.resumePolling();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(repository.conversationFetches, greaterThan(fetchesWhilePaused));
+
+    provider.stopPolling();
+    final fetchesAfterStop = repository.conversationFetches;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(repository.conversationFetches, fetchesAfterStop);
+    provider.dispose();
+  });
 }

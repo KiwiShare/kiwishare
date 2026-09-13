@@ -17,8 +17,14 @@ import 'widgets/home_product_map.dart';
 class HomeScreen extends StatefulWidget {
   final ProductLocationService? locationService;
   final ValueChanged<ItemModel>? onOpenItem;
+  final bool? autoLocate;
 
-  const HomeScreen({super.key, this.locationService, this.onOpenItem});
+  const HomeScreen({
+    super.key,
+    this.locationService,
+    this.onOpenItem,
+    this.autoLocate = false,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -35,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _optionsLoading = true;
   DiscoveryQuery? _lastRequestedQuery;
   bool _initialized = false;
+  bool _autoLocated = false;
 
   @override
   void initState() {
@@ -58,6 +65,25 @@ class _HomeScreenState extends State<HomeScreen> {
     _discovery.addListener(_onDiscoveryChanged);
     _initialized = true;
     unawaited(_loadDiscoveryOptions());
+    if ((widget.autoLocate ?? false) && !_autoLocated) {
+      _autoLocated = true;
+      unawaited(_autoDetectLocation());
+    }
+  }
+
+  Future<void> _autoDetectLocation() async {
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+      context.read<HomeDiscoveryProvider>().setLocation(
+        location.city,
+        nearYou: true,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      );
+    } catch (_) {
+      // Silently ignore if permissions are not granted or services are off
+    }
   }
 
   @override
@@ -419,6 +445,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       filters: filters,
                       onShowFilters: _showFilters,
                       onOpenProduct: _openProduct,
+                      onLocateMe: _useCurrentLocation,
                     );
                   },
                 ),
@@ -583,18 +610,38 @@ class _HomeHeader extends StatelessWidget {
           icon: Icon(
             nearYou ? Icons.my_location : Icons.location_on_outlined,
             size: 18,
-            color: AppColors.brandPrimary,
+            color: nearYou ? AppColors.brandPrimary : AppColors.textSecondary,
           ),
           label: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 110),
-            child: Text(
-              nearYou ? 'Near you' : location,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            constraints: const BoxConstraints(maxWidth: 140),
+            child: DefaultTextStyle.merge(
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: AppColors.brandPrimary,
                 fontWeight: FontWeight.w700,
               ),
+              child: nearYou
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Near you'),
+                        if (location.isNotEmpty &&
+                            location != HomeDiscoveryProvider.allLocationsLabel) ...[
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              '($location)',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
+                    )
+                  : Text(
+                      location,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
             ),
           ),
         ),
@@ -1279,6 +1326,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
   final HomeDiscoveryProvider filters;
   final VoidCallback onShowFilters;
   final ValueChanged<ItemModel> onOpenProduct;
+  final VoidCallback? onLocateMe;
 
   const _HomeDiscoveryResults({
     required this.products,
@@ -1286,6 +1334,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
     required this.filters,
     required this.onShowFilters,
     required this.onOpenProduct,
+    this.onLocateMe,
   });
 
   String get _heading {
@@ -1322,8 +1371,8 @@ class _HomeDiscoveryResults extends StatelessWidget {
               icon: const Icon(Icons.tune, size: 18),
               label: Text(
                 filters.activeFilterCount == 0
-                    ? 'Sort & filter'
-                    : 'Sort & filter (${filters.activeFilterCount})',
+                ? 'Sort & filter'
+                : 'Sort & filter (${filters.activeFilterCount})',
               ),
             ),
             _HomeViewToggle(filters: filters),
@@ -1341,6 +1390,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
               onSelectProduct: (item) => filters.selectPreview(item.id),
               onClearSelection: () => filters.selectPreview(null),
               onOpenProduct: onOpenProduct,
+              onLocateMe: onLocateMe,
             ),
           )
         else if (products.isEmpty)

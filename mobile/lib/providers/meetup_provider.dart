@@ -196,4 +196,19 @@ class MeetupProvider extends ChangeNotifier {
       rethrow;
     }
   }
+
+  Future<Map<String, dynamic>> claimHandover({
+    required String claimCode,
+    String? itemId,
+    required String token,
+  }) async {
+    final result = await repository.claimHandover(
+      claimCode: claimCode,
+      itemId: itemId,
+      token: token,
+    );
+    // Reload meetups to keep local cache in sync
+    await loadMyMeetups(token);
+    return result;
+  }
 }

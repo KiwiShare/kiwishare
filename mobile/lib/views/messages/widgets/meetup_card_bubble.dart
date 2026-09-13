@@ -7,12 +7,15 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/meetup_provider.dart';
 import '../../../theme/app_theme.dart';
 
+import '../../scanner/qr_scanner_screen.dart';
+
 class MeetupCardBubble extends StatefulWidget {
   const MeetupCardBubble({
     super.key,
     required this.meetup,
     required this.isMine,
     required this.createdAt,
+    this.isBuyer,
     this.onViewQrCode,
     this.onStatusChanged,
   });
@@ -20,6 +23,7 @@ class MeetupCardBubble extends StatefulWidget {
   final ChatMeetupPayload meetup;
   final bool isMine;
   final DateTime createdAt;
+  final bool? isBuyer;
   final ValueChanged<String>? onViewQrCode;
   final VoidCallback? onStatusChanged;
 
@@ -260,11 +264,29 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                     height: 38,
                     child: FilledButton.icon(
                       key: Key('view_qr_button_${widget.meetup.orderId}'),
-                      onPressed: _openQrScreen,
-                      icon: const Icon(Icons.qr_code_2_rounded, size: 18),
-                      label: const Text(
-                        'View Meetup QR Code',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                      onPressed: () {
+                        if (widget.isBuyer == true) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => const QrScannerScreen(),
+                            ),
+                          );
+                        } else {
+                          _openQrScreen();
+                        }
+                      },
+                      icon: Icon(
+                        widget.isBuyer == true
+                            ? Icons.qr_code_scanner_rounded
+                            : Icons.qr_code_2_rounded,
+                        size: 18,
+                      ),
+                      label: Text(
+                        widget.isBuyer == true
+                            ? 'Scan Seller\'s QR Code'
+                            : 'Show Handover QR Code',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF059669),
@@ -275,6 +297,26 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                       ),
                     ),
                   ),
+                  if (widget.isBuyer == true) ...[
+                    const SizedBox(height: 6),
+                    Center(
+                      child: TextButton(
+                        onPressed: _openQrScreen,
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                        child: Text(
+                          'View meetup schedule & details',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.primary,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ] else if (isProposed) ...[
                   if (widget.isMine) ...[
                     Row(
