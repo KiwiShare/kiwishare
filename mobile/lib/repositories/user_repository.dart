@@ -176,8 +176,9 @@ class RestUserRepository implements UserRepository {
       throw Exception(error['message'] ?? 'Could not change your password.');
     } catch (e) {
       if (e is Exception &&
-          !e.toString().startsWith('Exception: FormatException'))
+          !e.toString().startsWith('Exception: FormatException')) {
         rethrow;
+      }
       throw Exception('Could not change your password.');
     }
   }

@@ -42,8 +42,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final token = auth.jwtToken;
     try {
       await auth.refreshProfile();
-      if (mounted && auth.jwtToken == token)
+      if (mounted && auth.jwtToken == token) {
         setState(() => _refreshError = null);
+      }
     } catch (_) {
       if (mounted && auth.jwtToken == token) {
         setState(
@@ -1181,11 +1182,12 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       );
       if (mounted) Navigator.pop(context);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _saving = false;
           _failure = error.toString().replaceFirst('Exception: ', '');
         });
+      }
     }
   }
 

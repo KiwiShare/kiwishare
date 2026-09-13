@@ -254,13 +254,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       result = await watchlist.toggleWatch(product.id, item: product);
     } catch (error) {
       debugPrint('Watchlist update failed: $error');
-      if (mounted)
+      if (mounted) {
         _showMessage('Could not update Watchlist. Please try again.');
+      }
       return;
     }
     if (!mounted || result == WatchlistMutationResult.failed) {
-      if (mounted)
+      if (mounted) {
         _showMessage('Could not update Watchlist. Please try again.');
+      }
       return;
     }
     if (result != WatchlistMutationResult.added) return;

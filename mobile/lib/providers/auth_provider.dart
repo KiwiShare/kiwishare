@@ -324,8 +324,9 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _storeProfile(String token, UserModel updated) async {
     final prefs = await SharedPreferences.getInstance();
-    if (!_isLoggedIn || _jwtToken != token || _currentUser?.id != updated.id)
+    if (!_isLoggedIn || _jwtToken != token || _currentUser?.id != updated.id) {
       return;
+    }
     _currentUser = updated;
     await prefs.setString('current_user', jsonEncode(updated.toJson()));
     notifyListeners();
