@@ -2245,10 +2245,12 @@ IconData? _getOptionIcon(String option) {
   if (lower.contains('book')) return Icons.menu_book_outlined;
   if (lower.contains('home')) return Icons.home_outlined;
   if (lower.contains('sport')) return Icons.sports_basketball_outlined;
-  if (lower.contains('kid') || lower.contains('toy'))
+  if (lower.contains('kid') || lower.contains('toy')) {
     return Icons.child_care_outlined;
-  if (lower.contains('cloth') || lower.contains('fashion'))
+  }
+  if (lower.contains('cloth') || lower.contains('fashion')) {
     return Icons.checkroom_outlined;
+  }
   if (lower.contains('other')) return Icons.category_outlined;
   if (lower == 'new') return Icons.verified_outlined;
   if (lower.contains('like new')) return Icons.thumb_up_outlined;
