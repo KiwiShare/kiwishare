@@ -53,10 +53,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(
-        find.byKey(const Key('profile-scan-qr-button')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('profile-scan-qr-button')), findsOneWidget);
     });
 
     testWidgets(

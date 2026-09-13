@@ -175,9 +175,8 @@ class ProfileScreen extends StatelessWidget {
               onSellingTap: () => Navigator.push(
                 context,
                 MaterialPageRoute<void>(
-                  builder: (_) => const UserListingsScreen(
-                    mode: UserListingsMode.selling,
-                  ),
+                  builder: (_) =>
+                      const UserListingsScreen(mode: UserListingsMode.selling),
                 ),
               ),
               onSoldTap: () => Navigator.push(
@@ -328,9 +327,7 @@ class _ProfileHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark
-            ? scheme.surfaceContainerLow
-            : Colors.white,
+        color: isDark ? scheme.surfaceContainerLow : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: isDark
             ? null
@@ -381,7 +378,9 @@ class _ProfileHeader extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF101B17) : Colors.white,
+                          color: isDark
+                              ? const Color(0xFF101B17)
+                              : Colors.white,
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -617,9 +616,7 @@ class _MarketplaceGridAction extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? iconColor.withValues(alpha: 0.15)
-                      : iconBg,
+                  color: isDark ? iconColor.withValues(alpha: 0.15) : iconBg,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
@@ -643,7 +640,9 @@ class _MarketplaceGridAction extends StatelessWidget {
                 sublabel,
                 style: TextStyle(
                   fontSize: 11,
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  color: theme.colorScheme.onSurfaceVariant.withValues(
+                    alpha: 0.7,
+                  ),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

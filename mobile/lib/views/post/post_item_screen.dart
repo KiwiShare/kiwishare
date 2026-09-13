@@ -765,15 +765,21 @@ class _PostItemScreenState extends State<PostItemScreen> {
                           padding: const EdgeInsets.all(AppSpacing.xs + 2),
                           decoration: BoxDecoration(
                             color: _isSustainable
-                                ? const Color(0xFF2E5E4E).withValues(alpha: 0.15)
+                                ? const Color(
+                                    0xFF2E5E4E,
+                                  ).withValues(alpha: 0.15)
                                 : Colors.transparent,
-                            borderRadius: BorderRadius.circular(AppRadius.small),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small,
+                            ),
                           ),
                           child: Icon(
                             _isSustainable ? Icons.eco : Icons.eco_outlined,
                             color: _isSustainable
                                 ? const Color(0xFF2E5E4E)
-                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                             size: 22,
                           ),
                         ),
@@ -866,8 +872,9 @@ class _PostItemScreenState extends State<PostItemScreen> {
                               dimension: 22,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
                               ),
                             )
                           : const Text(
@@ -1140,9 +1147,9 @@ class _PhotosSectionState extends State<_PhotosSection> {
           children: [
             Text(
               'Photos',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1156,11 +1163,11 @@ class _PhotosSectionState extends State<_PhotosSection> {
                 '${widget.photos.length}/10',
                 key: const Key('post_photo_count'),
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: widget.photos.isEmpty
-                          ? colors.onSurfaceVariant
-                          : colors.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: widget.photos.isEmpty
+                      ? colors.onSurfaceVariant
+                      : colors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -1213,10 +1220,10 @@ class _PhotosSectionState extends State<_PhotosSection> {
                           ),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
-                          widget.isPickingPhotos ? 'Adding photos…' : 'Add photos',
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelLarge
+                          widget.isPickingPhotos
+                              ? 'Adding photos…'
+                              : 'Add photos',
+                          style: Theme.of(context).textTheme.labelLarge
                               ?.copyWith(color: colors.primary),
                         ),
                         const SizedBox(height: AppSpacing.xs),
@@ -1320,8 +1327,12 @@ class _PhotosSectionState extends State<_PhotosSection> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.brandPrimary.withValues(alpha: 0.95),
-                              borderRadius: BorderRadius.circular(AppRadius.full),
+                              color: AppColors.brandPrimary.withValues(
+                                alpha: 0.95,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.25),
@@ -1355,7 +1366,9 @@ class _PhotosSectionState extends State<_PhotosSection> {
                             child: InkWell(
                               key: const Key('post_photo_set_cover_button'),
                               onTap: () => widget.onSetCoverPhoto(activeIndex),
-                              borderRadius: BorderRadius.circular(AppRadius.full),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 9,
@@ -1363,15 +1376,18 @@ class _PhotosSectionState extends State<_PhotosSection> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: Colors.black.withValues(alpha: 0.65),
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.full),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.full,
+                                  ),
                                   border: Border.all(
                                     color: Colors.white.withValues(alpha: 0.45),
                                     width: 0.8,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.25),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.25,
+                                      ),
                                       blurRadius: 4,
                                       offset: const Offset(0, 1),
                                     ),
@@ -1472,9 +1488,11 @@ class _PhotosSectionState extends State<_PhotosSection> {
                             color: Colors.transparent,
                             child: InkWell(
                               key: const Key('post_hero_prev_photo'),
-                              onTap: () => widget.onSelectPhoto(activeIndex - 1),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.full),
+                              onTap: () =>
+                                  widget.onSelectPhoto(activeIndex - 1),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
                               child: Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
@@ -1501,9 +1519,11 @@ class _PhotosSectionState extends State<_PhotosSection> {
                             color: Colors.transparent,
                             child: InkWell(
                               key: const Key('post_hero_next_photo'),
-                              onTap: () => widget.onSelectPhoto(activeIndex + 1),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.full),
+                              onTap: () =>
+                                  widget.onSelectPhoto(activeIndex + 1),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
                               child: Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
@@ -1594,19 +1614,23 @@ class _PhotosSectionState extends State<_PhotosSection> {
                           width: 58,
                           height: 58,
                           decoration: BoxDecoration(
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.small),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small,
+                            ),
                             border: Border.all(
                               color: isSelected
                                   ? AppColors.brandPrimary
-                                  : colors.outlineVariant.withValues(alpha: 0.7),
+                                  : colors.outlineVariant.withValues(
+                                      alpha: 0.7,
+                                    ),
                               width: isSelected ? 2.5 : 1.0,
                             ),
                             boxShadow: isSelected
                                 ? [
                                     BoxShadow(
-                                      color: AppColors.brandPrimary
-                                          .withValues(alpha: 0.25),
+                                      color: AppColors.brandPrimary.withValues(
+                                        alpha: 0.25,
+                                      ),
                                       blurRadius: 4,
                                       offset: const Offset(0, 1),
                                     ),
@@ -1614,8 +1638,9 @@ class _PhotosSectionState extends State<_PhotosSection> {
                                 : null,
                           ),
                           child: ClipRRect(
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.small - 1),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small - 1,
+                            ),
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
@@ -1631,10 +1656,12 @@ class _PhotosSectionState extends State<_PhotosSection> {
                                     alignment: Alignment.bottomCenter,
                                     child: Container(
                                       width: double.infinity,
-                                      padding:
-                                          const EdgeInsets.symmetric(vertical: 1),
-                                      color: AppColors.brandPrimary
-                                          .withValues(alpha: 0.92),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 1,
+                                      ),
+                                      color: AppColors.brandPrimary.withValues(
+                                        alpha: 0.92,
+                                      ),
                                       child: const Text(
                                         'Cover',
                                         textAlign: TextAlign.center,
@@ -1664,8 +1691,7 @@ class _PhotosSectionState extends State<_PhotosSection> {
                           child: InkWell(
                             key: Key('post_photo_thumb_delete_$index'),
                             onTap: () => widget.onRemovePhoto(index),
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.full),
+                            borderRadius: BorderRadius.circular(AppRadius.full),
                             child: Container(
                               width: 19,
                               height: 19,
@@ -1698,9 +1724,9 @@ class _PhotosSectionState extends State<_PhotosSection> {
           Text(
             'First photo is the cover · Tap thumbnail to switch preview · Can set as cover',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: colors.onSurfaceVariant.withValues(alpha: 0.7),
-                  fontSize: 10.5,
-                ),
+              color: colors.onSurfaceVariant.withValues(alpha: 0.7),
+              fontSize: 10.5,
+            ),
           ),
         ],
       ],
@@ -2130,18 +2156,21 @@ class _SelectionSheet extends StatelessWidget {
                                               ? colors.primary
                                               : colors.onSurfaceVariant,
                                         ),
-                                        const SizedBox(width: AppSpacing.xs + 2),
+                                        const SizedBox(
+                                          width: AppSpacing.xs + 2,
+                                        ),
                                       ],
                                       Expanded(
                                         child: Text(
                                           option,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodyMedium?.copyWith(
-                                            fontWeight: isSelected
-                                                ? FontWeight.w700
-                                                : FontWeight.w500,
-                                          ),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w500,
+                                              ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -2216,8 +2245,10 @@ IconData? _getOptionIcon(String option) {
   if (lower.contains('book')) return Icons.menu_book_outlined;
   if (lower.contains('home')) return Icons.home_outlined;
   if (lower.contains('sport')) return Icons.sports_basketball_outlined;
-  if (lower.contains('kid') || lower.contains('toy')) return Icons.child_care_outlined;
-  if (lower.contains('cloth') || lower.contains('fashion')) return Icons.checkroom_outlined;
+  if (lower.contains('kid') || lower.contains('toy'))
+    return Icons.child_care_outlined;
+  if (lower.contains('cloth') || lower.contains('fashion'))
+    return Icons.checkroom_outlined;
   if (lower.contains('other')) return Icons.category_outlined;
   if (lower == 'new') return Icons.verified_outlined;
   if (lower.contains('like new')) return Icons.thumb_up_outlined;

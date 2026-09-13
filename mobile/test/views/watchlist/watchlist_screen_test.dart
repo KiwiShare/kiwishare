@@ -138,7 +138,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No matching items found'), findsOneWidget);
-    expect(find.byKey(const Key('watchlist-reset-filters-button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('watchlist-reset-filters-button')),
+      findsOneWidget,
+    );
 
     // Reset filters
     await tester.tap(find.byKey(const Key('watchlist-reset-filters-button')));

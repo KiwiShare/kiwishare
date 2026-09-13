@@ -110,8 +110,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           _chatProvider.isLoadingMessages(widget.conversation.id)) {
         return;
       }
-      final previousCount =
-          _chatProvider.messagesFor(widget.conversation.id).length;
+      final previousCount = _chatProvider
+          .messagesFor(widget.conversation.id)
+          .length;
       await _chatProvider.loadMessages(
         conversation: widget.conversation,
         token: token,
@@ -119,8 +120,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         shouldMarkRead: () => _isCurrentRoute,
       );
       if (!mounted) return;
-      final currentCount =
-          _chatProvider.messagesFor(widget.conversation.id).length;
+      final currentCount = _chatProvider
+          .messagesFor(widget.conversation.id)
+          .length;
       if (currentCount > previousCount) {
         _scrollToEnd();
       }

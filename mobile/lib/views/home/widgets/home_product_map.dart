@@ -19,8 +19,7 @@ class HomeProductMap extends StatefulWidget {
 
   static const minimumZoom = 4.8;
   static const maximumZoom = 11.0;
-  static const tileUrl =
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   final List<ItemModel> products;
   final ItemModel? selectedItem;
@@ -190,7 +189,9 @@ class _HomeProductMapState extends State<HomeProductMap> {
                                   height: 38,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: AppColors.info.withValues(alpha: 0.22),
+                                    color: AppColors.info.withValues(
+                                      alpha: 0.22,
+                                    ),
                                   ),
                                 ),
                                 Container(
@@ -201,7 +202,9 @@ class _HomeProductMapState extends State<HomeProductMap> {
                                     color: Colors.white,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.18),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.18,
+                                        ),
                                         blurRadius: 4,
                                         offset: const Offset(0, 1),
                                       ),

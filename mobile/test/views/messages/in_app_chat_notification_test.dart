@@ -72,10 +72,7 @@ void main() {
                   body: conversation.lastMessage,
                   icon: Icons.chat_bubble_rounded,
                 ),
-                action: SnackBarAction(
-                  label: 'Reply',
-                  onPressed: () {},
-                ),
+                action: SnackBarAction(label: 'Reply', onPressed: () {}),
               ),
             );
         }

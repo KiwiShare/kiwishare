@@ -407,7 +407,8 @@ void _showForegroundChatNotification(
           title: message.participantName.isNotEmpty
               ? message.participantName
               : 'New message',
-          body: envelope.body ??
+          body:
+              envelope.body ??
               (message.itemTitle.isNotEmpty
                   ? 'Sent you a message about ${message.itemTitle}'
                   : 'You have a new KiwiShare message.'),
@@ -585,13 +586,13 @@ class _KiwiShareAppState extends State<KiwiShareApp> {
     super.initState();
     _lifecycleListener = AppLifecycleListener(
       onResume: () {
-        final chat =
-            _scaffoldMessengerKey.currentContext?.read<ChatProvider?>();
+        final chat = _scaffoldMessengerKey.currentContext
+            ?.read<ChatProvider?>();
         chat?.resumePolling();
       },
       onPause: () {
-        final chat =
-            _scaffoldMessengerKey.currentContext?.read<ChatProvider?>();
+        final chat = _scaffoldMessengerKey.currentContext
+            ?.read<ChatProvider?>();
         chat?.pausePolling();
       },
     );

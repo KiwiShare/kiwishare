@@ -625,7 +625,8 @@ class _HomeHeader extends StatelessWidget {
                       children: [
                         const Text('Near you'),
                         if (location.isNotEmpty &&
-                            location != HomeDiscoveryProvider.allLocationsLabel) ...[
+                            location !=
+                                HomeDiscoveryProvider.allLocationsLabel) ...[
                           const SizedBox(width: 3),
                           Flexible(
                             child: Text(
@@ -1371,8 +1372,8 @@ class _HomeDiscoveryResults extends StatelessWidget {
               icon: const Icon(Icons.tune, size: 18),
               label: Text(
                 filters.activeFilterCount == 0
-                ? 'Sort & filter'
-                : 'Sort & filter (${filters.activeFilterCount})',
+                    ? 'Sort & filter'
+                    : 'Sort & filter (${filters.activeFilterCount})',
               ),
             ),
             _HomeViewToggle(filters: filters),

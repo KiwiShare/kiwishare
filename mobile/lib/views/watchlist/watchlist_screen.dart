@@ -108,7 +108,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                         Container(
                           decoration: BoxDecoration(
                             color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(AppRadius.medium),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.medium,
+                            ),
                             border: Border.all(color: AppColors.border),
                           ),
                           child: TextField(
@@ -166,7 +168,8 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                               _StatusFilterChip(
                                 key: const Key('watchlist-filter-available'),
                                 label: 'Available',
-                                isSelected: _selectedStatus == ItemStatus.active,
+                                isSelected:
+                                    _selectedStatus == ItemStatus.active,
                                 count: items
                                     .where((i) => i.status == ItemStatus.active)
                                     .length,

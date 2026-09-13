@@ -185,14 +185,13 @@ class RestMeetupRepository implements MeetupRepository {
     String? itemId,
     required String token,
   }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/transactions/handover/claim');
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/transactions/handover/claim',
+    );
     final response = await _client.post(
       uri,
       headers: _headers(token),
-      body: jsonEncode({
-        'claimCode': claimCode,
-        'itemId': ?itemId,
-      }),
+      body: jsonEncode({'claimCode': claimCode, 'itemId': ?itemId}),
     );
     return _responseMap(response);
   }
