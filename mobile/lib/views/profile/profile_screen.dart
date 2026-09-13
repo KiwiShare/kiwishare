@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../services/r2_upload_service.dart';
 
 import '../../models/user_model.dart';
 import '../../providers/providers.dart';
@@ -10,8 +13,115 @@ import 'user_listings_screen.dart';
 import 'user_meetups_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String? _loadedToken;
+  String? _refreshError;
+  bool _avatarBusy = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final token = context.watch<AuthProvider>().jwtToken;
+    if (token != _loadedToken) {
+      _loadedToken = token;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh();
+      });
+    }
+  }
+
+  Future<void> _refresh() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.jwtToken;
+    try {
+      await auth.refreshProfile();
+      if (mounted && auth.jwtToken == token) {
+        setState(() => _refreshError = null);
+      }
+    } catch (_) {
+      if (mounted && auth.jwtToken == token) {
+        setState(
+          () =>
+              _refreshError = 'Could not refresh profile. Showing saved data.',
+        );
+      }
+    }
+  }
+
+  Future<void> _editAvatar() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.jwtToken;
+    if (token == null || _avatarBusy) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose profile photo'),
+              onTap: () => Navigator.pop(sheet, 'photo'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Use default avatar'),
+              onTap: () => Navigator.pop(sheet, 'default'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted || auth.jwtToken != token) return;
+    setState(() => _avatarBusy = true);
+    try {
+      var url = '';
+      if (choice == 'photo') {
+        final photo = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1024,
+          imageQuality: 85,
+        );
+        if (photo == null) return;
+        final bytes = await photo.readAsBytes();
+        if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) {
+          throw StateError('Choose a photo smaller than 5 MB.');
+        }
+        if (auth.jwtToken != token) return;
+        url = await R2UploadService().uploadImage(
+          bytes: bytes,
+          fileName: photo.name,
+          contentType:
+              photo.mimeType ??
+              (photo.name.toLowerCase().endsWith('.png')
+                  ? 'image/png'
+                  : 'image/jpeg'),
+          authToken: token,
+        );
+      }
+      if (auth.jwtToken != token) return;
+      await auth.updateAvatar(url);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not save photo. Choose an image under 5 MB and try again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _avatarBusy = false);
+    }
+  }
 
   Future<void> _showLogin(BuildContext context) => showModalBottomSheet<void>(
     context: context,
@@ -47,58 +157,28 @@ class ProfileScreen extends StatelessWidget {
     ),
   );
 
-  Future<void> _editName(BuildContext context, UserModel user) async {
-    final controller = TextEditingController(text: user.displayName);
-    final formKey = GlobalKey<FormState>();
-    final auth = context.read<AuthProvider>();
-    String? failure;
-
+  Future<void> _showChangePassword(BuildContext context) async {
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit display name'),
-          content: Form(
-            key: formKey,
-            child: TextFormField(
-              controller: controller,
-              autofocus: true,
-              maxLength: 30,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: 'Display name',
-                errorText: failure,
-              ),
-              validator: (value) {
-                final length = value?.trim().length ?? 0;
-                return length < 2 ? 'Enter at least 2 characters.' : null;
-              },
+      builder: (_) => _ChangePasswordDialog(
+        onSave: ({required currentPassword, required newPassword}) =>
+            context.read<AuthProvider>().changePassword(
+              currentPassword: currentPassword,
+              newPassword: newPassword,
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
-                try {
-                  await auth.updateDisplayName(controller.text);
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                } catch (_) {
-                  setDialogState(
-                    () => failure = 'Could not save your name. Try again.',
-                  );
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
       ),
     );
-    controller.dispose();
+  }
+
+  Future<void> _editName(BuildContext context, UserModel user) async {
+    final auth = context.read<AuthProvider>();
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _EditDisplayNameDialog(
+        initialName: user.displayName,
+        onSave: auth.updateDisplayName,
+      ),
+    );
   }
 
   @override
@@ -154,121 +234,159 @@ class ProfileScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
-        ),
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
-        children: [
-          signedIn
-              ? _ProfileHeader(
-                  user: user,
-                  onEdit: () => _editName(context, user),
-                )
-              : _GuestHeader(
-                  onLogin: () => _showLogin(context),
-                  onSignUp: () => _showSignUp(context),
-                ),
-          const SizedBox(height: 16),
-          if (signedIn) ...[
-            _MarketplaceCard(
-              onSellingTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      const UserListingsScreen(mode: UserListingsMode.selling),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+          children: [
+            if (signedIn && _refreshError != null)
+              ListTile(
+                title: Text(_refreshError!),
+                trailing: IconButton(
+                  tooltip: 'Retry',
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh),
                 ),
               ),
-              onSoldTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      const UserListingsScreen(mode: UserListingsMode.sold),
-                ),
-              ),
-              onMeetupsTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const UserMeetupsScreen(),
-                ),
-              ),
-            ),
+            signedIn
+                ? _ProfileHeader(
+                    user: user,
+                    onEdit: () => _editName(context, user),
+                  )
+                : _GuestHeader(
+                    onLogin: () => _showLogin(context),
+                    onSignUp: () => _showSignUp(context),
+                  ),
             const SizedBox(height: 16),
-          ],
-          const _SectionHeader(title: 'Preferences'),
-          _SoftMenuContainer(
-            children: [
-              _ModernMenuTile(
-                icon: Icons.palette_outlined,
-                iconColor: const Color(0xFF6366F1),
-                title: 'Appearance',
-                subtitle: _themeLabel(context.watch<ThemeProvider>().themeMode),
-                onTap: () => _showAppearance(context),
-              ),
-              if (signedIn)
-                _ModernMenuTile(
-                  icon: Icons.notifications_active_outlined,
-                  iconColor: const Color(0xFFF59E0B),
-                  title: 'Notifications',
-                  subtitle: 'System permission and notification access',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const NotificationSettingsScreen(),
+            if (signedIn) ...[
+              _MarketplaceCard(
+                onWatchlistTap: () => context.go('/watchlist'),
+                onSellingTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const UserListingsScreen(
+                      mode: UserListingsMode.selling,
                     ),
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const _SectionHeader(title: 'Safety & support'),
-          _SoftMenuContainer(
-            children: [
-              _ModernMenuTile(
-                icon: Icons.verified_user_outlined,
-                iconColor: const Color(0xFF10B981),
-                title: 'Report a safety issue',
-                subtitle: 'Tell us about unsafe or suspicious behaviour',
-                onTap: signedIn
-                    ? () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => const ReportScreen(),
-                        ),
-                      )
-                    : () => _showLogin(context),
-              ),
-            ],
-          ),
-          if (signedIn) ...[
-            const SizedBox(height: 24),
-            TextButton.icon(
-              onPressed: auth.logout,
-              icon: Icon(
-                Icons.logout_rounded,
-                size: 20,
-                color: colors.error.withValues(alpha: 0.85),
-              ),
-              label: Text(
-                'Log out',
-                style: TextStyle(
-                  color: colors.error.withValues(alpha: 0.85),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
+                onSoldTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        const UserListingsScreen(mode: UserListingsMode.sold),
+                  ),
+                ),
+                onMeetupsTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const UserMeetupsScreen(),
+                  ),
                 ),
               ),
-              style: TextButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                backgroundColor: isDark
-                    ? colors.error.withValues(alpha: 0.08)
-                    : colors.error.withValues(alpha: 0.05),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              const SizedBox(height: 16),
+            ],
+            const _SectionHeader(title: 'Preferences'),
+            _SoftMenuContainer(
+              children: [
+                _ModernMenuTile(
+                  icon: Icons.palette_outlined,
+                  iconColor: const Color(0xFF6366F1),
+                  title: 'Appearance',
+                  subtitle: _themeLabel(
+                    context.watch<ThemeProvider>().themeMode,
+                  ),
+                  onTap: () => _showAppearance(context),
                 ),
-              ),
+                if (signedIn)
+                  _ModernMenuTile(
+                    icon: Icons.notifications_active_outlined,
+                    iconColor: const Color(0xFFF59E0B),
+                    title: 'Notifications',
+                    subtitle: 'System permission and notification access',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const NotificationSettingsScreen(),
+                      ),
+                    ),
+                  ),
+              ],
             ),
+            const SizedBox(height: 16),
+            if (signedIn) ...[
+              const _SectionHeader(title: 'Account & security'),
+              _SoftMenuContainer(
+                children: [
+                  _ModernMenuTile(
+                    icon: Icons.add_a_photo_outlined,
+                    iconColor: colors.primary,
+                    title: _avatarBusy ? 'Saving photo...' : 'Profile photo',
+                    subtitle: 'Photo and avatar',
+                    onTap: _editAvatar,
+                  ),
+                  _ModernMenuTile(
+                    icon: Icons.lock_outline,
+                    iconColor: const Color(0xFF0EA5E9),
+                    title: 'Change password',
+                    subtitle: 'Update your password',
+                    onTap: () => _showChangePassword(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+            const _SectionHeader(title: 'Safety & support'),
+            _SoftMenuContainer(
+              children: [
+                _ModernMenuTile(
+                  icon: Icons.verified_user_outlined,
+                  iconColor: const Color(0xFF10B981),
+                  title: 'Report a safety issue',
+                  subtitle: 'Tell us about unsafe or suspicious behaviour',
+                  onTap: signedIn
+                      ? () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ReportScreen(),
+                          ),
+                        )
+                      : () => _showLogin(context),
+                ),
+              ],
+            ),
+            if (signedIn) ...[
+              const SizedBox(height: 24),
+              TextButton.icon(
+                onPressed: auth.logout,
+                icon: Icon(
+                  Icons.logout_rounded,
+                  size: 20,
+                  color: colors.error.withValues(alpha: 0.85),
+                ),
+                label: Text(
+                  'Log out',
+                  style: TextStyle(
+                    color: colors.error.withValues(alpha: 0.85),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  backgroundColor: isDark
+                      ? colors.error.withValues(alpha: 0.08)
+                      : colors.error.withValues(alpha: 0.05),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -359,9 +477,14 @@ class _ProfileHeader extends StatelessWidget {
                     child: CircleAvatar(
                       radius: 34,
                       backgroundColor: scheme.primaryContainer,
-                      foregroundImage: user.avatarUrl == null
+                      foregroundImage:
+                          user.avatarUrl == null || user.avatarUrl!.isEmpty
                           ? null
                           : NetworkImage(user.avatarUrl!),
+                      onForegroundImageError:
+                          user.avatarUrl == null || user.avatarUrl!.isEmpty
+                          ? null
+                          : (_, _) {},
                       child: Text(
                         initial,
                         style: theme.textTheme.headlineMedium?.copyWith(
@@ -484,11 +607,13 @@ class _ProfileHeader extends StatelessWidget {
 
 class _MarketplaceCard extends StatelessWidget {
   const _MarketplaceCard({
+    required this.onWatchlistTap,
     required this.onSellingTap,
     required this.onSoldTap,
     required this.onMeetupsTap,
   });
 
+  final VoidCallback onWatchlistTap;
   final VoidCallback onSellingTap;
   final VoidCallback onSoldTap;
   final VoidCallback onMeetupsTap;
@@ -542,6 +667,16 @@ class _MarketplaceCard extends StatelessWidget {
           ),
           Row(
             children: [
+              Expanded(
+                child: _MarketplaceGridAction(
+                  icon: Icons.favorite_border,
+                  iconBg: const Color(0xFFFDF2F8),
+                  iconColor: const Color(0xFFDB2777),
+                  label: 'Watchlist',
+                  sublabel: 'Saved items',
+                  onTap: onWatchlistTap,
+                ),
+              ),
               Expanded(
                 child: _MarketplaceGridAction(
                   icon: Icons.sell_rounded,
@@ -925,4 +1060,188 @@ class _ModernMenuTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _EditDisplayNameDialog extends StatefulWidget {
+  const _EditDisplayNameDialog({
+    required this.initialName,
+    required this.onSave,
+  });
+
+  final String initialName;
+  final Future<void> Function(String name) onSave;
+
+  @override
+  State<_EditDisplayNameDialog> createState() => _EditDisplayNameDialogState();
+}
+
+class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
+  late final TextEditingController _controller;
+  final _formKey = GlobalKey<FormState>();
+  String? _failure;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(_controller.text);
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _failure = 'Could not save your name. Try again.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit display name'),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          autofocus: true,
+          maxLength: 30,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(
+            labelText: 'Display name',
+            errorText: _failure,
+          ),
+          validator: (value) {
+            final length = value?.trim().length ?? 0;
+            return length < 2 ? 'Enter at least 2 characters.' : null;
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog({required this.onSave});
+  final Future<void> Function({
+    required String currentPassword,
+    required String newPassword,
+  })
+  onSave;
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _saving = false;
+  String? _failure;
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(
+        currentPassword: _current.text,
+        newPassword: _next.text,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _failure = error.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Change password'),
+    content: Form(
+      key: _formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextFormField(
+            controller: _current,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Current password'),
+            validator: (v) =>
+                v == null || v.isEmpty ? 'Enter your current password.' : null,
+          ),
+          TextFormField(
+            controller: _next,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'New password'),
+            validator: (v) =>
+                v == null || v.length < 8 ? 'Use at least 8 characters.' : null,
+          ),
+          TextFormField(
+            controller: _confirm,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Confirm new password',
+            ),
+            validator: (v) =>
+                v != _next.text ? 'Passwords do not match.' : null,
+          ),
+          if (_failure != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _failure!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _saving ? null : () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: _saving ? null : _save,
+        child: const Text('Save'),
+      ),
+    ],
+  );
 }

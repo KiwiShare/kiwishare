@@ -665,20 +665,23 @@ class _HomeCategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final iconData = _getCategoryIcon(label);
     return ChoiceChip(
       avatar: Icon(
         iconData,
         size: 16,
-        color: selected ? AppColors.brandPrimary : AppColors.textSecondary,
+        color: selected ? colors.primary : colors.onSurfaceVariant,
       ),
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
-      selectedColor: AppColors.brandPrimaryContainer,
-      backgroundColor: AppColors.surface,
+      selectedColor: colors.primaryContainer,
+      backgroundColor: isDark ? colors.surfaceContainerHighest : colors.surface,
       side: BorderSide(
-        color: selected ? AppColors.brandPrimary : AppColors.border,
+        color: selected ? colors.primary : colors.outline,
         width: selected ? 1.5 : 1.0,
       ),
       shape: RoundedRectangleBorder(
@@ -701,7 +704,6 @@ class _HomeJumboCarousel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1004,6 +1006,9 @@ class _HomeRecommendedSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
     final cardHeight = 205.0 + (textScale - 1.0) * 45.0;
 
@@ -1040,13 +1045,17 @@ class _HomeRecommendedSection extends StatelessWidget {
                 vertical: 2,
               ),
               decoration: BoxDecoration(
-                color: AppColors.brandSecondaryContainer,
+                color: isDark
+                    ? colors.secondaryContainer
+                    : AppColors.brandSecondaryContainer,
                 borderRadius: BorderRadius.circular(AppRadius.full),
               ),
               child: Text(
                 'Top 10',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.brandPrimaryAlt,
+                  color: isDark
+                      ? colors.onSecondaryContainer
+                      : AppColors.brandPrimaryAlt,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1058,7 +1067,7 @@ class _HomeRecommendedSection extends StatelessWidget {
           'Curated based on popularity, freshness & sustainability',
           style: Theme.of(
             context,
-          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: AppSpacing.md),
         SizedBox(
@@ -1097,18 +1106,23 @@ class _RecommendedProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
     final cardWidth = 155.0 + (textScale - 1.0) * 35.0;
 
     return Container(
       width: cardWidth,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: isDark ? colors.surfaceContainerLow : colors.surface,
         borderRadius: BorderRadius.circular(AppRadius.medium),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: colors.outline.withValues(alpha: isDark ? 0.35 : 0.18),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -1489,7 +1503,7 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.65 - (textScale - 1) * 0.20,
+        childAspectRatio: 0.62 - (textScale - 1) * 0.20,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {

@@ -243,16 +243,29 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     WatchlistProvider watchlist,
     ItemModel product,
   ) async {
+    final token = _authToken;
+    if (token == null || token.isEmpty) {
+      if (mounted) _showLoginSheet(product);
+      return;
+    }
+
     WatchlistMutationResult result;
     try {
       result = await watchlist.toggleWatch(product.id, item: product);
     } catch (error) {
       debugPrint('Watchlist update failed: $error');
+      if (mounted) {
+        _showMessage('Could not update Watchlist. Please try again.');
+      }
       return;
     }
-    if (!mounted || result != WatchlistMutationResult.added) return;
-    final token = _authToken;
-    if (token == null || token.isEmpty) return;
+    if (!mounted || result == WatchlistMutationResult.failed) {
+      if (mounted) {
+        _showMessage('Could not update Watchlist. Please try again.');
+      }
+      return;
+    }
+    if (result != WatchlistMutationResult.added) return;
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
     await offerContextualNotificationPermission(
@@ -1153,7 +1166,8 @@ class _ProductActions extends StatelessWidget {
     final watchButton = OutlinedButton.icon(
       key: const Key('detail-watch-action-button'),
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 50),
+        minimumSize: const Size(0, 52),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.medium),
         ),
@@ -1163,19 +1177,34 @@ class _ProductActions extends StatelessWidget {
               : theme.colorScheme.outline.withOpacity(0.5),
         ),
         backgroundColor: isWatched
-            ? const Color(0xFFEF4444).withOpacity(0.08)
-            : null,
+            ? theme.brightness == Brightness.dark
+                  ? const Color(0xFF3A1D22)
+                  : const Color(0xFFFFF1F2)
+            : theme.brightness == Brightness.dark
+            ? theme.colorScheme.primaryContainer.withOpacity(0.42)
+            : AppColors.surfaceMuted,
+        foregroundColor: isWatched
+            ? const Color(0xFFEF4444)
+            : theme.colorScheme.onSurface,
       ),
       onPressed: onToggleWatch,
       icon: Icon(
         isWatched ? Icons.favorite : Icons.favorite_border,
-        color: isWatched ? const Color(0xFFEF4444) : null,
+        color: isWatched
+            ? const Color(0xFFEF4444)
+            : theme.colorScheme.onSurface,
       ),
       label: Text(
-        isWatched ? 'Watching' : 'Watch Item',
+        'Watching',
+        maxLines: 1,
+        softWrap: false,
         style: GoogleFonts.inter(
+          fontSize: 16,
           fontWeight: FontWeight.w600,
-          color: isWatched ? const Color(0xFFEF4444) : null,
+          height: 1.25,
+          color: isWatched
+              ? const Color(0xFFEF4444)
+              : theme.colorScheme.onSurface,
         ),
       ),
     );
@@ -1203,7 +1232,7 @@ class _ProductActions extends StatelessWidget {
           : const Icon(Icons.chat_bubble_outline),
       label: Text(
         isStartingConversation ? 'Opening chat' : messageSellerLabel,
-        style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
       ),
     );
 
@@ -1247,9 +1276,9 @@ class _ProductActions extends StatelessWidget {
                     meetupButton,
                     const SizedBox(width: AppSpacing.sm),
                   ],
-                  Expanded(child: watchButton),
+                  Expanded(flex: 3, child: watchButton),
                   const SizedBox(width: AppSpacing.sm),
-                  Expanded(flex: 2, child: messageButton),
+                  Expanded(flex: 5, child: messageButton),
                 ],
               ),
       ),

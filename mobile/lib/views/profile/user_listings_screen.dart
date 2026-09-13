@@ -8,16 +8,54 @@ import '../shared/widgets/item_card.dart';
 
 enum UserListingsMode { selling, sold }
 
-class UserListingsScreen extends StatelessWidget {
+class UserListingsScreen extends StatefulWidget {
   const UserListingsScreen({super.key, required this.mode});
   final UserListingsMode mode;
 
   @override
+  State<UserListingsScreen> createState() => _UserListingsScreenState();
+}
+
+class _UserListingsScreenState extends State<UserListingsScreen> {
+  String? _token;
+  Future<List<ItemModel>>? _items;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final token = context.watch<AuthProvider>().jwtToken;
+    if (token != _token) {
+      _token = token;
+      _load();
+    }
+  }
+
+  void _load() {
+    final token = _token;
+    _items = token == null
+        ? null
+        : context.read<ListingProvider>().getMyItems(
+            sold: widget.mode == UserListingsMode.sold,
+            token: token,
+          );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final sold = mode == UserListingsMode.sold;
-    final token = context.read<AuthProvider>().jwtToken;
+    final sold = widget.mode == UserListingsMode.sold;
+    final token = _token;
     return Scaffold(
-      appBar: AppBar(title: Text(sold ? 'Sold' : 'Selling')),
+      appBar: AppBar(
+        title: Text(sold ? 'Sold' : 'Selling'),
+        actions: [
+          if (token != null)
+            IconButton(
+              tooltip: 'Refresh listings',
+              onPressed: () => setState(_load),
+              icon: const Icon(Icons.refresh),
+            ),
+        ],
+      ),
       body: token == null
           ? const _ListingsMessage(
               icon: Icons.lock_outline,
@@ -25,10 +63,8 @@ class UserListingsScreen extends StatelessWidget {
               message: 'Log in to view your listings.',
             )
           : FutureBuilder<List<ItemModel>>(
-              future: context.read<ListingProvider>().getMyItems(
-                sold: sold,
-                token: token,
-              ),
+              key: ValueKey(token),
+              future: _items,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());

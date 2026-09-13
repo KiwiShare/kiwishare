@@ -30,14 +30,36 @@ abstract class UserRepository {
     required String displayName,
   });
   Future<Map<String, dynamic>> loginWithGoogle(String idToken);
+  Future<UserModel> fetchProfile(String token);
   Future<UserModel> updateProfile({
     required String token,
     String? displayName,
     String? avatarUrl,
   });
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  });
 }
 
 class RestUserRepository implements UserRepository {
+  RestUserRepository({http.Client? client}) : _client = client ?? http.Client();
+  final http.Client _client;
+
+  @override
+  Future<UserModel> fetchProfile(String token) async {
+    final response = await _client.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/users/me'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Could not refresh your profile. Please try again.');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return UserModel.fromJson(data['user'] as Map<String, dynamic>);
+  }
+
   @override
   Future<Map<String, dynamic>> loginWithPassword({
     required String email,
@@ -116,7 +138,7 @@ class RestUserRepository implements UserRepository {
     String? displayName,
     String? avatarUrl,
   }) async {
-    final response = await http.patch(
+    final response = await _client.patch(
       Uri.parse('${ApiConfig.baseUrl}/api/users/me'),
       headers: {
         'Content-Type': 'application/json',
@@ -129,6 +151,36 @@ class RestUserRepository implements UserRepository {
     }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return UserModel.fromJson(data['user'] as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await _client.patch(
+      Uri.parse('${ApiConfig.baseUrl}/api/users/me/password'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      }),
+    );
+    if (response.statusCode == 204) return;
+    try {
+      final error = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(error['message'] ?? 'Could not change your password.');
+    } catch (e) {
+      if (e is Exception &&
+          !e.toString().startsWith('Exception: FormatException')) {
+        rethrow;
+      }
+      throw Exception('Could not change your password.');
+    }
   }
 
   @override
@@ -231,6 +283,13 @@ class RestUserRepository implements UserRepository {
 
 class MockUserRepository implements UserRepository {
   @override
+  Future<UserModel> fetchProfile(String token) async => const UserModel(
+    id: 'mock_user_1',
+    displayName: 'Mock User',
+    trustScore: 100,
+    isVerified: false,
+  );
+  @override
   Future<Map<String, dynamic>> loginWithPassword({
     required String email,
     required String password,
@@ -280,6 +339,13 @@ class MockUserRepository implements UserRepository {
       isVerified: false,
     );
   }
+
+  @override
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {}
 
   @override
   Future<void> sendOtp(String email) async {

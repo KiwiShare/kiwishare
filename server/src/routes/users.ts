@@ -1,5 +1,6 @@
 import Router from 'koa-router';
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 import { authenticateToken } from '../middleware/auth';
 import User from '../models/User';
 import Item from '../models/Item';
@@ -45,6 +46,27 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
   const userId = ctx.state.user.id;
   const { displayName, avatarUrl } = ctx.request.body as any;
 
+  if (displayName !== undefined && (typeof displayName !== 'string' ||
+    displayName.trim().length < 2 || displayName.trim().length > 30)) {
+    ctx.status = 400;
+    ctx.body = { message: 'Display name must be between 2 and 30 characters.' };
+    return;
+  }
+  if (avatarUrl !== undefined && avatarUrl !== null && avatarUrl !== '') {
+    let valid = false;
+    if (typeof avatarUrl === 'string' && avatarUrl.length <= 2048) {
+      try {
+        const url = new URL(avatarUrl);
+        valid = ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password;
+      } catch { /* Reject malformed URLs. */ }
+    }
+    if (!valid) {
+      ctx.status = 400;
+      ctx.body = { message: 'Avatar must be an HTTP image URL or null.' };
+      return;
+    }
+  }
+
   const user = mongoose.Types.ObjectId.isValid(userId)
     ? await User.findById(userId)
     : await User.findOne({ id: userId });
@@ -55,8 +77,8 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
     return;
   }
 
-  if (displayName !== undefined) user.displayName = displayName;
-  if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+  if (displayName !== undefined) user.displayName = displayName.trim();
+  if (avatarUrl !== undefined) user.avatarUrl = avatarUrl || null;
 
   await user.save();
 
@@ -72,6 +94,47 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
       isVerified: user.isVerified
     }
   };
+});
+
+// PATCH /users/me/password - Change password for local email/password users
+router.patch('/users/me/password', authenticateToken, async (ctx) => {
+  const userId = ctx.state.user.id;
+  const { currentPassword, newPassword } = ctx.request.body as any;
+
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+    ctx.status = 400;
+    ctx.body = { message: 'Current password and new password are required.' };
+    return;
+  }
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    ctx.status = 400;
+    ctx.body = { message: 'New password must be between 8 and 128 characters.' };
+    return;
+  }
+
+  const user = mongoose.Types.ObjectId.isValid(userId)
+    ? await User.findById(userId).select('+passwordHash')
+    : await User.findOne({ id: userId }).select('+passwordHash');
+
+  if (!user || user.authProvider !== 'email_password' || !user.passwordHash) {
+    ctx.status = 400;
+    ctx.body = { message: 'Password changes are unavailable for this account.' };
+    return;
+  }
+  if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    ctx.status = 401;
+    ctx.body = { message: 'Current password is incorrect.' };
+    return;
+  }
+  if (currentPassword === newPassword) {
+    ctx.status = 400;
+    ctx.body = { message: 'New password must be different from your current password.' };
+    return;
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, 12);
+  await user.save();
+  ctx.status = 204;
 });
 
 // GET /users/me/usedItems - Retrieve items owned by authenticated user

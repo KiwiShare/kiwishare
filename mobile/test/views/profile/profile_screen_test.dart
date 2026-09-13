@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
 import 'package:kiwishare/providers/theme_provider.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
@@ -10,6 +11,42 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('signed-in Profile opens the existing Watchlist route', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":95,"isVerified":true}',
+    });
+    final auth = AuthProvider(userRepository: MockUserRepository());
+    final router = GoRouter(
+      initialLocation: '/profile',
+      routes: [
+        GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
+        GoRoute(
+          path: '/watchlist',
+          builder: (_, _) =>
+              const Scaffold(body: Text('Watchlist destination')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Watchlist'));
+    await tester.pumpAndSettle();
+    expect(find.text('Watchlist destination'), findsOneWidget);
+  });
+
   testWidgets('signed-in Profile opens notification recovery from Preferences', (
     tester,
   ) async {
@@ -39,6 +76,8 @@ void main() {
 
     expect(find.text('Preferences'), findsOneWidget);
     expect(find.text('Notifications'), findsOneWidget);
+    await tester.ensureVisible(find.text('Notifications'));
+    await tester.pump();
     await tester.tap(find.text('Notifications'));
     await tester.pumpAndSettle();
     expect(find.byType(NotificationSettingsScreen), findsOneWidget);
@@ -79,12 +118,14 @@ void main() {
     // Verify Xianyu 3-column marketplace action grid
     expect(find.text('My marketplace'), findsOneWidget);
     expect(find.text('Selling'), findsOneWidget);
+    expect(find.text('Watchlist'), findsOneWidget);
     expect(find.text('Sold'), findsOneWidget);
     expect(find.text('Meetups'), findsOneWidget);
 
     // Verify preference & safety sections
     expect(find.text('Preferences'), findsOneWidget);
     expect(find.text('Appearance'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Report a safety issue'), 100);
     expect(find.text('Safety & support'), findsOneWidget);
     expect(find.text('Report a safety issue'), findsOneWidget);
 

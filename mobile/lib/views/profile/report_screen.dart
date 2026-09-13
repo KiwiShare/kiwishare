@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../repositories/report_repository.dart';
 
 import '../../models/report_draft.dart';
 import '../../theme/app_theme.dart';
@@ -47,9 +50,9 @@ class _ReportScreenState extends State<ReportScreen> {
       if (widget.onSubmit case final submit?) {
         await submit(draft);
       } else {
-        // Persistence is connected by a separate backend integration. Keep
-        // this form usable until an approved submitter is supplied.
-        await Future<void>.delayed(const Duration(milliseconds: 500));
+        final token = context.read<AuthProvider>().jwtToken;
+        if (token == null) throw StateError('Please sign in to report.');
+        await ReportRepository().submit(draft, token: token);
       }
     } catch (_) {
       if (!mounted) return;

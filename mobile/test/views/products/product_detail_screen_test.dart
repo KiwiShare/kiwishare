@@ -111,7 +111,7 @@ void main() {
     // 1. Initial State: not watched
     expect(find.text('Eco 4-Person Camping Tent'), findsWidgets);
     expect(find.text('\$95 NZD'), findsOneWidget);
-    expect(find.text('Watch Item'), findsOneWidget);
+    expect(find.text('Watching'), findsOneWidget);
     expect(provider.isWatched('64f000000000000000000001'), isFalse);
 
     // 2. Tap bottom "Watch Item" button
@@ -131,8 +131,8 @@ void main() {
     await tester.tap(find.byKey(const Key('detail-favorite-button')));
     await tester.pumpAndSettle();
 
-    // 5. Status changes back to "Watch Item"
-    expect(find.text('Watch Item'), findsOneWidget);
+    // 5. The label stays fixed; the heart communicates the status.
+    expect(find.text('Watching'), findsOneWidget);
     expect(provider.isWatched('64f000000000000000000001'), isFalse);
     expect(permissionController.statusCalls, 1);
   });
@@ -430,7 +430,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Watch Item'), findsOneWidget);
+    expect(find.text('Watching'), findsOneWidget);
     expect(find.text('Message seller'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
