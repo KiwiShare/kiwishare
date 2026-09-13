@@ -1503,7 +1503,7 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.65 - (textScale - 1) * 0.20,
+        childAspectRatio: 0.62 - (textScale - 1) * 0.20,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {

@@ -307,6 +307,21 @@ class AuthProvider extends ChangeNotifier {
     await _storeProfile(token, updated);
   }
 
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to change your password.');
+    }
+    await userRepository.changePassword(
+      token: token,
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+  }
+
   Future<void> _storeProfile(String token, UserModel updated) async {
     final prefs = await SharedPreferences.getInstance();
     if (!_isLoggedIn || _jwtToken != token || _currentUser?.id != updated.id)

@@ -76,7 +76,8 @@ void main() {
 
     expect(find.text('Preferences'), findsOneWidget);
     expect(find.text('Notifications'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Notifications'), 100);
+    await tester.ensureVisible(find.text('Notifications'));
+    await tester.pump();
     await tester.tap(find.text('Notifications'));
     await tester.pumpAndSettle();
     expect(find.byType(NotificationSettingsScreen), findsOneWidget);
@@ -117,6 +118,7 @@ void main() {
     // Verify Xianyu 3-column marketplace action grid
     expect(find.text('My marketplace'), findsOneWidget);
     expect(find.text('Selling'), findsOneWidget);
+    expect(find.text('Watchlist'), findsOneWidget);
     expect(find.text('Sold'), findsOneWidget);
     expect(find.text('Meetups'), findsOneWidget);
 

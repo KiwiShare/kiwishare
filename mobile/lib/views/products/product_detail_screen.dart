@@ -243,16 +243,27 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     WatchlistProvider watchlist,
     ItemModel product,
   ) async {
+    final token = _authToken;
+    if (token == null || token.isEmpty) {
+      if (mounted) _showLoginSheet(product);
+      return;
+    }
+
     WatchlistMutationResult result;
     try {
       result = await watchlist.toggleWatch(product.id, item: product);
     } catch (error) {
       debugPrint('Watchlist update failed: $error');
+      if (mounted)
+        _showMessage('Could not update Watchlist. Please try again.');
       return;
     }
-    if (!mounted || result != WatchlistMutationResult.added) return;
-    final token = _authToken;
-    if (token == null || token.isEmpty) return;
+    if (!mounted || result == WatchlistMutationResult.failed) {
+      if (mounted)
+        _showMessage('Could not update Watchlist. Please try again.');
+      return;
+    }
+    if (result != WatchlistMutationResult.added) return;
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
     await offerContextualNotificationPermission(

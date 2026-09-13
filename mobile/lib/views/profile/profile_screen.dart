@@ -156,64 +156,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ),
   );
 
-  Future<void> _editName(BuildContext context, UserModel user) async {
-    final controller = TextEditingController(text: user.displayName);
-    final formKey = GlobalKey<FormState>();
-    final auth = context.read<AuthProvider>();
-    String? failure;
-    var saving = false;
-
+  Future<void> _showChangePassword(BuildContext context) async {
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit display name'),
-          content: Form(
-            key: formKey,
-            child: TextFormField(
-              controller: controller,
-              autofocus: true,
-              maxLength: 30,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: 'Display name',
-                errorText: failure,
-              ),
-              validator: (value) {
-                final length = value?.trim().length ?? 0;
-                return length < 2 ? 'Enter at least 2 characters.' : null;
-              },
+      builder: (_) => _ChangePasswordDialog(
+        onSave: ({required currentPassword, required newPassword}) =>
+            context.read<AuthProvider>().changePassword(
+              currentPassword: currentPassword,
+              newPassword: newPassword,
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: saving ? null : () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      if (!formKey.currentState!.validate()) return;
-                      setDialogState(() => saving = true);
-                      try {
-                        await auth.updateDisplayName(controller.text);
-                        if (dialogContext.mounted) Navigator.pop(dialogContext);
-                      } catch (_) {
-                        if (!dialogContext.mounted) return;
-                        setDialogState(() {
-                          saving = false;
-                          failure = 'Could not save your name. Try again.';
-                        });
-                      }
-                    },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
       ),
     );
-    controller.dispose();
+  }
+
+  Future<void> _editName(BuildContext context, UserModel user) async {
+    final auth = context.read<AuthProvider>();
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _EditDisplayNameDialog(
+        initialName: user.displayName,
+        onSave: auth.updateDisplayName,
+      ),
+    );
   }
 
   @override
@@ -297,23 +261,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
             const SizedBox(height: 16),
             if (signedIn) ...[
-              _ModernMenuTile(
-                icon: Icons.add_a_photo_outlined,
-                iconColor: colors.primary,
-                title: _avatarBusy ? 'Saving photo...' : 'Profile photo',
-                subtitle: 'Photo and avatar',
-                onTap: _editAvatar,
-              ),
-              const SizedBox(height: 16),
-              _ModernMenuTile(
-                icon: Icons.favorite_border,
-                iconColor: colors.primary,
-                title: 'Watchlist',
-                subtitle: 'Saved items',
-                onTap: () => context.go('/watchlist'),
-              ),
-              const SizedBox(height: 16),
               _MarketplaceCard(
+                onWatchlistTap: () => context.go('/watchlist'),
                 onSellingTap: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
@@ -366,6 +315,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
             const SizedBox(height: 16),
+            if (signedIn) ...[
+              const _SectionHeader(title: 'Account & security'),
+              _SoftMenuContainer(
+                children: [
+                  _ModernMenuTile(
+                    icon: Icons.add_a_photo_outlined,
+                    iconColor: colors.primary,
+                    title: _avatarBusy ? 'Saving photo...' : 'Profile photo',
+                    subtitle: 'Photo and avatar',
+                    onTap: _editAvatar,
+                  ),
+                  _ModernMenuTile(
+                    icon: Icons.lock_outline,
+                    iconColor: const Color(0xFF0EA5E9),
+                    title: 'Change password',
+                    subtitle: 'Update your password',
+                    onTap: () => _showChangePassword(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
             const _SectionHeader(title: 'Safety & support'),
             _SoftMenuContainer(
               children: [
@@ -635,11 +606,13 @@ class _ProfileHeader extends StatelessWidget {
 
 class _MarketplaceCard extends StatelessWidget {
   const _MarketplaceCard({
+    required this.onWatchlistTap,
     required this.onSellingTap,
     required this.onSoldTap,
     required this.onMeetupsTap,
   });
 
+  final VoidCallback onWatchlistTap;
   final VoidCallback onSellingTap;
   final VoidCallback onSoldTap;
   final VoidCallback onMeetupsTap;
@@ -693,6 +666,16 @@ class _MarketplaceCard extends StatelessWidget {
           ),
           Row(
             children: [
+              Expanded(
+                child: _MarketplaceGridAction(
+                  icon: Icons.favorite_border,
+                  iconBg: const Color(0xFFFDF2F8),
+                  iconColor: const Color(0xFFDB2777),
+                  label: 'Watchlist',
+                  sublabel: 'Saved items',
+                  onTap: onWatchlistTap,
+                ),
+              ),
               Expanded(
                 child: _MarketplaceGridAction(
                   icon: Icons.sell_rounded,
@@ -1076,4 +1059,187 @@ class _ModernMenuTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _EditDisplayNameDialog extends StatefulWidget {
+  const _EditDisplayNameDialog({
+    required this.initialName,
+    required this.onSave,
+  });
+
+  final String initialName;
+  final Future<void> Function(String name) onSave;
+
+  @override
+  State<_EditDisplayNameDialog> createState() => _EditDisplayNameDialogState();
+}
+
+class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
+  late final TextEditingController _controller;
+  final _formKey = GlobalKey<FormState>();
+  String? _failure;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(_controller.text);
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _failure = 'Could not save your name. Try again.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit display name'),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          autofocus: true,
+          maxLength: 30,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(
+            labelText: 'Display name',
+            errorText: _failure,
+          ),
+          validator: (value) {
+            final length = value?.trim().length ?? 0;
+            return length < 2 ? 'Enter at least 2 characters.' : null;
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog({required this.onSave});
+  final Future<void> Function({
+    required String currentPassword,
+    required String newPassword,
+  })
+  onSave;
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _saving = false;
+  String? _failure;
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(
+        currentPassword: _current.text,
+        newPassword: _next.text,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted)
+        setState(() {
+          _saving = false;
+          _failure = error.toString().replaceFirst('Exception: ', '');
+        });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Change password'),
+    content: Form(
+      key: _formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextFormField(
+            controller: _current,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Current password'),
+            validator: (v) =>
+                v == null || v.isEmpty ? 'Enter your current password.' : null,
+          ),
+          TextFormField(
+            controller: _next,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'New password'),
+            validator: (v) =>
+                v == null || v.length < 8 ? 'Use at least 8 characters.' : null,
+          ),
+          TextFormField(
+            controller: _confirm,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Confirm new password',
+            ),
+            validator: (v) =>
+                v != _next.text ? 'Passwords do not match.' : null,
+          ),
+          if (_failure != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _failure!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _saving ? null : () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: _saving ? null : _save,
+        child: const Text('Save'),
+      ),
+    ],
+  );
 }

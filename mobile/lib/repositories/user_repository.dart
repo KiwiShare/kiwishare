@@ -36,6 +36,11 @@ abstract class UserRepository {
     String? displayName,
     String? avatarUrl,
   });
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  });
 }
 
 class RestUserRepository implements UserRepository {
@@ -146,6 +151,35 @@ class RestUserRepository implements UserRepository {
     }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return UserModel.fromJson(data['user'] as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await _client.patch(
+      Uri.parse('${ApiConfig.baseUrl}/api/users/me/password'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      }),
+    );
+    if (response.statusCode == 204) return;
+    try {
+      final error = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(error['message'] ?? 'Could not change your password.');
+    } catch (e) {
+      if (e is Exception &&
+          !e.toString().startsWith('Exception: FormatException'))
+        rethrow;
+      throw Exception('Could not change your password.');
+    }
   }
 
   @override
@@ -304,6 +338,13 @@ class MockUserRepository implements UserRepository {
       isVerified: false,
     );
   }
+
+  @override
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {}
 
   @override
   Future<void> sendOtp(String email) async {
