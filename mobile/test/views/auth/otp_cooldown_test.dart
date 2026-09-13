@@ -7,6 +7,8 @@ import 'package:kiwishare/views/auth/login_view.dart';
 import 'package:provider/provider.dart';
 
 class FakeCooldownUserRepository implements UserRepository {
+  @override
+  Future<UserModel> fetchProfile(String token) => updateProfile(token: token);
   int sendOtpCalls = 0;
   bool throwCooldownOnSecondCall = false;
 

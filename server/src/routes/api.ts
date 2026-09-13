@@ -11,8 +11,11 @@ import chatRouter from './chat';
 import notificationsRouter from './notifications';
 import listingSuggestionsRouter from './listingSuggestions';
 import meetupsRouter from './meetups';
+import reportsRouter from './reports';
 
 const router = new Router({ prefix: '/api' });
+router.use(reportsRouter.routes());
+router.use(reportsRouter.allowedMethods());
 
 // Register modular sub-routers
 router.use(authRouter.routes());

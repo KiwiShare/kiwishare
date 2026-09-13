@@ -45,6 +45,27 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
   const userId = ctx.state.user.id;
   const { displayName, avatarUrl } = ctx.request.body as any;
 
+  if (displayName !== undefined && (typeof displayName !== 'string' ||
+    displayName.trim().length < 2 || displayName.trim().length > 30)) {
+    ctx.status = 400;
+    ctx.body = { message: 'Display name must be between 2 and 30 characters.' };
+    return;
+  }
+  if (avatarUrl !== undefined && avatarUrl !== null && avatarUrl !== '') {
+    let valid = false;
+    if (typeof avatarUrl === 'string' && avatarUrl.length <= 2048) {
+      try {
+        const url = new URL(avatarUrl);
+        valid = ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password;
+      } catch { /* Reject malformed URLs. */ }
+    }
+    if (!valid) {
+      ctx.status = 400;
+      ctx.body = { message: 'Avatar must be an HTTP image URL or null.' };
+      return;
+    }
+  }
+
   const user = mongoose.Types.ObjectId.isValid(userId)
     ? await User.findById(userId)
     : await User.findOne({ id: userId });
@@ -55,8 +76,8 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
     return;
   }
 
-  if (displayName !== undefined) user.displayName = displayName;
-  if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+  if (displayName !== undefined) user.displayName = displayName.trim();
+  if (avatarUrl !== undefined) user.avatarUrl = avatarUrl || null;
 
   await user.save();
 
