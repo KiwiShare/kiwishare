@@ -33,6 +33,8 @@ Widget _buildSubject({
   ChatVoiceUploader? voiceUploader,
   ChatVoiceRecorder? voiceRecorder,
   NotificationPermissionCoordinator? permissionCoordinator,
+  bool enablePolling = false,
+  Duration? pollingInterval,
 }) {
   final value = conversation ?? testConversation();
   return MaterialApp(
@@ -54,6 +56,8 @@ Widget _buildSubject({
         imagePicker: imagePicker,
         voiceRecorder: voiceRecorder,
         permissionCoordinator: permissionCoordinator,
+        enablePolling: enablePolling,
+        pollingInterval: pollingInterval,
       ),
     ),
   );
@@ -1126,6 +1130,76 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('conversation_message_list')), findsOneWidget);
+  });
+
+  testWidgets(
+    'chat message input requests focus and message list has keyboard dismiss on drag',
+    (tester) async {
+      final repository = FakeChatRepository(
+        messages: {
+          'conversation-1': [
+            testMessage(id: '1', text: 'Hello', isMine: false),
+          ],
+        },
+      );
+      await tester.pumpWidget(_buildSubject(repository: repository));
+      await tester.pumpAndSettle();
+
+      final listView = tester.widget<ListView>(
+        find.byKey(const Key('conversation_message_list')),
+      );
+      expect(
+        listView.keyboardDismissBehavior,
+        ScrollViewKeyboardDismissBehavior.onDrag,
+      );
+
+      final inputFinder = find.byKey(const Key('chat_message_input'));
+      expect(inputFinder, findsOneWidget);
+
+      await tester.tap(inputFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final textField = tester.widget<TextField>(inputFinder);
+      expect(textField.focusNode?.hasFocus, isTrue);
+
+      // Tap outside to unfocus
+      await tester.tap(find.byKey(const Key('conversation_message_list')));
+      await tester.pump();
+      expect(textField.focusNode?.hasFocus, isFalse);
+    },
+  );
+
+  testWidgets('in-conversation polling dynamically updates message history', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(id: '1', text: 'Initial message', isMine: false),
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        enablePolling: true,
+        pollingInterval: const Duration(milliseconds: 50),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Initial message'), findsOneWidget);
+
+    // Simulate another message arriving
+    repository.messages['conversation-1'] = [
+      testMessage(id: '1', text: 'Initial message', isMine: false),
+      testMessage(id: '2', text: 'New incoming message', isMine: false),
+    ];
+
+    await tester.pump(const Duration(milliseconds: 70));
+    await tester.pump(const Duration(milliseconds: 70));
+
+    expect(find.text('New incoming message'), findsOneWidget);
   });
 }
 

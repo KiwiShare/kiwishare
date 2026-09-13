@@ -64,6 +64,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
   ListingLocation? _location;
   String? _condition;
   final List<_SelectedPhoto> _photos = [];
+  int _selectedPhotoIndex = 0;
   bool _isSustainable = false;
   bool _isPickingPhotos = false;
   bool _isLocating = false;
@@ -168,7 +169,11 @@ class _PostItemScreenState extends State<PostItemScreen> {
       return;
     }
     if (loadedPhotos.isNotEmpty) {
-      setState(() => _photos.addAll(loadedPhotos));
+      setState(() {
+        final previousCount = _photos.length;
+        _photos.addAll(loadedPhotos);
+        _selectedPhotoIndex = previousCount;
+      });
     }
     if (failedCount > 0) {
       _showPhotoMessage(
@@ -186,7 +191,32 @@ class _PostItemScreenState extends State<PostItemScreen> {
     if (index < 0 || index >= _photos.length) {
       return;
     }
-    setState(() => _photos.removeAt(index));
+    setState(() {
+      _photos.removeAt(index);
+      if (_photos.isEmpty) {
+        _selectedPhotoIndex = 0;
+      } else if (_selectedPhotoIndex >= _photos.length) {
+        _selectedPhotoIndex = _photos.length - 1;
+      } else if (_selectedPhotoIndex > index) {
+        _selectedPhotoIndex--;
+      }
+    });
+  }
+
+  void _selectPhoto(int index) {
+    if (index >= 0 && index < _photos.length) {
+      setState(() => _selectedPhotoIndex = index);
+    }
+  }
+
+  void _setCoverPhoto(int index) {
+    if (index <= 0 || index >= _photos.length) return;
+    setState(() {
+      final photo = _photos.removeAt(index);
+      _photos.insert(0, photo);
+      _selectedPhotoIndex = 0;
+    });
+    _showPhotoMessage('Set as cover photo');
   }
 
   void _showPhotoError(PlatformException error) {
@@ -629,9 +659,12 @@ class _PostItemScreenState extends State<PostItemScreen> {
                     _PhotosSection(
                       key: const Key('post_photos_section'),
                       photos: _photos,
+                      selectedIndex: _selectedPhotoIndex,
                       isPickingPhotos: _isPickingPhotos,
                       onAddPhoto: _showPhotoSourcePicker,
+                      onSelectPhoto: _selectPhoto,
                       onRemovePhoto: _removePhoto,
+                      onSetCoverPhoto: _setCoverPhoto,
                     ),
                     const SizedBox(height: AppSpacing.xl),
                     _ResponsiveFieldRow(
@@ -709,7 +742,9 @@ class _PostItemScreenState extends State<PostItemScreen> {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Material(
-                      color: Theme.of(context).colorScheme.surfaceContainerLow,
+                      color: _isSustainable
+                          ? const Color(0xFF2E5E4E).withValues(alpha: 0.08)
+                          : Theme.of(context).colorScheme.surfaceContainerLow,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppRadius.medium),
                         side: BorderSide(
@@ -726,11 +761,27 @@ class _PostItemScreenState extends State<PostItemScreen> {
                             ? null
                             : (value) => setState(() => _isSustainable = value),
                         activeColor: const Color(0xFF2E5E4E),
-                        secondary: Icon(
-                          _isSustainable ? Icons.eco : Icons.eco_outlined,
-                          color: _isSustainable
-                              ? const Color(0xFF2E5E4E)
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                        secondary: Container(
+                          padding: const EdgeInsets.all(AppSpacing.xs + 2),
+                          decoration: BoxDecoration(
+                            color: _isSustainable
+                                ? const Color(
+                                    0xFF2E5E4E,
+                                  ).withValues(alpha: 0.15)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small,
+                            ),
+                          ),
+                          child: Icon(
+                            _isSustainable ? Icons.eco : Icons.eco_outlined,
+                            color: _isSustainable
+                                ? const Color(0xFF2E5E4E)
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                            size: 22,
+                          ),
                         ),
                         title: Text(
                           'Sustainable Item',
@@ -809,6 +860,9 @@ class _PostItemScreenState extends State<PostItemScreen> {
                           : _postItem,
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
+                        backgroundColor: AppColors.brandPrimary,
+                        foregroundColor: Colors.white,
+                        elevation: 1,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppRadius.medium),
                         ),
@@ -816,9 +870,20 @@ class _PostItemScreenState extends State<PostItemScreen> {
                       child: _isPublishing
                           ? const SizedBox.square(
                               dimension: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
                             )
-                          : const Text('Post item'),
+                          : const Text(
+                              'Post item',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
                     ),
                   ],
                 ),
@@ -1006,164 +1071,664 @@ class _PostHeader extends StatelessWidget {
   }
 }
 
-class _PhotosSection extends StatelessWidget {
+class _PhotosSection extends StatefulWidget {
   final List<_SelectedPhoto> photos;
+  final int selectedIndex;
   final bool isPickingPhotos;
   final VoidCallback onAddPhoto;
+  final ValueChanged<int> onSelectPhoto;
   final ValueChanged<int> onRemovePhoto;
+  final ValueChanged<int> onSetCoverPhoto;
 
   const _PhotosSection({
     super.key,
     required this.photos,
+    required this.selectedIndex,
     required this.isPickingPhotos,
     required this.onAddPhoto,
+    required this.onSelectPhoto,
     required this.onRemovePhoto,
+    required this.onSetCoverPhoto,
   });
+
+  @override
+  State<_PhotosSection> createState() => _PhotosSectionState();
+}
+
+class _PhotosSectionState extends State<_PhotosSection> {
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(
+      initialPage: widget.photos.isNotEmpty
+          ? widget.selectedIndex.clamp(0, widget.photos.length - 1)
+          : 0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _PhotosSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.photos.isNotEmpty) {
+      final safeIndex = widget.selectedIndex.clamp(0, widget.photos.length - 1);
+      if (_pageController.hasClients &&
+          (_pageController.page?.round() ?? -1) != safeIndex) {
+        _pageController.animateToPage(
+          safeIndex,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final useAccessibleHeight = MediaQuery.textScalerOf(context).scale(14) > 18;
     final colors = Theme.of(context).colorScheme;
+    final hasPhotos = widget.photos.isNotEmpty;
+    final activeIndex = hasPhotos
+        ? widget.selectedIndex.clamp(0, widget.photos.length - 1)
+        : 0;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Photos', style: Theme.of(context).textTheme.labelLarge),
             Text(
-              '${photos.length}/10',
-              key: const Key('post_photo_count'),
-              style: Theme.of(context).textTheme.labelSmall,
+              'Photos',
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: widget.photos.isEmpty
+                    ? colors.surfaceContainerHighest.withValues(alpha: 0.5)
+                    : colors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+              child: Text(
+                '${widget.photos.length}/10',
+                key: const Key('post_photo_count'),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: widget.photos.isEmpty
+                      ? colors.onSurfaceVariant
+                      : colors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
-        Semantics(
-          button: true,
-          label: 'Add photos. ${photos.length} of 10 selected.',
-          child: CustomPaint(
-            painter: _DashedRoundedBorderPainter(colors.secondary),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                key: const Key('post_add_photos_button'),
-                onTap: photos.length < 10 && !isPickingPhotos
-                    ? onAddPhoto
-                    : null,
-                borderRadius: BorderRadius.circular(AppRadius.medium),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: useAccessibleHeight ? 240 : 152,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (isPickingPhotos)
-                        const SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: CircularProgressIndicator(strokeWidth: 3),
-                        )
-                      else
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: colors.primary),
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.small,
+
+        // 1. If NO photos: show the large, welcoming upload box
+        if (!hasPhotos)
+          Semantics(
+            button: true,
+            label: 'Add photos. 0 of 10 selected.',
+            child: CustomPaint(
+              painter: _DashedRoundedBorderPainter(colors.secondary),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  key: const Key('post_add_photos_button'),
+                  onTap: !widget.isPickingPhotos ? widget.onAddPhoto : null,
+                  borderRadius: BorderRadius.circular(AppRadius.medium),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: useAccessibleHeight ? 240 : 152,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (widget.isPickingPhotos)
+                          const SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(strokeWidth: 3),
+                          )
+                        else
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: colors.primary.withValues(alpha: 0.08),
+                              border: Border.all(
+                                color: colors.primary.withValues(alpha: 0.3),
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.medium,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.add_a_photo_outlined,
+                              size: 24,
+                              color: colors.primary,
                             ),
                           ),
-                          child: Icon(
-                            Icons.add_a_photo_outlined,
-                            size: 24,
-                            color: colors.primary,
-                          ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          widget.isPickingPhotos
+                              ? 'Adding photos…'
+                              : 'Add photos',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(color: colors.primary),
                         ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        isPickingPhotos ? 'Adding photos…' : 'Add photos',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.labelLarge?.copyWith(color: colors.primary),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        photos.length >= 10
-                            ? 'Maximum of 10 photos reached'
-                            : 'Use your camera or choose from your device',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ],
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'First photo will be the cover · Up to 10 photos',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        SizedBox(
-          height: 52,
-          child: ListView.separated(
-            key: const Key('post_photo_slots'),
-            scrollDirection: Axis.horizontal,
-            itemCount: 10,
-            separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
-            itemBuilder: (context, index) {
-              final hasPhoto = index < photos.length;
-              return Semantics(
-                button: hasPhoto,
-                label: hasPhoto
-                    ? 'Photo ${index + 1}. Tap to remove.'
-                    : 'Empty photo slot ${index + 1}.',
-                child: InkWell(
-                  key: Key('post_photo_slot_$index'),
-                  onTap: hasPhoto ? () => onRemovePhoto(index) : null,
-                  borderRadius: BorderRadius.circular(AppRadius.small),
-                  child: SizedBox.square(
-                    dimension: 52,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadius.small),
-                      child: hasPhoto
-                          ? Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Image.memory(
-                                  photos[index].bytes,
-                                  fit: BoxFit.cover,
-                                  gaplessPlayback: true,
-                                  semanticLabel:
-                                      'Photo ${index + 1}: ${photos[index].file.name}',
+          )
+        else ...[
+          // 2. If HAS photos: Large Hero Preview (Xianyu-style)
+          Container(
+            key: const Key('post_hero_image_card'),
+            width: double.infinity,
+            height: useAccessibleHeight ? 270 : 230,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(AppRadius.large),
+              border: Border.all(
+                color: colors.outlineVariant.withValues(alpha: 0.4),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.large - 1),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  PageView.builder(
+                    controller: _pageController,
+                    itemCount: widget.photos.length,
+                    onPageChanged: widget.onSelectPhoto,
+                    itemBuilder: (context, index) {
+                      return Image.memory(
+                        widget.photos[index].bytes,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        semanticLabel:
+                            'Photo ${index + 1} of ${widget.photos.length}: ${widget.photos[index].file.name}',
+                      );
+                    },
+                  ),
+
+                  // Top & bottom subtle gradient overlays for contrast
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 52,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.55),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 48,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.45),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Top-Left: Cover Badge OR "Set as cover" action button
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: activeIndex == 0
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.brandPrimary.withValues(
+                                alpha: 0.95,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
                                 ),
-                                const Align(
-                                  alignment: Alignment.topRight,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: Color(0xB3000000),
-                                      borderRadius: BorderRadius.only(
-                                        bottomLeft: Radius.circular(8),
-                                      ),
-                                    ),
-                                    child: Padding(
-                                      padding: EdgeInsets.all(2),
-                                      child: Icon(
-                                        Icons.close,
-                                        size: 14,
-                                        color: Colors.white,
-                                      ),
-                                    ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.star_rounded,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Cover',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ],
-                            )
-                          : ColoredBox(color: colors.surfaceContainerHighest),
+                            ),
+                          )
+                        : Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              key: const Key('post_photo_set_cover_button'),
+                              onTap: () => widget.onSetCoverPhoto(activeIndex),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.65),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.full,
+                                  ),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.45),
+                                    width: 0.8,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.25,
+                                      ),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.crop_original_rounded,
+                                      color: Colors.white,
+                                      size: 13,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Set as cover',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+
+                  // Top-Right: Delete button for active photo
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Tooltip(
+                        message: 'Remove photo',
+                        child: InkWell(
+                          key: Key('post_photo_delete_$activeIndex'),
+                          onTap: () => widget.onRemovePhoto(activeIndex),
+                          borderRadius: BorderRadius.circular(AppRadius.full),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.6),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.4),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
+
+                  // Bottom-Right: Index counter pill
+                  Positioned(
+                    bottom: 10,
+                    right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                      ),
+                      child: Text(
+                        '${activeIndex + 1}/${widget.photos.length}',
+                        key: const Key('post_hero_photo_index'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Previous / Next chevron hints
+                  if (widget.photos.length > 1) ...[
+                    if (activeIndex > 0)
+                      Positioned(
+                        left: 6,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              key: const Key('post_hero_prev_photo'),
+                              onTap: () =>
+                                  widget.onSelectPhoto(activeIndex - 1),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.chevron_left_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (activeIndex < widget.photos.length - 1)
+                      Positioned(
+                        right: 6,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              key: const Key('post_hero_next_photo'),
+                              onTap: () =>
+                                  widget.onSelectPhoto(activeIndex + 1),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: AppSpacing.sm),
+
+          // 3. Below: Thumbnails Strip (Tap to select, delete via 'x' button)
+          SizedBox(
+            height: 66,
+            child: ListView.separated(
+              key: const Key('post_photo_slots'),
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              itemCount: widget.photos.length < 10
+                  ? widget.photos.length + 1
+                  : widget.photos.length,
+              separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+              itemBuilder: (context, index) {
+                // If it's the "+ Add" button at the end
+                if (index == widget.photos.length) {
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      key: const Key('post_add_photos_button'),
+                      onTap: widget.isPickingPhotos ? null : widget.onAddPhoto,
+                      borderRadius: BorderRadius.circular(AppRadius.small),
+                      child: CustomPaint(
+                        painter: _DashedRoundedBorderPainter(colors.secondary),
+                        child: SizedBox.square(
+                          dimension: 58,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.add_a_photo_outlined,
+                                size: 18,
+                                color: colors.primary,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Add',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                final isSelected = index == activeIndex;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: isSelected
+                          ? 'Photo ${index + 1}, currently viewing.'
+                          : 'Photo ${index + 1}. Tap to view.',
+                      child: InkWell(
+                        key: Key('post_photo_slot_$index'),
+                        onTap: () => widget.onSelectPhoto(index),
+                        borderRadius: BorderRadius.circular(AppRadius.small),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: 58,
+                          height: 58,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small,
+                            ),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.brandPrimary
+                                  : colors.outlineVariant.withValues(
+                                      alpha: 0.7,
+                                    ),
+                              width: isSelected ? 2.5 : 1.0,
+                            ),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: AppColors.brandPrimary.withValues(
+                                        alpha: 0.25,
+                                      ),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small - 1,
+                            ),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.memory(
+                                  widget.photos[index].bytes,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                  semanticLabel:
+                                      'Photo ${index + 1}: ${widget.photos[index].file.name}',
+                                ),
+                                if (index == 0)
+                                  Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 1,
+                                      ),
+                                      color: AppColors.brandPrimary.withValues(
+                                        alpha: 0.92,
+                                      ),
+                                      child: const Text(
+                                        'Cover',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Circular '✕' delete button on thumbnail corner
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Tooltip(
+                          message: 'Remove photo ${index + 1}',
+                          child: InkWell(
+                            key: Key('post_photo_thumb_delete_$index'),
+                            onTap: () => widget.onRemovePhoto(index),
+                            borderRadius: BorderRadius.circular(AppRadius.full),
+                            child: Container(
+                              width: 19,
+                              height: 19,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.75),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.close,
+                                  size: 11,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'First photo is the cover · Tap thumbnail to switch preview · Can set as cover',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: colors.onSurfaceVariant.withValues(alpha: 0.7),
+              fontSize: 10.5,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1583,19 +2148,38 @@ class _SelectionSheet extends StatelessWidget {
                                   ),
                                   child: Row(
                                     children: [
+                                      if (_getOptionIcon(option) != null) ...[
+                                        Icon(
+                                          _getOptionIcon(option),
+                                          size: 18,
+                                          color: isSelected
+                                              ? colors.primary
+                                              : colors.onSurfaceVariant,
+                                        ),
+                                        const SizedBox(
+                                          width: AppSpacing.xs + 2,
+                                        ),
+                                      ],
                                       Expanded(
                                         child: Text(
                                           option,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodyMedium,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w500,
+                                              ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                       if (isSelected) ...[
                                         const SizedBox(width: AppSpacing.xs),
                                         Icon(
                                           Icons.check_rounded,
-                                          size: 20,
+                                          size: 18,
                                           color: colors.primary,
                                         ),
                                       ],
@@ -1652,4 +2236,25 @@ class _DashedRoundedBorderPainter extends CustomPainter {
   bool shouldRepaint(covariant _DashedRoundedBorderPainter oldDelegate) {
     return oldDelegate.color != color;
   }
+}
+
+IconData? _getOptionIcon(String option) {
+  final lower = option.toLowerCase();
+  if (lower.contains('furniture')) return Icons.chair_outlined;
+  if (lower.contains('electronic')) return Icons.devices_outlined;
+  if (lower.contains('book')) return Icons.menu_book_outlined;
+  if (lower.contains('home')) return Icons.home_outlined;
+  if (lower.contains('sport')) return Icons.sports_basketball_outlined;
+  if (lower.contains('kid') || lower.contains('toy')) {
+    return Icons.child_care_outlined;
+  }
+  if (lower.contains('cloth') || lower.contains('fashion')) {
+    return Icons.checkroom_outlined;
+  }
+  if (lower.contains('other')) return Icons.category_outlined;
+  if (lower == 'new') return Icons.verified_outlined;
+  if (lower.contains('like new')) return Icons.thumb_up_outlined;
+  if (lower.contains('good')) return Icons.sentiment_satisfied_outlined;
+  if (lower.contains('fair')) return Icons.handshake_outlined;
+  return null;
 }

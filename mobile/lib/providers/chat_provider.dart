@@ -20,12 +20,21 @@ class ChatProvider extends ChangeNotifier {
     required this.repository,
     ChatPhotoUploader? photoUploader,
     ChatVoiceUploader? voiceUploader,
+    this.enablePolling = false,
+    this.pollingInterval = const Duration(seconds: 4),
+    this.onIncomingChatMessage,
   }) : photoUploader = photoUploader ?? R2ChatPhotoUploader(),
        voiceUploader = voiceUploader ?? R2ChatVoiceUploader();
 
   final ChatRepository repository;
   final ChatPhotoUploader photoUploader;
   final ChatVoiceUploader voiceUploader;
+  final bool enablePolling;
+  final Duration pollingInterval;
+  void Function(ChatConversationModel conversation)? onIncomingChatMessage;
+
+  Timer? _pollingTimer;
+  bool _isPollingPaused = false;
 
   String? _sessionToken;
   bool ownsSession(String token) => _sessionToken == token;
@@ -108,16 +117,58 @@ class ChatProvider extends ChangeNotifier {
   int conversationRenderVersionFor(String conversationId) =>
       _conversationRenderVersions[conversationId] ?? 0;
 
+  void startPolling({Duration? interval}) {
+    _pollingTimer?.cancel();
+    _isPollingPaused = false;
+    final duration = interval ?? pollingInterval;
+    _pollingTimer = Timer.periodic(duration, (_) {
+      final token = _sessionToken;
+      if (!_isPollingPaused &&
+          token != null &&
+          token.isNotEmpty &&
+          !_isLoadingConversations) {
+        unawaited(loadConversations(token));
+      }
+    });
+  }
+
+  void pausePolling() {
+    _isPollingPaused = true;
+  }
+
+  void resumePolling() {
+    _isPollingPaused = false;
+    final token = _sessionToken;
+    if (token != null && token.isNotEmpty) {
+      unawaited(loadConversations(token));
+    }
+  }
+
+  void stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+  }
+
   void updateAuthToken(String? token) {
     if (_sessionToken == token) return;
     _resetSession(token);
     if (token == null || token.isEmpty) {
+      stopPolling();
       scheduleMicrotask(notifyListeners);
       return;
+    }
+    if (enablePolling) {
+      startPolling();
     }
     scheduleMicrotask(() {
       if (_sessionToken == token) unawaited(loadConversations(token));
     });
+  }
+
+  @override
+  void dispose() {
+    stopPolling();
+    super.dispose();
   }
 
   void _useSession(String token) {
@@ -223,7 +274,39 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final conversations = await repository.fetchConversations(token: token);
-      if (_sessionToken == token) _conversations = conversations;
+      if (_sessionToken == token) {
+        final previousConversations = _conversations;
+        _conversations = conversations;
+
+        if (onIncomingChatMessage != null && previousConversations.isNotEmpty) {
+          for (final updated in conversations) {
+            final previous = previousConversations.firstWhere(
+              (c) => c.id == updated.id,
+              orElse: () => const ChatConversationModel(
+                id: '',
+                itemId: '',
+                itemTitle: '',
+                itemImageUrl: '',
+                participantId: '',
+                participantName: '',
+                direction: ChatDirection.buying,
+                status: 'active',
+                lastMessage: '',
+                unreadCount: 0,
+              ),
+            );
+            final isNewWithUnread =
+                previous.id.isEmpty && updated.unreadCount > 0;
+            final unreadIncreased = updated.unreadCount > previous.unreadCount;
+            final newIncoming =
+                (isNewWithUnread || unreadIncreased) &&
+                updated.lastMessage.isNotEmpty;
+            if (newIncoming) {
+              onIncomingChatMessage?.call(updated);
+            }
+          }
+        }
+      }
     } on ChatRepositoryException catch (error) {
       if (_sessionToken == token) _conversationError = error.message;
     } catch (_) {

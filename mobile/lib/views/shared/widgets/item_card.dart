@@ -223,7 +223,7 @@ class ItemCard extends StatelessWidget {
 
                 // 2. Info & Details Body
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
+                  padding: const EdgeInsets.fromLTRB(9, 5, 9, 6),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -257,7 +257,7 @@ class ItemCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 1.5),
 
                       // Location Row
                       Row(
@@ -281,7 +281,7 @@ class ItemCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 2),
 
                       // Title (up to 2 lines)
                       Text(
@@ -289,13 +289,13 @@ class ItemCard extends StatelessWidget {
                         style: GoogleFonts.inter(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          height: 1.25,
+                          height: 1.2,
                           color: colors.onSurface,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 3),
 
                       // Seller Row
                       Row(
