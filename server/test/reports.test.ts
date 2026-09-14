@@ -202,7 +202,7 @@ describe('KiwiShare report persistence API', () => {
         contextType: 'chat',
         contextId: new mongoose.Types.ObjectId(conversationId),
         reason: 'harassment_or_abusive_behaviour',
-        status: 'submitted'
+        status: 'pending'
       })
     );
   });
