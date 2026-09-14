@@ -12,6 +12,39 @@ const userReasons = ['scam_or_fraud', 'harassment_or_abusive_behaviour',
 const listingReasons = ['misleading_information', 'prohibited_or_unsafe_item',
   'counterfeit_item', 'suspected_stolen_item', 'duplicate_listing_or_spam', 'other'];
 
+router.get('/reports', authenticateToken, async (ctx) => {
+  const reporterId = ctx.state.user?.id;
+  if (
+    typeof reporterId !== 'string' ||
+    !mongoose.isValidObjectId(reporterId) ||
+    !await User.exists({ _id: reporterId })
+  ) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Please sign in again.' };
+    return;
+  }
+
+  const reports = await Report.find({ reporterId })
+    .select('targetType contextType reason details status createdAt')
+    .sort({ createdAt: -1, _id: -1 })
+    .lean()
+    .exec();
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    reports: reports.map((report) => ({
+      id: String(report._id),
+      targetType: report.targetType,
+      contextType: report.contextType,
+      reason: report.reason,
+      details: report.details,
+      status: report.status === 'submitted' ? 'pending' : report.status,
+      createdAt: report.createdAt.toISOString()
+    }))
+  };
+});
+
 router.post('/reports', authenticateToken, async (ctx) => {
   const { targetType, targetId, contextType, contextId, reason, details } = ctx.request.body as any;
   const invalid = (message: string) => { ctx.status = 400; ctx.body = { message }; };
