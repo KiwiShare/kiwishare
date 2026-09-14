@@ -7,6 +7,7 @@ import '../../services/r2_upload_service.dart';
 import '../../models/user_model.dart';
 import '../../providers/providers.dart';
 import '../auth/login_view.dart';
+import 'my_reports_screen.dart';
 import 'report_screen.dart';
 import 'notification_settings_screen.dart';
 import 'user_listings_screen.dart';
@@ -341,6 +342,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const _SectionHeader(title: 'Safety & support'),
             _SoftMenuContainer(
               children: [
+                _ModernMenuTile(
+                  icon: Icons.history_rounded,
+                  iconColor: colors.primary,
+                  title: 'My reports',
+                  subtitle: 'View your report history and review status',
+                  onTap: signedIn
+                      ? () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => const MyReportsScreen(),
+                          ),
+                        )
+                      : () => _showLogin(context),
+                ),
                 _ModernMenuTile(
                   icon: Icons.verified_user_outlined,
                   iconColor: const Color(0xFF10B981),
