@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../models/chat_conversation_model.dart';
 import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
+import '../../models/report_draft.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/watchlist_provider.dart';
@@ -18,6 +19,7 @@ import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
 import '../messages/widgets/schedule_meetup_sheet.dart';
+import '../profile/report_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String? itemId;
@@ -316,6 +318,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  void _openReportForm(ItemModel product) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReportScreen(
+          reportContext: ReportContext(
+            targetType: ReportTargetType.listing,
+            targetId: product.id,
+            targetLabel: product.title,
+            contextType: ReportContextType.listing,
+            contextId: product.id,
+            contextLabel: product.title,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _shareListing(ItemModel product) {
     Clipboard.setData(
       ClipboardData(
@@ -581,6 +600,24 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           },
                         ),
                       ],
+                      const SizedBox(height: AppSpacing.md),
+                      Center(
+                        child: TextButton.icon(
+                          key: const Key('detail-report-listing-button'),
+                          onPressed: () => _openReportForm(product),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            minimumSize: const Size(48, 48),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                            ),
+                            textStyle: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(fontWeight: FontWeight.w500),
+                          ),
+                          icon: const Icon(Icons.flag_outlined, size: 16),
+                          label: const Text('Report listing'),
+                        ),
+                      ),
                     ],
                   ),
                 ),
