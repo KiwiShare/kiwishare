@@ -72,7 +72,10 @@ void main() {
           'reason': 'other',
           'details': 'Suspicious payment request.',
         });
-        return http.Response('{"report":{"id":"report-1"}}', 201);
+        return http.Response(
+          '{"status":"success","report":{"id":"report-1","status":"pending","createdAt":"2026-09-14T10:00:00.000Z"}}',
+          201,
+        );
       }),
     );
     await repo.submit(draft, token: 'token');

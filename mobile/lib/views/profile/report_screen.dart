@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../repositories/report_repository.dart';
 
 import '../../models/report_draft.dart';
+import '../../providers/auth_provider.dart';
+import '../../repositories/report_repository.dart';
 import '../../theme/app_theme.dart';
 
 class ReportScreen extends StatefulWidget {
@@ -11,10 +11,14 @@ class ReportScreen extends StatefulWidget {
     super.key,
     this.reportContext = const ReportContext.general(),
     this.onSubmit,
+    this.reportRepository,
+    this.authToken,
   });
 
   final ReportContext reportContext;
   final ReportSubmitter? onSubmit;
+  final ReportRepository? reportRepository;
+  final String? authToken;
 
   @override
   State<ReportScreen> createState() => _ReportScreenState();
@@ -50,10 +54,31 @@ class _ReportScreenState extends State<ReportScreen> {
       if (widget.onSubmit case final submit?) {
         await submit(draft);
       } else {
-        final token = context.read<AuthProvider>().jwtToken;
-        if (token == null) throw StateError('Please sign in to report.');
-        await ReportRepository().submit(draft, token: token);
+        final token = widget.authToken ?? context.read<AuthProvider>().jwtToken;
+        if (token == null || token.isEmpty) {
+          throw const ReportAuthenticationException();
+        }
+        final repository =
+            widget.reportRepository ?? context.read<ReportRepository>();
+        await repository.submitReport(draft: draft, token: token);
       }
+    } on ReportAuthenticationException catch (exception) {
+      if (widget.authToken == null && mounted) {
+        await context.read<AuthProvider>().clearSession();
+      }
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _submissionError = exception.message;
+      });
+      return;
+    } on ReportRepositoryException catch (exception) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _submissionError = exception.message;
+      });
+      return;
     } catch (_) {
       if (!mounted) return;
       setState(() {

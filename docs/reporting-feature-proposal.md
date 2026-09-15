@@ -1,6 +1,6 @@
 # KiwiShare Reporting Feature Proposal
 
-**Status:** Accepted incrementally for the Report Abuse module
+**Status:** Accepted incrementally for the Report Abuse module; #102 persistence pending team review
 
 **Related issues:** #99, #100, #101, #102, #103
 
@@ -8,12 +8,13 @@
 
 **Prepared:** 14 August 2026
 
-**Updated:** 14 September 2026
+**Updated:** 15 September 2026
 
-> Implementation note: listing, chat, shared-form, persistence, and member
-> history work are tracked separately so each issue remains independently
-> reviewable. Issue #103 adds an authenticated read-only history; it does not
-> add moderator tooling or expose enforcement decisions.
+> Implementation note: Issue #102 implements authenticated creation and MongoDB
+> persistence; Issue #103 adds an authenticated read-only member history. Their
+> canonical, test-backed contracts are in `docs/api-spec.md` and
+> `docs/schemas/report.schema.json`. These issues remain independently
+> reviewable and do not add moderator tooling or expose enforcement decisions.
 
 ## 1. Decision needed
 
@@ -43,7 +44,7 @@ The current user's Profile should contain a **Safety & support** section with a 
 1. User selects **Report** from a user profile, listing, chat, transaction, or Safety & support.
 2. App explains that reports are confidential and should be accurate.
 3. User selects a reason appropriate to the target.
-4. User adds optional supporting details. A short description may be required for **Other**.
+4. User adds supporting details of 10–1000 characters.
 5. App shows the selected target and asks for confirmation.
 6. Submission is sent once; the submit action is disabled while the request is in progress.
 7. App confirms: **“Thanks for helping keep KiwiShare safe. We’ll review your report.”**
@@ -155,7 +156,9 @@ Example request:
 }
 ```
 
-The API should validate allowed enum values and text length, require authentication, reject self-reporting where inappropriate, and rate-limit repeated reports against the same target.
+The API validates allowed enum values and the 10–1000 character text limit,
+requires authentication, rejects self-reporting where inappropriate, and
+rejects the same reporter/target/context/reason combination for 10 minutes.
 
 ## 9. Safety, privacy, and moderation considerations
 
