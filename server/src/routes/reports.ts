@@ -125,6 +125,39 @@ async function validateUserContext(
   return { status: 400, message: 'User reports require a profile, chat, or transaction context.' };
 }
 
+router.get('/reports', authenticateToken, async (ctx: Context) => {
+  const reporterId = ctx.state.user?.id;
+  if (
+    typeof reporterId !== 'string' ||
+    !mongoose.isValidObjectId(reporterId) ||
+    !await User.exists({ _id: reporterId })
+  ) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Please sign in again.' };
+    return;
+  }
+
+  const reports = await Report.find({ reporterId })
+    .select('targetType contextType reason details status createdAt')
+    .sort({ createdAt: -1, _id: -1 })
+    .lean()
+    .exec();
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    reports: reports.map((report) => ({
+      id: String(report._id),
+      targetType: report.targetType,
+      contextType: report.contextType,
+      reason: report.reason,
+      details: report.details,
+      status: report.status === 'submitted' ? 'pending' : report.status,
+      createdAt: report.createdAt.toISOString()
+    }))
+  };
+});
+
 router.post('/reports', authenticateToken, async (ctx: Context) => {
   const payload = ctx.request.body;
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {

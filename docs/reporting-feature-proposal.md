@@ -1,15 +1,20 @@
 # KiwiShare Reporting Feature Proposal
 
-**Status:** Implemented on `feature/102-report-persistence`; pending team review and merge
-**Related issues:** #93 — User can report in the profile page; #102 — User report DB schema
-**Parent issue:** #46 — Me/Profile Module  
+**Status:** Accepted incrementally for the Report Abuse module; #102 persistence pending team review
+
+**Related issues:** #99, #100, #101, #102, #103
+
+**Parent issue:** #51 — Report Abuse module
+
 **Prepared:** 14 August 2026
 
-> Implementation note (31 August 2026): Issue #102 implements the authenticated
-> creation endpoint and MongoDB persistence described below. The canonical,
-> test-backed contract is now in `docs/api-spec.md` and
-> `docs/schemas/report.schema.json`. This proposal remains the product-design
-> background and does not claim that a moderator dashboard exists.
+**Updated:** 15 September 2026
+
+> Implementation note: Issue #102 implements authenticated creation and MongoDB
+> persistence; Issue #103 adds an authenticated read-only member history. Their
+> canonical, test-backed contracts are in `docs/api-spec.md` and
+> `docs/schemas/report.schema.json`. These issues remain independently
+> reviewable and do not add moderator tooling or expose enforcement decisions.
 
 ## 1. Decision needed
 
@@ -92,15 +97,22 @@ Do not require the MVP to include:
 
 ## 6. Report history and outcome visibility
 
-The Profile page does not need to show report history for the initial MVP. Supporting it would require a moderation workflow, a report-query API, privacy rules, and careful decisions about which outcomes may be disclosed.
+Issue #103 adds **My reports** under Profile → Safety & support. The screen
+queries `GET /api/reports` with the signed-in member's JWT and shows all records
+owned by that account, newest first. It includes loading, empty, recoverable
+error, retry, refresh, light-theme, dark-theme, and enlarged-text states without
+using sample report data.
 
-If the team later adds history, show only limited information, for example:
+Each history card may show the member's own submitted information:
 
-- Report type
-- Submitted date
+- Report and context type
+- Reason and supporting details
+- Submitted date and a short report reference
 - High-level status: `pending`, `reviewed`, or `dismissed`
 
-Do not expose moderator notes, enforcement details, or unnecessary information about the reported person. A closed report should not imply that a particular punishment occurred.
+The query response does not expose reporter/target/context IDs, moderator notes,
+enforcement details, or another member's reports. A reviewed or closed report
+must not imply that a particular punishment occurred.
 
 ## 7. Proposed data contract
 

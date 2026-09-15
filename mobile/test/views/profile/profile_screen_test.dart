@@ -127,6 +127,11 @@ void main() {
     expect(find.text('Appearance'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Report a safety issue'), 100);
     expect(find.text('Safety & support'), findsOneWidget);
+    expect(find.text('My reports'), findsOneWidget);
+    expect(
+      find.text('View your report history and review status'),
+      findsOneWidget,
+    );
     expect(find.text('Report a safety issue'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('Log out'), 200);
@@ -134,7 +139,7 @@ void main() {
 
     // Check that Divider widgets are wrapped with left padding (56) to avoid full-width black cut lines
     final dividerFinder = find.byType(Divider);
-    expect(dividerFinder, findsOneWidget);
+    expect(dividerFinder, findsNWidgets(2));
     final nearestPadding = tester.widget<Padding>(
       find.ancestor(of: dividerFinder, matching: find.byType(Padding)).first,
     );
