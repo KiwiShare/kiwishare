@@ -1,13 +1,19 @@
 # KiwiShare Reporting Feature Proposal
 
-**Status:** Proposal for team discussion  
-**Related issue:** #93 — User can report in the profile page  
-**Parent issue:** #46 — Me/Profile Module  
+**Status:** Accepted incrementally for the Report Abuse module
+
+**Related issues:** #99, #100, #101, #102, #103
+
+**Parent issue:** #51 — Report Abuse module
+
 **Prepared:** 14 August 2026
 
-> Implementation note: the reusable Profile report form UI is present on branch
-> `46-me-profile-module`, but persistence is deliberately not claimed as complete.
-> The backend contract and moderation ownership below still require team approval.
+**Updated:** 14 September 2026
+
+> Implementation note: listing, chat, shared-form, persistence, and member
+> history work are tracked separately so each issue remains independently
+> reviewable. Issue #103 adds an authenticated read-only history; it does not
+> add moderator tooling or expose enforcement decisions.
 
 ## 1. Decision needed
 
@@ -77,7 +83,7 @@ For the course MVP, implement:
 - Entry points that other feature owners can later add to listing, chat, and public-profile screens.
 - Reason selection, supporting details, validation, loading, success, and failure states.
 - Authenticated `POST /api/reports` submission.
-- Backend storage with an initial `submitted` status.
+- Backend storage with an initial `pending` status.
 - Flutter and Node tests for validation, authentication, successful submission, and server failure.
 
 Do not require the MVP to include:
@@ -90,15 +96,22 @@ Do not require the MVP to include:
 
 ## 6. Report history and outcome visibility
 
-The Profile page does not need to show report history for the initial MVP. Supporting it would require a moderation workflow, a report-query API, privacy rules, and careful decisions about which outcomes may be disclosed.
+Issue #103 adds **My reports** under Profile → Safety & support. The screen
+queries `GET /api/reports` with the signed-in member's JWT and shows all records
+owned by that account, newest first. It includes loading, empty, recoverable
+error, retry, refresh, light-theme, dark-theme, and enlarged-text states without
+using sample report data.
 
-If the team later adds history, show only limited information, for example:
+Each history card may show the member's own submitted information:
 
-- Report type
-- Submitted date
-- High-level status: `submitted`, `reviewing`, or `closed`
+- Report and context type
+- Reason and supporting details
+- Submitted date and a short report reference
+- High-level status: `pending`, `reviewed`, or `dismissed`
 
-Do not expose moderator notes, enforcement details, or unnecessary information about the reported person. A closed report should not imply that a particular punishment occurred.
+The query response does not expose reporter/target/context IDs, moderator notes,
+enforcement details, or another member's reports. A reviewed or closed report
+must not imply that a particular punishment occurred.
 
 ## 7. Proposed data contract
 
@@ -112,7 +125,7 @@ Do not expose moderator notes, enforcement details, or unnecessary information a
   "contextId": "chat_id",
   "reason": "scam_or_fraud",
   "details": "The seller requested payment before the meetup.",
-  "status": "submitted",
+  "status": "pending",
   "createdAt": "timestamp"
 }
 ```
