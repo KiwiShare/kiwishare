@@ -9,6 +9,7 @@ import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/product_location_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/kiwishare_logo.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/home_filter_sheet.dart';
@@ -547,25 +548,7 @@ class _HomeHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.xs + 2),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.brandPrimary, AppColors.brandPrimaryAlt],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(AppRadius.medium),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.brandPrimary.withValues(alpha: 0.25),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.eco_rounded, color: Colors.white, size: 22),
-        ),
+        const KiwiShareLogo(size: 48),
         const SizedBox(width: AppSpacing.sm + 2),
         Expanded(
           child: Column(

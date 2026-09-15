@@ -78,6 +78,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/icons/kiwishare-app-icon_V1.5/master/kiwishare-mark-green-4096.png
+    - assets/icons/kiwishare-app-icon_V1.5/master/kiwishare-mark-ivory-4096.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

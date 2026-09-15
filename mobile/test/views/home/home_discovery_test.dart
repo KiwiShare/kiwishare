@@ -8,6 +8,7 @@ import 'package:kiwishare/providers/providers.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/product_location_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
+import 'package:kiwishare/widgets/kiwishare_logo.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/home/widgets/home_product_map.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
@@ -68,6 +69,29 @@ Future<void> _loadHome(WidgetTester tester, Widget app) async {
 }
 
 void main() {
+  testWidgets('Home header retains a 48px approved logo beside its wordmark', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
+    expect(find.byType(KiwiShareLogo), findsOneWidget);
+    expect(tester.getSize(find.byType(KiwiShareLogo)), const Size(48, 48));
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Icon &&
+            widget.icon == Icons.eco_rounded &&
+            widget.size == 22,
+      ),
+      findsNothing,
+    );
+    expect(find.text('Share & Reuse in NZ'), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(KiwiShareLogo)).right,
+      lessThan(tester.getRect(find.text('KiwiShare')).left),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('category chips filter products without leaving Home', (
     tester,
   ) async {
