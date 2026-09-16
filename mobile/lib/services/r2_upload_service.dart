@@ -109,7 +109,7 @@ class R2UploadService implements ListingPhotoUploader {
         body: bytes,
       );
       if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
-        return _uploadThroughServer(
+        return await _uploadThroughServer(
           bytes: bytes,
           fileName: fileName,
           contentType: contentType,
@@ -121,7 +121,7 @@ class R2UploadService implements ListingPhotoUploader {
     } on ListingPhotoUploadException {
       rethrow;
     } catch (_) {
-      return _uploadThroughServer(
+      return await _uploadThroughServer(
         bytes: bytes,
         fileName: fileName,
         contentType: contentType,
