@@ -16,6 +16,7 @@ import Report, {
   USER_REPORT_REASONS
 } from '../models/Report';
 import User from '../models/User';
+import { sendReportConfirmationEmail } from '../services/reportConfirmationEmail';
 
 const router = new Router();
 const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
@@ -203,7 +204,11 @@ router.post('/reports', authenticateToken, async (ctx: Context) => {
     return;
   }
   const reporterId = new mongoose.Types.ObjectId(authenticatedUserId);
-  if (!await User.exists({ _id: reporterId })) {
+  const reporter = await User.findById(reporterId)
+    .select('email displayName')
+    .lean<{ email: string; displayName: string }>()
+    .exec();
+  if (!reporter) {
     error(ctx, 401, 'The authenticated user no longer exists.');
     return;
   }
@@ -305,6 +310,18 @@ router.post('/reports', authenticateToken, async (ctx: Context) => {
     details,
     status: 'pending'
   });
+
+  try {
+    await sendReportConfirmationEmail({
+      email: reporter.email,
+      displayName: reporter.displayName,
+      reportId: report._id.toString(),
+      submittedAt: report.createdAt
+    });
+  } catch (emailError) {
+    const message = emailError instanceof Error ? emailError.message : 'Unknown error';
+    console.warn(`[Report confirmation email] ${report._id}: ${message}`);
+  }
 
   ctx.status = 201;
   ctx.body = { status: 'success', report: serializeReport(report) };
