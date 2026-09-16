@@ -4,6 +4,7 @@ class UserModel {
   final String? avatarUrl;
   final int trustScore;
   final bool isVerified;
+  final String? authProvider;
 
   const UserModel({
     required this.id,
@@ -11,6 +12,7 @@ class UserModel {
     this.avatarUrl,
     required this.trustScore,
     required this.isVerified,
+    this.authProvider,
   });
 
   /// Create a copy of this UserModel with updated fields.
@@ -20,6 +22,7 @@ class UserModel {
     String? avatarUrl,
     int? trustScore,
     bool? isVerified,
+    String? authProvider,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -27,6 +30,7 @@ class UserModel {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       trustScore: trustScore ?? this.trustScore,
       isVerified: isVerified ?? this.isVerified,
+      authProvider: authProvider ?? this.authProvider,
     );
   }
 
@@ -38,6 +42,7 @@ class UserModel {
       'avatarUrl': avatarUrl,
       'trustScore': trustScore,
       'isVerified': isVerified,
+      'authProvider': authProvider,
     };
   }
 
@@ -49,6 +54,7 @@ class UserModel {
       avatarUrl: map['avatarUrl'] as String?,
       trustScore: map['trustScore'] as int,
       isVerified: map['isVerified'] as bool,
+      authProvider: map['authProvider'] as String?,
     );
   }
 
@@ -66,16 +72,24 @@ class UserModel {
         other.displayName == displayName &&
         other.avatarUrl == avatarUrl &&
         other.trustScore == trustScore &&
-        other.isVerified == isVerified;
+        other.isVerified == isVerified &&
+        other.authProvider == authProvider;
   }
 
   @override
   int get hashCode {
-    return Object.hash(id, displayName, avatarUrl, trustScore, isVerified);
+    return Object.hash(
+      id,
+      displayName,
+      avatarUrl,
+      trustScore,
+      isVerified,
+      authProvider,
+    );
   }
 
   @override
   String toString() {
-    return 'UserModel(id: $id, displayName: $displayName, avatarUrl: $avatarUrl, trustScore: $trustScore, isVerified: $isVerified)';
+    return 'UserModel(id: $id, displayName: $displayName, avatarUrl: $avatarUrl, trustScore: $trustScore, isVerified: $isVerified, authProvider: $authProvider)';
   }
 }

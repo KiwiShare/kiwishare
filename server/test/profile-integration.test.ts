@@ -1,11 +1,13 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import app from '../src/app';
 import User from '../src/models/User';
 import Item from '../src/models/Item';
 import Report from '../src/models/Report';
+import Otp from '../src/models/Otp';
 
 jest.setTimeout(60000);
 
@@ -22,7 +24,7 @@ describe('Profile database integration', () => {
     if (mongo) await mongo.stop();
   });
   beforeEach(async () => {
-    await Promise.all([User.deleteMany({}), Item.deleteMany({}), Report.deleteMany({})]);
+    await Promise.all([User.deleteMany({}), Item.deleteMany({}), Report.deleteMany({}), Otp.deleteMany({})]);
     const user = await User.create({ email: 'profile@example.com', displayName: 'Jenny', trustScore: 87 });
     userId = user.id;
     token = jwt.sign({ id: userId }, process.env.JWT_SECRET!);
@@ -78,5 +80,42 @@ describe('Profile database integration', () => {
     const sold = await request(app.callback()).get('/api/users/me/usedItems?status=sold').set('Authorization', `Bearer ${token}`);
     expect(sold.body).toHaveLength(1);
     expect(sold.body[0].title).toBe('sold item');
+  });
+
+  test('forgotten password reset updates email-password accounts only after code verification', async () => {
+    await User.create({
+      email: 'reset@example.com',
+      displayName: 'Reset User',
+      trustScore: 100,
+      isVerified: false,
+      authProvider: 'email_password',
+      passwordHash: await bcrypt.hash('old-password', 12)
+    });
+
+    const requestReset = await request(app.callback())
+      .post('/api/auth/request-password-reset')
+      .send({ email: 'reset@example.com' });
+    expect(requestReset.status).toBe(200);
+    const otp = await Otp.findOne({ email: 'reset@example.com', purpose: 'password_reset', used: false });
+    expect(otp).toBeTruthy();
+
+    await request(app.callback())
+      .post('/api/auth/reset-password')
+      .send({ email: 'reset@example.com', code: '000000', newPassword: 'new-password' })
+      .expect(401);
+
+    await request(app.callback())
+      .post('/api/auth/reset-password')
+      .send({ email: 'reset@example.com', code: otp!.code, newPassword: 'new-password' })
+      .expect(200);
+
+    await request(app.callback())
+      .post('/api/auth/login')
+      .send({ email: 'reset@example.com', password: 'old-password' })
+      .expect(401);
+    await request(app.callback())
+      .post('/api/auth/login')
+      .send({ email: 'reset@example.com', password: 'new-password' })
+      .expect(200);
   });
 });

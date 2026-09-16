@@ -135,6 +135,36 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> requestPasswordReset(String email) async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      await userRepository.requestPasswordReset(email);
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      await userRepository.resetPassword(
+        email: email,
+        code: code,
+        newPassword: newPassword,
+      );
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> verifyOtp(
     String email,
     String code, {

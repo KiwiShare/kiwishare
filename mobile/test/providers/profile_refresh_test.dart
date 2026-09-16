@@ -7,17 +7,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _Repository extends MockUserRepository {
   Completer<UserModel>? pending;
+  Object? failure;
   @override
-  Future<UserModel> fetchProfile(String token) =>
-      pending?.future ??
-      Future.value(
-        const UserModel(
-          id: 'user-1',
-          displayName: 'Fresh name',
-          trustScore: 76,
-          isVerified: true,
-        ),
-      );
+  Future<UserModel> fetchProfile(String token) {
+    final failure = this.failure;
+    if (failure != null) return Future<UserModel>.error(failure);
+    return pending?.future ??
+        Future.value(
+          const UserModel(
+            id: 'user-1',
+            displayName: 'Fresh name',
+            trustScore: 76,
+            isVerified: true,
+          ),
+        );
+  }
 }
 
 void main() {
@@ -63,6 +67,18 @@ void main() {
       (await SharedPreferences.getInstance()).getString('current_user'),
       isNull,
     );
+    auth.dispose();
+  });
+  test('expired profile refresh can clear the active session', () async {
+    final repo = _Repository()..failure = const UserAuthenticationException();
+    final auth = await restore(repo);
+    await expectLater(
+      auth.refreshProfile(),
+      throwsA(isA<UserAuthenticationException>()),
+    );
+    await auth.clearSession();
+    expect(auth.currentUser, isNull);
+    expect(auth.jwtToken, isNull);
     auth.dispose();
   });
 }

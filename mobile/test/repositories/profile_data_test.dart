@@ -14,6 +14,7 @@ void main() {
     'avatarUrl': null,
     'trustScore': 87,
     'isVerified': true,
+    'authProvider': 'email_password',
   };
   test('profile fetch authenticates and reads database score', () async {
     final repo = RestUserRepository(
@@ -24,8 +25,78 @@ void main() {
         return http.Response(jsonEncode({'user': user}), 200);
       }),
     );
-    expect((await repo.fetchProfile('token')).trustScore, 87);
+    final profile = await repo.fetchProfile('token');
+    expect(profile.trustScore, 87);
+    expect(profile.authProvider, 'email_password');
   });
+  test(
+    'profile fetch distinguishes expired sessions and server errors',
+    () async {
+      final expired = RestUserRepository(
+        client: MockClient(
+          (_) async => http.Response(
+            '{"status":"error","message":"Invalid or expired authorization token."}',
+            401,
+          ),
+        ),
+      );
+      await expectLater(
+        expired.fetchProfile('expired-token'),
+        throwsA(isA<UserAuthenticationException>()),
+      );
+
+      final serverError = RestUserRepository(
+        client: MockClient((_) async => http.Response('{}', 500)),
+      );
+      await expectLater(
+        serverError.fetchProfile('token'),
+        throwsA(isA<UserRepositoryException>()),
+      );
+    },
+  );
+  test(
+    'password change keeps incorrect password separate from expired token',
+    () async {
+      final wrongPassword = RestUserRepository(
+        client: MockClient(
+          (_) async => http.Response(
+            '{"message":"Current password is incorrect."}',
+            401,
+          ),
+        ),
+      );
+      await expectLater(
+        wrongPassword.changePassword(
+          token: 'token',
+          currentPassword: 'old',
+          newPassword: 'new-password',
+        ),
+        throwsA(
+          predicate(
+            (Object error) =>
+                error.toString().contains('Current password is incorrect.'),
+          ),
+        ),
+      );
+
+      final expired = RestUserRepository(
+        client: MockClient(
+          (_) async => http.Response(
+            '{"message":"Invalid or expired authorization token."}',
+            401,
+          ),
+        ),
+      );
+      await expectLater(
+        expired.changePassword(
+          token: 'expired-token',
+          currentPassword: 'old',
+          newPassword: 'new-password',
+        ),
+        throwsA(isA<UserAuthenticationException>()),
+      );
+    },
+  );
   test(
     'avatar reset is sent explicitly without changing name or score',
     () async {
@@ -42,6 +113,37 @@ void main() {
       );
     },
   );
+  test('password reset requests and confirms through auth endpoints', () async {
+    final seen = <String>[];
+    final repo = RestUserRepository(
+      client: MockClient((request) async {
+        seen.add(request.url.path);
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        if (request.url.path.endsWith('/request-password-reset')) {
+          expect(body, {'email': 'reset@example.com'});
+          return http.Response('{"status":"success"}', 200);
+        }
+        expect(body, {
+          'email': 'reset@example.com',
+          'code': '123456',
+          'newPassword': 'new-password',
+        });
+        return http.Response('{"status":"success"}', 200);
+      }),
+    );
+
+    await repo.requestPasswordReset('Reset@Example.com');
+    await repo.resetPassword(
+      email: 'Reset@Example.com',
+      code: '123456',
+      newPassword: 'new-password',
+    );
+
+    expect(seen, [
+      '/api/auth/request-password-reset',
+      '/api/auth/reset-password',
+    ]);
+  });
   test('selling and sold use authenticated server filters', () async {
     final statuses = <String?>[];
     final repo = RestItemRepository(

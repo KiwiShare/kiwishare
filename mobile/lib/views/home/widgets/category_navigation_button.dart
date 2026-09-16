@@ -17,10 +17,14 @@ class CategoryNavigationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = const Color(0xFF2E5E4E);
-    final inactiveBg = const Color(0xFFE2F0D9);
-    final activeText = Colors.white;
-    final inactiveText = const Color(0xFF1F1F1F);
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = colors.primary;
+    final inactiveBg = colors.primaryContainer.withValues(
+      alpha: isDark ? 0.32 : 1,
+    );
+    final activeText = colors.onPrimary;
+    final inactiveText = colors.onPrimaryContainer;
 
     return Semantics(
       button: true,
@@ -37,7 +41,7 @@ class CategoryNavigationButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1F1F1F).withOpacity(0.04),
+                color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.04),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
@@ -48,7 +52,7 @@ class CategoryNavigationButton extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                color: isActive ? activeText : const Color(0xFF2E5E4E),
+                color: isActive ? activeText : colors.primary,
                 size: 24,
               ),
               const SizedBox(height: 6),
@@ -60,6 +64,8 @@ class CategoryNavigationButton extends StatelessWidget {
                   color: isActive ? activeText : inactiveText,
                 ),
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

@@ -375,27 +375,35 @@ class _PostItemScreenState extends State<PostItemScreen> {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2E5E4E).withOpacity(0.12),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withValues(alpha: 0.65),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: const Color(0xFF2E5E4E).withOpacity(0.3),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.3),
                       ),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           Icons.eco_outlined,
                           size: 14,
-                          color: Color(0xFF2E5E4E),
+                          color: Theme.of(context).colorScheme.primary,
                         ),
-                        SizedBox(width: 4),
-                        Text(
-                          'Sustainable Item',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF2E5E4E),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'Sustainable Item',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -743,13 +751,14 @@ class _PostItemScreenState extends State<PostItemScreen> {
                     const SizedBox(height: AppSpacing.md),
                     Material(
                       color: _isSustainable
-                          ? const Color(0xFF2E5E4E).withValues(alpha: 0.08)
+                          ? Theme.of(context).colorScheme.primaryContainer
+                                .withValues(alpha: 0.42)
                           : Theme.of(context).colorScheme.surfaceContainerLow,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppRadius.medium),
                         side: BorderSide(
                           color: _isSustainable
-                              ? const Color(0xFF2E5E4E)
+                              ? Theme.of(context).colorScheme.primary
                               : Theme.of(context).colorScheme.outlineVariant,
                           width: _isSustainable ? 1.5 : 1.0,
                         ),
@@ -760,14 +769,12 @@ class _PostItemScreenState extends State<PostItemScreen> {
                         onChanged: _isPublishing
                             ? null
                             : (value) => setState(() => _isSustainable = value),
-                        activeColor: const Color(0xFF2E5E4E),
+                        activeColor: Theme.of(context).colorScheme.primary,
                         secondary: Container(
                           padding: const EdgeInsets.all(AppSpacing.xs + 2),
                           decoration: BoxDecoration(
                             color: _isSustainable
-                                ? const Color(
-                                    0xFF2E5E4E,
-                                  ).withValues(alpha: 0.15)
+                                ? Theme.of(context).colorScheme.primaryContainer
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(
                               AppRadius.small,
@@ -776,7 +783,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                           child: Icon(
                             _isSustainable ? Icons.eco : Icons.eco_outlined,
                             color: _isSustainable
-                                ? const Color(0xFF2E5E4E)
+                                ? Theme.of(context).colorScheme.primary
                                 : Theme.of(
                                     context,
                                   ).colorScheme.onSurfaceVariant,

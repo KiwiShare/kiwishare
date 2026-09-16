@@ -66,6 +66,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final searchProvider = Provider.of<SearchProvider>(context);
     final listingProvider = Provider.of<ListingProvider>(context);
     final activeCategory = searchProvider.selectedCategory;
@@ -82,9 +84,9 @@ class _SearchScreenState extends State<SearchScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.arrow_back,
-                      color: Color(0xFF2E5E4E),
+                      color: colors.primary,
                       size: 28,
                     ),
                     onPressed: () {},
@@ -95,15 +97,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     style: GoogleFonts.inter(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF2E5E4E), // Sage Green Title
+                      color: colors.primary,
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
-                      Icons.tune,
-                      color: Color(0xFF2E5E4E),
-                      size: 28,
-                    ),
+                    icon: Icon(Icons.tune, color: colors.primary, size: 28),
                     onPressed: () {},
                     tooltip: 'Tune',
                   ),
@@ -116,18 +114,16 @@ class _SearchScreenState extends State<SearchScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAF7F2), // Off-White inside
+                  color: colors.surface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: const Color(
-                      0xFF2E5E4E,
-                    ).withOpacity(0.2), // Light green border
+                    color: colors.outline.withValues(alpha: 0.35),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(
-                        0xFF1F1F1F,
-                      ).withOpacity(0.04), // Charcoal shadow
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.18 : 0.04,
+                      ),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),
@@ -137,29 +133,23 @@ class _SearchScreenState extends State<SearchScreen> {
                   controller: _searchController,
                   onChanged: _onSearchChanged,
                   decoration: InputDecoration(
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      color: Color(0xFF2E5E4E),
-                    ), // Sage Green
+                    prefixIcon: Icon(Icons.search, color: colors.primary),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(
-                              Icons.close,
-                              color: Color(0xFF2E5E4E),
-                            ),
+                            icon: Icon(Icons.close, color: colors.primary),
                             onPressed: _clearSearch,
                             tooltip: 'Clear search',
                           )
                         : null,
                     hintText: 'Search for items or categories',
                     hintStyle: GoogleFonts.inter(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.5),
+                      color: colors.onSurfaceVariant,
                     ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   style: GoogleFonts.inter(
-                    color: const Color(0xFF1F1F1F),
+                    color: colors.onSurface,
                     fontSize: 16,
                   ),
                 ),
@@ -256,10 +246,10 @@ class _SearchScreenState extends State<SearchScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.error_outline,
                               size: 48,
-                              color: Colors.red,
+                              color: colors.error,
                             ),
                             const SizedBox(height: 16),
                             Text(
@@ -267,7 +257,7 @@ class _SearchScreenState extends State<SearchScreen> {
                               style: GoogleFonts.inter(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1F1F1F),
+                                color: colors.onSurface,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -299,10 +289,10 @@ class _SearchScreenState extends State<SearchScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.search_off,
                                 size: 64,
-                                color: Color(0xFF2E5E4E),
+                                color: colors.primary,
                               ),
                               const SizedBox(height: 16),
                               Text(
@@ -310,7 +300,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 style: GoogleFonts.inter(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF1F1F1F),
+                                  color: colors.onSurface,
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -319,9 +309,8 @@ class _SearchScreenState extends State<SearchScreen> {
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.inter(
                                   fontSize: 14,
-                                  color: const Color(
-                                    0xFF1F1F1F,
-                                  ).withOpacity(0.6),
+                                  color: colors.onSurfaceVariant,
+                                  height: 1.25,
                                 ),
                               ),
                             ],
@@ -343,7 +332,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             style: GoogleFonts.inter(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1F1F1F).withOpacity(0.8),
+                              color: colors.onSurface,
                             ),
                           ),
                         ),
@@ -379,14 +368,16 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAF7F2), // Off-White
+                  color: colors.surface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: const Color(0xFF2E5E4E).withOpacity(0.2),
+                    color: colors.outline.withValues(alpha: 0.35),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.03),
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.18 : 0.03,
+                      ),
                       blurRadius: 6,
                       offset: const Offset(0, 3),
                     ),
@@ -394,11 +385,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.verified_user,
-                      color: Color(0xFF2E5E4E),
-                      size: 28,
-                    ), // Sage Green
+                    Icon(Icons.verified_user, color: colors.primary, size: 28),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
@@ -409,21 +396,26 @@ class _SearchScreenState extends State<SearchScreen> {
                             style: GoogleFonts.inter(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1F1F1F),
+                              color: colors.onSurface,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
                           Text(
                             'Choose public places and build trust.',
                             style: GoogleFonts.inter(
                               fontSize: 12,
-                              color: const Color(0xFF1F1F1F).withOpacity(0.6),
+                              color: colors.onSurfaceVariant,
+                              height: 1.25,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.chevron_right, color: Color(0xFF2E5E4E)),
+                    Icon(Icons.chevron_right, color: colors.primary),
                   ],
                 ),
               ),

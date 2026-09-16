@@ -35,6 +35,16 @@ class FakeCooldownUserRepository implements UserRepository {
   }
 
   @override
+  Future<void> requestPasswordReset(String email) async {}
+
+  @override
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {}
+
+  @override
   Future<Map<String, dynamic>> loginWithPassword({
     required String email,
     required String password,

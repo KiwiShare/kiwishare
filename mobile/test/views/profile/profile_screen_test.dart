@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kiwishare/models/user_model.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
 import 'package:kiwishare/providers/theme_provider.dart';
@@ -11,6 +12,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   testWidgets('signed-in Profile opens the existing Watchlist route', (
     tester,
   ) async {
@@ -111,7 +114,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify user info and trust badge
-    expect(find.text('Riley'), findsOneWidget);
+    expect(find.text('Riley'), findsWidgets);
     expect(find.text('Trust score 95/100'), findsOneWidget);
     expect(find.byKey(const Key('profile-scan-qr-button')), findsOneWidget);
 
@@ -139,13 +142,133 @@ void main() {
 
     // Check that Divider widgets are wrapped with left padding (56) to avoid full-width black cut lines
     final dividerFinder = find.byType(Divider);
-    expect(dividerFinder, findsNWidgets(2));
+    expect(dividerFinder, findsNWidgets(3));
     final nearestPadding = tester.widget<Padding>(
       find.ancestor(of: dividerFinder, matching: find.byType(Padding)).first,
     );
     final insets = nearestPadding.padding as EdgeInsets;
     expect(insets.left, 56.0);
     expect(insets.right, 16.0);
+  });
+
+  testWidgets('Account & security exposes photo, nickname, and password', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":95,"isVerified":true,"authProvider":"email_password"}',
+    });
+    final auth = AuthProvider(userRepository: MockUserRepository());
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          Provider<NotificationPermissionCoordinator>.value(
+            value: NotificationPermissionCoordinator(
+              permissionController: null,
+              storage: _Storage(),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Account & security'), 100);
+    expect(find.text('Profile photo'), findsOneWidget);
+    expect(find.text('Nickname'), findsOneWidget);
+    expect(find.text('Riley'), findsWidgets);
+    expect(find.text('Change password'), findsOneWidget);
+  });
+
+  testWidgets('password dialog supports visibility toggles and success message', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":95,"isVerified":true,"authProvider":"email_password"}',
+    });
+    final auth = AuthProvider(userRepository: MockUserRepository());
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          Provider<NotificationPermissionCoordinator>.value(
+            value: NotificationPermissionCoordinator(
+              permissionController: null,
+              storage: _Storage(),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Change password'), 100);
+    await tester.ensureVisible(find.text('Change password'));
+    await tester.pump();
+    await tester.tap(find.text('Change password'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Change password'), findsWidgets);
+    expect(find.byTooltip('Show current password'), findsOneWidget);
+    await tester.tap(find.byTooltip('Show current password'));
+    await tester.pump();
+    expect(find.byTooltip('Hide current password'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'old-password');
+    await tester.enterText(find.byType(TextFormField).at(1), 'new-password');
+    await tester.enterText(find.byType(TextFormField).at(2), 'new-password');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Password changed successfully.'), findsOneWidget);
+  });
+
+  testWidgets('expired profile refresh clears session and explains re-login', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'expired-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":95,"isVerified":true}',
+    });
+    final auth = AuthProvider(
+      userRepository: _FailingProfileRepository(
+        const UserAuthenticationException(),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          Provider<NotificationPermissionCoordinator>.value(
+            value: NotificationPermissionCoordinator(
+              permissionController: null,
+              storage: _Storage(),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(auth.isLoggedIn, isFalse);
+    expect(
+      find.text('Your session has expired. Please sign in again.'),
+      findsOneWidget,
+    );
   });
 }
 
@@ -158,4 +281,13 @@ class _Storage implements NotificationPermissionStorage {
 
   @override
   Future<void> removeObsoleteDismissal() async {}
+}
+
+class _FailingProfileRepository extends MockUserRepository {
+  _FailingProfileRepository(this.error);
+
+  final Object error;
+
+  @override
+  Future<UserModel> fetchProfile(String token) => Future.error(error);
 }

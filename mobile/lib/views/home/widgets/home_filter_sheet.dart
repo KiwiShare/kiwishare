@@ -162,14 +162,21 @@ class _HomeFilterSheetState extends State<HomeFilterSheet> {
                     label: Text(range.label),
                     selected: _priceRange == range,
                     onSelected: (_) => _selectPriceRange(range),
-                    selectedColor: AppColors.brandPrimaryContainer,
+                    selectedColor: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer,
+                    backgroundColor: Theme.of(context).colorScheme.surface,
                     side: BorderSide(
                       color: _priceRange == range
-                          ? AppColors.brandPrimary
-                          : AppColors.border,
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.outline,
                     ),
                     labelStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(color: AppColors.textPrimary),
+                        ?.copyWith(
+                          color: _priceRange == range
+                              ? Theme.of(context).colorScheme.onPrimaryContainer
+                              : Theme.of(context).colorScheme.onSurface,
+                        ),
                   ),
               ],
             ),
