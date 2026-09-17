@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:kiwishare/models/report_draft.dart';
 import 'package:kiwishare/repositories/report_repository.dart';
 import 'package:kiwishare/theme/app_theme.dart';
@@ -49,6 +54,70 @@ void main() {
       repository.draft?.details,
       'A detailed safety concern that should be stored.',
     );
+    expect(find.text('Report submitted'), findsOneWidget);
+  });
+
+  testWidgets('listing form sends the selected reason to the report API', (
+    tester,
+  ) async {
+    late http.Request request;
+    final repository = RestReportRepository(
+      client: MockClient((sent) async {
+        request = sent;
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'report': {
+              'id': '66d222222222222222222222',
+              'status': 'pending',
+              'createdAt': '2026-09-17T02:03:04.000Z',
+            },
+          }),
+          201,
+        );
+      }),
+    );
+    await tester.pumpWidget(
+      buildReportScreen(
+        reportContext: const ReportContext(
+          targetType: ReportTargetType.listing,
+          targetId: '66d111111111111111111111',
+          contextType: ReportContextType.listing,
+          contextId: '66d111111111111111111111',
+        ),
+        reportRepository: repository,
+        authToken: 'signed-in-token',
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('report_reason_field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Counterfeit item').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('report_details_field')),
+      'The branding does not match the manufacturer.',
+    );
+    final submit = find.byKey(const Key('submit_report_button'));
+    await tester.scrollUntilVisible(
+      submit,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(request.method, 'POST');
+    expect(request.url.path, '/api/reports');
+    expect(request.headers['Authorization'], 'Bearer signed-in-token');
+    expect(jsonDecode(request.body), {
+      'targetType': 'listing',
+      'targetId': '66d111111111111111111111',
+      'contextType': 'listing',
+      'contextId': '66d111111111111111111111',
+      'reason': 'counterfeit_item',
+      'details': 'The branding does not match the manufacturer.',
+    });
     expect(find.text('Report submitted'), findsOneWidget);
   });
 
@@ -125,6 +194,44 @@ void main() {
       findsOneWidget,
     );
     expect(find.text(details), findsOneWidget);
+  });
+
+  testWidgets('waits for a receipt and prevents repeated submission', (
+    tester,
+  ) async {
+    final pending = Completer<void>();
+    var submissions = 0;
+    await tester.pumpWidget(
+      buildReportScreen(
+        onSubmit: (_) {
+          submissions++;
+          return pending.future;
+        },
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('report_reason_field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Something else').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('report_details_field')),
+      'The account repeatedly asked for an unsafe meetup.',
+    );
+    final submit = find.byKey(const Key('submit_report_button'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(submissions, 1);
+    expect(find.text('Report submitted'), findsNothing);
+    expect(find.text('Submitting…'), findsOneWidget);
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+
+    pending.complete();
+    await tester.pumpAndSettle();
+    expect(submissions, 1);
+    expect(find.text('Report submitted'), findsOneWidget);
   });
 
   testWidgets('report form remains usable at 200 percent text scaling', (
