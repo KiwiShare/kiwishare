@@ -79,7 +79,11 @@ class _PostItemScreenState extends State<PostItemScreen> {
     _publishService = widget.publishService ?? RestListingPublishService();
     _suggestionService =
         widget.suggestionService ?? RestListingSuggestionService();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhotos());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _recoverLostPhotos();
+      // Auto-fill location when screen opens
+      await _autoFillLocation();
+    });
   }
 
   @override
@@ -295,6 +299,36 @@ class _PostItemScreenState extends State<PostItemScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message), action: action));
+  }
+
+  /// Auto-fills the location on screen open. Silently skips if already set.
+  /// Shows a non-intrusive rationale banner for permission-denied cases
+  /// instead of an error snackbar, so users are informed without being blocked.
+  Future<void> _autoFillLocation() async {
+    if (_location != null || _isLocating || !mounted) return;
+
+    setState(() => _isLocating = true);
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+      setState(() {
+        _location = location;
+        _isLocating = false;
+      });
+    } on ListingLocationException catch (error) {
+      if (!mounted) return;
+      setState(() => _isLocating = false);
+      // For auto-fill, only show a banner for permission issues; skip for
+      // timedOut / unavailable (user can tap the field to try again).
+      if (error.code == ListingLocationErrorCode.permissionDenied ||
+          error.code == ListingLocationErrorCode.permissionDeniedForever ||
+          error.code == ListingLocationErrorCode.servicesDisabled) {
+        _showLocationError(error.code);
+      }
+      // timedOut / unavailable: stay silent; user can tap the location field.
+    } catch (_) {
+      if (mounted) setState(() => _isLocating = false);
+    }
   }
 
   bool _validateForm({required bool requirePhoto}) {

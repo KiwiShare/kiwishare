@@ -418,6 +418,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       builder: (context) => ScheduleMeetupSheet(
         itemId: widget.conversation.itemId,
         itemTitle: widget.conversation.itemTitle,
+        // Required for seller to resolve buyer from conversation
+        conversationId: widget.conversation.id,
         counterpartId: widget.conversation.participantId,
         counterpartName: widget.conversation.participantName,
         onProposed: (meetup) {
@@ -573,17 +575,40 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Adjust Price',
+                  'Offer Special Price',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Update the listing price. The buyer will see the updated price.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                // Clarify this is a per-buyer offer, NOT a product price change
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'This is a private offer for this buyer only. Your listing price stays unchanged for other buyers.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -597,7 +622,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                           decimal: true,
                         ),
                         decoration: InputDecoration(
-                          labelText: isFree ? 'Free Item' : 'New Price (NZD)',
+                          labelText: isFree ? 'Free Item' : 'Special Price (NZD)',
                           prefixText: isFree ? '' : '\$ ',
                           border: const OutlineInputBorder(),
                         ),
@@ -628,7 +653,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       if (val.isEmpty) return;
                       Navigator.of(context).pop(val);
                     },
-                    child: const Text('Confirm Price Update'),
+                    child: const Text('Send Offer to Buyer'),
                   ),
                 ),
               ],
@@ -638,27 +663,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       ),
     );
 
+    // Only send a chat message — do NOT modify the actual listing price
     if (newPrice != null && mounted) {
+      final priceLabel = newPrice == '0' ? 'FREE' : '\$$newPrice NZD';
       try {
-        final updated = await RestItemRepository().updateItem(
-          id: widget.conversation.itemId,
-          token: token,
-          updates: {'priceNzd': newPrice},
-        );
-        setState(() => _activeItem = updated);
-        final priceLabel = newPrice == '0' ? 'FREE' : '\$$newPrice NZD';
         await _chatProvider.sendText(
           conversation: widget.conversation,
-          text: '🏷️ [Seller Action] Price updated to $priceLabel',
+          text: '🏷️ Special offer just for you: $priceLabel (listing price unchanged for others)',
           token: token,
         );
         _scrollToEnd();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Price updated to $priceLabel')),
+          SnackBar(content: Text('Price offer sent: $priceLabel')),
         );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update price: $e')),
+          SnackBar(content: Text('Failed to send offer: $e')),
         );
       }
     }
@@ -1525,26 +1545,30 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 2),
-              Text(
-                _messageTime(message.createdAt),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: mine
-                      ? Theme.of(
-                          context,
-                        ).colorScheme.onPrimary.withValues(alpha: 0.78)
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              if (showReadReceipt)
-                Text(
-                  'Read',
-                  key: Key('chat_read_receipt_${message.id}'),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onPrimary.withValues(alpha: 0.78),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _messageTime(message.createdAt),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: mine
+                          ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.78)
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
+                  if (mine) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      showReadReceipt ? Icons.done_all : Icons.done,
+                      key: showReadReceipt ? Key('chat_read_receipt_${message.id}') : null,
+                      size: 13,
+                      color: showReadReceipt
+                          ? const Color(0xFF60AEFF) // blue = read
+                          : Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.65),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
@@ -1560,20 +1584,48 @@ class _ReadReceipt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      'Read',
-      key: Key('chat_read_receipt_$messageId'),
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Read',
+          key: Key('chat_read_receipt_$messageId'),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: const Color(0xFF60AEFF),
+          ),
+        ),
+        const SizedBox(width: 3),
+        const Icon(Icons.done_all, size: 12, color: Color(0xFF60AEFF)),
+      ],
     );
   }
 }
 
+/// Returns a relative or absolute time label for a chat message.
 String _messageTime(DateTime value) {
   final local = value.toLocal();
-  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
-  return '$hour:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
+  final now = DateTime.now();
+  final diff = now.difference(local);
+
+  if (diff.inSeconds < 60) {
+    return 'Just now';
+  } else if (diff.inMinutes < 60) {
+    final m = diff.inMinutes;
+    return '$m min${m == 1 ? '' : 's'} ago';
+  } else if (diff.inHours < 6) {
+    final h = diff.inHours;
+    return '$h hr${h == 1 ? '' : 's'} ago';
+  } else if (local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day) {
+    // Same day — show time
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    return '$hour:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
+  } else {
+    // Different day — show date + time
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    return '${local.day}/${local.month} $hour:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
+  }
 }
 
 class _MessageComposer extends StatelessWidget {
