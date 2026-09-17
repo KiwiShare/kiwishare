@@ -3,13 +3,15 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, UsedItem } from '../api/client';
 import { ProductCard } from '../components/ProductCard';
+import { EditItemModal } from '../components/EditItemModal';
 import { 
   ShieldCheck, 
   Globe, 
   Smartphone, 
   LogOut, 
   Package, 
-  Loader2 
+  Loader2,
+  Edit3
 } from 'lucide-react';
 
 export const ProfilePage: React.FC = () => {
@@ -17,6 +19,7 @@ export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const [myItems, setMyItems] = useState<UsedItem[]>([]);
   const [loadingItems, setLoadingItems] = useState<boolean>(true);
+  const [editingItem, setEditingItem] = useState<UsedItem | null>(null);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -163,7 +166,31 @@ export const ProfilePage: React.FC = () => {
         ) : myItems.length > 0 ? (
           <div className="product-grid animate-fade-in">
             {myItems.map((item) => (
-              <ProductCard key={item.id || item._id} item={item} />
+              <div key={item.id || item._id} style={{ display: 'flex', flexDirection: 'column' }}>
+                <ProductCard item={item} />
+                <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEditingItem(item);
+                    }}
+                    className="btn btn-secondary"
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: '#fff',
+                      boxShadow: 'var(--shadow-sm)'
+                    }}
+                  >
+                    <Edit3 size={15} color="var(--primary-600)" />
+                    <span>Edit Listing / 修改商品</span>
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         ) : (
@@ -181,6 +208,19 @@ export const ProfilePage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {editingItem && (
+        <EditItemModal
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+          onUpdated={(updated: UsedItem) => {
+            setMyItems((prev) =>
+              prev.map((it) => ((it.id || it._id) === (updated.id || updated._id) ? updated : it))
+            );
+            setEditingItem(null);
+          }}
+        />
+      )}
 
     </div>
   );

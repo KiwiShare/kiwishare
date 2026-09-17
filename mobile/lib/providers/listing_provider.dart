@@ -70,6 +70,20 @@ class ListingProvider extends ChangeNotifier {
     required String token,
   }) => itemRepository.fetchMyItems(sold: sold, token: token);
 
+  Future<ItemModel> updateItem({
+    required String id,
+    required String token,
+    required Map<String, dynamic> updates,
+  }) async {
+    final updated = await itemRepository.updateItem(
+      id: id,
+      token: token,
+      updates: updates,
+    );
+    invalidateCaches();
+    return updated;
+  }
+
   void invalidateCaches() {
     _cachedPopularItems = null;
     _cachedRecommendedItems = null;

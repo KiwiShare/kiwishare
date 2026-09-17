@@ -20,6 +20,7 @@ import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
 import '../messages/widgets/schedule_meetup_sheet.dart';
 import '../profile/report_screen.dart';
+import '../shared/widgets/edit_item_sheet.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String? itemId;
@@ -352,6 +353,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       );
   }
 
+  Future<void> _editListing(ItemModel product) async {
+    final updated = await EditItemSheet.show(context, item: product);
+    if (updated != null && mounted) {
+      setState(() => _loadedItem = updated);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -378,6 +386,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         actions: product == null
             ? null
             : [
+                Builder(builder: (context) {
+                  final auth = context.watch<AuthProvider?>();
+                  final userId = widget.currentUserId ?? auth?.currentUser?.id;
+                  final ownsListing = userId != null &&
+                      (userId == product.ownerId || userId == product.seller?.id);
+                  if (!ownsListing) return const SizedBox.shrink();
+                  return IconButton(
+                    tooltip: 'Edit listing / 修改商品',
+                    onPressed: () => _editListing(product),
+                    icon: const Icon(Icons.edit_outlined, size: 22),
+                  );
+                }),
                 IconButton(
                   tooltip: 'Share listing',
                   onPressed: () => _shareListing(product),
@@ -428,13 +448,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     final auth = context.watch<AuthProvider?>();
                     final userId =
                         widget.currentUserId ?? auth?.currentUser?.id;
-                    final ownsListing =
-                        userId != null && userId == product.ownerId;
+                    final ownsListing = userId != null &&
+                        (userId == product.ownerId || userId == product.seller?.id);
                     final canMessage =
                         product.status == ItemStatus.active && !ownsListing;
                     return _ProductActions(
                       product: product,
                       watchlist: watchlist,
+                      ownsListing: ownsListing,
+                      onEditListing: () => _editListing(product),
                       onToggleWatch: () =>
                           _requestWatchlistToggle(watchlist, product),
                       messageSellerEnabled: canMessage,
@@ -521,15 +543,88 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       ),
                       const SizedBox(height: AppSpacing.sm),
 
-                      // Price Display (high contrast in both light and dark themes)
-                      Text(
-                        '\$${product.priceNzd} NZD',
-                        style: GoogleFonts.inter(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.primary,
-                          letterSpacing: -0.5,
-                        ),
+                      // Price Display & Watchlist Counter
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          if (product.isFree) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF059669),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'FREE',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '\$0 NZD',
+                              style: GoogleFonts.inter(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF059669),
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                          ] else ...[
+                            Text(
+                              '\$${product.priceNzd} NZD',
+                              style: GoogleFonts.inter(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                color: theme.colorScheme.primary,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                          ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF3A1D22)
+                                  : const Color(0xFFFFF1F2),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: const Color(0xFFFECDD3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.favorite,
+                                  size: 14,
+                                  color: Color(0xFFE11D48),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${product.watchlistCount} watching',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFE11D48),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: AppSpacing.xl),
 
@@ -1162,6 +1257,8 @@ class _ProductActions extends StatelessWidget {
     required this.onMessageSeller,
     this.onScheduleMeetup,
     this.messageSellerLabel = 'Message seller',
+    this.ownsListing = false,
+    this.onEditListing,
   });
 
   final ItemModel product;
@@ -1172,12 +1269,33 @@ class _ProductActions extends StatelessWidget {
   final VoidCallback? onMessageSeller;
   final VoidCallback? onScheduleMeetup;
   final String messageSellerLabel;
+  final bool ownsListing;
+  final VoidCallback? onEditListing;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isWatched = watchlist.isWatched(product.id);
     final useVerticalLayout = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+
+    final editButton = FilledButton.icon(
+      key: const Key('detail-edit-listing-button'),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 50),
+        backgroundColor: const Color(0xFF059669),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+      ),
+      onPressed: onEditListing,
+      icon: const Icon(Icons.edit_outlined),
+      label: Text(
+        product.status != ItemStatus.active
+            ? 'Re-list / Edit / 重新发布'
+            : 'Edit Listing / 修改商品',
+        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+    );
 
     final meetupButton = IconButton.outlined(
       key: const Key('detail-schedule-meetup-button'),
@@ -1294,6 +1412,10 @@ class _ProductActions extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (ownsListing && onEditListing != null) ...[
+                    editButton,
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
                   Row(
                     children: [
                       if (onScheduleMeetup != null) ...[
@@ -1309,7 +1431,21 @@ class _ProductActions extends StatelessWidget {
               )
             : Row(
                 children: [
-                  if (onScheduleMeetup != null) ...[
+                  if (ownsListing && onEditListing != null) ...[
+                    IconButton.filledTonal(
+                      key: const Key('detail-edit-listing-button'),
+                      tooltip: 'Edit listing / 修改商品',
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(50, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.medium),
+                        ),
+                      ),
+                      onPressed: onEditListing,
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ] else if (onScheduleMeetup != null) ...[
                     meetupButton,
                     const SizedBox(width: AppSpacing.sm),
                   ],

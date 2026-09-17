@@ -8,7 +8,42 @@ import { formatItem } from './usedItems';
 
 const router = new Router({ prefix: '/watchlist' });
 
-// Apply JWT authentication middleware to all watchlist routes
+/**
+ * GET /api/watchlist/count/:itemId
+ * Retrieve total watchlist/favourite count for an item (Public).
+ */
+router.get('/count/:itemId', async (ctx: Context) => {
+  const { itemId } = ctx.params;
+  if (!itemId) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Item ID is required.' };
+    return;
+  }
+
+  try {
+    const itemQuery = mongoose.Types.ObjectId.isValid(itemId)
+      ? { $in: [new mongoose.Types.ObjectId(itemId), itemId] }
+      : itemId;
+
+    const count = await Watchlist.countDocuments({ itemId: itemQuery });
+
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      itemId,
+      count
+    };
+  } catch (err: any) {
+    ctx.status = 500;
+    ctx.body = {
+      status: 'error',
+      message: 'Failed to retrieve watchlist count.',
+      error: err.message
+    };
+  }
+});
+
+// Apply JWT authentication middleware to authenticated watchlist routes
 router.use(authenticateToken);
 
 /**

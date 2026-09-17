@@ -738,6 +738,13 @@ class _FailingItemRepository implements ItemRepository {
   }) => throw UnimplementedError();
 
   @override
+  Future<ItemModel> updateItem({
+    required String id,
+    required String token,
+    required Map<String, dynamic> updates,
+  }) => throw UnimplementedError();
+
+  @override
   Future<List<ItemModel>> fetchPopularItems() => throw UnimplementedError();
 
   @override

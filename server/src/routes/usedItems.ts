@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth';
 import Item from '../models/Item';
 import Category from '../models/Category';
 import User from '../models/User';
+import Watchlist from '../models/Watchlist';
 import { notifyWatchlistPriceDrop } from '../services/pushNotification';
 import { sendAdminItemNotification } from '../services/adminNotification';
 
@@ -43,28 +44,28 @@ function parseListingPrice(priceNzd: unknown, priceCents: unknown) {
         : '';
     if (!/^\d{1,7}(\.\d{1,2})?$/.test(priceText)) {
       throw new ListingValidationError(
-        'priceNzd must be a positive amount with no more than two decimal places.'
+        'priceNzd must be a non-negative amount with no more than two decimal places.'
       );
     }
     const amount = Number(priceText);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new ListingValidationError('priceNzd must be greater than zero.');
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new ListingValidationError('priceNzd cannot be negative.');
     }
     return {
       priceCents: Math.round(amount * 100),
-      priceNzd: priceText
+      priceNzd: amount === 0 ? '0' : priceText
     };
   }
 
   const cents = Number(priceCents);
-  if (!Number.isSafeInteger(cents) || cents <= 0) {
+  if (!Number.isSafeInteger(cents) || cents < 0) {
     throw new ListingValidationError(
-      'A positive priceNzd amount or integer price in cents is required.'
+      'A valid priceNzd amount or integer price in cents (>= 0) is required.'
     );
   }
   return {
     priceCents: cents,
-    priceNzd: (cents / 100).toString()
+    priceNzd: cents === 0 ? '0' : (cents / 100).toString()
   };
 }
 
@@ -215,6 +216,8 @@ export function formatItem(itemDoc: any) {
     : undefined;
 
   const priceNzd = itemObj.priceNzd || (itemObj.price != null ? (itemObj.price / 100).toString() : '0');
+  const isFree = (itemObj.price ?? 0) === 0 || priceNzd === '0' || priceNzd === '0.00';
+  const watchlistCount = itemObj.favouriteCount ?? 0;
   const rawImages = Array.isArray(itemObj.images) && itemObj.images.length > 0
     ? itemObj.images
     : (itemObj.imageUrl ? [{ url: itemObj.imageUrl, sortOrder: 0 }] : []);
@@ -246,6 +249,9 @@ export function formatItem(itemDoc: any) {
     images: rawImages,
     location: locationStr,
     priceNzd,
+    isFree,
+    watchlistCount,
+    favouriteCount: watchlistCount,
     ownerId,
     sellerId: ownerId,
     seller: sellerInfo,
@@ -508,7 +514,18 @@ async function getUsedItemByIdHandler(ctx: any) {
     return;
   }
 
-  const formatted = formatItem(item);
+  let liveWatchlistCount = item.favouriteCount ?? 0;
+  try {
+    liveWatchlistCount = await Watchlist.countDocuments({ itemId: item._id });
+  } catch (e) {
+    console.log('Error counting watchlist: ', e);
+  }
+
+  const formatted = {
+    ...formatItem(item),
+    watchlistCount: liveWatchlistCount,
+    favouriteCount: liveWatchlistCount
+  };
   ctx.status = 200;
   ctx.body = {
     ...formatted,

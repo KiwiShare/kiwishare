@@ -247,6 +247,27 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const handleSetExactScore = async (u: UserProfile) => {
+    const userId = u.id || u._id;
+    if (!userId) return;
+    const current = u.trustScore ?? 100;
+    const input = window.prompt(`Enter new trust score (0 - 100) for ${u.displayName || u.email}:`, current.toString());
+    if (input === null) return;
+    const parsed = parseInt(input.trim(), 10);
+    if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+      alert('Please enter a valid integer between 0 and 100.');
+      return;
+    }
+
+    try {
+      await adminApi.updateUserTrustScore(userId, { trustScore: parsed });
+      const res = await adminApi.getUsers({ status: userStatusFilter, search: userSearch });
+      if (res.users) setUsersList(res.users);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update trust score.');
+    }
+  };
+
   const handleToggleBan = async (u: UserProfile) => {
     const userId = u.id || u._id;
     if (!userId) return;
@@ -901,9 +922,22 @@ export const AdminDashboardPage: React.FC = () => {
 
                         <td style={{ padding: '14px 16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <strong style={{ color: (u.trustScore ?? 100) < 50 ? '#dc2626' : 'var(--primary-700)' }}>
-                              {u.trustScore ?? 100}
-                            </strong>
+                            <button
+                              onClick={() => handleSetExactScore(u)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: 0,
+                                textAlign: 'left',
+                                textDecoration: 'underline dotted'
+                              }}
+                              title="Click to enter exact credit score"
+                            >
+                              <strong style={{ color: (u.trustScore ?? 100) < 50 ? '#dc2626' : 'var(--primary-700)', fontSize: '1rem' }}>
+                                {u.trustScore ?? 100}
+                              </strong>
+                            </button>
                             <div style={{ display: 'inline-flex', gap: '2px' }}>
                               <button
                                 onClick={() => handleAdjustScore(u, 5)}
