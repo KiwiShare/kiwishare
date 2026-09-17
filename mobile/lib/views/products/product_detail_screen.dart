@@ -393,7 +393,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       (userId == product.ownerId || userId == product.seller?.id);
                   if (!ownsListing) return const SizedBox.shrink();
                   return IconButton(
-                    tooltip: 'Edit listing / 修改商品',
+                    tooltip: 'Edit listing',
                     onPressed: () => _editListing(product),
                     icon: const Icon(Icons.edit_outlined, size: 22),
                   );
@@ -1291,8 +1291,8 @@ class _ProductActions extends StatelessWidget {
       icon: const Icon(Icons.edit_outlined),
       label: Text(
         product.status != ItemStatus.active
-            ? 'Re-list / Edit / 重新发布'
-            : 'Edit Listing / 修改商品',
+            ? 'Re-list / Edit'
+            : 'Edit Listing',
         style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
       ),
     );
@@ -1434,7 +1434,7 @@ class _ProductActions extends StatelessWidget {
                   if (ownsListing && onEditListing != null) ...[
                     IconButton.filledTonal(
                       key: const Key('detail-edit-listing-button'),
-                      tooltip: 'Edit listing / 修改商品',
+                      tooltip: 'Edit listing',
                       style: IconButton.styleFrom(
                         minimumSize: const Size(50, 50),
                         shape: RoundedRectangleBorder(

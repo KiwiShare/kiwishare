@@ -470,7 +470,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Confirm Purchase Intent / 确认购买意向',
+                'Confirm Purchase Intent',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -510,7 +510,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                         backgroundColor: const Color(0xFF059669),
                       ),
                       onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text('Send Intent / 确认购买'),
+                      child: const Text('Send Intent'),
                     ),
                   ),
                 ],
@@ -524,7 +524,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     if (confirmed == true && mounted) {
       await _chatProvider.sendText(
         conversation: widget.conversation,
-        text: '💳 我想购买这件商品（$priceStr），请问什么时候方便见面交易/自提？',
+        text: '💳 I want to purchase this item ($priceStr). When would be convenient to meet or pick up?',
         token: token,
       );
       _scrollToEnd();
@@ -573,7 +573,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Adjust Price / 修改价格',
+                  'Adjust Price',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -605,7 +605,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     ),
                     const SizedBox(width: 12),
                     FilterChip(
-                      label: const Text('Free / 免费'),
+                      label: const Text('Free'),
                       selected: isFree,
                       selectedColor: Colors.green.shade100,
                       checkmarkColor: Colors.green.shade800,
@@ -628,7 +628,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       if (val.isEmpty) return;
                       Navigator.of(context).pop(val);
                     },
-                    child: const Text('Confirm Price Update / 确认改价'),
+                    child: const Text('Confirm Price Update'),
                   ),
                 ),
               ],
@@ -683,7 +683,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Change Item Status / 修改商品状态',
+                'Change Item Status',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -691,19 +691,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
               const Divider(height: 24),
               ListTile(
                 leading: const Icon(Icons.check_circle_outline, color: Colors.green),
-                title: const Text('Active / 在售 (重新发布)'),
+                title: const Text('Active (Available)'),
                 subtitle: const Text('Item is available for other buyers'),
                 onTap: () => Navigator.of(context).pop('active'),
               ),
               ListTile(
                 leading: const Icon(Icons.bookmark_outline, color: Colors.amber),
-                title: const Text('Reserved / 已预订'),
+                title: const Text('Reserved'),
                 subtitle: const Text('Holding for this buyer'),
                 onTap: () => Navigator.of(context).pop('reserved'),
               ),
               ListTile(
                 leading: const Icon(Icons.lock_outline, color: Colors.grey),
-                title: const Text('Sold / 标记已售'),
+                title: const Text('Sold'),
                 subtitle: const Text('Transaction completed'),
                 onTap: () => Navigator.of(context).pop('sold'),
               ),
@@ -722,10 +722,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         );
         setState(() => _activeItem = updated);
         final statusLabel = selected == 'active'
-            ? 'Active (重新发布)'
+            ? 'Active'
             : selected == 'reserved'
-                ? 'Reserved (已预订)'
-                : 'Sold (已售出)';
+                ? 'Reserved'
+                : 'Sold';
         await _chatProvider.sendText(
           conversation: widget.conversation,
           text: '📦 [Seller Action] Item status updated to $statusLabel',
@@ -921,16 +921,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
     final quickChips = isBuyer
         ? const [
-            '还在吗？',
-            '可以小刀吗？',
-            '什么时候方便自提？',
-            '能拍细节图吗？',
+            'Is it available?',
+            'Is price negotiable?',
+            'When can I pick up?',
+            'Any more photos?',
           ]
         : const [
-            '在的，支持自提',
-            '目前不议价哦',
-            '请问什么时间方便见？',
-            '商品成色完好',
+            'Yes, available for pickup',
+            'Price is firm',
+            'When are you free to meet?',
+            'Item in great condition',
           ];
 
     return Container(
@@ -960,7 +960,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       onPressed: _scheduleMeetup,
                       icon: const Icon(Icons.location_on_outlined, size: 16),
                       label: const Text(
-                        '协商位置',
+                        'Meetup Location',
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -976,7 +976,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       onPressed: _buyerBuyNow,
                       icon: const Icon(Icons.shopping_bag_outlined, size: 16),
                       label: const Text(
-                        '立即购买',
+                        'Buy Now',
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -992,7 +992,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       onPressed: _sellerModifyPrice,
                       icon: const Icon(Icons.price_change_outlined, size: 16),
                       label: const Text(
-                        '修改价格',
+                        'Edit Price',
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -1008,7 +1008,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       onPressed: _scheduleMeetup,
                       icon: const Icon(Icons.handshake_outlined, size: 16),
                       label: const Text(
-                        '提议见面',
+                        'Propose Meetup',
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -1023,7 +1023,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       onPressed: _sellerChangeStatus,
                       icon: const Icon(Icons.sell_outlined, size: 16),
                       label: const Text(
-                        '标记状态',
+                        'Item Status',
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),

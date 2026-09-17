@@ -802,10 +802,17 @@ async function updateUsedItemHandler(ctx: any) {
     });
   }
 
+  const populatedItem = await Item.findById(item._id).populate(
+    'sellerId',
+    'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role'
+  );
+  const formatted = formatItem(populatedItem || updatedItem);
+
   ctx.status = 200;
   ctx.body = {
     status: 'success',
-    item: formatItem(updatedItem)
+    item: formatted,
+    ...formatted
   };
 }
 

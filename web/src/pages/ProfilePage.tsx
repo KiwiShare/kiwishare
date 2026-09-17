@@ -27,9 +27,17 @@ export const ProfilePage: React.FC = () => {
       return;
     }
 
-    apiRequest<{ status: string; items: UsedItem[] }>('/users/me/usedItems')
+    apiRequest<UsedItem[] | { items?: UsedItem[]; data?: UsedItem[] }>('/users/me/usedItems')
       .then((res) => {
-        setMyItems(res.items || []);
+        if (Array.isArray(res)) {
+          setMyItems(res);
+        } else if (res && Array.isArray(res.items)) {
+          setMyItems(res.items);
+        } else if (res && Array.isArray(res.data)) {
+          setMyItems(res.data);
+        } else {
+          setMyItems([]);
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -187,7 +195,7 @@ export const ProfilePage: React.FC = () => {
                     }}
                   >
                     <Edit3 size={15} color="var(--primary-600)" />
-                    <span>Edit Listing / 修改商品</span>
+                    <span>Edit Listing</span>
                   </button>
                 </div>
               </div>

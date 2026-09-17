@@ -184,7 +184,7 @@ class _EditItemSheetState extends State<EditItemSheet> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Edit Listing / 修改商品',
+                        'Edit Listing',
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -215,7 +215,7 @@ class _EditItemSheetState extends State<EditItemSheet> {
 
                 // Status & Quick Re-list
                 Text(
-                  'Listing Status / 商品状态',
+                  'Listing Status',
                   style: theme.textTheme.labelLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -225,17 +225,17 @@ class _EditItemSheetState extends State<EditItemSheet> {
                   segments: const [
                     ButtonSegment(
                       value: ItemStatus.active,
-                      label: Text('Active (在售)'),
+                      label: Text('Active'),
                       icon: Icon(Icons.check_circle_outline),
                     ),
                     ButtonSegment(
                       value: ItemStatus.reserved,
-                      label: Text('Reserved (预订)'),
+                      label: Text('Reserved'),
                       icon: Icon(Icons.bookmark_outline),
                     ),
                     ButtonSegment(
                       value: ItemStatus.sold,
-                      label: Text('Sold (已售)'),
+                      label: Text('Sold'),
                       icon: Icon(Icons.lock_outline),
                     ),
                   ],
@@ -286,7 +286,7 @@ class _EditItemSheetState extends State<EditItemSheet> {
                     ),
                     const SizedBox(width: 12),
                     FilterChip(
-                      label: const Text('Free / 免费'),
+                      label: const Text('Free'),
                       selected: _isFree,
                       selectedColor: Colors.green.shade100,
                       checkmarkColor: Colors.green.shade800,
@@ -356,7 +356,7 @@ class _EditItemSheetState extends State<EditItemSheet> {
                   controller: _descController,
                   maxLines: 3,
                   decoration: const InputDecoration(
-                    labelText: 'Description / 描述',
+                    labelText: 'Description',
                     border: OutlineInputBorder(),
                     alignLabelWithHint: true,
                   ),
@@ -379,7 +379,7 @@ class _EditItemSheetState extends State<EditItemSheet> {
                           )
                         : const Icon(Icons.save_outlined),
                     label: Text(
-                      _isLoading ? 'Saving Changes...' : 'Save & Publish / 保存并发布',
+                      _isLoading ? 'Saving Changes...' : 'Save Changes',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

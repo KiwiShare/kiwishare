@@ -157,8 +157,9 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
 
       if (res.status === 'success' || res.item) {
         const updatedItem = res.item || { ...item, title, description, priceNzd, status };
-        onItemUpdated?.(updatedItem);
-        onUpdated?.(updatedItem);
+        const mergedItem = { ...item, ...updatedItem, seller: updatedItem.seller || item.seller };
+        onItemUpdated?.(mergedItem);
+        onUpdated?.(mergedItem);
         onClose();
       }
     } catch (err: any) {
@@ -315,7 +316,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
                   style={{ padding: '6px 14px', fontSize: '0.85rem' }}
                 >
                   <RotateCcw size={14} />
-                  <span>Re-list (上架)</span>
+                  <span>Re-list Active</span>
                 </button>
               ) : (
                 <>

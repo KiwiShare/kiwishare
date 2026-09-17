@@ -532,7 +532,7 @@ export const ProductDetailPage: React.FC = () => {
                 }}
               >
                 <Edit3 size={18} />
-                <span>Edit Listing / 修改商品</span>
+                <span>Edit Listing</span>
               </button>
             ) : (
               <button
@@ -600,7 +600,7 @@ export const ProductDetailPage: React.FC = () => {
           item={item}
           onClose={() => setIsEditing(false)}
           onUpdated={(updated: UsedItem) => {
-            setItem(updated);
+            setItem((prev) => (prev ? { ...prev, ...updated, seller: updated.seller || prev.seller } : updated));
             setIsEditing(false);
           }}
         />
