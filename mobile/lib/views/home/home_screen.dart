@@ -656,13 +656,15 @@ class _HomeCategoryChip extends StatelessWidget {
       avatar: Icon(
         iconData,
         size: 16,
-        color: selected ? colors.primary : colors.onSurfaceVariant,
+        color: selected ? colors.onPrimaryContainer : colors.onSurfaceVariant,
       ),
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
       selectedColor: colors.primaryContainer,
-      backgroundColor: isDark ? colors.surfaceContainerHighest : colors.surface,
+      backgroundColor: isDark
+          ? colors.surfaceContainerHighest.withValues(alpha: 0.72)
+          : colors.surface,
       side: BorderSide(
         color: selected ? colors.primary : colors.outline,
         width: selected ? 1.5 : 1.0,
@@ -670,8 +672,9 @@ class _HomeCategoryChip extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.full),
       ),
+      showCheckmark: false,
       labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-        color: selected ? AppColors.brandPrimary : AppColors.textPrimary,
+        color: selected ? colors.onPrimaryContainer : colors.onSurface,
         fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
       ),
     );
@@ -1593,19 +1596,16 @@ class _SustainabilityBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.brandPrimaryContainer,
+        color: colors.primaryContainer,
         borderRadius: BorderRadius.circular(AppRadius.large),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.eco_outlined,
-            color: AppColors.brandPrimary,
-            size: 36,
-          ),
+          Icon(Icons.eco_outlined, color: colors.onPrimaryContainer, size: 36),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -1613,10 +1613,22 @@ class _SustainabilityBanner extends StatelessWidget {
               children: [
                 Text(
                   'Give items a new life.',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: colors.onPrimaryContainer,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                const Text('Buy local. Reduce waste. Build community.'),
+                Text(
+                  'Buy local. Reduce waste. Build community.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.onPrimaryContainer.withValues(alpha: 0.82),
+                  ),
+                ),
               ],
             ),
           ),

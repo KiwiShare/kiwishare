@@ -122,21 +122,29 @@ class _QrScannerScreenState extends State<QrScannerScreen>
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(
-                color: Color(0xFFD1FAE5),
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  dialogContext,
+                ).colorScheme.primaryContainer.withValues(alpha: 0.72),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.check_circle,
-                color: Color(0xFF059669),
+                color: Theme.of(dialogContext).colorScheme.primary,
                 size: 28,
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Handover Complete!',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(dialogContext).colorScheme.onSurface,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -145,23 +153,29 @@ class _QrScannerScreenState extends State<QrScannerScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'The item handover has been verified. Ownership has been transferred to your account.',
-              style: TextStyle(fontSize: 14, color: Colors.black87),
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(dialogContext).colorScheme.onSurface,
+                height: 1.3,
+              ),
             ),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: Theme.of(dialogContext).colorScheme.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(AppRadius.medium),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(
+                  color: Theme.of(dialogContext).colorScheme.outlineVariant,
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.inventory_2_outlined,
-                    color: Color(0xFF059669),
+                    color: Theme.of(dialogContext).colorScheme.primary,
                     size: 24,
                   ),
                   const SizedBox(width: 10),
@@ -171,9 +185,12 @@ class _QrScannerScreenState extends State<QrScannerScreen>
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
+                            color: Theme.of(
+                              dialogContext,
+                            ).colorScheme.onSurface,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -202,7 +219,6 @@ class _QrScannerScreenState extends State<QrScannerScreen>
               Navigator.pop(context);
             },
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF059669),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppRadius.medium),
               ),
@@ -233,7 +249,10 @@ class _QrScannerScreenState extends State<QrScannerScreen>
         ),
         content: Text(
           error,
-          style: const TextStyle(fontSize: 14, color: Colors.black87),
+          style: TextStyle(
+            fontSize: 14,
+            color: Theme.of(dialogContext).colorScheme.onSurface,
+          ),
         ),
         actions: [
           TextButton(
@@ -287,9 +306,13 @@ class _QrScannerScreenState extends State<QrScannerScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Paste or enter the claim code token provided on the seller\'s screen:',
-              style: TextStyle(fontSize: 13, color: Colors.black54),
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                height: 1.3,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(

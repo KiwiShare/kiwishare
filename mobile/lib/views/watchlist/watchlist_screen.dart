@@ -621,18 +621,23 @@ class _StatusFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return FilterChip(
       selected: isSelected,
-      label: Text('$label ($count)'),
+      label: Text(
+        '$label ($count)',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       labelStyle: TextStyle(
         fontSize: 12,
         fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-        color: isSelected ? AppColors.brandPrimaryAlt : AppColors.textPrimary,
+        color: isSelected ? colors.onPrimaryContainer : colors.onSurface,
       ),
-      selectedColor: AppColors.brandSecondaryContainer,
-      backgroundColor: AppColors.surface,
+      selectedColor: colors.primaryContainer,
+      backgroundColor: colors.surface,
       side: BorderSide(
-        color: isSelected ? AppColors.brandPrimary : AppColors.border,
+        color: isSelected ? colors.primary : colors.outline,
         width: isSelected ? 1.5 : 1,
       ),
       shape: RoundedRectangleBorder(

@@ -10,6 +10,85 @@ import { getJwtSecret } from '../middleware/auth';
 
 const router = new Router();
 
+async function sendVerificationEmail(options: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}) {
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const resendFrom = process.env.RESEND_FROM || 'onboarding@resend.dev';
+
+  if (resendApiKey) {
+    try {
+      const resend = new Resend(resendApiKey);
+      const result = await resend.emails.send({
+        from: resendFrom,
+        to: options.to,
+        subject: options.subject,
+        text: options.text,
+        html: options.html
+      });
+      if (result.error) {
+        console.error('[Resend Email Error] Failed to send email via Resend:', result.error);
+      } else {
+        return true;
+      }
+    } catch (error: any) {
+      console.error(`❌ [Resend Email Error] Failed to send email via Resend: ${error.message || error}`);
+    }
+  }
+
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 465;
+  const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpFrom = process.env.SMTP_FROM || `"KiwiShare" <${smtpUser}>`;
+
+  if (smtpHost && smtpUser && smtpPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpSecure,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        }
+      });
+      await transporter.sendMail({
+        from: smtpFrom,
+        to: options.to,
+        subject: options.subject,
+        text: options.text,
+        html: options.html
+      });
+      return true;
+    } catch (error: any) {
+      console.error(`❌ [SMTP Email Error] Failed to send email via SMTP: ${error.message || error}`);
+    }
+  }
+
+  return false;
+}
+
+function verificationEmailHtml(code: string, intro: string) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f2e8db; border-radius: 12px; background-color: #faf7f2; color: #1f1f1f;">
+      <h2 style="color: #2e5e4e; text-align: center; margin-bottom: 24px;">KiwiShare</h2>
+      <p>Kia ora!</p>
+      <p>${intro}</p>
+      <div style="font-size: 32px; font-weight: bold; color: #c96b4a; text-align: center; padding: 20px; letter-spacing: 4px; background-color: #f2e8db; border-radius: 8px; margin: 20px 0;">
+        ${code}
+      </div>
+      <p>This code will expire in 10 minutes. Please do not share this code with anyone.</p>
+      <hr style="border: none; border-top: 1px solid #2e5e4e; opacity: 0.1; margin: 30px 0;" />
+      <p style="font-size: 12px; color: #1f1f1f; opacity: 0.6; text-align: center;">Ngā mihi,<br>The KiwiShare Team</p>
+    </div>
+  `;
+}
+
 // --- 1. Authentication Endpoints ---
 
 router.post('/auth/register', async (ctx) => {
@@ -284,6 +363,7 @@ router.post('/auth/verify-otp', async (ctx) => {
   const otp = await Otp.findOne({
     email: normalizedEmail,
     code: code.toString().trim(),
+    purpose: 'login',
     used: false
   }).sort({ expiresAt: -1 });
 
@@ -343,6 +423,144 @@ router.post('/auth/verify-otp', async (ctx) => {
       lastUsedPlatform: user.lastUsedPlatform
     }
   };
+});
+
+router.post('/auth/request-password-reset', async (ctx) => {
+  const { email } = ctx.request.body as any;
+
+  if (!email || !email.includes('@')) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Please provide a valid email address.' };
+    return;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
+  if (!user || user.authProvider !== 'email_password' || !user.passwordHash) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'Password reset is only available for email and password accounts.'
+    };
+    return;
+  }
+
+  const now = Date.now();
+  const sixtySecondsAgo = new Date(now - 60 * 1000);
+  const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
+
+  const dailyCount = await Otp.countDocuments({
+    email: normalizedEmail,
+    purpose: 'password_reset',
+    createdAt: { $gte: twentyFourHoursAgo }
+  });
+  if (dailyCount >= 10) {
+    ctx.status = 429;
+    ctx.body = {
+      status: 'error',
+      message: 'Daily password reset code limit reached. Please try again tomorrow.'
+    };
+    return;
+  }
+
+  const recentOtp = await Otp.findOne({
+    email: normalizedEmail,
+    purpose: 'password_reset',
+    createdAt: { $gte: sixtySecondsAgo }
+  }).sort({ createdAt: -1 });
+  if (recentOtp) {
+    const elapsedSeconds = Math.floor((now - recentOtp.createdAt.getTime()) / 1000);
+    const waitSeconds = Math.max(1, 60 - elapsedSeconds);
+    ctx.status = 429;
+    ctx.body = {
+      status: 'error',
+      message: 'Please wait for the cooldown timer before requesting a new reset code.',
+      cooldownSeconds: waitSeconds
+    };
+    return;
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(now + 10 * 60 * 1000);
+
+  await Otp.create({
+    email: normalizedEmail,
+    code,
+    purpose: 'password_reset',
+    expiresAt,
+    used: false
+  });
+
+  console.log(`\n🔐 [Password Reset OTP Sent] Email: ${normalizedEmail} | Code: ${code} (Expires in 10 minutes)\n`);
+
+  const mailSent = await sendVerificationEmail({
+    to: normalizedEmail,
+    subject: 'KiwiShare Password Reset Code',
+    text: `Kia ora!\n\nYour KiwiShare password reset code is: ${code}\n\nThis code will expire in 10 minutes. Please do not share this code with anyone.\n\nNgā mihi,\nThe KiwiShare Team`,
+    html: verificationEmailHtml(code, 'Your KiwiShare password reset code is:')
+  });
+  if (mailSent) {
+    console.log(`✉️ [Password Reset Email Sent] Sent to: ${normalizedEmail}`);
+  }
+
+  const responseBody: any = { status: 'success', message: 'Password reset code sent successfully.' };
+  if (process.env.NODE_ENV !== 'production') {
+    responseBody.devCode = code;
+  }
+
+  ctx.status = 200;
+  ctx.body = responseBody;
+});
+
+router.post('/auth/reset-password', async (ctx) => {
+  const { email, code, newPassword } = ctx.request.body as any;
+
+  if (!email || !code || typeof newPassword !== 'string') {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Email, verification code, and new password are required.' };
+    return;
+  }
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'New password must be between 8 and 128 characters.' };
+    return;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const otp = await Otp.findOne({
+    email: normalizedEmail,
+    code: code.toString().trim(),
+    purpose: 'password_reset',
+    used: false
+  }).sort({ expiresAt: -1 });
+
+  if (!otp || otp.expiresAt < new Date()) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Invalid or expired password reset code.' };
+    return;
+  }
+
+  const user = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
+  if (!user || user.authProvider !== 'email_password' || !user.passwordHash) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'Password reset is only available for email and password accounts.'
+    };
+    return;
+  }
+  if (await bcrypt.compare(newPassword, user.passwordHash)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'New password must be different from your current password.' };
+    return;
+  }
+
+  otp.used = true;
+  user.passwordHash = await bcrypt.hash(newPassword, 12);
+  await Promise.all([otp.save(), user.save()]);
+
+  ctx.status = 200;
+  ctx.body = { status: 'success', message: 'Password reset successfully.' };
 });
 
 router.post('/auth/google', async (ctx) => {
