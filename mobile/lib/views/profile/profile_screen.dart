@@ -370,6 +370,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         )
                       : () => _showLogin(context),
                 ),
+                _MenuTile(
+                  icon: Icons.qr_code_2_rounded,
+                  title: 'Meetups & QR Codes',
+                  subtitle: 'Confirmed schedule and transaction QR codes',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const UserMeetupsScreen(),
+                    ),
+                  ),
+                ),
               ],
             ),
             if (signedIn) ...[
@@ -399,6 +410,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
+              if (signedIn)
+                _MenuTile(
+                  icon: Icons.notifications_outlined,
+                  title: 'Notifications',
+                  subtitle: 'System permission and notification access',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const NotificationSettingsScreen(),
+                    ),
+                  ),
+                ),
             ],
           ],
         ),
