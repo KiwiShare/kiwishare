@@ -47,7 +47,6 @@ class ReportReason {
 }
 
 class ReportReasonCatalog {
-<<<<<<< HEAD
   static const chatUser = <ReportReason>[
     ReportReason(
       code: 'scam_or_fraud',
@@ -82,8 +81,6 @@ class ReportReasonCatalog {
     ),
   ];
 
-=======
->>>>>>> main
   static const userAndTrade = <ReportReason>[
     ReportReason(
       code: 'scam_or_fraud',
@@ -174,16 +171,11 @@ class ReportReasonCatalog {
     ),
   ];
 
-<<<<<<< HEAD
   static List<ReportReason> forContext(ReportContext context) {
     if (context.targetType == ReportTargetType.listing) return listing;
     if (context.contextType == ReportContextType.chat) return chatUser;
     return userAndTrade;
   }
-=======
-  static List<ReportReason> forContext(ReportContext context) =>
-      context.targetType == ReportTargetType.listing ? listing : userAndTrade;
->>>>>>> main
 }
 
 class ReportDraft {
