@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kiwishare/models/user_model.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
 import 'package:kiwishare/providers/meetup_provider.dart';
 import 'package:kiwishare/providers/theme_provider.dart';
@@ -61,7 +62,8 @@ void main() {
       (tester) async {
         final fakeRepo = FakeMeetupRepository();
         final meetupProvider = MeetupProvider(repository: fakeRepo);
-        final authProvider = AuthProvider(userRepository: MockUserRepository());
+        final userRepository = _RefreshingUserRepository();
+        final authProvider = AuthProvider(userRepository: userRepository);
         final themeProvider = ThemeProvider();
 
         await tester.pumpWidget(
@@ -108,6 +110,8 @@ void main() {
         expect(find.text('Test Item'), findsOneWidget);
         expect(find.text('\$50 NZD'), findsOneWidget);
         expect(find.text('Done'), findsOneWidget);
+        expect(userRepository.fetchProfileCalls, 1);
+        expect(authProvider.currentUser?.trustScore, 105);
 
         // 5. Dismiss dialog
         await tester.tap(find.text('Done'));
@@ -116,4 +120,19 @@ void main() {
       },
     );
   });
+}
+
+class _RefreshingUserRepository extends MockUserRepository {
+  int fetchProfileCalls = 0;
+
+  @override
+  Future<UserModel> fetchProfile(String token) async {
+    fetchProfileCalls++;
+    return const UserModel(
+      id: 'buyer-user-id',
+      displayName: 'Buyer User',
+      trustScore: 105,
+      isVerified: true,
+    );
+  }
 }

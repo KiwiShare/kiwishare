@@ -79,6 +79,41 @@ final _detailItem = ItemModel(
 );
 
 void main() {
+  testWidgets('ProductDetailScreen caps public seller trust display at 200+', (
+    tester,
+  ) async {
+    final item = ItemModel(
+      id: _detailItem.id,
+      title: _detailItem.title,
+      priceNzd: _detailItem.priceNzd,
+      location: _detailItem.location,
+      imageUrl: '',
+      isSustainable: _detailItem.isSustainable,
+      category: _detailItem.category,
+      status: _detailItem.status,
+      description: _detailItem.description,
+      ownerId: _detailItem.ownerId,
+      seller: const SellerInfo(
+        id: 'seller_3',
+        displayName: 'High Trust Seller',
+        trustScore: 205,
+      ),
+    );
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: item,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.scrollUntilVisible(find.text('Trust Score'), 300);
+
+    expect(find.text('200+'), findsOneWidget);
+    expect(find.textContaining('/100'), findsNothing);
+  });
+
   testWidgets('ProductDetailScreen allows watching and unwatching item', (
     tester,
   ) async {

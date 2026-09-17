@@ -15,6 +15,7 @@ import 'user_listings_screen.dart';
 import 'user_meetups_screen.dart';
 import 'user_orders_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
+import '../../utils/trust_score.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -594,7 +595,8 @@ class _ProfileHeader extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Semantics(
-                      label: 'Trust score ${user.trustScore} out of 100',
+                      label:
+                          'Trust score ${formatPublicTrustScore(user.trustScore)}',
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
@@ -626,7 +628,7 @@ class _ProfileHeader extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              'Trust score ${user.trustScore}/100',
+                              'Trust score ${formatPublicTrustScore(user.trustScore)}',
                               style: TextStyle(
                                 color: isDark
                                     ? const Color(0xFFD6F6E3)

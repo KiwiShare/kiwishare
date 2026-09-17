@@ -172,7 +172,7 @@ sequenceDiagram
         Server->>Mongo: 1. Verify claimCode matches active QrCode token hash
         Server->>Mongo: 2. Validate item status is not already 'sold' & buyer != seller
         Server->>Mongo: 3. Atomically transfer item.ownerId = buyerId & status = 'sold'
-        Server->>Mongo: 4. Increment Seller trustScore by +5 points
+        Server->>Mongo: 4. Increment Buyer and Seller trustScore by +5 points each
         Server->>Mongo: 5. Mark QrCode status = 'consumed' with scannedAt timestamp
         Server->>Mongo: 6. Transition Order status to 'completed'
         Mongo-->>Server: Commit Transaction

@@ -88,7 +88,7 @@ const UserSchema = new Schema<IUser>(
 
     // Compatibility fields
     googleId: { type: String, unique: true, sparse: true },
-    trustScore: { type: Number, default: 100 },
+    trustScore: { type: Number, default: 100, min: 0 },
     isVerified: { type: Boolean, default: false },
     isStudentVerified: { type: Boolean, default: false },
     studentInstitution: { type: String, default: 'University of Auckland' },

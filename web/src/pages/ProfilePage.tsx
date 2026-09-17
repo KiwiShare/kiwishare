@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, UsedItem, ordersApi, OrderItem } from '../api/client';
+import { formatPublicTrustScore } from '../utils/trustScore';
 import { ProductCard } from '../components/ProductCard';
 import { EditItemModal } from '../components/EditItemModal';
 import { 
@@ -160,7 +161,7 @@ export const ProfilePage: React.FC = () => {
               Trust Score
             </div>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--primary-700)', marginTop: '4px' }}>
-              {user.trustScore}% <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Verified</span>
+              {formatPublicTrustScore(user.trustScore)}
             </div>
           </div>
 

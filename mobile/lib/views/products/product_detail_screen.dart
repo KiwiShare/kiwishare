@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../utils/trust_score.dart';
 
 import '../../models/chat_conversation_model.dart';
 import '../../models/discovery_options_model.dart';
@@ -384,18 +385,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         actions: product == null
             ? null
             : [
-                Builder(builder: (context) {
-                  final auth = context.watch<AuthProvider?>();
-                  final userId = widget.currentUserId ?? auth?.currentUser?.id;
-                  final ownsListing = userId != null &&
-                      (userId == product.ownerId || userId == product.seller?.id);
-                  if (!ownsListing) return const SizedBox.shrink();
-                  return IconButton(
-                    tooltip: 'Edit listing',
-                    onPressed: () => _editListing(product),
-                    icon: const Icon(Icons.edit_outlined, size: 22),
-                  );
-                }),
+                Builder(
+                  builder: (context) {
+                    final auth = context.watch<AuthProvider?>();
+                    final userId =
+                        widget.currentUserId ?? auth?.currentUser?.id;
+                    final ownsListing =
+                        userId != null &&
+                        (userId == product.ownerId ||
+                            userId == product.seller?.id);
+                    if (!ownsListing) return const SizedBox.shrink();
+                    return IconButton(
+                      tooltip: 'Edit listing',
+                      onPressed: () => _editListing(product),
+                      icon: const Icon(Icons.edit_outlined, size: 22),
+                    );
+                  },
+                ),
                 Builder(
                   builder: (btnContext) => IconButton(
                     tooltip: 'Share listing',
@@ -448,8 +454,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     final auth = context.watch<AuthProvider?>();
                     final userId =
                         widget.currentUserId ?? auth?.currentUser?.id;
-                    final ownsListing = userId != null &&
-                        (userId == product.ownerId || userId == product.seller?.id);
+                    final ownsListing =
+                        userId != null &&
+                        (userId == product.ownerId ||
+                            userId == product.seller?.id);
                     final canMessage =
                         product.status == ItemStatus.active && !ownsListing;
                     return _ProductActions(
@@ -1172,7 +1180,7 @@ class _SellerProfileCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${seller.trustScore}/100',
+                  formatPublicTrustScore(seller.trustScore),
                   style: GoogleFonts.inter(
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
@@ -1290,9 +1298,7 @@ class _ProductActions extends StatelessWidget {
       onPressed: onEditListing,
       icon: const Icon(Icons.edit_outlined),
       label: Text(
-        product.status != ItemStatus.active
-            ? 'Re-list / Edit'
-            : 'Edit Listing',
+        product.status != ItemStatus.active ? 'Re-list / Edit' : 'Edit Listing',
         style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
       ),
     );

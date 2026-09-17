@@ -10,6 +10,7 @@ import {
   UserProfile 
 } from '../api/client';
 import { PostItemModal } from '../components/PostItemModal';
+import { parseNonNegativeSafeInteger } from '../utils/trustScore';
 import { 
   ShieldCheck, 
   LayoutDashboard, 
@@ -236,7 +237,7 @@ export const AdminDashboardPage: React.FC = () => {
   const handleAdjustScore = async (u: UserProfile, delta: number) => {
     const userId = u.id || u._id;
     if (!userId) return;
-    const newScore = Math.max(0, Math.min(100, (u.trustScore ?? 100) + delta));
+    const newScore = Math.max(0, (u.trustScore ?? 100) + delta);
 
     try {
       await adminApi.updateUserTrustScore(userId, { trustScore: newScore });
@@ -251,11 +252,11 @@ export const AdminDashboardPage: React.FC = () => {
     const userId = u.id || u._id;
     if (!userId) return;
     const current = u.trustScore ?? 100;
-    const input = window.prompt(`Enter new trust score (0 - 100) for ${u.displayName || u.email}:`, current.toString());
+    const input = window.prompt(`Enter a non-negative trust score for ${u.displayName || u.email}:`, current.toString());
     if (input === null) return;
-    const parsed = parseInt(input.trim(), 10);
-    if (isNaN(parsed) || parsed < 0 || parsed > 100) {
-      alert('Please enter a valid integer between 0 and 100.');
+    const parsed = parseNonNegativeSafeInteger(input);
+    if (parsed === null) {
+      alert('Please enter a valid non-negative integer.');
       return;
     }
 

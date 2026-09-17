@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { itemsApi, chatApi, UsedItem } from '../api/client';
 import { useWatchlist } from '../context/WatchlistContext';
 import { useAuth } from '../context/AuthContext';
+import { formatPublicTrustScore } from '../utils/trustScore';
 import { EditItemModal } from '../components/EditItemModal';
 import { 
   Heart, 
@@ -475,7 +476,7 @@ export const ProductDetailPage: React.FC = () => {
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Trust Score</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--primary-600)' }}>
-                {item.seller?.trustScore ?? 100} / 100
+                {formatPublicTrustScore(item.seller?.trustScore ?? 100)}
               </div>
             </div>
           </div>

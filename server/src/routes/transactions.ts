@@ -5,124 +5,183 @@ import Item from '../models/Item';
 import User from '../models/User';
 import QrCode from '../models/QrCode';
 import Order from '../models/Order';
+import {
+  MongoTransactionsRequiredError,
+  runRequiredMongoTransaction
+} from '../services/mongoTransaction';
 
 const router = new Router();
+const COMPLETION_CREDIT_POINTS = 5;
 
-// --- 3. QR Code Handover Endpoints ---
+class HandoverError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = 'HandoverError';
+  }
+}
+
+class ConcurrentCompletionError extends Error {}
+
+function sameId(left: unknown, right: unknown): boolean {
+  return String(left ?? '') === String(right ?? '');
+}
 
 router.post('/transactions/handover/claim', authenticateToken, async (ctx) => {
-  const { itemId, claimCode } = ctx.request.body as any;
-  const claimerId = ctx.state.user.id; // User scanning the QR code to claim item
+  const { itemId, claimCode } = ctx.request.body as { itemId?: unknown; claimCode?: unknown };
+  const claimerId = ctx.state.user.id;
 
-  if (!claimCode) {
-    ctx.status = 400;
-    ctx.body = { status: 'error', message: 'Missing transaction claiming parameters.' };
-    return;
-  }
-
-  // Security Verification (OWASP Validation checks)
-  if (!claimCode.startsWith('QR_HANDOVER_TOKEN_')) {
+  if (typeof claimCode !== 'string' || !claimCode.startsWith('QR_HANDOVER_TOKEN_')) {
     ctx.status = 400;
     ctx.body = { status: 'error', message: 'Forbidden: Invalid QR handover claim code token.' };
     return;
   }
+  if (!mongoose.Types.ObjectId.isValid(claimerId)) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Unauthorized user.' };
+    return;
+  }
 
-  // If itemId is not provided, look up by claimCode in QrCode collection
-  let resolvedItemId = itemId;
-  let qrRecord: any = null;
-  let orderRecord: any = null;
+  try {
+    const result = await runRequiredMongoTransaction(async (session) => {
+      const qr = await QrCode.findOne({ tokenHash: claimCode }).session(session);
+      if (!qr) throw new HandoverError(404, 'Could not find transaction matching this QR code.');
 
-  qrRecord = await QrCode.findOne({ tokenHash: claimCode });
-  if (qrRecord) {
-    if (qrRecord.status === 'consumed') {
-      ctx.status = 409;
-      ctx.body = { status: 'error', message: 'This handover QR code has already been claimed.' };
-      return;
-    }
-    if (qrRecord.status === 'cancelled') {
-      ctx.status = 400;
-      ctx.body = { status: 'error', message: 'This meetup proposal was cancelled.' };
-      return;
-    }
-    if (qrRecord.orderId) {
-      orderRecord = await Order.findById(qrRecord.orderId);
-      if (orderRecord && !resolvedItemId) {
-        resolvedItemId = orderRecord.itemId;
+      const order = await Order.findById(qr.orderId).session(session);
+      if (!order) throw new HandoverError(404, 'The transaction for this QR code no longer exists.');
+
+      const buyerId = order.buyerId.toString();
+      const sellerId = order.sellerId.toString();
+      const trustedItemId = order.itemId.toString();
+
+      if (!sameId(qr.buyerId, buyerId) || !sameId(qr.sellerId, sellerId) ||
+          (itemId != null && String(itemId) !== trustedItemId)) {
+        throw new HandoverError(409, 'QR code transaction details do not match.');
       }
+      if (buyerId === sellerId) throw new HandoverError(400, 'Self-transactions cannot be completed.');
+      if (claimerId !== buyerId) {
+        throw new HandoverError(403, 'Only the transaction buyer can confirm this handover.');
+      }
+
+      const item = await Item.findById(order.itemId).session(session);
+      if (!item) throw new HandoverError(404, 'Listing item not found.');
+
+      // Completed records are read-only. This covers safe retries and never
+      // backfills rewards onto historical completions.
+      if (order.status === 'completed') {
+        return { alreadyCompleted: true, creditAwarded: false, item };
+      }
+
+      const itemSellerId = item.sellerId?.toString() ?? item.ownerId;
+      if (!sameId(itemSellerId, sellerId)) {
+        throw new HandoverError(409, 'The listing owner does not match this transaction.');
+      }
+
+      if (qr.status === 'cancelled') throw new HandoverError(400, 'This meetup proposal was cancelled.');
+      if (qr.status !== 'active' || qr.expiresAt.getTime() <= Date.now()) {
+        throw new HandoverError(400, 'This handover QR code is expired or unavailable.');
+      }
+      if (order.status !== 'meeting_scheduled' || order.meeting?.proposalStatus !== 'confirmed') {
+        throw new HandoverError(409, 'This transaction is not eligible for completion.');
+      }
+      if (item.status === 'sold' || item.status === 'deleted') {
+        throw new HandoverError(409, 'Conflict: Item is not available for handover.');
+      }
+
+      const participants = await User.countDocuments({
+        _id: { $in: [order.buyerId, order.sellerId] }
+      }).session(session);
+      if (participants !== 2) throw new HandoverError(409, 'Both transaction participants must exist.');
+
+      const now = new Date();
+      const reservedOrder = await Order.updateOne(
+        { _id: order._id, status: 'meeting_scheduled', 'meeting.proposalStatus': 'confirmed',
+          'completionCredit.awardedAt': { $exists: false } },
+        { $set: { status: 'completed', completedAt: now, qrScannedAt: now,
+          completionCredit: { pointsPerParticipant: COMPLETION_CREDIT_POINTS, awardedAt: now } } },
+        { session }
+      );
+      if (reservedOrder.modifiedCount !== 1) {
+        throw new ConcurrentCompletionError();
+      }
+
+      const consumedQr = await QrCode.updateOne(
+        { _id: qr._id, status: 'active', expiresAt: { $gt: now } },
+        { $set: { status: 'consumed', scannedAt: now, consumedAt: now,
+          scannedByUserId: new mongoose.Types.ObjectId(claimerId) } },
+        { session }
+      );
+      if (consumedQr.modifiedCount !== 1) {
+        throw new HandoverError(409, 'This handover QR code is no longer available.');
+      }
+
+      const transferredItem = await Item.updateOne(
+        { _id: item._id, sellerId: order.sellerId, status: { $nin: ['sold', 'deleted'] } },
+        { $set: { status: 'sold', sellerId: order.buyerId, ownerId: buyerId } },
+        { session }
+      );
+      if (transferredItem.modifiedCount !== 1) {
+        throw new HandoverError(409, 'The listing changed before handover completed.');
+      }
+
+      const rewardedUsers = await User.updateMany(
+        { _id: { $in: [order.buyerId, order.sellerId] } },
+        { $inc: { trustScore: COMPLETION_CREDIT_POINTS } },
+        { session }
+      );
+      if (rewardedUsers.matchedCount !== 2 || rewardedUsers.modifiedCount !== 2) {
+        throw new HandoverError(409, 'Both transaction participants must receive credit together.');
+      }
+      return { alreadyCompleted: false, creditAwarded: true, item };
+    });
+
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      message: result.alreadyCompleted
+        ? 'This handover was already completed.'
+        : 'Ownership transaction verified and committed successfully.',
+      newOwnerId: claimerId,
+      completion: { alreadyCompleted: result.alreadyCompleted, creditAwarded: result.creditAwarded,
+        pointsPerParticipant: result.creditAwarded ? COMPLETION_CREDIT_POINTS : 0 },
+      item: { id: result.item._id.toString(), title: result.item.title,
+        priceNzd: result.item.priceNzd ?? (result.item.price != null ? result.item.price.toString() : '0'),
+        imageUrl: result.item.imageUrl ?? (result.item.images?.[0]?.url ?? '') }
+    };
+  } catch (error) {
+    if (error instanceof ConcurrentCompletionError) {
+      const qr = await QrCode.findOne({ tokenHash: claimCode });
+      const order = qr ? await Order.findById(qr.orderId) : null;
+      if (qr && order && order.status === 'completed' &&
+          sameId(order.buyerId, claimerId) && sameId(qr.buyerId, claimerId)) {
+        const item = await Item.findById(order.itemId);
+        ctx.status = 200;
+        ctx.body = {
+          status: 'success',
+          message: 'This handover was already completed.',
+          newOwnerId: claimerId,
+          completion: { alreadyCompleted: true, creditAwarded: false, pointsPerParticipant: 0 },
+          item: item ? { id: item._id.toString(), title: item.title,
+            priceNzd: item.priceNzd ?? (item.price != null ? item.price.toString() : '0'),
+            imageUrl: item.imageUrl ?? (item.images?.[0]?.url ?? '') } : null
+        };
+        return;
+      }
+      ctx.status = 409;
+      ctx.body = { status: 'error', message: 'Transaction completion is already in progress.' };
+      return;
     }
-  }
-
-  if (!resolvedItemId) {
-    ctx.status = 404;
-    ctx.body = { status: 'error', message: 'Could not find transaction matching this QR code.' };
-    return;
-  }
-
-  const item = mongoose.Types.ObjectId.isValid(resolvedItemId)
-    ? await Item.findById(resolvedItemId)
-    : await Item.findOne({ id: resolvedItemId });
-
-  if (!item) {
-    ctx.status = 404;
-    ctx.body = { status: 'error', message: 'Listing item not found.' };
-    return;
-  }
-
-  if (item.status === 'sold') {
-    ctx.status = 409;
-    ctx.body = { status: 'error', message: 'Conflict: Item is already transferred.' };
-    return;
-  }
-
-  const currentOwnerId = item.sellerId ? item.sellerId.toString() : item.ownerId;
-  if (currentOwnerId === claimerId) {
-    ctx.status = 400;
-    ctx.body = { status: 'error', message: 'Self-claims are unauthorized.' };
-    return;
-  }
-
-  // Update item status and owner ID
-  const originalOwnerId = currentOwnerId;
-  item.status = 'sold';
-  item.sellerId = new mongoose.Types.ObjectId(claimerId);
-  item.ownerId = claimerId;
-  await item.save();
-
-  // Atomically increment owner's trust reputation score in User database
-  if (mongoose.Types.ObjectId.isValid(originalOwnerId)) {
-    await User.updateOne({ _id: new mongoose.Types.ObjectId(originalOwnerId) }, { $inc: { trustScore: 5 } });
-  } else {
-    await User.updateOne({ id: originalOwnerId }, { $inc: { trustScore: 5 } });
-  }
-
-  // Update QR Code and Order status if found
-  if (qrRecord) {
-    qrRecord.status = 'consumed';
-    qrRecord.scannedAt = new Date();
-    qrRecord.consumedAt = new Date();
-    qrRecord.scannedByUserId = new mongoose.Types.ObjectId(claimerId);
-    await qrRecord.save();
-  }
-
-  if (orderRecord) {
-    orderRecord.status = 'completed';
-    orderRecord.completedAt = new Date();
-    orderRecord.qrScannedAt = new Date();
-    await orderRecord.save();
-  }
-
-  ctx.status = 200;
-  ctx.body = {
-    status: 'success',
-    message: 'Ownership transaction verified and committed successfully.',
-    newOwnerId: claimerId,
-    item: {
-      id: item._id.toString(),
-      title: item.title,
-      priceNzd: item.priceNzd ?? (item.price != null ? item.price.toString() : '0'),
-      imageUrl: item.imageUrl ?? (item.images?.[0]?.url ?? '')
+    if (error instanceof HandoverError) {
+      ctx.status = error.status;
+      ctx.body = { status: 'error', message: error.message };
+      return;
     }
-  };
+    if (error instanceof MongoTransactionsRequiredError) {
+      ctx.status = 503;
+      ctx.body = { status: 'error', message: error.message };
+      return;
+    }
+    throw error;
+  }
 });
 
 export default router;

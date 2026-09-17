@@ -25,7 +25,6 @@ import 'navigation/app_route_observer.dart';
 
 // State and Repositories
 import 'providers/providers.dart';
-import 'providers/meetup_provider.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 import 'repositories/watchlist_repository.dart';
