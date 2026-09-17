@@ -15,8 +15,8 @@ deliverable.
 | --- | --- | --- |
 | 23 July | Broad opportunity | KiwiShare began as a second-hand marketplace idea with open scope. The team agreed that user research and feasibility had to shape the product. |
 | 28 July | Trust-first concept | Local discovery, in-app chat, a public meetup, confirmation and reputation became the distinctive end-to-end flow. |
-| 15 August | UoA pilot MVP | The team prioritised one complete user journey. Payments, delivery, rentals and advanced AI moved outside the core release. |
-| 17 September | Working product | Flutter and React clients use a Koa and TypeScript REST API, MongoDB, and bounded services for authentication, push notifications, email and media. |
+| 15 August | UoA pilot MVP | The team prioritised one complete user journey. Payments became conditional outside the baseline MVP; delivery and rentals became future scope; advanced AI remained optional. |
+| 17 September | Working product | Flutter and React clients use a Koa and TypeScript REST API, MongoDB, backend-verified Google tokens with application JWTs, and bounded Firebase Remote Config and push services. |
 
 **Key message:** Local, safe and trusted stayed constant. Every other decision
 served that promise.
@@ -29,12 +29,13 @@ while we validated users and feasibility. By 28 July, the durable idea was
 clear: local discovery had to lead into a safer, traceable exchange through
 in-app chat, a public meetup, confirmation and reputation. The 15 August
 product requirements turned that vision into a UoA pilot and one complete
-journey, while payments, delivery, rentals and advanced AI moved out of the
-core release. By 17 September, that journey had become a working product
-foundation across Flutter and React clients, a Koa and TypeScript REST API,
-MongoDB, Firebase Authentication and push notifications, plus bounded email
-and media services. The concept evolved, but the promise did not: local, safe
-and trusted.
+journey. Payments became conditional outside the baseline MVP, delivery and
+rentals moved to future scope, and advanced AI remained optional. By 17
+September, that journey had become a working product foundation across Flutter
+and React clients, a Koa and TypeScript REST API, MongoDB, Google token
+verification with application-issued JWTs, Firebase Remote Config and push
+notifications, plus bounded email and media services. The concept evolved, but
+the promise did not: local, safe and trusted.
 
 ## Slide 2 - Reality replaced assumptions with explicit trade-offs
 
@@ -44,8 +45,8 @@ Each decision reduced delivery risk without weakening the core trust journey.
 | --- | --- | --- |
 | Scope | A New Zealand-wide marketplace with many possible services. | A UoA pilot with explicit Must, Should, Conditional and Future scope. A focused community reduces cold-start and deadline risk. |
 | Trust | Listings and chat supported by broad safety ideas. | Item-bound chat, public meetup proposals, reservation, QR handover, reporting and authenticated state changes make trust observable. |
-| Architecture | Backend-as-a-Service, serverless functions and Firestore were explored. | Flutter and React clients use a shared Koa and TypeScript REST API backed by MongoDB. Firebase is bounded to authentication and push notifications, leaving one clear application source of truth. |
-| Delivery | Payments, delivery, rentals and advanced AI competed for attention. | The core journey comes first. Optional AI degrades gracefully, while reliability, tests and documentation form part of the Definition of Done. |
+| Architecture | Backend-as-a-Service, serverless functions and Firestore were explored. | Flutter and React clients use a shared Koa and TypeScript REST API backed by MongoDB. The backend verifies Google tokens and issues application JWTs; Firebase supports Remote Config and push notifications. |
+| Delivery | Payments, delivery, rentals and advanced AI competed for attention. | The core journey comes first. Payments are conditional outside the baseline MVP; delivery and rentals are future scope; optional AI degrades gracefully. Reliability, tests and documentation form part of the Definition of Done. |
 
 **Key message:** The idea became real by protecting the trust promise while
 reducing everything else.
@@ -58,12 +59,13 @@ categories. Second, trust: broad safety ideas became observable state changes,
 including item-bound chat, public meetup proposals, reservation, QR handover,
 reporting and authenticated confirmation. Third, architecture: the early
 Backend-as-a-Service and Firestore direction was replaced by decoupled clients
-using a shared Koa REST API and MongoDB; Firebase is now bounded to
-authentication and push notifications. Fourth, delivery discipline: payments,
-delivery, rentals and advanced AI stopped competing with the core journey.
-Optional AI is allowed to fail gracefully, while tests, documentation and
-security evidence are part of done. This is how the idea reached reality: we
-protected the trust promise and reduced everything else.
+using a shared Koa REST API and MongoDB. The backend now verifies Google tokens
+and issues application JWTs, while Firebase supports Remote Config and push
+notifications. Fourth, delivery discipline: payments are conditional outside
+the baseline MVP, delivery and rentals are future scope, and optional AI is
+allowed to fail gracefully. Tests, documentation and security evidence are
+part of done. This is how the idea reached reality: we protected the trust
+promise and reduced everything else.
 
 ## Evidence basis
 
@@ -82,8 +84,11 @@ protected the trust promise and reduced everything else.
 
 - Present early Backend-as-a-Service and Firestore content as an explored
   direction, not as the final architecture.
-- Present payments, delivery and rentals as future scope, not implemented MVP
-  features.
+- Present payments as Conditional and outside the baseline MVP while OD-001 is
+  open. Present delivery and rentals as Future scope.
+- Describe implemented authentication as backend Google-token verification and
+  application-issued JWTs; describe Firebase usage as Remote Config and push
+  notifications, not Firebase Authentication.
 - Describe AI listing support as optional and recoverable; the core publishing
   flow must remain usable without it.
 - Avoid implying guaranteed user safety. KiwiShare provides trust and safety
