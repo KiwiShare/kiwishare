@@ -688,6 +688,8 @@ class KiwiShareShell extends StatelessWidget {
     final unreadChatCount = context.select<ChatProvider?, int>(
       (provider) => provider?.totalUnreadCount ?? 0,
     );
+    final colors = Theme.of(context).colorScheme;
+    final navTheme = Theme.of(context).bottomNavigationBarTheme;
 
     final shell = Scaffold(
       body: child,
@@ -730,18 +732,20 @@ class KiwiShareShell extends StatelessWidget {
             }
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          selectedItemColor: Theme.of(context).colorScheme.primary,
-          unselectedItemColor: Theme.of(
-            context,
-          ).colorScheme.onSurface.withOpacity(0.5),
+          backgroundColor: navTheme.backgroundColor ?? colors.surface,
+          selectedItemColor: navTheme.selectedItemColor ?? colors.primary,
+          unselectedItemColor:
+              navTheme.unselectedItemColor ??
+              colors.onSurface.withValues(alpha: 0.78),
           selectedLabelStyle: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
             fontSize: 12,
+            height: 1.2,
           ),
           unselectedLabelStyle: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
             fontSize: 11,
+            height: 1.2,
           ),
           items: [
             const BottomNavigationBarItem(
@@ -771,11 +775,11 @@ class KiwiShareShell extends StatelessWidget {
                 margin: const EdgeInsets.only(top: 4.0),
                 width: 44,
                 height: 44,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF2E5E4E), // Sage Green
+                decoration: BoxDecoration(
+                  color: colors.primary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.add, color: Colors.white, size: 26),
+                child: Icon(Icons.add, color: colors.onPrimary, size: 26),
               ),
               label: '',
             ),

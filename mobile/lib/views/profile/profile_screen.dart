@@ -6,6 +6,7 @@ import '../../services/r2_upload_service.dart';
 
 import '../../models/user_model.dart';
 import '../../providers/providers.dart';
+import '../../repositories/user_repository.dart';
 import '../auth/login_view.dart';
 import 'my_reports_screen.dart';
 import 'report_screen.dart';
@@ -41,10 +42,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _refresh() async {
     final auth = context.read<AuthProvider>();
     final token = auth.jwtToken;
+    if (token == null) return;
     try {
       await auth.refreshProfile();
       if (mounted && auth.jwtToken == token) {
         setState(() => _refreshError = null);
+      }
+    } on UserAuthenticationException catch (error) {
+      if (mounted && auth.jwtToken == token) {
+        await auth.clearSession();
+        if (mounted) {
+          setState(() => _refreshError = error.message);
+        }
+      }
+    } on UserNetworkException catch (error) {
+      if (mounted && auth.jwtToken == token) {
+        setState(() => _refreshError = error.message);
+      }
+    } on UserRepositoryException catch (error) {
+      if (mounted && auth.jwtToken == token) {
+        setState(() => _refreshError = error.message);
       }
     } catch (_) {
       if (mounted && auth.jwtToken == token) {
@@ -159,7 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   );
 
   Future<void> _showChangePassword(BuildContext context) async {
-    await showDialog<void>(
+    final changed = await showDialog<bool>(
       context: context,
       builder: (_) => _ChangePasswordDialog(
         onSave: ({required currentPassword, required newPassword}) =>
@@ -169,6 +186,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
       ),
     );
+    if (changed == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password changed successfully.')),
+      );
+    }
   }
 
   Future<void> _editName(BuildContext context, UserModel user) async {
@@ -190,6 +212,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final canChangePassword =
+        user?.authProvider == null || user?.authProvider == 'email_password';
 
     return Scaffold(
       backgroundColor: isDark
@@ -243,7 +267,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
           children: [
-            if (signedIn && _refreshError != null)
+            if (_refreshError != null)
               ListTile(
                 title: Text(_refreshError!),
                 trailing: IconButton(
@@ -329,11 +353,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: _editAvatar,
                   ),
                   _ModernMenuTile(
+                    icon: Icons.badge_outlined,
+                    iconColor: const Color(0xFF14B8A6),
+                    title: 'Nickname',
+                    subtitle: user.displayName,
+                    onTap: () => _editName(context, user),
+                  ),
+                  _ModernMenuTile(
                     icon: Icons.lock_outline,
                     iconColor: const Color(0xFF0EA5E9),
                     title: 'Change password',
-                    subtitle: 'Update your password',
-                    onTap: () => _showChangePassword(context),
+                    subtitle: canChangePassword
+                        ? 'Update your password'
+                        : 'Managed by your sign-in provider',
+                    onTap: canChangePassword
+                        ? () => _showChangePassword(context)
+                        : () => ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Password changes are unavailable for this account. Use your sign-in provider instead.',
+                              ),
+                            ),
+                          ),
                   ),
                 ],
               ),
@@ -778,6 +819,7 @@ class _MarketplaceGridAction extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 label,
+                textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
@@ -788,6 +830,7 @@ class _MarketplaceGridAction extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 sublabel,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
                   color: theme.colorScheme.onSurfaceVariant.withValues(
@@ -1048,6 +1091,8 @@ class _ModernMenuTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         fontSize: 14,
@@ -1056,6 +1101,8 @@ class _ModernMenuTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
                         color: colors.onSurfaceVariant.withValues(alpha: 0.75),
@@ -1127,7 +1174,7 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Edit display name'),
+      title: const Text('Edit nickname'),
       content: Form(
         key: _formKey,
         child: TextFormField(
@@ -1136,7 +1183,7 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
           maxLength: 30,
           textCapitalization: TextCapitalization.words,
           decoration: InputDecoration(
-            labelText: 'Display name',
+            labelText: 'Nickname',
             errorText: _failure,
           ),
           validator: (value) {
@@ -1177,6 +1224,9 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   final _next = TextEditingController();
   final _confirm = TextEditingController();
   bool _saving = false;
+  bool _showCurrent = false;
+  bool _showNext = false;
+  bool _showConfirm = false;
   String? _failure;
 
   @override
@@ -1195,7 +1245,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
         currentPassword: _current.text,
         newPassword: _next.text,
       );
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -1216,23 +1266,64 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
         children: [
           TextFormField(
             controller: _current,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Current password'),
+            obscureText: !_showCurrent,
+            decoration: InputDecoration(
+              labelText: 'Current password',
+              suffixIcon: IconButton(
+                tooltip: _showCurrent
+                    ? 'Hide current password'
+                    : 'Show current password',
+                icon: Icon(
+                  _showCurrent
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+                onPressed: _saving
+                    ? null
+                    : () => setState(() => _showCurrent = !_showCurrent),
+              ),
+            ),
             validator: (v) =>
                 v == null || v.isEmpty ? 'Enter your current password.' : null,
           ),
           TextFormField(
             controller: _next,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'New password'),
+            obscureText: !_showNext,
+            decoration: InputDecoration(
+              labelText: 'New password',
+              suffixIcon: IconButton(
+                tooltip: _showNext ? 'Hide new password' : 'Show new password',
+                icon: Icon(
+                  _showNext
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+                onPressed: _saving
+                    ? null
+                    : () => setState(() => _showNext = !_showNext),
+              ),
+            ),
             validator: (v) =>
                 v == null || v.length < 8 ? 'Use at least 8 characters.' : null,
           ),
           TextFormField(
             controller: _confirm,
-            obscureText: true,
-            decoration: const InputDecoration(
+            obscureText: !_showConfirm,
+            decoration: InputDecoration(
               labelText: 'Confirm new password',
+              suffixIcon: IconButton(
+                tooltip: _showConfirm
+                    ? 'Hide password confirmation'
+                    : 'Show password confirmation',
+                icon: Icon(
+                  _showConfirm
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+                onPressed: _saving
+                    ? null
+                    : () => setState(() => _showConfirm = !_showConfirm),
+              ),
             ),
             validator: (v) =>
                 v != _next.text ? 'Passwords do not match.' : null,
@@ -1255,7 +1346,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       ),
       FilledButton(
         onPressed: _saving ? null : _save,
-        child: const Text('Save'),
+        child: _saving ? const Text('Saving...') : const Text('Save'),
       ),
     ],
   );

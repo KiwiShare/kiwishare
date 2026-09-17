@@ -15,6 +15,8 @@ class StepCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final inactiveFill = colors.surface;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -23,17 +25,17 @@ class StepCircle extends StatelessWidget {
           height: 24,
           decoration: BoxDecoration(
             color: active
-                ? const Color(0xFF2E5E4E)
+                ? colors.primary
                 : (completed
-                      ? const Color(0xFF2E5E4E).withOpacity(0.2)
-                      : Colors.white),
+                      ? colors.primaryContainer.withValues(alpha: 0.6)
+                      : inactiveFill),
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF2E5E4E), width: 2),
+            border: Border.all(color: colors.primary, width: 2),
           ),
           child: Icon(
             Icons.check,
             size: 14,
-            color: active ? Colors.white : const Color(0xFF2E5E4E),
+            color: active ? colors.onPrimary : colors.primary,
           ),
         ),
         const SizedBox(height: 6),
@@ -42,10 +44,10 @@ class StepCircle extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 11,
             fontWeight: active ? FontWeight.bold : FontWeight.w500,
-            color: active
-                ? const Color(0xFF2E5E4E)
-                : const Color(0xFF1F1F1F).withOpacity(0.5),
+            color: active ? colors.primary : colors.onSurfaceVariant,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );

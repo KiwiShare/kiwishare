@@ -7,6 +7,7 @@ class StepLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.only(
@@ -15,8 +16,8 @@ class StepLine extends StatelessWidget {
         child: Container(
           height: 2.5,
           color: completed
-              ? const Color(0xFF2E5E4E)
-              : const Color(0xFF2E5E4E).withOpacity(0.2),
+              ? colors.primary
+              : colors.primary.withValues(alpha: 0.22),
         ),
       ),
     );

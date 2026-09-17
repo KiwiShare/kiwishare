@@ -8,6 +8,7 @@ class CategoryPickerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final searchProvider = Provider.of<SearchProvider>(context);
     final activeCategory = searchProvider.selectedCategory;
     final categories = [
@@ -30,7 +31,7 @@ class CategoryPickerSheet extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1F1F1F),
+                color: colors.onSurface,
               ),
             ),
             const SizedBox(height: 16),
@@ -49,13 +50,13 @@ class CategoryPickerSheet extends StatelessWidget {
                       fontWeight: isSelected
                           ? FontWeight.bold
                           : FontWeight.normal,
-                      color: isSelected
-                          ? const Color(0xFF2E5E4E)
-                          : const Color(0xFF1F1F1F),
+                      color: isSelected ? colors.primary : colors.onSurface,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   trailing: isSelected
-                      ? const Icon(Icons.check, color: Color(0xFF2E5E4E))
+                      ? Icon(Icons.check, color: colors.primary)
                       : null,
                   onTap: () {
                     searchProvider.setCategory(cat);
