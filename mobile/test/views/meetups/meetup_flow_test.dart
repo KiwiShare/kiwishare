@@ -89,6 +89,23 @@ class FakeMeetupRepository implements MeetupRepository {
     declineCalled = true;
     sampleMeetup = sampleMeetup?.copyWith(proposalStatus: 'declined');
   }
+
+  @override
+  Future<Map<String, dynamic>> claimHandover({
+    required String claimCode,
+    String? itemId,
+    required String token,
+  }) async {
+    return {
+      'status': 'success',
+      'message': 'Ownership transaction verified',
+      'item': {
+        'id': itemId ?? 'item-123',
+        'title': 'Test Item',
+        'priceNzd': '50',
+      },
+    };
+  }
 }
 
 void main() {
@@ -268,6 +285,7 @@ void main() {
         // Check QR code card
         expect(find.byKey(const Key('meetup_qr_image')), findsOneWidget);
         expect(find.text('Copy verification token'), findsOneWidget);
+        expect(find.byKey(const Key('buyer_scan_qr_button')), findsOneWidget);
 
         // Check Reserved Payment section
         expect(
@@ -275,6 +293,68 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('In-Person Settlement'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'MeetupCardBubble renders distinct actions for seller and buyer when confirmed',
+      (tester) async {
+        final fakeRepo = FakeMeetupRepository();
+        final provider = MeetupProvider(repository: fakeRepo);
+        final authProvider = AuthProvider(userRepository: MockUserRepository());
+
+        final payload = ChatMeetupPayload(
+          orderId: 'order-789',
+          scheduledAt: DateTime(2026, 9, 20, 10, 0),
+          locationName: 'Ponsonby Central',
+          proposalStatus: 'confirmed',
+        );
+
+        // 1. Render as Seller (isBuyer = false)
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: provider),
+              ChangeNotifierProvider.value(value: authProvider),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: MeetupCardBubble(
+                  meetup: payload,
+                  isMine: true,
+                  isBuyer: false,
+                  createdAt: DateTime.now(),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('Show Handover QR Code'), findsOneWidget);
+        expect(find.text('Scan Seller\'s QR Code'), findsNothing);
+
+        // 2. Render as Buyer (isBuyer = true)
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: provider),
+              ChangeNotifierProvider.value(value: authProvider),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: MeetupCardBubble(
+                  meetup: payload,
+                  isMine: false,
+                  isBuyer: true,
+                  createdAt: DateTime.now(),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('Scan Seller\'s QR Code'), findsOneWidget);
+        expect(find.text('View meetup schedule & details'), findsOneWidget);
       },
     );
   });

@@ -19,8 +19,7 @@ class HomeProductMap extends StatefulWidget {
 
   static const minimumZoom = 4.8;
   static const maximumZoom = 11.0;
-  static const tileUrl =
-      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+  static const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   final List<ItemModel> products;
   final ItemModel? selectedItem;
@@ -29,6 +28,7 @@ class HomeProductMap extends StatefulWidget {
   final ValueChanged<ItemModel> onSelectProduct;
   final VoidCallback onClearSelection;
   final ValueChanged<ItemModel> onOpenProduct;
+  final VoidCallback? onLocateMe;
 
   const HomeProductMap({
     super.key,
@@ -39,6 +39,7 @@ class HomeProductMap extends StatefulWidget {
     required this.onSelectProduct,
     required this.onClearSelection,
     required this.onOpenProduct,
+    this.onLocateMe,
   });
 
   @override
@@ -90,6 +91,17 @@ class _HomeProductMapState extends State<HomeProductMap> {
     _mapController.move(camera.center, zoom.toDouble());
   }
 
+  void _recenterToUser() {
+    if (widget.userLatitude != null && widget.userLongitude != null) {
+      _mapController.move(
+        LatLng(widget.userLatitude!, widget.userLongitude!),
+        9.5,
+      );
+    } else {
+      widget.onLocateMe?.call();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasSelectedLocation =
@@ -136,8 +148,8 @@ class _HomeProductMapState extends State<HomeProductMap> {
                 children: [
                   TileLayer(
                     urlTemplate: HomeProductMap.tileUrl,
-                    subdomains: const ['a', 'b', 'c', 'd'],
-                    userAgentPackageName: 'com.kiwishare.app',
+                    userAgentPackageName: 'nz.kiwishare.app',
+                    maxZoom: 19,
                   ),
                   MarkerLayer(
                     markers: [
@@ -165,20 +177,51 @@ class _HomeProductMapState extends State<HomeProductMap> {
                             widget.userLatitude!,
                             widget.userLongitude!,
                           ),
-                          width: 40,
-                          height: 40,
-                          child: const Tooltip(
-                            message: 'Your approximate location',
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.my_location,
-                                color: AppColors.info,
-                                size: 24,
-                              ),
+                          width: 44,
+                          height: 44,
+                          child: Tooltip(
+                            message: 'Your current location',
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppColors.info.withValues(
+                                      alpha: 0.22,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.18,
+                                        ),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: AppColors.info,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -188,7 +231,6 @@ class _HomeProductMapState extends State<HomeProductMap> {
                     showFlutterMapAttribution: false,
                     attributions: [
                       TextSourceAttribution('OpenStreetMap contributors'),
-                      TextSourceAttribution('CARTO'),
                     ],
                   ),
                 ],
@@ -218,6 +260,13 @@ class _HomeProductMapState extends State<HomeProductMap> {
                       tooltip: 'Zoom out',
                       icon: Icons.remove,
                       onPressed: () => _changeZoom(-1),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _MapControlButton(
+                      key: const Key('home-map-locate-me'),
+                      tooltip: 'Locate me',
+                      icon: Icons.my_location,
+                      onPressed: _recenterToUser,
                     ),
                   ],
                 ),

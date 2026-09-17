@@ -109,18 +109,74 @@ class R2UploadService implements ListingPhotoUploader {
         body: bytes,
       );
       if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
-        throw ListingPhotoUploadException(
-          _errorMessage(uploadResponse.body, fallback: uploadFailureMessage),
+        return await _uploadThroughServer(
+          bytes: bytes,
+          fileName: fileName,
+          contentType: contentType,
+          authToken: authToken,
+          uploadFailureMessage: uploadFailureMessage,
         );
       }
       return publicUrl;
     } on ListingPhotoUploadException {
       rethrow;
     } catch (_) {
-      throw const ListingPhotoUploadException(
-        'The upload service returned an invalid response. Please try again.',
+      return await _uploadThroughServer(
+        bytes: bytes,
+        fileName: fileName,
+        contentType: contentType,
+        authToken: authToken,
+        uploadFailureMessage: uploadFailureMessage,
       );
     }
+  }
+
+  Future<String> _uploadThroughServer({
+    required Uint8List bytes,
+    required String fileName,
+    required String contentType,
+    required String authToken,
+    required String uploadFailureMessage,
+  }) async {
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/upload'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'x-client-platform': 'mobile',
+        'Authorization': 'Bearer $authToken',
+      },
+      body: jsonEncode({
+        'imageBase64': base64Encode(bytes),
+        'fileName': fileName,
+        'contentType': contentType,
+        if (_uploadFolder.trim().isNotEmpty) 'folder': _uploadFolder.trim(),
+      }),
+    );
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw const ListingPhotoAuthenticationException();
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ListingPhotoUploadException(
+        _errorMessage(response.body, fallback: uploadFailureMessage),
+      );
+    }
+
+    try {
+      final data = jsonDecode(response.body);
+      if (data is Map<String, dynamic>) {
+        final url = data['url'];
+        if (url is String && url.isNotEmpty) {
+          return url;
+        }
+      }
+    } catch (_) {
+      // Report a user-safe message below.
+    }
+    throw const ListingPhotoUploadException(
+      'The upload service returned an invalid response. Please try again.',
+    );
   }
 
   String _errorMessage(String responseBody, {required String fallback}) {

@@ -8,6 +8,7 @@ import 'package:kiwishare/providers/providers.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/product_location_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
+import 'package:kiwishare/widgets/kiwishare_logo.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/home/widgets/home_product_map.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
@@ -38,6 +39,7 @@ Widget _homeApp({
   TextScaler textScaler = TextScaler.noScaling,
   ProductLocationService? locationService,
   HomeDiscoveryProvider? discovery,
+  bool autoLocate = false,
 }) => MultiProvider(
   providers: [
     ChangeNotifierProvider.value(value: discovery ?? HomeDiscoveryProvider()),
@@ -55,6 +57,7 @@ Widget _homeApp({
     home: HomeScreen(
       locationService: locationService ?? _AucklandLocationService(),
       onOpenItem: onOpenItem,
+      autoLocate: autoLocate,
     ),
   ),
 );
@@ -66,6 +69,29 @@ Future<void> _loadHome(WidgetTester tester, Widget app) async {
 }
 
 void main() {
+  testWidgets('Home header retains a 48px approved logo beside its wordmark', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
+    expect(find.byType(KiwiShareLogo), findsOneWidget);
+    expect(tester.getSize(find.byType(KiwiShareLogo)), const Size(48, 48));
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Icon &&
+            widget.icon == Icons.eco_rounded &&
+            widget.size == 22,
+      ),
+      findsNothing,
+    );
+    expect(find.text('Share & Reuse in NZ'), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(KiwiShareLogo)).right,
+      lessThan(tester.getRect(find.text('KiwiShare')).left),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('category chips filter products without leaving Home', (
     tester,
   ) async {
@@ -125,8 +151,9 @@ void main() {
     expect(map.options.cameraConstraint, isA<ContainCameraCenter>());
     final tiles = tester.widget<TileLayer>(find.byType(TileLayer));
     expect(tiles.urlTemplate, HomeProductMap.tileUrl);
-    expect(tiles.urlTemplate, contains('light_all'));
+    expect(tiles.urlTemplate, contains('openstreetmap'));
     expect(find.byKey(const Key('home-product-marker-item_1')), findsOneWidget);
+    expect(find.byKey(const Key('home-map-locate-me')), findsOneWidget);
   });
 
   testWidgets('near-you choice stays on Home and shows Auckland products', (
@@ -140,10 +167,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Near you'), findsOneWidget);
+    expect(find.text('(Auckland)'), findsOneWidget);
     expect(find.byKey(const Key('home-products-map')), findsOneWidget);
     expect(find.text('2 items'), findsOneWidget);
     expect(find.byKey(const Key('home-product-marker-item_1')), findsOneWidget);
     expect(find.byKey(const Key('home-product-marker-item_6')), findsOneWidget);
+  });
+
+  testWidgets('autoLocate detects current GPS city on launch', (tester) async {
+    await _loadHome(tester, _homeApp(autoLocate: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Near you'), findsOneWidget);
+    expect(find.text('(Auckland)'), findsOneWidget);
+    expect(find.text('2 items'), findsOneWidget);
   });
 
   testWidgets('denied location keeps conventional Home browsing available', (

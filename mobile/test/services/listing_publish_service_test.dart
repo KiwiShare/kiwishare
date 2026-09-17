@@ -228,6 +228,51 @@ void main() {
     expect(requests.last.bodyBytes, photo.bytes);
     expect(requests.last.headers['Content-Type'], 'image/png');
   });
+
+  test('R2 falls back to server upload when direct upload fails', () async {
+    final requests = <http.Request>[];
+    final uploader = R2UploadService(
+      uploadFolder: 'test/local',
+      client: MockClient((request) async {
+        requests.add(request);
+        if (request.url.path == '/api/upload/presign') {
+          return http.Response(
+            jsonEncode({
+              'uploadUrl': 'https://r2.example.test/signed-upload',
+              'publicUrl': 'https://assets.kiwishare.online/images/direct.png',
+            }),
+            200,
+          );
+        }
+        if (request.method == 'PUT') {
+          return http.Response('signature mismatch', 403);
+        }
+        if (request.url.path == '/api/upload') {
+          return http.Response(
+            jsonEncode({
+              'url': 'https://assets.kiwishare.online/images/fallback.png',
+            }),
+            201,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+
+    final url = await uploader.uploadImage(
+      bytes: photo.bytes,
+      fileName: photo.fileName,
+      contentType: photo.contentType,
+      authToken: token,
+    );
+
+    expect(url, 'https://assets.kiwishare.online/images/fallback.png');
+    expect(requests.map((request) => request.method), ['POST', 'PUT', 'POST']);
+    expect(requests.last.url.path, '/api/upload');
+    final fallbackBody = jsonDecode(requests.last.body);
+    expect(fallbackBody['imageBase64'], base64Encode(photo.bytes));
+    expect(fallbackBody['folder'], 'test/local');
+  });
 }
 
 class FakePhotoUploader implements ListingPhotoUploader {

@@ -9,6 +9,7 @@ import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/product_location_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/kiwishare_logo.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/home_filter_sheet.dart';
@@ -17,8 +18,14 @@ import 'widgets/home_product_map.dart';
 class HomeScreen extends StatefulWidget {
   final ProductLocationService? locationService;
   final ValueChanged<ItemModel>? onOpenItem;
+  final bool? autoLocate;
 
-  const HomeScreen({super.key, this.locationService, this.onOpenItem});
+  const HomeScreen({
+    super.key,
+    this.locationService,
+    this.onOpenItem,
+    this.autoLocate = false,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -35,6 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _optionsLoading = true;
   DiscoveryQuery? _lastRequestedQuery;
   bool _initialized = false;
+  bool _autoLocated = false;
 
   @override
   void initState() {
@@ -58,6 +66,25 @@ class _HomeScreenState extends State<HomeScreen> {
     _discovery.addListener(_onDiscoveryChanged);
     _initialized = true;
     unawaited(_loadDiscoveryOptions());
+    if ((widget.autoLocate ?? false) && !_autoLocated) {
+      _autoLocated = true;
+      unawaited(_autoDetectLocation());
+    }
+  }
+
+  Future<void> _autoDetectLocation() async {
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+      context.read<HomeDiscoveryProvider>().setLocation(
+        location.city,
+        nearYou: true,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      );
+    } catch (_) {
+      // Silently ignore if permissions are not granted or services are off
+    }
   }
 
   @override
@@ -419,6 +446,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       filters: filters,
                       onShowFilters: _showFilters,
                       onOpenProduct: _openProduct,
+                      onLocateMe: _useCurrentLocation,
                     );
                   },
                 ),
@@ -520,25 +548,7 @@ class _HomeHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.xs + 2),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.brandPrimary, AppColors.brandPrimaryAlt],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(AppRadius.medium),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.brandPrimary.withValues(alpha: 0.25),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.eco_rounded, color: Colors.white, size: 22),
-        ),
+        const KiwiShareLogo(size: 48),
         const SizedBox(width: AppSpacing.sm + 2),
         Expanded(
           child: Column(
@@ -583,18 +593,39 @@ class _HomeHeader extends StatelessWidget {
           icon: Icon(
             nearYou ? Icons.my_location : Icons.location_on_outlined,
             size: 18,
-            color: AppColors.brandPrimary,
+            color: nearYou ? AppColors.brandPrimary : AppColors.textSecondary,
           ),
           label: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 110),
-            child: Text(
-              nearYou ? 'Near you' : location,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            constraints: const BoxConstraints(maxWidth: 140),
+            child: DefaultTextStyle.merge(
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: AppColors.brandPrimary,
                 fontWeight: FontWeight.w700,
               ),
+              child: nearYou
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Near you'),
+                        if (location.isNotEmpty &&
+                            location !=
+                                HomeDiscoveryProvider.allLocationsLabel) ...[
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              '($location)',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
+                    )
+                  : Text(
+                      location,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
             ),
           ),
         ),
@@ -617,27 +648,33 @@ class _HomeCategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final iconData = _getCategoryIcon(label);
     return ChoiceChip(
       avatar: Icon(
         iconData,
         size: 16,
-        color: selected ? AppColors.brandPrimary : AppColors.textSecondary,
+        color: selected ? colors.onPrimaryContainer : colors.onSurfaceVariant,
       ),
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
-      selectedColor: AppColors.brandPrimaryContainer,
-      backgroundColor: AppColors.surface,
+      selectedColor: colors.primaryContainer,
+      backgroundColor: isDark
+          ? colors.surfaceContainerHighest.withValues(alpha: 0.72)
+          : colors.surface,
       side: BorderSide(
-        color: selected ? AppColors.brandPrimary : AppColors.border,
+        color: selected ? colors.primary : colors.outline,
         width: selected ? 1.5 : 1.0,
       ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.full),
       ),
+      showCheckmark: false,
       labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-        color: selected ? AppColors.brandPrimary : AppColors.textPrimary,
+        color: selected ? colors.onPrimaryContainer : colors.onSurface,
         fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
       ),
     );
@@ -653,7 +690,6 @@ class _HomeJumboCarousel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -956,6 +992,9 @@ class _HomeRecommendedSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
     final cardHeight = 205.0 + (textScale - 1.0) * 45.0;
 
@@ -992,13 +1031,17 @@ class _HomeRecommendedSection extends StatelessWidget {
                 vertical: 2,
               ),
               decoration: BoxDecoration(
-                color: AppColors.brandSecondaryContainer,
+                color: isDark
+                    ? colors.secondaryContainer
+                    : AppColors.brandSecondaryContainer,
                 borderRadius: BorderRadius.circular(AppRadius.full),
               ),
               child: Text(
                 'Top 10',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.brandPrimaryAlt,
+                  color: isDark
+                      ? colors.onSecondaryContainer
+                      : AppColors.brandPrimaryAlt,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1010,7 +1053,7 @@ class _HomeRecommendedSection extends StatelessWidget {
           'Curated based on popularity, freshness & sustainability',
           style: Theme.of(
             context,
-          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: AppSpacing.md),
         SizedBox(
@@ -1049,18 +1092,23 @@ class _RecommendedProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
     final cardWidth = 155.0 + (textScale - 1.0) * 35.0;
 
     return Container(
       width: cardWidth,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: isDark ? colors.surfaceContainerLow : colors.surface,
         borderRadius: BorderRadius.circular(AppRadius.medium),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: colors.outline.withValues(alpha: isDark ? 0.35 : 0.18),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -1279,6 +1327,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
   final HomeDiscoveryProvider filters;
   final VoidCallback onShowFilters;
   final ValueChanged<ItemModel> onOpenProduct;
+  final VoidCallback? onLocateMe;
 
   const _HomeDiscoveryResults({
     required this.products,
@@ -1286,6 +1335,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
     required this.filters,
     required this.onShowFilters,
     required this.onOpenProduct,
+    this.onLocateMe,
   });
 
   String get _heading {
@@ -1341,6 +1391,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
               onSelectProduct: (item) => filters.selectPreview(item.id),
               onClearSelection: () => filters.selectPreview(null),
               onOpenProduct: onOpenProduct,
+              onLocateMe: onLocateMe,
             ),
           )
         else if (products.isEmpty)
@@ -1438,7 +1489,7 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.65 - (textScale - 1) * 0.20,
+        childAspectRatio: 0.62 - (textScale - 1) * 0.20,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
@@ -1545,19 +1596,16 @@ class _SustainabilityBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.brandPrimaryContainer,
+        color: colors.primaryContainer,
         borderRadius: BorderRadius.circular(AppRadius.large),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.eco_outlined,
-            color: AppColors.brandPrimary,
-            size: 36,
-          ),
+          Icon(Icons.eco_outlined, color: colors.onPrimaryContainer, size: 36),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -1565,10 +1613,22 @@ class _SustainabilityBanner extends StatelessWidget {
               children: [
                 Text(
                   'Give items a new life.',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: colors.onPrimaryContainer,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                const Text('Buy local. Reduce waste. Build community.'),
+                Text(
+                  'Buy local. Reduce waste. Build community.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.onPrimaryContainer.withValues(alpha: 0.82),
+                  ),
+                ),
               ],
             ),
           ),

@@ -135,6 +135,36 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> requestPasswordReset(String email) async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      await userRepository.requestPasswordReset(email);
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    _isLoggingIn = true;
+    notifyListeners();
+    try {
+      await userRepository.resetPassword(
+        email: email,
+        code: code,
+        newPassword: newPassword,
+      );
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> verifyOtp(
     String email,
     String code, {
@@ -282,8 +312,52 @@ class AuthProvider extends ChangeNotifier {
       token: token,
       displayName: name,
     );
-    _currentUser = updated;
+    await _storeProfile(token, updated);
+  }
+
+  Future<void> refreshProfile() async {
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) return;
+    final previous = _currentUser;
+    final updated = await userRepository.fetchProfile(token);
+    // A refresh started before an edit must not overwrite the saved edit.
+    if (!identical(previous, _currentUser)) return;
+    await _storeProfile(token, updated);
+  }
+
+  Future<void> updateAvatar(String url) async {
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to edit your profile.');
+    }
+    final updated = await userRepository.updateProfile(
+      token: token,
+      avatarUrl: url,
+    );
+    await _storeProfile(token, updated);
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to change your password.');
+    }
+    await userRepository.changePassword(
+      token: token,
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+  }
+
+  Future<void> _storeProfile(String token, UserModel updated) async {
     final prefs = await SharedPreferences.getInstance();
+    if (!_isLoggedIn || _jwtToken != token || _currentUser?.id != updated.id) {
+      return;
+    }
+    _currentUser = updated;
     await prefs.setString('current_user', jsonEncode(updated.toJson()));
     notifyListeners();
   }

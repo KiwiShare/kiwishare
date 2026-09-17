@@ -55,7 +55,7 @@ class RestItemRepository implements ItemRepository {
     final uri = Uri.parse(
       '${ApiConfig.baseUrl}/api/users/me/usedItems',
     ).replace(queryParameters: {'status': sold ? 'sold' : 'active,reserved'});
-    final response = await http.get(
+    final response = await _client.get(
       uri,
       headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
     );

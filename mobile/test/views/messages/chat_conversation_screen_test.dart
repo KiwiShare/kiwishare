@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
 import 'package:kiwishare/models/chat_message_model.dart';
+import 'package:kiwishare/models/report_draft.dart';
 import 'package:kiwishare/navigation/app_route_observer.dart';
 import 'package:kiwishare/config/api_config.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
@@ -17,6 +18,7 @@ import 'package:kiwishare/services/listing_image_picker.dart';
 import 'package:kiwishare/services/notification_permission_coordinator.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/views/messages/chat_conversation_screen.dart';
+import 'package:kiwishare/views/profile/report_screen.dart';
 import 'package:kiwishare/widgets/notification_permission_dialog.dart';
 
 import '../../support/fake_chat_photo_uploader.dart';
@@ -33,6 +35,8 @@ Widget _buildSubject({
   ChatVoiceUploader? voiceUploader,
   ChatVoiceRecorder? voiceRecorder,
   NotificationPermissionCoordinator? permissionCoordinator,
+  bool enablePolling = false,
+  Duration? pollingInterval,
 }) {
   final value = conversation ?? testConversation();
   return MaterialApp(
@@ -54,6 +58,8 @@ Widget _buildSubject({
         imagePicker: imagePicker,
         voiceRecorder: voiceRecorder,
         permissionCoordinator: permissionCoordinator,
+        enablePolling: enablePolling,
+        pollingInterval: pollingInterval,
       ),
     ),
   );
@@ -87,6 +93,55 @@ void main() {
     expect(find.text('Ergonomic Office Chair'), findsOneWidget);
     expect(find.byKey(const Key('chat_message_1')), findsOneWidget);
     expect(find.byKey(const Key('chat_message_2')), findsOneWidget);
+  });
+
+  testWidgets('opens the shared report form with chat participant context', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildSubject(repository: FakeChatRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_more_actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('Report user'), findsOneWidget);
+
+    await tester.tap(find.text('Report user'));
+    await tester.pumpAndSettle();
+
+    final reportScreen = tester.widget<ReportScreen>(find.byType(ReportScreen));
+    expect(reportScreen.reportContext.targetType, ReportTargetType.user);
+    expect(reportScreen.reportContext.targetId, 'participant-conversation-1');
+    expect(reportScreen.reportContext.targetLabel, 'Sophie M.');
+    expect(reportScreen.reportContext.contextType, ReportContextType.chat);
+    expect(reportScreen.reportContext.contextId, 'conversation-1');
+    expect(
+      reportScreen.reportContext.contextLabel,
+      'Chat about Ergonomic Office Chair',
+    );
+    expect(find.text('Sophie M.'), findsOneWidget);
+    expect(find.text('Chat about Ergonomic Office Chair'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('report_reason_field')));
+    await tester.pumpAndSettle();
+    expect(find.text('Scam or fraud'), findsOneWidget);
+    expect(find.text('Harassment or abusive behaviour'), findsOneWidget);
+    expect(find.text('Unsafe meetup behaviour'), findsOneWidget);
+    expect(find.text('Fake identity or impersonation'), findsOneWidget);
+    expect(find.text('Something else'), findsOneWidget);
+    expect(find.text('Repeatedly did not show up'), findsNothing);
+    expect(find.text('Suspicious payment request'), findsNothing);
+    expect(find.text('Asked to move off KiwiShare'), findsNothing);
+  });
+
+  testWidgets('does not offer reporting when signed out', (tester) async {
+    await tester.pumpWidget(
+      _buildSubject(repository: FakeChatRepository(), authToken: null),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_more_actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('Report user'), findsNothing);
   });
 
   testWidgets('does not mark an in-flight initial load read after navigation', (
@@ -1126,6 +1181,76 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('conversation_message_list')), findsOneWidget);
+  });
+
+  testWidgets(
+    'chat message input requests focus and message list has keyboard dismiss on drag',
+    (tester) async {
+      final repository = FakeChatRepository(
+        messages: {
+          'conversation-1': [
+            testMessage(id: '1', text: 'Hello', isMine: false),
+          ],
+        },
+      );
+      await tester.pumpWidget(_buildSubject(repository: repository));
+      await tester.pumpAndSettle();
+
+      final listView = tester.widget<ListView>(
+        find.byKey(const Key('conversation_message_list')),
+      );
+      expect(
+        listView.keyboardDismissBehavior,
+        ScrollViewKeyboardDismissBehavior.onDrag,
+      );
+
+      final inputFinder = find.byKey(const Key('chat_message_input'));
+      expect(inputFinder, findsOneWidget);
+
+      await tester.tap(inputFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final textField = tester.widget<TextField>(inputFinder);
+      expect(textField.focusNode?.hasFocus, isTrue);
+
+      // Tap outside to unfocus
+      await tester.tap(find.byKey(const Key('conversation_message_list')));
+      await tester.pump();
+      expect(textField.focusNode?.hasFocus, isFalse);
+    },
+  );
+
+  testWidgets('in-conversation polling dynamically updates message history', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(id: '1', text: 'Initial message', isMine: false),
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        enablePolling: true,
+        pollingInterval: const Duration(milliseconds: 50),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Initial message'), findsOneWidget);
+
+    // Simulate another message arriving
+    repository.messages['conversation-1'] = [
+      testMessage(id: '1', text: 'Initial message', isMine: false),
+      testMessage(id: '2', text: 'New incoming message', isMine: false),
+    ];
+
+    await tester.pump(const Duration(milliseconds: 70));
+    await tester.pump(const Duration(milliseconds: 70));
+
+    expect(find.text('New incoming message'), findsOneWidget);
   });
 }
 

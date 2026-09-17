@@ -47,6 +47,40 @@ class ReportReason {
 }
 
 class ReportReasonCatalog {
+  static const chatUser = <ReportReason>[
+    ReportReason(
+      code: 'scam_or_fraud',
+      label: 'Scam or fraud',
+      description:
+          'Deceptive offers, suspicious payments or off-platform pressure',
+      icon: Icons.gpp_maybe_outlined,
+    ),
+    ReportReason(
+      code: 'harassment_or_abusive_behaviour',
+      label: 'Harassment or abusive behaviour',
+      description: 'Threats, hate, bullying or unwanted contact',
+      icon: Icons.record_voice_over_outlined,
+    ),
+    ReportReason(
+      code: 'unsafe_meetup_behaviour',
+      label: 'Unsafe meetup behaviour',
+      description: 'Pressure to meet somewhere unsafe or concerning conduct',
+      icon: Icons.location_off_outlined,
+    ),
+    ReportReason(
+      code: 'fake_identity_or_impersonation',
+      label: 'Fake identity or impersonation',
+      description: 'The account may be pretending to be someone else',
+      icon: Icons.person_off_outlined,
+    ),
+    ReportReason(
+      code: 'other',
+      label: 'Something else',
+      description: 'A different concern about this conversation',
+      icon: Icons.more_horiz,
+    ),
+  ];
+
   static const userAndTrade = <ReportReason>[
     ReportReason(
       code: 'scam_or_fraud',
@@ -137,8 +171,11 @@ class ReportReasonCatalog {
     ),
   ];
 
-  static List<ReportReason> forContext(ReportContext context) =>
-      context.targetType == ReportTargetType.listing ? listing : userAndTrade;
+  static List<ReportReason> forContext(ReportContext context) {
+    if (context.targetType == ReportTargetType.listing) return listing;
+    if (context.contextType == ReportContextType.chat) return chatUser;
+    return userAndTrade;
+  }
 }
 
 class ReportDraft {

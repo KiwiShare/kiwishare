@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/chat_conversation_model.dart';
 import '../../models/chat_message_model.dart';
+import '../../models/report_draft.dart';
 import '../../config/api_config.dart';
 import '../../navigation/app_route_observer.dart';
 import '../../providers/auth_provider.dart';
@@ -16,10 +17,13 @@ import '../../services/listing_image_picker.dart';
 import '../../services/chat_voice_service.dart';
 import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
+import '../profile/report_screen.dart';
 import 'widgets/location_bubble.dart';
 import 'widgets/location_picker_sheet.dart';
 import 'widgets/meetup_card_bubble.dart';
 import 'widgets/schedule_meetup_sheet.dart';
+
+enum _ChatConversationAction { reportUser }
 
 class ChatConversationScreen extends StatefulWidget {
   const ChatConversationScreen({
@@ -30,6 +34,8 @@ class ChatConversationScreen extends StatefulWidget {
     this.imagePicker,
     this.voiceRecorder,
     this.permissionCoordinator,
+    this.enablePolling = false,
+    this.pollingInterval,
   });
 
   final ChatConversationModel conversation;
@@ -38,6 +44,8 @@ class ChatConversationScreen extends StatefulWidget {
   final ListingImagePicker? imagePicker;
   final ChatVoiceRecorder? voiceRecorder;
   final NotificationPermissionCoordinator? permissionCoordinator;
+  final bool? enablePolling;
+  final Duration? pollingInterval;
 
   @override
   State<ChatConversationScreen> createState() => _ChatConversationScreenState();
@@ -47,9 +55,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     with WidgetsBindingObserver, RouteAware {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _messageFocusNode = FocusNode();
   late final ListingImagePicker _imagePicker;
   late final ChatVoiceRecorder _voiceRecorder;
   Timer? _recordingTimer;
+  Timer? _conversationPollTimer;
+  Timer? _focusScrollTimer;
   bool _isRecording = false;
   bool _isStartingVoice = false;
   bool _isFinalizingVoice = false;
@@ -65,6 +76,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   @override
   void initState() {
     super.initState();
+    _messageFocusNode.addListener(_handleFocusChange);
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _voiceRecorder = widget.voiceRecorder ?? DeviceChatVoiceRecorder();
     _lifecycleState =
@@ -73,17 +85,72 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverLostPhoto());
   }
 
+  void _handleFocusChange() {
+    if (_messageFocusNode.hasFocus) {
+      _focusScrollTimer?.cancel();
+      _focusScrollTimer = Timer(const Duration(milliseconds: 150), () {
+        if (mounted) _scrollToEnd();
+      });
+    }
+  }
+
+  void _startConversationPolling() {
+    _conversationPollTimer?.cancel();
+    if (!(widget.enablePolling ?? false) ||
+        !_isCurrentRoute ||
+        _lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    final interval = widget.pollingInterval ?? const Duration(seconds: 3);
+    _conversationPollTimer = Timer.periodic(interval, (_) async {
+      if (!mounted ||
+          !_isCurrentRoute ||
+          _lifecycleState != AppLifecycleState.resumed) {
+        return;
+      }
+      final token = _currentAuthToken;
+      if (token == null ||
+          token.isEmpty ||
+          _chatProvider.isLoadingMessages(widget.conversation.id)) {
+        return;
+      }
+      final previousCount = _chatProvider
+          .messagesFor(widget.conversation.id)
+          .length;
+      await _chatProvider.loadMessages(
+        conversation: widget.conversation,
+        token: token,
+        queueIfBusy: true,
+        shouldMarkRead: () => _isCurrentRoute,
+      );
+      if (!mounted) return;
+      final currentCount = _chatProvider
+          .messagesFor(widget.conversation.id)
+          .length;
+      if (currentCount > previousCount) {
+        _scrollToEnd();
+      }
+    });
+  }
+
+  void _stopConversationPolling() {
+    _conversationPollTimer?.cancel();
+    _conversationPollTimer = null;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lifecycleState = state;
     _syncVisibility();
     if (state != AppLifecycleState.resumed) {
       _leftForeground = true;
+      _stopConversationPolling();
       return;
     }
     if (!_leftForeground) return;
     _leftForeground = false;
     unawaited(_refreshAfterResume());
+    _startConversationPolling();
   }
 
   @override
@@ -100,12 +167,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   @override
   void didPushNext() {
     _syncVisibility();
+    _stopConversationPolling();
   }
 
   @override
   void didPopNext() {
     _syncVisibility();
     unawaited(_refreshAfterResume());
+    _startConversationPolling();
   }
 
   Future<void> _refreshAfterResume() async {
@@ -146,6 +215,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     _syncVisibility();
     if (token == null || token.isEmpty) {
       _loadedToken = null;
+      _stopConversationPolling();
       return;
     }
     if (token != _loadedToken) {
@@ -158,12 +228,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           shouldMarkRead: () => _isCurrentRoute,
         );
         _scrollToEnd();
+        _startConversationPolling();
       });
     }
   }
 
   @override
   void dispose() {
+    _focusScrollTimer?.cancel();
+    _stopConversationPolling();
+    _messageFocusNode.removeListener(_handleFocusChange);
+    _messageFocusNode.dispose();
     chatVisibilityTracker.clear(_visibilityOwner);
     appRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
@@ -352,6 +427,23 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     );
   }
 
+  void _reportUser() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ReportScreen(
+          reportContext: ReportContext(
+            targetType: ReportTargetType.user,
+            targetId: widget.conversation.participantId,
+            targetLabel: widget.conversation.participantName,
+            contextType: ReportContextType.chat,
+            contextId: widget.conversation.id,
+            contextLabel: 'Chat about ${widget.conversation.itemTitle}',
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _startVoiceRecording() async {
     if (_isRecording ||
         _isStartingVoice ||
@@ -472,6 +564,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final token = widget.authToken ?? context.watch<AuthProvider?>()?.jwtToken;
     _ensureLoaded(token);
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         titleSpacing: 0,
         title: Column(
@@ -501,6 +594,38 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 ? _scheduleMeetup
                 : null,
           ),
+          PopupMenuButton<_ChatConversationAction>(
+            key: const Key('chat_more_actions'),
+            tooltip: 'More chat actions',
+            enabled: _currentAuthToken?.isNotEmpty ?? false,
+            onSelected: (action) {
+              switch (action) {
+                case _ChatConversationAction.reportUser:
+                  _reportUser();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<_ChatConversationAction>(
+                key: const Key('chat_report_user_action'),
+                value: _ChatConversationAction.reportUser,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.flag_outlined,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      'Report user',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: SafeArea(
@@ -528,6 +653,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 ),
               _MessageComposer(
                 controller: _messageController,
+                focusNode: _messageFocusNode,
                 isSending:
                     provider.isSending(widget.conversation.id) ||
                     _isStartingVoice ||
@@ -588,28 +714,35 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final latestSentIndex = messages.lastIndexWhere(
       (message) => message.isMine,
     );
-    return ListView.builder(
-      key: const Key('conversation_message_list'),
-      controller: _scrollController,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      itemCount: messages.length,
-      itemBuilder: (context, index) {
-        final message = messages[index];
-        return _MessageBubble(
-          message: message,
-          showReadReceipt: index == latestSentIndex && message.status == 'read',
-          onMeetupStatusChanged: () {
-            final token = _currentAuthToken;
-            if (token != null && token.isNotEmpty) {
-              _chatProvider.loadMessages(
-                conversation: widget.conversation,
-                token: token,
-                shouldMarkRead: () => _isCurrentRoute,
-              );
-            }
-          },
-        );
-      },
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => _messageFocusNode.unfocus(),
+      child: ListView.builder(
+        key: const Key('conversation_message_list'),
+        controller: _scrollController,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        itemCount: messages.length,
+        itemBuilder: (context, index) {
+          final message = messages[index];
+          return _MessageBubble(
+            message: message,
+            isBuyer: widget.conversation.direction == ChatDirection.buying,
+            showReadReceipt:
+                index == latestSentIndex && message.status == 'read',
+            onMeetupStatusChanged: () {
+              final token = _currentAuthToken;
+              if (token != null && token.isNotEmpty) {
+                _chatProvider.loadMessages(
+                  conversation: widget.conversation,
+                  token: token,
+                  shouldMarkRead: () => _isCurrentRoute,
+                );
+              }
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -618,11 +751,13 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     required this.showReadReceipt,
+    this.isBuyer = false,
     this.onMeetupStatusChanged,
   });
 
   final ChatMessageModel message;
   final bool showReadReceipt;
+  final bool isBuyer;
   final VoidCallback? onMeetupStatusChanged;
 
   @override
@@ -643,6 +778,7 @@ class _MessageBubble extends StatelessWidget {
                 key: Key('chat_meetup_card_${message.id}'),
                 meetup: message.meetup!,
                 isMine: message.isMine,
+                isBuyer: isBuyer,
                 createdAt: message.createdAt,
                 onStatusChanged: onMeetupStatusChanged,
               ),
@@ -809,6 +945,7 @@ String _messageTime(DateTime value) {
 class _MessageComposer extends StatelessWidget {
   const _MessageComposer({
     required this.controller,
+    required this.focusNode,
     required this.isSending,
     required this.enabled,
     required this.onAddPhoto,
@@ -822,6 +959,7 @@ class _MessageComposer extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool isSending;
   final bool enabled;
   final VoidCallback onAddPhoto;
@@ -879,7 +1017,9 @@ class _MessageComposer extends StatelessWidget {
                     child: TextField(
                       key: const Key('chat_message_input'),
                       controller: controller,
+                      focusNode: focusNode,
                       enabled: enabled && !isSending,
+                      keyboardType: TextInputType.multiline,
                       minLines: 1,
                       maxLines: 5,
                       maxLength: 2000,

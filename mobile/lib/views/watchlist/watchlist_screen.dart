@@ -16,12 +16,21 @@ class WatchlistScreen extends StatefulWidget {
 }
 
 class _WatchlistScreenState extends State<WatchlistScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  ItemStatus? _selectedStatus; // null means 'All'
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<WatchlistProvider>().loadWatchlist();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _openItem(ItemModel item) {
@@ -32,10 +41,36 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     }
   }
 
+  void _clearFilters() {
+    setState(() {
+      _searchController.clear();
+      _selectedStatus = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final watchlist = context.watch<WatchlistProvider>();
     final items = watchlist.watchlistItems;
+
+    final query = _searchController.text.trim().toLowerCase();
+    final filteredItems = items.where((item) {
+      if (_selectedStatus != null && item.status != _selectedStatus) {
+        return false;
+      }
+      if (query.isNotEmpty) {
+        final matchesTitle = item.title.toLowerCase().contains(query);
+        final matchesDesc = item.description.toLowerCase().contains(query);
+        final matchesCategory = item.category.toLowerCase().contains(query);
+        final matchesLoc = item.location.toLowerCase().contains(query);
+        if (!matchesTitle && !matchesDesc && !matchesCategory && !matchesLoc) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+
+    final isFiltered = query.isNotEmpty || _selectedStatus != null;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -51,11 +86,138 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     AppSpacing.lg,
                     AppSpacing.lg,
                     AppSpacing.lg,
-                    AppSpacing.md,
+                    AppSpacing.sm,
                   ),
-                  child: _WatchlistHeader(itemCount: items.length),
+                  child: _WatchlistHeader(
+                    itemCount: items.length,
+                    filteredCount: isFiltered ? filteredItems.length : null,
+                  ),
                 ),
               ),
+              if (items.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.xs,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Search Bar
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.medium,
+                            ),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: TextField(
+                            key: const Key('watchlist-search-field'),
+                            controller: _searchController,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                              hintText: 'Search in watchlist...',
+                              hintStyle: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.search,
+                                size: 20,
+                                color: AppColors.textSecondary,
+                              ),
+                              suffixIcon: query.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(
+                                        Icons.close,
+                                        size: 18,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() {});
+                                      },
+                                    )
+                                  : null,
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.md,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        // Status Filter Chips
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _StatusFilterChip(
+                                key: const Key('watchlist-filter-all'),
+                                label: 'All',
+                                isSelected: _selectedStatus == null,
+                                count: items.length,
+                                onSelected: () {
+                                  setState(() => _selectedStatus = null);
+                                },
+                              ),
+                              const SizedBox(width: AppSpacing.xs),
+                              _StatusFilterChip(
+                                key: const Key('watchlist-filter-available'),
+                                label: 'Available',
+                                isSelected:
+                                    _selectedStatus == ItemStatus.active,
+                                count: items
+                                    .where((i) => i.status == ItemStatus.active)
+                                    .length,
+                                onSelected: () {
+                                  setState(
+                                    () => _selectedStatus = ItemStatus.active,
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: AppSpacing.xs),
+                              _StatusFilterChip(
+                                key: const Key('watchlist-filter-reserved'),
+                                label: 'Reserved',
+                                isSelected:
+                                    _selectedStatus == ItemStatus.reserved,
+                                count: items
+                                    .where(
+                                      (i) => i.status == ItemStatus.reserved,
+                                    )
+                                    .length,
+                                onSelected: () {
+                                  setState(
+                                    () => _selectedStatus = ItemStatus.reserved,
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: AppSpacing.xs),
+                              _StatusFilterChip(
+                                key: const Key('watchlist-filter-sold'),
+                                label: 'Sold',
+                                isSelected: _selectedStatus == ItemStatus.sold,
+                                count: items
+                                    .where((i) => i.status == ItemStatus.sold)
+                                    .length,
+                                onSelected: () {
+                                  setState(
+                                    () => _selectedStatus = ItemStatus.sold,
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                      ],
+                    ),
+                  ),
+                ),
               if (watchlist.isLoading && items.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
@@ -72,6 +234,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     onDiscoverPressed: () => context.go('/home'),
                   ),
                 )
+              else if (filteredItems.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _NoMatchingWatchlistView(
+                    onResetPressed: _clearFilters,
+                  ),
+                )
               else
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(
@@ -80,7 +249,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   ),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
-                      final item = items[index];
+                      final item = filteredItems[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: AppSpacing.md),
                         child: _WatchlistCard(
@@ -90,7 +259,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                               watchlist.removeFromWatchlist(item.id),
                         ),
                       );
-                    }, childCount: items.length),
+                    }, childCount: filteredItems.length),
                   ),
                 ),
             ],
@@ -103,8 +272,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
 class _WatchlistHeader extends StatelessWidget {
   final int itemCount;
+  final int? filteredCount;
 
-  const _WatchlistHeader({required this.itemCount});
+  const _WatchlistHeader({required this.itemCount, this.filteredCount});
 
   @override
   Widget build(BuildContext context) {
@@ -149,7 +319,9 @@ class _WatchlistHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.full),
               ),
               child: Text(
-                '$itemCount items',
+                filteredCount != null
+                    ? '$filteredCount of $itemCount'
+                    : '$itemCount items',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   color: AppColors.brandPrimaryAlt,
                   fontWeight: FontWeight.w800,
@@ -424,6 +596,115 @@ class _EmptyWatchlistView extends StatelessWidget {
               label: const Text(
                 'Explore Products',
                 style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusFilterChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final int count;
+  final VoidCallback onSelected;
+
+  const _StatusFilterChip({
+    super.key,
+    required this.label,
+    required this.isSelected,
+    required this.count,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return FilterChip(
+      selected: isSelected,
+      label: Text(
+        '$label ($count)',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+        color: isSelected ? colors.onPrimaryContainer : colors.onSurface,
+      ),
+      selectedColor: colors.primaryContainer,
+      backgroundColor: colors.surface,
+      side: BorderSide(
+        color: isSelected ? colors.primary : colors.outline,
+        width: isSelected ? 1.5 : 1,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.full),
+      ),
+      showCheckmark: false,
+      onSelected: (_) => onSelected(),
+    );
+  }
+}
+
+class _NoMatchingWatchlistView extends StatelessWidget {
+  final VoidCallback onResetPressed;
+
+  const _NoMatchingWatchlistView({required this.onResetPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: const BoxDecoration(
+                color: AppColors.surfaceMuted,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.search_off_outlined,
+                size: 40,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'No matching items found',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Try adjusting your search terms or filter selection.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            OutlinedButton.icon(
+              key: const Key('watchlist-reset-filters-button'),
+              onPressed: onResetPressed,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Reset filters'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.sm,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                ),
               ),
             ),
           ],

@@ -31,6 +31,7 @@ import 'repositories/watchlist_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/meetup_repository.dart';
 import 'repositories/push_device_repository.dart';
+import 'repositories/report_repository.dart';
 import 'services/remote_config_service.dart';
 import 'services/firebase_runtime_configuration.dart';
 import 'services/push_notification_service.dart';
@@ -67,7 +68,10 @@ final GoRouter _router = GoRouter(
       navigatorKey: _shellNavigatorKey,
       builder: (context, state, child) => KiwiShareShell(child: child),
       routes: [
-        GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
+        GoRoute(
+          path: '/home',
+          builder: (context, state) => const HomeScreen(autoLocate: true),
+        ),
         GoRoute(
           path: '/watchlist',
           builder: (context, state) => const WatchlistScreen(),
@@ -126,7 +130,10 @@ final GoRouter _router = GoRouter(
                     lastMessage: '',
                     unreadCount: 0,
                   ));
-        return ChatConversationScreen(conversation: conversation);
+        return ChatConversationScreen(
+          conversation: conversation,
+          enablePolling: true,
+        );
       },
     ),
     GoRoute(
@@ -206,6 +213,7 @@ void main() async {
           ),
         ),
         Provider<ItemRepository>(create: (_) => RestItemRepository()),
+        Provider<ReportRepository>(create: (_) => RestReportRepository()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProxyProvider<AuthProvider, WatchlistProvider>(
           create: (_) =>
@@ -223,10 +231,27 @@ void main() async {
           create: (_) => ListingProvider(itemRepository: RestItemRepository()),
         ),
         ChangeNotifierProxyProvider<AuthProvider, ChatProvider>(
-          create: (_) => ChatProvider(repository: RestChatRepository()),
+          create: (_) => ChatProvider(
+            repository: RestChatRepository(),
+            enablePolling: true,
+          ),
           update: (_, auth, chat) => syncChatAuth(
-            chat ?? ChatProvider(repository: RestChatRepository()),
+            chat ??
+                ChatProvider(
+                  repository: RestChatRepository(),
+                  enablePolling: true,
+                ),
             auth.jwtToken,
+            onIncomingChatMessage: (conversation) {
+              final token = auth.jwtToken ?? '';
+              if (chatVisibilityTracker.isVisible(
+                conversationId: conversation.id,
+                sessionToken: token,
+              )) {
+                return;
+              }
+              _showInAppChatNotification(conversation);
+            },
           ),
         ),
         Provider<MeetupRepository>(create: (_) => RestMeetupRepository()),
@@ -250,7 +275,14 @@ MeetupProvider syncMeetupAuth(MeetupProvider meetup, String? authToken) {
 }
 
 @visibleForTesting
-ChatProvider syncChatAuth(ChatProvider chat, String? authToken) {
+ChatProvider syncChatAuth(
+  ChatProvider chat,
+  String? authToken, {
+  void Function(ChatConversationModel conversation)? onIncomingChatMessage,
+}) {
+  if (onIncomingChatMessage != null) {
+    chat.onIncomingChatMessage = onIncomingChatMessage;
+  }
   chat.updateAuthToken(authToken);
   return chat;
 }
@@ -312,6 +344,38 @@ void navigateToNotificationRoute(
   router.push(location, extra: extra);
 }
 
+void _showInAppChatNotification(ChatConversationModel conversation) {
+  final messenger = _scaffoldMessengerKey.currentState;
+  if (messenger == null) return;
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: KiwiShareNotificationContent(
+          title: conversation.participantName.isNotEmpty
+              ? conversation.participantName
+              : 'New message',
+          body: conversation.lastMessage.isNotEmpty
+              ? conversation.lastMessage
+              : 'Sent you a message about ${conversation.itemTitle}',
+          icon: Icons.chat_bubble_rounded,
+        ),
+        action: SnackBarAction(
+          label: 'Reply',
+          onPressed: () {
+            navigateToNotificationRoute(
+              _router,
+              '/messages/${conversation.id}',
+              extra: conversation,
+            );
+          },
+        ),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+}
+
 void _showForegroundChatNotification(
   ChatPushMessage message,
   PushEnvelope envelope,
@@ -340,9 +404,20 @@ void _showForegroundChatNotification(
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(envelope.body ?? 'You have a new KiwiShare message.'),
+        behavior: SnackBarBehavior.floating,
+        content: KiwiShareNotificationContent(
+          title: message.participantName.isNotEmpty
+              ? message.participantName
+              : 'New message',
+          body:
+              envelope.body ??
+              (message.itemTitle.isNotEmpty
+                  ? 'Sent you a message about ${message.itemTitle}'
+                  : 'You have a new KiwiShare message.'),
+          icon: Icons.chat_bubble_rounded,
+        ),
         action: SnackBarAction(
-          label: 'Open',
+          label: 'Reply',
           onPressed: () {
             final activeUserId = _scaffoldMessengerKey.currentContext
                 ?.read<AuthProvider>()
@@ -353,6 +428,7 @@ void _showForegroundChatNotification(
             }
           },
         ),
+        duration: const Duration(seconds: 4),
       ),
     );
 }
@@ -497,8 +573,38 @@ void _showForegroundPriceDrop(
     );
 }
 
-class KiwiShareApp extends StatelessWidget {
+class KiwiShareApp extends StatefulWidget {
   const KiwiShareApp({super.key});
+
+  @override
+  State<KiwiShareApp> createState() => _KiwiShareAppState();
+}
+
+class _KiwiShareAppState extends State<KiwiShareApp> {
+  late final AppLifecycleListener _lifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () {
+        final chat = _scaffoldMessengerKey.currentContext
+            ?.read<ChatProvider?>();
+        chat?.resumePolling();
+      },
+      onPause: () {
+        final chat = _scaffoldMessengerKey.currentContext
+            ?.read<ChatProvider?>();
+        chat?.pausePolling();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycleListener.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -582,6 +688,8 @@ class KiwiShareShell extends StatelessWidget {
     final unreadChatCount = context.select<ChatProvider?, int>(
       (provider) => provider?.totalUnreadCount ?? 0,
     );
+    final colors = Theme.of(context).colorScheme;
+    final navTheme = Theme.of(context).bottomNavigationBarTheme;
 
     final shell = Scaffold(
       body: child,
@@ -624,18 +732,20 @@ class KiwiShareShell extends StatelessWidget {
             }
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          selectedItemColor: Theme.of(context).colorScheme.primary,
-          unselectedItemColor: Theme.of(
-            context,
-          ).colorScheme.onSurface.withOpacity(0.5),
+          backgroundColor: navTheme.backgroundColor ?? colors.surface,
+          selectedItemColor: navTheme.selectedItemColor ?? colors.primary,
+          unselectedItemColor:
+              navTheme.unselectedItemColor ??
+              colors.onSurface.withValues(alpha: 0.78),
           selectedLabelStyle: GoogleFonts.inter(
             fontWeight: FontWeight.bold,
             fontSize: 12,
+            height: 1.2,
           ),
           unselectedLabelStyle: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
             fontSize: 11,
+            height: 1.2,
           ),
           items: [
             const BottomNavigationBarItem(
@@ -665,11 +775,11 @@ class KiwiShareShell extends StatelessWidget {
                 margin: const EdgeInsets.only(top: 4.0),
                 width: 44,
                 height: 44,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF2E5E4E), // Sage Green
+                decoration: BoxDecoration(
+                  color: colors.primary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.add, color: Colors.white, size: 26),
+                child: Icon(Icons.add, color: colors.onPrimary, size: 26),
               ),
               label: '',
             ),

@@ -46,6 +46,9 @@ class ApiConfig {
 
   static String get sendOtpUrl => '$baseUrl/api/auth/send-otp';
   static String get verifyOtpUrl => '$baseUrl/api/auth/verify-otp';
+  static String get requestPasswordResetUrl =>
+      '$baseUrl/api/auth/request-password-reset';
+  static String get resetPasswordUrl => '$baseUrl/api/auth/reset-password';
   static String get googleAuthUrl => '$baseUrl/api/auth/google';
   static String get loginUrl => '$baseUrl/api/auth/login';
   static String get registerUrl => '$baseUrl/api/auth/register';

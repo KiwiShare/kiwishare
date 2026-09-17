@@ -17,6 +17,284 @@ class LoginView extends StatefulWidget {
   State<LoginView> createState() => _LoginViewState();
 }
 
+class _PasswordResetDialog extends StatefulWidget {
+  const _PasswordResetDialog({required this.initialEmail});
+
+  final String initialEmail;
+
+  @override
+  State<_PasswordResetDialog> createState() => _PasswordResetDialogState();
+}
+
+class _PasswordResetDialogState extends State<_PasswordResetDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _emailController;
+  final _codeController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
+  bool _codeSent = false;
+  bool _saving = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.initialEmail);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _codeController.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _requestCode() async {
+    if (!_validateEmail()) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await context.read<AuthProvider>().requestPasswordReset(
+        _emailController.text.trim(),
+      );
+      if (mounted) {
+        setState(() => _codeSent = true);
+      }
+    } on OtpCooldownException catch (error) {
+      if (mounted) {
+        setState(() => _error = error.message);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _error = error.toString().replaceFirst('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await context.read<AuthProvider>().resetPassword(
+        email: _emailController.text.trim(),
+        code: _codeController.text.trim(),
+        newPassword: _passwordController.text,
+      );
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+      if (mounted) {
+        await _showResultDialog(
+          title: 'Password reset successful',
+          message: 'Your password has been updated. You can log in now.',
+        );
+      }
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        final message = error.toString().replaceFirst('Exception: ', '');
+        setState(() {
+          _saving = false;
+          _error = message;
+        });
+        await _showResultDialog(
+          title: 'Password reset failed',
+          message: message,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  bool _validateEmail() {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
+      setState(() => _error = 'Please enter a valid email address.');
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _showResultDialog({
+    required String title,
+    required String message,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Reset password'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _emailController,
+                enabled: !_codeSent && !_saving,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email address'),
+                validator: (value) {
+                  final email = value?.trim() ?? '';
+                  if (email.isEmpty ||
+                      !email.contains('@') ||
+                      !email.contains('.')) {
+                    return 'Enter a valid email address.';
+                  }
+                  return null;
+                },
+              ),
+              if (_codeSent) ...[
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _codeController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'Verification code',
+                    counterText: '',
+                  ),
+                  validator: (value) =>
+                      value == null || value.trim().length != 6
+                      ? 'Enter the 6-digit code.'
+                      : null,
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'New password',
+                    helperText:
+                        'Use 8-128 characters. Choose something different from your current password.',
+                    helperMaxLines: 3,
+                    suffixIcon: IconButton(
+                      tooltip: _obscurePassword
+                          ? 'Show new password'
+                          : 'Hide new password',
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: _saving
+                          ? null
+                          : () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                    ),
+                  ),
+                  validator: (value) => value == null || value.length < 8
+                      ? 'Use at least 8 characters.'
+                      : null,
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _confirmController,
+                  obscureText: _obscureConfirm,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm new password',
+                    suffixIcon: IconButton(
+                      tooltip: _obscureConfirm
+                          ? 'Show password confirmation'
+                          : 'Hide password confirmation',
+                      icon: Icon(
+                        _obscureConfirm
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: _saving
+                          ? null
+                          : () => setState(
+                              () => _obscureConfirm = !_obscureConfirm,
+                            ),
+                    ),
+                  ),
+                  validator: (value) => value != _passwordController.text
+                      ? 'Passwords do not match.'
+                      : null,
+                ),
+              ],
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.errorContainer.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: colors.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving
+              ? null
+              : (_codeSent ? _resetPassword : _requestCode),
+          child: Text(
+            _saving
+                ? 'Saving...'
+                : (_codeSent ? 'Reset password' : 'Send code'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _LoginViewState extends State<LoginView> {
   final _formKey = GlobalKey<FormState>();
   final _displayNameController = TextEditingController();
@@ -322,8 +600,55 @@ class _LoginViewState extends State<LoginView> {
     }
   }
 
+  Future<void> _showPasswordReset() async {
+    final email = _emailController.text.trim();
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => _PasswordResetDialog(initialEmail: email),
+    );
+  }
+
+  InputDecoration _authInputDecoration(
+    BuildContext context, {
+    required String labelText,
+    String? hintText,
+    IconData? prefixIcon,
+    Widget? suffixIcon,
+    String? counterText,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InputDecoration(
+      labelText: labelText,
+      hintText: hintText,
+      counterText: counterText,
+      labelStyle: GoogleFonts.inter(
+        color: colors.onSurfaceVariant,
+        letterSpacing: 0,
+      ),
+      prefixIcon: prefixIcon == null
+          ? null
+          : Icon(prefixIcon, color: colors.primary),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: colors.surfaceContainerHighest.withValues(
+        alpha: isDark ? 0.42 : 0.55,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: colors.outline.withValues(alpha: 0.45)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: colors.primary, width: 1.5),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: EdgeInsets.only(
         left: 24,
@@ -332,7 +657,7 @@ class _LoginViewState extends State<LoginView> {
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAF7F2), // Off-White
+        color: isDark ? colors.surface : const Color(0xFFFAF7F2),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Form(
@@ -352,7 +677,7 @@ class _LoginViewState extends State<LoginView> {
                 style: GoogleFonts.inter(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2E5E4E), // Sage Green
+                  color: colors.primary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -365,7 +690,8 @@ class _LoginViewState extends State<LoginView> {
                           : 'Sign in with your email and password.'),
                 style: GoogleFonts.inter(
                   fontSize: 13,
-                  color: const Color(0xFF1F1F1F).withOpacity(0.6),
+                  color: colors.onSurfaceVariant,
+                  height: 1.25,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -376,7 +702,9 @@ class _LoginViewState extends State<LoginView> {
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF2E8DB).withOpacity(0.6),
+                    color: colors.surfaceContainerHighest.withValues(
+                      alpha: isDark ? 0.48 : 0.62,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -392,13 +720,15 @@ class _LoginViewState extends State<LoginView> {
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
                               color: _authMode == AuthMode.password
-                                  ? Colors.white
+                                  ? colors.surface
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: _authMode == AuthMode.password
                                   ? [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
+                                        color: Colors.black.withValues(
+                                          alpha: isDark ? 0.18 : 0.05,
+                                        ),
                                         blurRadius: 4,
                                         offset: const Offset(0, 1),
                                       ),
@@ -414,8 +744,8 @@ class _LoginViewState extends State<LoginView> {
                                     ? FontWeight.w700
                                     : FontWeight.w500,
                                 color: _authMode == AuthMode.password
-                                    ? const Color(0xFF2E5E4E)
-                                    : const Color(0xFF1F1F1F).withOpacity(0.6),
+                                    ? colors.primary
+                                    : colors.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -432,13 +762,15 @@ class _LoginViewState extends State<LoginView> {
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
                               color: _authMode == AuthMode.otp
-                                  ? Colors.white
+                                  ? colors.surface
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: _authMode == AuthMode.otp
                                   ? [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
+                                        color: Colors.black.withValues(
+                                          alpha: isDark ? 0.18 : 0.05,
+                                        ),
                                         blurRadius: 4,
                                         offset: const Offset(0, 1),
                                       ),
@@ -454,8 +786,8 @@ class _LoginViewState extends State<LoginView> {
                                     ? FontWeight.w700
                                     : FontWeight.w500,
                                 color: _authMode == AuthMode.otp
-                                    ? const Color(0xFF2E5E4E)
-                                    : const Color(0xFF1F1F1F).withOpacity(0.6),
+                                    ? colors.primary
+                                    : colors.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -474,32 +806,12 @@ class _LoginViewState extends State<LoginView> {
                   TextFormField(
                     controller: _displayNameController,
                     textCapitalization: TextCapitalization.words,
-                    style: GoogleFonts.inter(color: const Color(0xFF1F1F1F)),
-                    decoration: InputDecoration(
+                    style: GoogleFonts.inter(color: colors.onSurface),
+                    decoration: _authInputDecoration(
+                      context,
                       labelText: 'Username',
                       hintText: 'e.g. Sam Yao',
-                      labelStyle: GoogleFonts.inter(
-                        color: const Color(0xFF1F1F1F).withOpacity(0.6),
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.person_outline,
-                        color: Color(0xFF2E5E4E),
-                      ),
-                      filled: true,
-                      fillColor: const Color(0xFFF2E8DB).withOpacity(0.3),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: const Color(0xFF2E5E4E).withOpacity(0.2),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF2E5E4E),
-                          width: 1.5,
-                        ),
-                      ),
+                      prefixIcon: Icons.person_outline,
                     ),
                     validator: (value) {
                       if (!_isSignUp) return null;
@@ -519,32 +831,12 @@ class _LoginViewState extends State<LoginView> {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  style: GoogleFonts.inter(color: const Color(0xFF1F1F1F)),
-                  decoration: InputDecoration(
+                  style: GoogleFonts.inter(color: colors.onSurface),
+                  decoration: _authInputDecoration(
+                    context,
                     labelText: 'Email Address',
                     hintText: 'yourname@example.com',
-                    labelStyle: GoogleFonts.inter(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.6),
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.email_outlined,
-                      color: Color(0xFF2E5E4E),
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xFFF2E8DB).withOpacity(0.3),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: const Color(0xFF2E5E4E).withOpacity(0.2),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF2E5E4E),
-                        width: 1.5,
-                      ),
-                    ),
+                    prefixIcon: Icons.email_outlined,
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -563,44 +855,24 @@ class _LoginViewState extends State<LoginView> {
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
-                    style: GoogleFonts.inter(color: const Color(0xFF1F1F1F)),
-                    decoration: InputDecoration(
+                    style: GoogleFonts.inter(color: colors.onSurface),
+                    decoration: _authInputDecoration(
+                      context,
                       labelText: 'Password',
                       hintText: '••••••••',
-                      labelStyle: GoogleFonts.inter(
-                        color: const Color(0xFF1F1F1F).withOpacity(0.6),
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.lock_outline,
-                        color: Color(0xFF2E5E4E),
-                      ),
+                      prefixIcon: Icons.lock_outline,
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
                               ? Icons.visibility_off
                               : Icons.visibility,
-                          color: const Color(0xFF2E5E4E).withOpacity(0.7),
+                          color: colors.primary.withValues(alpha: 0.78),
                         ),
                         onPressed: () {
                           setState(() {
                             _obscurePassword = !_obscurePassword;
                           });
                         },
-                      ),
-                      filled: true,
-                      fillColor: const Color(0xFFF2E8DB).withOpacity(0.3),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: const Color(0xFF2E5E4E).withOpacity(0.2),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF2E5E4E),
-                          width: 1.5,
-                        ),
                       ),
                     ),
                     validator: (value) {
@@ -614,7 +886,22 @@ class _LoginViewState extends State<LoginView> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 20),
+                  if (!_isSignUp) ...[
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _isLoading ? null : _showPasswordReset,
+                        child: Text(
+                          'Forgot password?',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w700,
+                            color: colors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else
+                    const SizedBox(height: 20),
 
                   // Password Auth Submit Button
                   ElevatedButton(
@@ -713,12 +1000,15 @@ class _LoginViewState extends State<LoginView> {
                             color: Color(0xFFC96B4A),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            'Cooldown active: ${_cooldownSeconds}s remaining',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFFC96B4A),
+                          Flexible(
+                            child: Text(
+                              'Cooldown active: ${_cooldownSeconds}s remaining',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFFC96B4A),
+                              ),
                             ),
                           ),
                         ],
@@ -733,40 +1023,18 @@ class _LoginViewState extends State<LoginView> {
                   keyboardType: TextInputType.number,
                   maxLength: 6,
                   style: GoogleFonts.inter(
-                    color: const Color(0xFF1F1F1F),
+                    color: colors.onSurface,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 8,
                   ),
                   textAlign: TextAlign.center,
-                  decoration: InputDecoration(
+                  decoration: _authInputDecoration(
+                    context,
                     counterText: '',
                     labelText: '6-Digit Code',
                     hintText: '• • • • • •',
-                    labelStyle: GoogleFonts.inter(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.6),
-                      fontSize: 14,
-                      letterSpacing: 0,
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.lock_clock_outlined,
-                      color: Color(0xFF2E5E4E),
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xFFF2E8DB).withOpacity(0.3),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: const Color(0xFF2E5E4E).withOpacity(0.2),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF2E5E4E),
-                        width: 1.5,
-                      ),
-                    ),
+                    prefixIcon: Icons.lock_clock_outlined,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -779,7 +1047,7 @@ class _LoginViewState extends State<LoginView> {
                       "Didn't receive code? ",
                       style: GoogleFonts.inter(
                         fontSize: 13,
-                        color: const Color(0xFF1F1F1F).withOpacity(0.6),
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
                     TextButton(
@@ -798,7 +1066,7 @@ class _LoginViewState extends State<LoginView> {
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                           color: _cooldownSeconds > 0
-                              ? const Color(0xFF1F1F1F).withOpacity(0.4)
+                              ? colors.onSurfaceVariant.withValues(alpha: 0.55)
                               : const Color(0xFFC96B4A),
                         ),
                       ),
@@ -828,12 +1096,15 @@ class _LoginViewState extends State<LoginView> {
                           color: Color(0xFFC96B4A),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          'You can request a new code in ${_cooldownSeconds}s',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFFC96B4A),
+                        Flexible(
+                          child: Text(
+                            'You can request a new code in ${_cooldownSeconds}s',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFC96B4A),
+                            ),
                           ),
                         ),
                       ],
@@ -890,7 +1161,7 @@ class _LoginViewState extends State<LoginView> {
                         ? 'Change Email or Username'
                         : 'Change Email Address',
                     style: GoogleFonts.inter(
-                      color: const Color(0xFF2E5E4E),
+                      color: colors.primary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -909,7 +1180,7 @@ class _LoginViewState extends State<LoginView> {
                           : "Don't have an account? ",
                       style: GoogleFonts.inter(
                         fontSize: 13,
-                        color: const Color(0xFF1F1F1F).withOpacity(0.7),
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
                     GestureDetector(
@@ -939,7 +1210,7 @@ class _LoginViewState extends State<LoginView> {
                 children: [
                   Expanded(
                     child: Divider(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.1),
+                      color: colors.outline.withValues(alpha: 0.22),
                       thickness: 1.5,
                     ),
                   ),
@@ -949,14 +1220,14 @@ class _LoginViewState extends State<LoginView> {
                       'or continue with',
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        color: const Color(0xFF1F1F1F).withOpacity(0.4),
+                        color: colors.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   Expanded(
                     child: Divider(
-                      color: const Color(0xFF1F1F1F).withOpacity(0.1),
+                      color: colors.outline.withValues(alpha: 0.22),
                       thickness: 1.5,
                     ),
                   ),
@@ -969,14 +1240,14 @@ class _LoginViewState extends State<LoginView> {
               OutlinedButton(
                 onPressed: _isLoading ? null : _loginWithGoogle,
                 style: OutlinedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF1F1F1F),
+                  backgroundColor: colors.surface,
+                  foregroundColor: colors.onSurface,
                   minimumSize: const Size(double.infinity, 48),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   side: BorderSide(
-                    color: const Color(0xFF1F1F1F).withOpacity(0.15),
+                    color: colors.outline.withValues(alpha: 0.35),
                     width: 1.5,
                   ),
                   elevation: 0,
@@ -994,7 +1265,7 @@ class _LoginViewState extends State<LoginView> {
                       style: GoogleFonts.inter(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1F1F1F),
+                        color: colors.onSurface,
                       ),
                     ),
                   ],

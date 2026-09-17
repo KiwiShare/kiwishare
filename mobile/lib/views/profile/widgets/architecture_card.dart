@@ -19,13 +19,14 @@ class ArchitectureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor.withOpacity(0.6)),
+        border: Border.all(color: borderColor.withValues(alpha: 0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -35,19 +36,23 @@ class ArchitectureCard extends StatelessWidget {
             style: GoogleFonts.inter(
               fontWeight: FontWeight.bold,
               fontSize: 15,
-              color: const Color(0xFF1F1F1F),
+              color: colors.onSurface,
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Text(
             subtitle,
             style: GoogleFonts.inter(
               fontSize: 12,
-              color: const Color(0xFF1F1F1F).withOpacity(0.6),
+              color: colors.onSurfaceVariant,
               fontStyle: FontStyle.italic,
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
-          const Divider(height: 20, color: Color(0xFF1F1F1F)),
+          Divider(height: 20, color: colors.outline.withValues(alpha: 0.35)),
           ...items,
         ],
       ),

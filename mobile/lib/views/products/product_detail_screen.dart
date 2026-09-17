@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../models/chat_conversation_model.dart';
 import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
+import '../../models/report_draft.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/watchlist_provider.dart';
@@ -18,6 +19,7 @@ import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
 import '../messages/widgets/schedule_meetup_sheet.dart';
+import '../profile/report_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String? itemId;
@@ -243,16 +245,29 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     WatchlistProvider watchlist,
     ItemModel product,
   ) async {
+    final token = _authToken;
+    if (token == null || token.isEmpty) {
+      if (mounted) _showLoginSheet(product);
+      return;
+    }
+
     WatchlistMutationResult result;
     try {
       result = await watchlist.toggleWatch(product.id, item: product);
     } catch (error) {
       debugPrint('Watchlist update failed: $error');
+      if (mounted) {
+        _showMessage('Could not update Watchlist. Please try again.');
+      }
       return;
     }
-    if (!mounted || result != WatchlistMutationResult.added) return;
-    final token = _authToken;
-    if (token == null || token.isEmpty) return;
+    if (!mounted || result == WatchlistMutationResult.failed) {
+      if (mounted) {
+        _showMessage('Could not update Watchlist. Please try again.');
+      }
+      return;
+    }
+    if (result != WatchlistMutationResult.added) return;
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
     await offerContextualNotificationPermission(
@@ -297,6 +312,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 },
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openReportForm(ItemModel product) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReportScreen(
+          reportContext: ReportContext(
+            targetType: ReportTargetType.listing,
+            targetId: product.id,
+            targetLabel: product.title,
+            contextType: ReportContextType.listing,
+            contextId: product.id,
+            contextLabel: product.title,
           ),
         ),
       ),
@@ -362,9 +394,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onPressed: () =>
                           _requestWatchlistToggle(watchlist, product),
                       icon: Icon(
-                        isWatched ? Icons.bookmark : Icons.bookmark_outline,
+                        isWatched ? Icons.favorite : Icons.favorite_border,
                         color: isWatched
-                            ? theme.colorScheme.primary
+                            ? const Color(0xFFEF4444)
                             : theme.colorScheme.onSurface,
                         size: 26,
                       ),
@@ -568,6 +600,24 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           },
                         ),
                       ],
+                      const SizedBox(height: AppSpacing.md),
+                      Center(
+                        child: TextButton.icon(
+                          key: const Key('detail-report-listing-button'),
+                          onPressed: () => _openReportForm(product),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            minimumSize: const Size(48, 48),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                            ),
+                            textStyle: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(fontWeight: FontWeight.w500),
+                          ),
+                          icon: const Icon(Icons.flag_outlined, size: 16),
+                          label: const Text('Report listing'),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1153,24 +1203,46 @@ class _ProductActions extends StatelessWidget {
     final watchButton = OutlinedButton.icon(
       key: const Key('detail-watch-action-button'),
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 50),
+        minimumSize: const Size(0, 52),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.medium),
         ),
         side: BorderSide(
           color: isWatched
-              ? theme.colorScheme.primary
+              ? const Color(0xFFEF4444)
               : theme.colorScheme.outline.withOpacity(0.5),
         ),
+        backgroundColor: isWatched
+            ? theme.brightness == Brightness.dark
+                  ? const Color(0xFF3A1D22)
+                  : const Color(0xFFFFF1F2)
+            : theme.brightness == Brightness.dark
+            ? theme.colorScheme.primaryContainer.withOpacity(0.42)
+            : AppColors.surfaceMuted,
+        foregroundColor: isWatched
+            ? const Color(0xFFEF4444)
+            : theme.colorScheme.onSurface,
       ),
       onPressed: onToggleWatch,
       icon: Icon(
-        isWatched ? Icons.bookmark : Icons.bookmark_outline,
-        color: isWatched ? theme.colorScheme.primary : null,
+        isWatched ? Icons.favorite : Icons.favorite_border,
+        color: isWatched
+            ? const Color(0xFFEF4444)
+            : theme.colorScheme.onSurface,
       ),
       label: Text(
-        isWatched ? 'Watching' : 'Watch Item',
-        style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+        'Watching',
+        maxLines: 1,
+        softWrap: false,
+        style: GoogleFonts.inter(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          height: 1.25,
+          color: isWatched
+              ? const Color(0xFFEF4444)
+              : theme.colorScheme.onSurface,
+        ),
       ),
     );
 
@@ -1197,7 +1269,7 @@ class _ProductActions extends StatelessWidget {
           : const Icon(Icons.chat_bubble_outline),
       label: Text(
         isStartingConversation ? 'Opening chat' : messageSellerLabel,
-        style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
       ),
     );
 
@@ -1241,9 +1313,9 @@ class _ProductActions extends StatelessWidget {
                     meetupButton,
                     const SizedBox(width: AppSpacing.sm),
                   ],
-                  Expanded(child: watchButton),
+                  Expanded(flex: 3, child: watchButton),
                   const SizedBox(width: AppSpacing.sm),
-                  Expanded(flex: 2, child: messageButton),
+                  Expanded(flex: 5, child: messageButton),
                 ],
               ),
       ),
