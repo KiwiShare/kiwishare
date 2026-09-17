@@ -46,7 +46,6 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
@@ -65,11 +64,9 @@ class _SplashScreenState extends State<SplashScreen>
                   style: GoogleFonts.inter(
                     fontSize: 36,
                     fontWeight: FontWeight.w900,
-                    color: colors.primary,
+                    color: const Color(0xFF2E5E4E), // Sage Green title
                     letterSpacing: 0.5,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
 
@@ -79,18 +76,19 @@ class _SplashScreenState extends State<SplashScreen>
                   style: GoogleFonts.inter(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: colors.onSurfaceVariant,
+                    color: const Color(
+                      0xFF1F1F1F,
+                    ).withOpacity(0.6), // Charcoal opacity subtitle
                   ),
-                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 48),
 
                 // Loading indicator
-                SizedBox(
+                const SizedBox(
                   width: 32,
                   height: 32,
                   child: CircularProgressIndicator(
-                    color: colors.primary,
+                    color: Color(0xFF2E5E4E), // Sage Green loader
                     strokeWidth: 3.5,
                   ),
                 ),

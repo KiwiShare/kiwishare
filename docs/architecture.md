@@ -135,12 +135,51 @@ Data persistence is managed via **Mongoose** schemas defining high-integrity doc
 
 ## 3. Deep Integration of Native Mobile Capabilities
 
-To deliver a premium mobile experience that stands apart from standard responsive web browsers, KiwiShare leverages Flutter's platform integration channels:
+To deliver a premium mobile experience that stands apart from standard responsive web browsers, KiwiShare leverages Flutter's rich native device plugins:
 
-| Capability | Plugin | Integration Use-Case |
+| Native Capability | Plugin(s) | Integration & Value-Add Use-Case |
 | :--- | :--- | :--- |
-| **Camera & Image Pick** | `camera`, `image_picker` | Users snap high-resolution photos of physical items directly inside the listing form to process and compress for Cloud Storage. |
-| **Biometric Auth** | `local_auth` | Gated transaction verification: authenticating peer-to-peer exchange transfers with Fingerprint / FaceID before releasing item ownership. |
-| **Location & Geofence** | `geolocator` | Computes distances between the current user and items in Aotearoa (e.g. Auckland, Wellington) for geographic listing filtering. |
-| **Push Notifications** | `firebase_messaging` | Direct device notification streams alerting users of incoming chat messages even when the app runs in the background. |
-| **QR Code Scanner** | `mobile_scanner` | Instant in-person item handover verification via animated QR codes. |
+| **Camera & Image Capture** | `image_picker` | Direct high-resolution photo shooting & camera roll selection for pre-loved item listings, compressed prior to edge storage. |
+| **Voice Note Recording & Playback** | `record`, `just_audio` | Hardware microphone capture for voice messaging in chat threads, coupled with streaming playback and visual audio timeline. |
+| **QR Code Scanner & Generator** | `mobile_scanner`, `qr_flutter` | Real-time camera barcode scanner for buyer and high-contrast dynamic QR display for seller to complete in-person handovers. |
+| **GPS Location & Geocoding** | `geolocator`, `geocoding` | Precision GPS location querying and reverse-geocoding to New Zealand suburbs (e.g., Ponsonby, Newmarket, Te Aro) for distance-based sorting. |
+| **Interactive Vector Mapping** | `flutter_map`, `latlong2` | Embedded OpenStreetMap tiles displaying meetup locations and item pickup zones with interactive panning and markers. |
+| **Push Notifications** | `firebase_messaging` | Native APNs/FCM background device notification channels alerting users to incoming buyer messages and meetup status updates. |
+| **Cloud Remote Config** | `firebase_remote_config` | Dynamic over-the-air feature flag toggling and operational configuration without requiring app store resubmissions. |
+
+---
+
+## 4. Atomic QR Code Handover Verification Flow
+
+To eliminate the common second-hand marketplace hazards of **buyer ghosting**, **unverified physical exchanges**, and **seller non-delivery**, KiwiShare implements a cryptographically hashed, atomic in-person handover protocol:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Seller as Seller (Mobile App)
+    actor Buyer as Buyer (Mobile App)
+    participant Server as Koa Backend API (/api)
+    participant Mongo as MongoDB Atlas (Cluster)
+
+    Note over Seller,Buyer: In-Person Meetup in Aotearoa (e.g. Ponsonby Central)
+    Seller->>Seller: Opens Meetup Details & displays dynamic Handover QR Code
+    Buyer->>Buyer: Taps "Scan Handover QR Code" (Opens camera via mobile_scanner)
+    Buyer->>Seller: Scans Seller's QR Screen
+    Buyer->>Server: POST /api/transactions/handover/claim { itemId, claimCode } (JWT Auth)
+
+    rect rgb(240, 248, 255)
+        Note over Server,Mongo: Atomic Transaction Session (runMongoTransaction)
+        Server->>Mongo: 1. Verify claimCode matches active QrCode token hash
+        Server->>Mongo: 2. Validate item status is not already 'sold' & buyer != seller
+        Server->>Mongo: 3. Atomically transfer item.ownerId = buyerId & status = 'sold'
+        Server->>Mongo: 4. Increment Seller trustScore by +5 points
+        Server->>Mongo: 5. Mark QrCode status = 'consumed' with scannedAt timestamp
+        Server->>Mongo: 6. Transition Order status to 'completed'
+        Mongo-->>Server: Commit Transaction
+    end
+
+    Server-->>Buyer: 200 OK { status: 'success', item, newOwnerId }
+    Buyer->>Buyer: UI displays celebration dialog & verified ownership
+    Seller->>Server: Polls order status or receives FCM push
+    Seller->>Seller: Order updates to "Completed" & Trust Score +5 confirmed
+```
