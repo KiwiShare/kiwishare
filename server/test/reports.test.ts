@@ -5,6 +5,13 @@ import app from '../src/app';
 import Conversation from '../src/models/Conversation';
 import Item from '../src/models/Item';
 import Report from '../src/models/Report';
+import { sendReportConfirmationEmail } from '../src/services/reportConfirmationEmail';
+
+jest.mock('../src/services/reportConfirmationEmail', () => ({
+  sendReportConfirmationEmail: jest.fn()
+}));
+
+const mockedSendReportConfirmationEmail = jest.mocked(sendReportConfirmationEmail);
 
 jest.setTimeout(60000);
 
@@ -91,6 +98,8 @@ describe('KiwiShare report persistence API', () => {
 
   beforeEach(async () => {
     await Report.deleteMany({});
+    mockedSendReportConfirmationEmail.mockReset();
+    mockedSendReportConfirmationEmail.mockResolvedValue(undefined);
   });
 
   afterAll(async () => {
@@ -108,6 +117,7 @@ describe('KiwiShare report persistence API', () => {
 
     expect(response.status).toBe(401);
     expect(await Report.countDocuments()).toBe(0);
+    expect(mockedSendReportConfirmationEmail).not.toHaveBeenCalled();
   });
 
   test('persists a report with server-owned identity, status, and timestamp', async () => {
@@ -149,6 +159,12 @@ describe('KiwiShare report persistence API', () => {
     );
     expect(stored!.createdAt.toISOString()).not.toBe(clientCreatedAt);
     expect(await Report.countDocuments()).toBe(1);
+    expect(mockedSendReportConfirmationEmail).toHaveBeenCalledWith({
+      email: 'reporter@example.com',
+      displayName: 'Careful Buyer',
+      reportId: response.body.report.id,
+      submittedAt: expect.any(Date)
+    });
   });
 
   test('persists listing target and context supplied by the mobile form', async () => {
@@ -323,8 +339,31 @@ describe('KiwiShare report persistence API', () => {
     expect(duplicate.status).toBe(409);
     expect(duplicate.body.message).toContain('already submitted');
     expect(await Report.countDocuments()).toBe(1);
+    expect(mockedSendReportConfirmationEmail).toHaveBeenCalledTimes(1);
     const stored = await Report.findOne();
     expect(stored!.contextId!.toString()).toBe(reportedUserId);
+  });
+
+  test('keeps the saved report when Resend delivery fails', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockedSendReportConfirmationEmail.mockRejectedValueOnce(new Error('Email rejected'));
+
+    const response = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`)
+      .send({
+        targetType: 'general',
+        contextType: 'general',
+        reason: 'other',
+        details: 'A report that remains stored when email delivery is unavailable.'
+      });
+
+    expect(response.status).toBe(201);
+    expect(await Report.countDocuments()).toBe(1);
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining('[Report confirmation email]')
+    );
+    warning.mockRestore();
   });
 
   test('does not allow a listing owner to report their own listing', async () => {
