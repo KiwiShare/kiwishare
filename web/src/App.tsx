@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { WatchlistProvider } from './context/WatchlistContext';
+import { ChatProvider } from './context/ChatContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { HomePage } from './pages/HomePage';
@@ -45,7 +46,9 @@ export const App: React.FC = () => {
     <BrowserRouter>
       <AuthProvider>
         <WatchlistProvider>
-          <AppContent />
+          <ChatProvider>
+            <AppContent />
+          </ChatProvider>
         </WatchlistProvider>
       </AuthProvider>
     </BrowserRouter>

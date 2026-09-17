@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { chatApi, uploadApi, ConversationItem, ChatMessage } from '../api/client';
+import { useChat } from '../context/ChatContext';
+import { chatApi, uploadApi, getApiBaseUrl, ConversationItem, ChatMessage } from '../api/client';
 import {
   Send,
   Image as ImageIcon,
@@ -17,10 +18,225 @@ import {
   RefreshCw,
   Loader2,
   X,
+  Play,
+  Pause,
+  Mic,
 } from 'lucide-react';
+
+const VoiceAudioPlayer: React.FC<{
+  audioUrl: string;
+  durationMs?: number | null;
+  isMine: boolean;
+}> = ({ audioUrl, durationMs, isMine }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState<number>(durationMs && durationMs > 0 ? durationMs / 1000 : 0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const resolvedUrl = useMemo(() => {
+    if (!audioUrl) return '';
+    if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) return audioUrl;
+    const cleanPath = audioUrl.startsWith('/') ? audioUrl : `/${audioUrl}`;
+    const base = getApiBaseUrl().replace(/\/api$/, '');
+    return `${base}${cleanPath}`;
+  }, [audioUrl]);
+
+  useEffect(() => {
+    if (!resolvedUrl) return;
+    const audio = new Audio(resolvedUrl);
+    audioRef.current = audio;
+
+    const handleLoadedMetadata = () => {
+      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+
+    const handleWaiting = () => setIsLoading(true);
+    const handleCanPlay = () => setIsLoading(false);
+    const handleError = () => {
+      setIsLoading(false);
+      setIsPlaying(false);
+      setHasError(true);
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('error', handleError);
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('waiting', handleWaiting);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('error', handleError);
+      audioRef.current = null;
+    };
+  }, [resolvedUrl]);
+
+  const togglePlay = () => {
+    if (!audioRef.current || hasError) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => {
+          setIsPlaying(false);
+          setHasError(true);
+        });
+    }
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !duration || duration <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetTime = ratio * duration;
+    audioRef.current.currentTime = targetTime;
+    setCurrentTime(targetTime);
+  };
+
+  const formatTime = (secs: number) => {
+    if (!secs || isNaN(secs) || secs < 0) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const barHeights = [40, 70, 50, 90, 60, 100, 75, 45, 80, 55, 65, 85, 40, 70];
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        padding: '6px 4px',
+        minWidth: '220px',
+        maxWidth: '300px',
+      }}
+    >
+      <button
+        type="button"
+        onClick={togglePlay}
+        style={{
+          width: '38px',
+          height: '38px',
+          borderRadius: '50%',
+          border: 'none',
+          backgroundColor: isMine ? '#ffffff' : 'var(--primary-600)',
+          color: isMine ? 'var(--primary-600)' : '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: hasError ? 'not-allowed' : 'pointer',
+          flexShrink: 0,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+          transition: 'transform 0.15s ease',
+        }}
+        onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.95)')}
+        onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+        title={hasError ? 'Failed to play voice message' : isPlaying ? 'Pause' : 'Play voice message'}
+      >
+        {isLoading ? (
+          <Loader2 size={18} className="animate-spin" />
+        ) : isPlaying ? (
+          <Pause size={18} fill="currentColor" />
+        ) : (
+          <Play size={18} fill="currentColor" style={{ marginLeft: '2px' }} />
+        )}
+      </button>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div
+          onClick={handleSeek}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+            height: '24px',
+            cursor: 'pointer',
+            padding: '2px 0',
+          }}
+          title="Click to scrub"
+        >
+          {barHeights.map((h, i) => {
+            const barProgress = ((i + 1) / barHeights.length) * 100;
+            const isFilled = progressPercent >= barProgress;
+            return (
+              <div
+                key={i}
+                style={{
+                  flex: 1,
+                  height: `${h}%`,
+                  borderRadius: '2px',
+                  backgroundColor: isMine
+                    ? isFilled
+                      ? '#ffffff'
+                      : 'rgba(255, 255, 255, 0.4)'
+                    : isFilled
+                      ? 'var(--primary-600)'
+                      : 'var(--border-subtle)',
+                  transition: 'background-color 0.1s ease',
+                }}
+              />
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '0.72rem',
+            color: isMine ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-muted)',
+            fontWeight: 500,
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+            <Mic size={11} />
+            <span>Voice</span>
+          </span>
+          <span>
+            {hasError
+              ? 'Audio error'
+              : isPlaying
+                ? `${formatTime(currentTime)} / ${formatTime(duration)}`
+                : duration > 0
+                  ? formatTime(duration)
+                  : '0:00'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const ChatPage: React.FC = () => {
   const { user, isLoggedIn } = useAuth();
+  const { markConversationRead, setLocalConversationRead } = useChat();
   const { conversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
 
@@ -84,7 +300,11 @@ export const ChatPage: React.FC = () => {
     try {
       const res = await chatApi.getConversations();
       if (res.status === 'success') {
-        setConversations(res.conversations || []);
+        const raw = res.conversations || [];
+        // Keep currently active conversation unreadCount at 0
+        setConversations(
+          raw.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
+        );
       }
     } catch (err: any) {
       if (!isSilent) {
@@ -93,7 +313,7 @@ export const ChatPage: React.FC = () => {
     } finally {
       if (!isSilent) setLoadingConversations(false);
     }
-  }, []);
+  }, [conversationId]);
 
   // Initial load of conversation list
   useEffect(() => {
@@ -119,8 +339,13 @@ export const ChatPage: React.FC = () => {
             return prev;
           });
 
-          // Mark as read
-          chatApi.markAsRead(convId).catch(() => {});
+          // Immediately clear unread badges for this conversation locally & globally
+          setConversations((prev) =>
+            prev.map((c) => (c.id === convId ? { ...c, unreadCount: 0 } : c))
+          );
+          setLocalConversationRead(convId);
+          const lastMsg = res.messages && res.messages.length > 0 ? res.messages[res.messages.length - 1] : undefined;
+          markConversationRead(convId, lastMsg?.id).catch(() => {});
         }
       } catch (err: any) {
         if (!isSilent) {
@@ -131,18 +356,23 @@ export const ChatPage: React.FC = () => {
         isPollingRef.current = false;
       }
     },
-    []
+    [markConversationRead, setLocalConversationRead]
   );
 
-  // When conversationId changes, load its messages
+  // When conversationId changes, mark as read immediately and load its messages
   useEffect(() => {
     if (conversationId) {
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
+      );
+      setLocalConversationRead(conversationId);
+      markConversationRead(conversationId).catch(() => {});
       fetchMessages(conversationId, false);
       scrollToBottom('auto');
     } else {
       setMessages([]);
     }
-  }, [conversationId, fetchMessages]);
+  }, [conversationId, fetchMessages, markConversationRead, setLocalConversationRead]);
 
   // Polling for active conversation messages (every 3.5s) & conversation list (every 10s)
   useEffect(() => {
@@ -518,7 +748,14 @@ export const ChatPage: React.FC = () => {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          {conv.lastMessageText || 'Started conversation'}
+                          {conv.lastMessageText === 'Voice message' ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Mic size={13} color="var(--primary-600)" />
+                              <span>Voice message</span>
+                            </span>
+                          ) : (
+                            conv.lastMessageText || 'Started conversation'
+                          )}
                         </div>
 
                         {conv.unreadCount > 0 && (
@@ -738,7 +975,7 @@ export const ChatPage: React.FC = () => {
                       {/* Bubble */}
                       <div
                         style={{
-                          padding: msg.type === 'image' ? '4px' : '10px 14px',
+                          padding: msg.type === 'image' ? '4px' : (msg.type === 'voice' || msg.audioUrl) ? '8px 12px' : '10px 14px',
                           borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                           backgroundColor: isMine ? 'var(--primary-600)' : '#ffffff',
                           color: isMine ? '#ffffff' : 'var(--text-main)',
@@ -749,6 +986,15 @@ export const ChatPage: React.FC = () => {
                           wordBreak: 'break-word',
                         }}
                       >
+                        {/* Voice message */}
+                        {(msg.type === 'voice' || Boolean(msg.audioUrl)) && (
+                          <VoiceAudioPlayer
+                            audioUrl={msg.audioUrl || ''}
+                            durationMs={msg.durationMs}
+                            isMine={isMine}
+                          />
+                        )}
+
                         {/* Image message */}
                         {msg.type === 'image' && msg.imageUrl && (
                           <img

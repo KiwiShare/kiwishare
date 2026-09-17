@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWatchlist } from '../context/WatchlistContext';
+import { useChat } from '../context/ChatContext';
 import { PostItemModal } from './PostItemModal';
 import { 
   Heart, 
@@ -19,6 +20,7 @@ import {
 export const Navbar: React.FC = () => {
   const { user, isLoggedIn, logout } = useAuth();
   const { watchlistIds } = useWatchlist();
+  const { unreadCount } = useChat();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -125,6 +127,7 @@ export const Navbar: React.FC = () => {
                 to="/chat"
                 className="btn btn-secondary"
                 style={{
+                  position: 'relative',
                   padding: '8px 14px',
                   borderRadius: 'var(--radius-full)',
                   border: location.pathname.startsWith('/chat') ? '1.5px solid var(--primary-500)' : undefined,
@@ -132,6 +135,29 @@ export const Navbar: React.FC = () => {
               >
                 <MessageSquare size={18} color="var(--primary-600)" />
                 <span>Messages</span>
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-4px',
+                      backgroundColor: '#ef4444',
+                      color: '#fff',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      minWidth: '18px',
+                      height: '18px',
+                      padding: '0 5px',
+                      borderRadius: '9px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: 'var(--shadow-sm)',
+                    }}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </Link>
             )}
 
@@ -229,8 +255,10 @@ export const Navbar: React.FC = () => {
                       to="/chat"
                       onClick={() => setShowDropdown(false)}
                       style={{
+                        position: 'relative',
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'space-between',
                         gap: '10px',
                         padding: '10px 12px',
                         borderRadius: 'var(--radius-sm)',
@@ -241,8 +269,24 @@ export const Navbar: React.FC = () => {
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
-                      <MessageSquare size={16} />
-                      <span>Messages</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <MessageSquare size={16} />
+                        <span>Messages</span>
+                      </div>
+                      {unreadCount > 0 && (
+                        <span
+                          style={{
+                            backgroundColor: '#ef4444',
+                            color: '#fff',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '10px',
+                          }}
+                        >
+                          {unreadCount}
+                        </span>
+                      )}
                     </Link>
 
                     {isAdmin && (
