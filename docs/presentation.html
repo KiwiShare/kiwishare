@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KiwiShare — COMPSCI 734 Presentation</title>
+  
+  <!-- Modern Clean Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* -------------------------------------------------------------
+       Executive Corporate Theme (Balanced Slate-Navy & Emerald)
+       Clean contrast, generous breathing room, high readability
+       ------------------------------------------------------------- */
+    :root {
+      --bg-outer: #070c14;
+      --bg-slide: #0d1726;
+      --bg-card: #14243a;
+      --bg-card-hover: #192c46;
+      --border-card: #264466;
+      --border-highlight: #10b981;
+      --bg-frame: #101e30;
+      
+      --primary: #10b981;
+      --primary-light: #34d399;
+      --cyan: #06b6d4;
+      
+      --text-white: #ffffff;
+      --text-body: #b0c3de;
+      --text-muted: #788ca8;
+      
+      --font-display: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-outer);
+      font-family: var(--font-body);
+      color: var(--text-body);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+
+    /* Fixed 16:9 Presentation Stage */
+    .presentation-container {
+      position: relative;
+      width: min(95vw, 1360px);
+      aspect-ratio: 16 / 9;
+      max-height: 88vh;
+      background-color: var(--bg-slide);
+      border: 1px solid #1f3752;
+      border-radius: var(--radius-lg);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Slide Frame */
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 30px 44px 20px 44px;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.22s ease, transform 0.22s ease;
+      transform: scale(0.99);
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
+    }
+
+    /* Header Region */
+    .slide-header {
+      margin-bottom: 16px;
+      flex-shrink: 0;
+    }
+
+    .rubric-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 12px;
+      background: #0f2c24;
+      border: 1px solid var(--primary);
+      border-radius: 9999px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--primary-light);
+      margin-bottom: 6px;
+    }
+
+    .slide-title {
+      font-family: var(--font-display);
+      font-size: 1.65rem;
+      font-weight: 700;
+      color: var(--text-white);
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+
+    .slide-subtitle {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    /* 16:9 Split Body Layout: Left Cards (56%) + Right Visual (44%) */
+    .slide-body-split {
+      display: grid;
+      grid-template-columns: 1.18fr 0.82fr;
+      gap: 22px;
+      flex: 1;
+      min-height: 0;
+      align-items: stretch;
+    }
+
+    .cards-col {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 100%;
+      justify-content: space-between;
+    }
+
+    /* Slide Content Cards */
+    .content-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      flex: 1;
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+    }
+
+    .content-card.highlight {
+      border-color: var(--border-highlight);
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+    }
+
+    .content-card:hover {
+      background-color: var(--bg-card-hover);
+    }
+
+    .card-head {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-white);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .content-card.highlight .card-head {
+      color: var(--primary-light);
+    }
+
+    .card-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .card-list li {
+      font-size: 0.82rem;
+      line-height: 1.4;
+      color: var(--text-body);
+      position: relative;
+      padding-left: 14px;
+    }
+
+    .card-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--primary-light);
+      font-weight: bold;
+    }
+
+    .card-list li strong {
+      color: var(--text-white);
+      font-weight: 600;
+    }
+
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .card-tag {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      padding: 2px 8px;
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.35);
+      border-radius: var(--radius-sm);
+      color: var(--cyan);
+      font-weight: 600;
+    }
+
+    .card-tag.mint {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.35);
+      color: var(--primary-light);
+    }
+
+    /* Right Visual Image Panel */
+    .visual-panel {
+      background: var(--bg-frame);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      position: relative;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+
+    .visual-panel.highlight-border {
+      border-color: var(--border-highlight);
+    }
+
+    .visual-img-wrap {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #080e18;
+    }
+
+    .visual-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.3s ease;
+    }
+
+    .visual-panel:hover .visual-img-wrap img {
+      transform: scale(1.02);
+    }
+
+    .visual-caption {
+      padding: 8px 14px;
+      background: rgba(13, 23, 38, 0.95);
+      border-top: 1px solid var(--border-card);
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--primary-light);
+      text-align: center;
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
+    }
+
+    /* Slide Footer */
+    .slide-footer {
+      height: 38px;
+      margin-top: 14px;
+      border-top: 1px solid #1a2c42;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .slide-footer .author {
+      color: var(--text-muted);
+    }
+
+    .slide-footer .counter {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--primary-light);
+    }
+
+    /* Cover Slide Specifics */
+    .cover-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 36px;
+      height: 100%;
+      align-items: center;
+    }
+
+    .cover-left {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .cover-kicker {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--primary-light);
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+    }
+
+    .cover-title {
+      font-family: var(--font-display);
+      font-size: 3.6rem;
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      color: var(--text-white);
+      margin-bottom: 14px;
+    }
+
+    .cover-title span {
+      color: var(--primary-light);
+    }
+
+    .cover-desc {
+      font-size: 1.15rem;
+      color: var(--text-body);
+      line-height: 1.45;
+      margin-bottom: 18px;
+    }
+
+    .cover-badges {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .cover-badge-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cover-badge-item.active {
+      border-color: var(--primary);
+      color: var(--primary-light);
+    }
+
+    /* Bottom Control Bar */
+    .control-bar {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: min(95vw, 1360px);
+      padding: 0 8px;
+    }
+
+    .nav-buttons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-nav {
+      background: #14243a;
+      border: 1px solid #264466;
+      color: var(--text-white);
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-nav:hover:not(:disabled) {
+      background: #1e3654;
+      border-color: var(--primary);
+      color: var(--primary-light);
+    }
+
+    .btn-nav:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-pptx {
+      background: #0f2c24;
+      border: 1px solid var(--primary);
+      color: var(--primary-light);
+      text-decoration: none;
+      padding: 8px 18px;
+      border-radius: var(--radius-sm);
+      font-size: 0.84rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-pptx:hover {
+      background: var(--primary);
+      color: #061e16;
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    }
+
+    .slide-dots {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #264466;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .dot.active {
+      background: var(--primary-light);
+      transform: scale(1.25);
+      box-shadow: 0 0 8px var(--primary);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 16:9 Presentation Stage -->
+  <div class="presentation-container" id="stage">
+
+    <!-- =========================================================
+         SLIDE 1: Cover Slide
+         ========================================================= -->
+    <section class="slide active" id="slide-1">
+      <div class="cover-layout">
+        <div class="cover-left">
+          <div class="rubric-pill">🌿 COMPSCI 734 • UNIVERSITY OF AUCKLAND</div>
+          <div class="cover-kicker">SUSTAINABLE COMMUNITY MARKETPLACE</div>
+          <h1 class="cover-title">Kiwi<span>Share</span></h1>
+          <p class="cover-desc">A Decoupled, Cloud-Native & Cross-Platform Second-Hand Solution for Aotearoa</p>
+          <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px;">
+            Team Five Guys · Project Implementation Presentation
+          </div>
+          <div class="cover-badges">
+            <div class="cover-badge-item active">● Live in Production</div>
+            <div class="cover-badge-item">🌐 kiwishare.online</div>
+            <div class="cover-badge-item">☁️ kiwishare.onrender.com</div>
+            <div class="cover-badge-item active">📱 Android APK Ready</div>
+          </div>
+        </div>
+        <div class="visual-panel highlight-border">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide1_cover.jpg" alt="Auckland Campus Ecosystem">
+          </div>
+          <div class="visual-caption">Auckland Sky Tower · Campus Ecosystem · Sustainable Circular Economy</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 01 of 10</span>
+      </footer>
+    </section>
+
+    <!-- =========================================================
+         SLIDE 2: Rubric Criterion 04 · User Need & Trust
+         ========================================================= -->
+    <section class="slide" id="slide-2">
+      <header class="slide-header">
+        <div class="rubric-pill">Rubric Criterion 04 · User Need</div>
+        <h2 class="slide-title">Genuine User Need: Building Verified Trust in Aotearoa</h2>
+        <p class="slide-subtitle">Eliminating second-hand friction, seller ghosting, and commission tax for campus communities</p>
+      </header>
+      <div class="slide-body-split">
+        <div class="cards-col">
+          <div class="content-card">
+            <div class="card-head">1. Institutional Trust vs Anonymous Friction</div>
+            <ul class="card-list">
+              <li><strong>Student Email Verification:</strong> Mandatory <code>.ac.nz</code> university institutional email verification eliminates anonymous scammers and counterfeit items.</li>
+              <li><strong>Public Reputation Badges:</strong> Every user profile displays verified student credentials, accumulated trades, and peer ratings.</li>
+              <li><strong>Campus Safety Baseline:</strong> Fosters inherent accountability across university dorms, faculties, and suburban meeting hubs.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">Verified .ac.nz</span>
+              <span class="card-tag">Zero Scams</span>
+              <span class="card-tag">Campus Safety</span>
+            </div>
+          </div>
+          <div class="content-card highlight">
+            <div class="card-head">2. Dynamic Trust Scores & Zero Platform Tax</div>
+            <ul class="card-list">
+              <li><strong>Dynamic Trust Scoring (0–100):</strong> Proprietary algorithm awards +5 reputation points for successful handovers and penalizes meetup cancellations.</li>
+              <li><strong>100% Free Campus Exchange:</strong> Zero platform commission compared to Trade Me's 7.9%–12.9% fees, encouraging circular student reuse.</li>
+              <li><strong>Spatial Proximity Indexing:</strong> Geospatial queries match buyers with listings within walking distance (CBD, Ponsonby, Grafton).</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">Trust Score 0-100</span>
+              <span class="card-tag mint">Zero Platform Tax</span>
+              <span class="card-tag">Spatial Matching</span>
+            </div>
+          </div>
+        </div>
+        <div class="visual-panel">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide2_trust.jpg" alt="Verified Institutional Trust">
+          </div>
+          <div class="visual-caption">Institutional Student Verification · 100% Trust Gauge · Localized NZ Proximity</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 02 of 10</span>
+      </footer>
+    </section>
+
+    <!-- =========================================================
+         SLIDE 3: Rubric Criteria 01 & 06 · Tri-Tier Architecture
+         ========================================================= -->
+    <section class="slide" id="slide-3">
+      <header class="slide-header">
+        <div class="rubric-pill">Rubric Criteria 01 & 06 · Architecture</div>
+        <h2 class="slide-title">Integrated Solution: Decoupled Tri-Tier Architecture</h2>
+        <p class="slide-subtitle">Clear functional separation: Mobile for physical exchange, Web for governance, Cloud for atomic data</p>
+      </header>
+      <div class="slide-body-split">
+        <div class="cards-col">
+          <div class="content-card">
+            <div class="card-head">📱 Flutter Mobile App (Physical Interaction)</div>
+            <ul class="card-list">
+              <li><strong>60 FPS Discovery:</strong> Consumer-focused browsing, category filtering, and distance queries.</li>
+              <li><strong>Hardware Features:</strong> Optical camera QR scanning for handovers and voice note recording in chat.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">Flutter 3.12+</span>
+              <span class="card-tag">Provider & GoRouter</span>
+            </div>
+          </div>
+          <div class="content-card highlight">
+            <div class="card-head">🌐 React Web Portal (Platform Governance)</div>
+            <ul class="card-list">
+              <li><strong>Live Administration:</strong> Desktop portal at <code>kiwishare.online</code> for monitoring and audit.</li>
+              <li><strong>Financial & Moderation:</strong> Real-time GMV turnover metrics, user trust score adjustments, and item moderation.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">React 18 & Vite</span>
+              <span class="card-tag">Cloudflare SSL</span>
+              <span class="card-tag">Admin RBAC</span>
+            </div>
+          </div>
+          <div class="content-card">
+            <div class="card-head">☁️ Koa RESTful API & MongoDB Atlas</div>
+            <ul class="card-list">
+              <li><strong>Stateless REST Gateway:</strong> Node.js/TypeScript backend deployed on Render with standardized error interceptors.</li>
+              <li><strong>Multi-Document ACID Sessions:</strong> MongoDB replica set guarantees atomic state transitions on handovers.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag">Koa.js & TypeScript</span>
+              <span class="card-tag">MongoDB Atlas</span>
+              <span class="card-tag mint">ACID Sessions</span>
+            </div>
+          </div>
+        </div>
+        <div class="visual-panel">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide3_arch.jpg" alt="Tri-Tier Architecture">
+          </div>
+          <div class="visual-caption">Isometric Architecture: Flutter Mobile · React Web Admin · Koa/Atlas Cloud</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 03 of 10</span>
+      </footer>
+    </section>
+
+    <!-- =========================================================
+         SLIDE 4: Rubric Criterion 05 · Modern Mobile Capabilities
+         ========================================================= -->
+    <section class="slide" id="slide-4">
+      <header class="slide-header">
+        <div class="rubric-pill">Rubric Criterion 05 · Mobile Capabilities</div>
+        <h2 class="slide-title">Modern Mobile Capabilities: Native Hardware Integration</h2>
+        <p class="slide-subtitle">Unlocking device sensors to deliver capabilities fundamentally impossible on conventional web browsers</p>
+      </header>
+      <div class="slide-body-split">
+        <div class="cards-col">
+          <div class="content-card">
+            <div class="card-head">📷 Optical Vision & Camera Scanning</div>
+            <ul class="card-list">
+              <li><strong>mobile_scanner:</strong> Hardware camera reads seller's dynamic QR code at 60 FPS in &lt; 200ms.</li>
+              <li><strong>image_picker:</strong> Fast photo shooting with client-side compression to preserve mobile data.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">mobile_scanner</span>
+              <span class="card-tag">60 FPS Vision</span>
+            </div>
+          </div>
+          <div class="content-card highlight">
+            <div class="card-head">🎙️ Native Microphone & Audio Streamer</div>
+            <ul class="card-list">
+              <li><strong>record Package:</strong> Direct microphone capture with ambient noise filtering inside real-time chat.</li>
+              <li><strong>just_audio Engine:</strong> Hardware-accelerated voice note playback with interactive scrubbing timeline.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">record</span>
+              <span class="card-tag mint">just_audio</span>
+              <span class="card-tag">Voice Memos</span>
+            </div>
+          </div>
+          <div class="content-card">
+            <div class="card-head">📍 GPS Sensors & Vector Mapping</div>
+            <ul class="card-list">
+              <li><strong>geolocator & geocoding:</strong> High-precision device GPS automatically mapped to NZ suburbs (Ponsonby, CBD).</li>
+              <li><strong>flutter_map:</strong> Offline-cached OpenStreetMap vector tiles with zero proprietary mapping tax.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag">geolocator</span>
+              <span class="card-tag">NZ Suburbs</span>
+              <span class="card-tag">OpenStreetMap</span>
+            </div>
+          </div>
+        </div>
+        <div class="visual-panel">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide4_mobile.jpg" alt="Native Mobile Hardware">
+          </div>
+          <div class="visual-caption">Native Hardware: Camera QR Beam · Audio Waveform · GPS Proximity</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 04 of 10</span>
+      </footer>
+    </section>
+
+    <!-- =========================================================
+         SLIDE 5: Rubric Criterion 03 · Independent Learning
+         ========================================================= -->
+    <section class="slide" id="slide-5">
+      <header class="slide-header">
+        <div class="rubric-pill">Rubric Criterion 03 · Independent Learning</div>
+        <h2 class="slide-title">Independent Learning: Technologies Applied Beyond Course Scope</h2>
+        <p class="slide-subtitle">Four research-backed architectural innovations explored, benchmarked, and implemented by the team</p>
+      </header>
+      <div class="slide-body-split">
+        <div class="cards-col">
+          <div class="content-card highlight">
+            <div class="card-head">1. Audio Transcoding & Direct Edge Uploads</div>
+            <ul class="card-list">
+              <li><strong>FFmpeg-Static Pipeline:</strong> Bundled static FFmpeg Linux binary to inspect, sanitize, and transcode conflicting mobile audio codecs (M4A/AAC) for 100% universal playback.</li>
+              <li><strong>Cloudflare R2 Direct PUT:</strong> Koa generates 15-min S3-presigned URLs; mobile clients upload photos directly to R2, bypassing API servers with zero egress fee.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">ffmpeg-static</span>
+              <span class="card-tag mint">Cloudflare R2</span>
+              <span class="card-tag">S3 Presigned</span>
+              <span class="card-tag">Zero Egress</span>
+            </div>
+          </div>
+          <div class="content-card">
+            <div class="card-head">2. Generative AI Assistant & Automated CI/CD</div>
+            <ul class="card-list">
+              <li><strong>Google Gemini 2.5 Flash:</strong> Integrated server-side Gemini AI model to infer item category, condition, and sustainability tags from minimal user prompts in &lt; 1 second.</li>
+              <li><strong>Automated Monorepo CD:</strong> PNPM workspace with standard-version and 4 automated GitHub Actions pipelines auto-tagging SemVer releases on merge to main.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag">Gemini 2.5 Flash</span>
+              <span class="card-tag">PNPM Workspace</span>
+              <span class="card-tag mint">GitHub Actions CD</span>
+            </div>
+          </div>
+        </div>
+        <div class="visual-panel">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide5_innovation.jpg" alt="Independent Learning">
+          </div>
+          <div class="visual-caption">Neural AI Brain · FFmpeg Audio Pipeline · Cloudflare R2 Edge Storage</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 05 of 10</span>
+      </footer>
+    </section>
+
+    <!-- =========================================================
+         SLIDE 6: Rubric Criteria 02 & 06 · Cryptographic Handover & ACID
+         ========================================================= -->
+    <section class="slide" id="slide-6">
+      <header class="slide-header">
+        <div class="rubric-pill">Rubric Criteria 02 & 06 · Protocol & ACID</div>
+        <h2 class="slide-title">Technical Mastery: Cryptographic Handover Protocol</h2>
+        <p class="slide-subtitle">Eliminating in-person delivery fraud and ghosting disputes through atomic cryptographic verification</p>
+      </header>
+      <div class="slide-body-split">
+        <div class="cards-col">
+          <div class="content-card">
+            <div class="card-head">1. Four-Step Cryptographic Handover Flow</div>
+            <ul class="card-list">
+              <li><strong>Step 1 (Dynamic QR):</strong> Seller displays dynamic token <code>QR_HANDOVER_TOKEN_&lt;id&gt;_&lt;nonce&gt;</code> bound to 7-day MongoDB TTL index.</li>
+              <li><strong>Step 2 (Optical Scan):</strong> Buyer scans QR via <code>mobile_scanner</code> in &lt; 200ms; sends authenticated claim request.</li>
+              <li><strong>Step 3 & 4 (State Transition):</strong> Server commits transaction; seller receives +5 trust points and order is marked complete.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag">Dynamic Nonce</span>
+              <span class="card-tag">TTL Expiration</span>
+              <span class="card-tag mint">+5 Trust Reward</span>
+            </div>
+          </div>
+          <div class="content-card highlight">
+            <div class="card-head">2. MongoDB ACID Multi-Document Atomicity</div>
+            <ul class="card-list">
+              <li><strong>All-or-Nothing Commit:</strong> Koa executes <code>runMongoTransaction</code>: [Transfer Ownership] ➔ [Seller TrustScore +5] ➔ [Burn Token] ➔ [Complete Order].</li>
+              <li><strong>Automatic Network Rollback:</strong> Mid-exchange cellular network dropouts abort cleanly with zero partial state corruption.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">runMongoTransaction</span>
+              <span class="card-tag mint">Zero State Drift</span>
+              <span class="card-tag">Atomic Rollback</span>
+            </div>
+          </div>
+        </div>
+        <div class="visual-panel">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide6_qr.jpg" alt="Cryptographic Handover Protocol">
+          </div>
+          <div class="visual-caption">Dynamic Optical QR Handover · Atomic Commitment Shield</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 06 of 10</span>
+      </footer>
+    </section>
+
+    <!-- =========================================================
+         SLIDE 7: Rubric Criterion 09 · Cybersecurity & OWASP Top 10
+         ========================================================= -->
+    <section class="slide" id="slide-7">
+      <header class="slide-header">
+        <div class="rubric-pill">Rubric Criterion 09 · Cybersecurity</div>
+        <h2 class="slide-title">Cybersecurity & Privacy: Defense-in-Depth OWASP Controls</h2>
+        <p class="slide-subtitle">Proactive mitigation embedded across client apps, API gateway, and database layers</p>
+      </header>
+      <div class="slide-body-split">
+        <div class="cards-col">
+          <div class="content-card highlight">
+            <div class="card-head">1. Access Control & Cryptographic Defense (A01, A02)</div>
+            <ul class="card-list">
+              <li><strong>JWT Authorization & RBAC:</strong> Signed JWT bearer tokens required for mutations; <code>requireAdmin</code> middleware guards governance routes.</li>
+              <li><strong>Bcrypt Password Hashing:</strong> User passwords salted and hashed with bcrypt (12 work factor rounds).</li>
+              <li><strong>TLS 1.3 & Secrets Vault:</strong> End-to-end HTTPS encryption across Cloudflare edge; zero secrets committed in git.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">JWT Bearer</span>
+              <span class="card-tag mint">requireAdmin RBAC</span>
+              <span class="card-tag">Bcrypt (12 Rounds)</span>
+            </div>
+          </div>
+          <div class="content-card">
+            <div class="card-head">2. Injection Prevention & Server Hardening (A03, A05)</div>
+            <ul class="card-list">
+              <li><strong>NoSQL & ReDoS Defense:</strong> Strict Mongoose schemas block query injection; search queries sanitize regex expressions to prevent catastrophic backtracking.</li>
+              <li><strong>Security Header Hardening:</strong> Stripped <code>X-Powered-By</code> headers; strict CORS whitelist enforces approved production origins.</li>
+              <li><strong>Masked Error Interceptors:</strong> Internal exceptions masked from clients while logged securely on the server.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag">NoSQL Defense</span>
+              <span class="card-tag">ReDoS Sanitization</span>
+              <span class="card-tag mint">CORS Whitelist</span>
+            </div>
+          </div>
+        </div>
+        <div class="visual-panel">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide7_security.jpg" alt="Cybersecurity Defense">
+          </div>
+          <div class="visual-caption">Cyber Defense: Padlock Encryption · Firewall Shield · OWASP Top 10</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 07 of 10</span>
+      </footer>
+    </section>
+
+    <!-- =========================================================
+         SLIDE 8: Rubric Criteria 07 & 08 · Engineering & Multi-Tier Testing
+         ========================================================= -->
+    <section class="slide" id="slide-8">
+      <header class="slide-header">
+        <div class="rubric-pill">Rubric Criteria 07 & 08 · Engineering & Testing</div>
+        <h2 class="slide-title">Software Engineering Standards & Multi-Tier Testing Strategy</h2>
+        <p class="slide-subtitle">Enforcing production-grade code quality, automated test suites, and transparent team workflows</p>
+      </header>
+      <div class="slide-body-split">
+        <div class="cards-col">
+          <div class="content-card highlight">
+            <div class="card-head">1. Multi-Tier Automated Testing Suites</div>
+            <ul class="card-list">
+              <li><strong>12 Backend Jest Suites:</strong> Unit and integration tests with Supertest HTTP mocking covering Auth, OTP, Meetups, Transactions, and Admin.</li>
+              <li><strong>Flutter Test Suites:</strong> Granular repository, provider, navigation, and widget tests in <code>mobile/test/</code> verifying offline states.</li>
+              <li><strong>Subsystem Audit Reports:</strong> Formal subsystem verification reports maintained in <code>docs/testing-strategy/</code>.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">12 Jest Suites</span>
+              <span class="card-tag mint">Flutter Widget Tests</span>
+              <span class="card-tag">Supertest Mocking</span>
+            </div>
+          </div>
+          <div class="content-card">
+            <div class="card-head">2. Git-Flow Branching & 4 Automated CI Pipelines</div>
+            <ul class="card-list">
+              <li><strong>Structured Git-Flow:</strong> Feature branches (<code>feature/*</code>) merge into <code>pre</code> for integration, with production tagged on <code>main</code>.</li>
+              <li><strong>4 Parallel GitHub Actions:</strong> Automated workflows validate linting (ESLint, Dart Analyze), execute tests, and compile Android APKs.</li>
+              <li><strong>Pre-Commit Hygiene:</strong> Husky hooks enforce Prettier and Dart Format to ensure zero lint drift across the monorepo.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag">Git-Flow Model</span>
+              <span class="card-tag mint">GitHub Actions CI</span>
+              <span class="card-tag">Husky Pre-Commit</span>
+            </div>
+          </div>
+        </div>
+        <div class="visual-panel">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide8_testing.jpg" alt="Automated Testing & CI/CD">
+          </div>
+          <div class="visual-caption">Continuous Testing: Automated Test Nodes · CI/CD Quality Gate</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 08 of 10</span>
+      </footer>
+    </section>
+
+    <!-- =========================================================
+         SLIDE 9: Rubric Criteria 10 & 11 · 100% Live Production Ecosystem
+         ========================================================= -->
+    <section class="slide" id="slide-9">
+      <header class="slide-header">
+        <div class="rubric-pill">Rubric Criteria 10 & 11 · Live Deployment</div>
+        <h2 class="slide-title">Realistic Deployment: 100% Live Production Ecosystem</h2>
+        <p class="slide-subtitle">Publicly accessible production services deployed across edge CDN, cloud containers, and physical mobile devices</p>
+      </header>
+      <div class="slide-body-split">
+        <div class="cards-col">
+          <div class="content-card highlight">
+            <div class="card-head">1. Public Production Endpoints (Ready to Access)</div>
+            <ul class="card-list">
+              <li><strong>Web Portal (kiwishare.online):</strong> Live single-page application hosted with Cloudflare CDN, edge caching, and automated SSL.</li>
+              <li><strong>REST API (kiwishare.onrender.com):</strong> Node.js 22 LTS container on Render with zero-downtime rolling updates and <code>/health</code> checks.</li>
+              <li><strong>Mobile APK (GitHub Releases):</strong> Compiled Android APK with release notes ready for immediate assessor download.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">kiwishare.online</span>
+              <span class="card-tag mint">Render Cloud</span>
+              <span class="card-tag">GitHub Releases APK</span>
+            </div>
+          </div>
+          <div class="content-card">
+            <div class="card-head">2. Pre-Seeded MongoDB Atlas Database (Zero Setup)</div>
+            <ul class="card-list">
+              <li><strong>Campus Data Pre-Seeded:</strong> Live database populated with 10 categories, verified student accounts, and active listings in Auckland (CBD, Ponsonby, Grafton).</li>
+              <li><strong>Ready-to-Scan Demo Order:</strong> Includes confirmed meetup order <code>#ORD_DEMO_MEETUP_2026</code> for instant QR handover evaluation.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag">MongoDB Atlas ReplicaSet</span>
+              <span class="card-tag">Auckland Suburbs</span>
+              <span class="card-tag mint">Zero Config</span>
+            </div>
+          </div>
+        </div>
+        <div class="visual-panel">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide9_deployment.jpg" alt="Production Deployment Mesh">
+          </div>
+          <div class="visual-caption">NZ Production Mesh: Cloudflare CDN · Render API · MongoDB Atlas</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 09 of 10</span>
+      </footer>
+    </section>
+
+    <!-- =========================================================
+         SLIDE 10: Rubric Criterion 12 · Assessor Live Walkthrough & Team
+         ========================================================= -->
+    <section class="slide" id="slide-10">
+      <header class="slide-header">
+        <div class="rubric-pill">Rubric Criterion 12 · Demonstration</div>
+        <h2 class="slide-title">Assessor Live Walkthrough & Demonstration</h2>
+        <p class="slide-subtitle">Ready-to-evaluate live credentials and step-by-step 3-minute evaluation scenarios</p>
+      </header>
+      <div class="slide-body-split">
+        <div class="cards-col">
+          <div class="content-card highlight">
+            <div class="card-head">🔑 Pre-Seeded Test Credentials</div>
+            <ul class="card-list">
+              <li><strong>Universal Password:</strong> <code>password123</code> (applies to all seeded accounts).</li>
+              <li><strong>Platform Admin:</strong> <code>admin@kiwishare.online</code> ➔ Inspect <code>kiwishare.online/admin</code> for GMV metrics & moderation.</li>
+              <li><strong>Student Seller:</strong> <code>demo@example.com</code> ➔ Displays QR for order <code>#ORD_DEMO_MEETUP_2026</code>.</li>
+              <li><strong>Student Buyer:</strong> <code>testbuyer@kiwishare.online</code> ➔ Scans QR to claim ownership and test +5 trust reward.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">P/W: password123</span>
+              <span class="card-tag mint">Instant Live Login</span>
+            </div>
+          </div>
+          <div class="content-card">
+            <div class="card-head">🚀 Fast 3-Minute Assessment Flows</div>
+            <ul class="card-list">
+              <li><strong>Scenario A (Web Admin):</strong> Log in at kiwishare.online as Admin; review live GMV metrics, fee turnover, and adjust trust scores.</li>
+              <li><strong>Scenario B (Optical QR Handover):</strong> Seller displays QR token on mobile; Buyer scans to witness atomic ownership transfer and +5 trust reward.</li>
+              <li><strong>Step-by-Step Guide:</strong> Refer to <code>docs/demo-guide.md</code> for comprehensive walkthrough instructions and API curl commands.</li>
+            </ul>
+            <div class="card-tags">
+              <span class="card-tag mint">Web Admin Board</span>
+              <span class="card-tag mint">Live QR Scan</span>
+              <span class="card-tag">docs/demo-guide.md</span>
+            </div>
+          </div>
+        </div>
+        <div class="visual-panel">
+          <div class="visual-img-wrap">
+            <img src="./presentation-assets/slide10_team.jpg" alt="Team Five Guys">
+          </div>
+          <div class="visual-caption">Team Five Guys · COMPSCI 734 · University of Auckland</div>
+        </div>
+      </div>
+      <footer class="slide-footer">
+        <span class="author">KiwiShare · Team Five Guys · COMPSCI 734 · University of Auckland</span>
+        <span class="counter">Slide 10 of 10</span>
+      </footer>
+    </section>
+
+  </div>
+
+  <!-- Control & Navigation Bar -->
+  <div class="control-bar">
+    <div class="nav-buttons">
+      <button class="btn-nav" id="prevBtn" onclick="prevSlide()">◀ Previous</button>
+      <button class="btn-nav" id="nextBtn" onclick="nextSlide()">Next ▶</button>
+      <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">(Keys: ← / → or Space)</span>
+    </div>
+
+    <div class="slide-dots" id="dotsContainer"></div>
+
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <a href="./KiwiShare-COMPSCI734-Presentation.pptx" download class="btn-pptx">
+        📥 Download PowerPoint (.pptx)
+      </a>
+      <button class="btn-nav" onclick="toggleFullScreen()">⛶ Fullscreen</button>
+    </div>
+  </div>
+
+  <script>
+    const totalSlides = 10;
+    let currentSlide = 1;
+
+    const dotsContainer = document.getElementById('dotsContainer');
+    for (let i = 1; i <= totalSlides; i++) {
+      const dot = document.createElement('div');
+      dot.className = `dot ${i === 1 ? 'active' : ''}`;
+      dot.title = `Go to Slide ${i}`;
+      dot.onclick = () => goToSlide(i);
+      dotsContainer.appendChild(dot);
+    }
+
+    function updateSlide() {
+      document.querySelectorAll('.slide').forEach((slide, index) => {
+        slide.classList.toggle('active', index + 1 === currentSlide);
+      });
+
+      document.querySelectorAll('.dot').forEach((dot, index) => {
+        dot.classList.toggle('active', index + 1 === currentSlide);
+      });
+
+      document.getElementById('prevBtn').disabled = currentSlide === 1;
+      document.getElementById('nextBtn').disabled = currentSlide === totalSlides;
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 1) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    function goToSlide(n) {
+      currentSlide = n;
+      updateSlide();
+    }
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        goToSlide(1);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        goToSlide(totalSlides);
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullScreen();
+      }
+    });
+
+    updateSlide();
+  </script>
+</body>
+</html>
