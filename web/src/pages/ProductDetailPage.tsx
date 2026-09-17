@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { itemsApi, UsedItem } from '../api/client';
+import { itemsApi, chatApi, UsedItem } from '../api/client';
 import { useWatchlist } from '../context/WatchlistContext';
 import { useAuth } from '../context/AuthContext';
+import { EditItemModal } from '../components/EditItemModal';
 import { 
   Heart, 
   MapPin, 
@@ -11,24 +12,26 @@ import {
   ArrowLeft, 
   Tag, 
   Share2, 
-  CheckCircle,
   MessageCircle,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Edit3
 } from 'lucide-react';
 
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isWatched, toggleWatch } = useWatchlist();
-  const { isLoggedIn } = useAuth();
+  const { user, isLoggedIn } = useAuth();
 
   const [item, setItem] = useState<UsedItem | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImgIndex, setSelectedImgIndex] = useState<number>(0);
-  const [claimed, setClaimed] = useState<boolean>(false);
+  const [watchlistCount, setWatchlistCount] = useState<number>(0);
+  const [isStartingChat, setIsStartingChat] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
 
   // Swipe handling state
   const touchStartX = useRef<number | null>(null);
@@ -42,6 +45,7 @@ export const ProductDetailPage: React.FC = () => {
       .then((res: any) => {
         const product = res.item || res;
         setItem(product);
+        setWatchlistCount(product.watchlistCount ?? product.favouriteCount ?? 0);
       })
       .catch((err) => {
         setError(err.message || 'Item not found');
@@ -81,11 +85,15 @@ export const ProductDetailPage: React.FC = () => {
     ? item.images.map((im) => im.url)
     : [item.imageUrl || 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1000&auto=format&fit=crop&q=80'];
 
-  const displayPrice = item.priceNzd 
-    ? `$${item.priceNzd}` 
-    : typeof item.price === 'number' 
-      ? `$${(item.price / 100).toFixed(0)}` 
-      : '$0';
+  const isFree = item.isFree || item.price === 0 || item.priceNzd === '0' || Number(item.priceNzd) === 0;
+
+  const displayPrice = isFree 
+    ? 'FREE'
+    : item.priceNzd 
+      ? `$${item.priceNzd}` 
+      : typeof item.price === 'number' 
+        ? `$${(item.price / 100).toFixed(0)}` 
+        : '$0';
 
   const handlePrevImage = (e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -129,15 +137,44 @@ export const ProductDetailPage: React.FC = () => {
       return;
     }
     toggleWatch(item);
+    setWatchlistCount((prev) => (watched ? Math.max(0, prev - 1) : prev + 1));
   };
 
-  const handleClaim = () => {
+  const handleClaim = async () => {
     if (!isLoggedIn) {
-      navigate('/login');
+      navigate(`/login?redirect=/products/${id}`);
       return;
     }
-    setClaimed(true);
+    if (!item) return;
+
+    const sellerId = item.seller?.id || item.sellerId;
+    const currentUid = user?.id;
+    if (currentUid && sellerId && (currentUid === sellerId || (typeof sellerId === 'object' && (sellerId as any)?._id === currentUid))) {
+      alert('This is your own listing. You cannot message yourself.');
+      return;
+    }
+
+    try {
+      setIsStartingChat(true);
+      const res = await chatApi.startConversation(item.id);
+      if (res?.conversation?.id) {
+        navigate(`/chat/${res.conversation.id}`);
+      } else {
+        navigate('/chat');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to start conversation with seller.');
+    } finally {
+      setIsStartingChat(false);
+    }
   };
+
+  const sellerId = item?.seller?.id || item?.sellerId || (item as any)?.seller?._id;
+  const isOwner = Boolean(
+    user?.id &&
+    sellerId &&
+    (user.id === sellerId || (typeof sellerId === 'object' && (sellerId as any)?._id === user.id))
+  );
 
   return (
     <div className="container" style={{ padding: '24px 20px 80px' }}>
@@ -314,11 +351,54 @@ export const ProductDetailPage: React.FC = () => {
             {item.title}
           </h1>
 
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '24px' }}>
-            <span style={{ fontSize: '2.2rem', fontWeight: 900, color: 'var(--primary-700)' }}>
-              {displayPrice}
-            </span>
-            <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>NZD</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
+            {isFree ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span
+                  className="badge"
+                  style={{
+                    backgroundColor: '#059669',
+                    color: '#ffffff',
+                    fontWeight: 900,
+                    fontSize: '1.25rem',
+                    padding: '6px 16px',
+                    borderRadius: '8px',
+                    letterSpacing: '0.5px',
+                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)'
+                  }}
+                >
+                  FREE
+                </span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#059669' }}>$0 NZD</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <span style={{ fontSize: '2.2rem', fontWeight: 900, color: 'var(--primary-700)' }}>
+                  {displayPrice}
+                </span>
+                <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>NZD</span>
+              </div>
+            )}
+
+            {/* Watchlist Counter Pill next to Price */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: '#fff1f2',
+                color: '#e11d48',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                border: '1px solid #fecdd3',
+              }}
+              title="Number of KiwiShare members watching this item"
+            >
+              <Heart size={15} fill="#e11d48" />
+              <span>{watchlistCount} {watchlistCount === 1 ? 'person watching' : 'people watching'}</span>
+            </div>
           </div>
 
           {/* Seller Profile Card */}
@@ -434,44 +514,64 @@ export const ProductDetailPage: React.FC = () => {
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-            {claimed ? (
-              <div
-                className="glass-card"
+            {isOwner ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="btn btn-primary"
                 style={{
                   flex: 1,
-                  padding: '16px',
-                  backgroundColor: '#f0fdf4',
-                  borderColor: '#bbf7d0',
-                  color: '#15803d',
-                  display: 'flex',
+                  padding: '16px 24px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '1rem',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '10px',
-                  fontWeight: 600,
-                  fontSize: '0.95rem',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  background: 'linear-gradient(135deg, var(--primary-600), var(--primary-700))',
+                  boxShadow: 'var(--shadow-primary)'
                 }}
               >
-                <CheckCircle size={20} />
-                <span>Claim request sent! The seller has been notified.</span>
-              </div>
+                <Edit3 size={18} />
+                <span>Edit Listing</span>
+              </button>
             ) : (
               <button
                 onClick={handleClaim}
+                disabled={isStartingChat}
                 className="btn btn-primary"
-                style={{ flex: 1, padding: '16px 24px', borderRadius: 'var(--radius-full)', fontSize: '1rem' }}
+                style={{
+                  flex: 1,
+                  padding: '16px 24px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '1rem',
+                  opacity: isStartingChat ? 0.7 : 1,
+                  cursor: isStartingChat ? 'not-allowed' : 'pointer'
+                }}
               >
-                <MessageCircle size={18} />
-                <span>Contact Seller / Claim</span>
+                {isStartingChat ? <Loader2 size={18} className="animate-spin" /> : <MessageCircle size={18} />}
+                <span>{isStartingChat ? 'Opening Chat...' : 'Contact Seller / Claim'}</span>
               </button>
             )}
 
             <button
               onClick={handleWatch}
               className={`btn ${watched ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ padding: '16px 24px', borderRadius: 'var(--radius-full)' }}
+              style={{ padding: '16px 24px', borderRadius: 'var(--radius-full)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
               title={watched ? 'Remove from Watchlist' : 'Add to Watchlist'}
             >
               <Heart size={20} fill={watched ? 'currentColor' : 'none'} />
               <span>{watched ? 'Watched' : 'Watch'}</span>
+              <span
+                style={{
+                  backgroundColor: watched ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.06)',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700
+                }}
+              >
+                {watchlistCount}
+              </span>
             </button>
 
             <button
@@ -494,6 +594,17 @@ export const ProductDetailPage: React.FC = () => {
         </div>
 
       </div>
+
+      {isEditing && (
+        <EditItemModal
+          item={item}
+          onClose={() => setIsEditing(false)}
+          onUpdated={(updated: UsedItem) => {
+            setItem((prev) => (prev ? { ...prev, ...updated, seller: updated.seller || prev.seller } : updated));
+            setIsEditing(false);
+          }}
+        />
+      )}
 
     </div>
   );

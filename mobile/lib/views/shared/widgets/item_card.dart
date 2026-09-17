@@ -233,28 +233,76 @@ class ItemCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
-                          Flexible(
-                            child: Text(
-                              '\$${item.priceNzd}',
-                              style: GoogleFonts.inter(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: colors.primary,
-                                letterSpacing: -0.5,
+                          if (item.isFree) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF059669),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'FREE',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 2.5),
-                          Text(
-                            'NZD',
-                            style: GoogleFonts.inter(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              color: colors.primary.withOpacity(0.75),
+                            const SizedBox(width: 4),
+                            Text(
+                              '\$0 NZD',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF059669),
+                              ),
                             ),
-                          ),
+                          ] else ...[
+                            Flexible(
+                              child: Text(
+                                '\$${item.priceNzd}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: colors.primary,
+                                  letterSpacing: -0.5,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 2.5),
+                            Text(
+                              'NZD',
+                              style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: colors.primary.withOpacity(0.75),
+                              ),
+                            ),
+                          ],
+                          if (item.watchlistCount > 0) ...[
+                            const Spacer(),
+                            const Icon(
+                              Icons.favorite,
+                              size: 11,
+                              color: Color(0xFFEF4444),
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${item.watchlistCount}',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFEF4444),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 1.5),

@@ -26,11 +26,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item }) => {
     toggleWatch(item);
   };
 
-  const displayPrice = item.priceNzd 
-    ? `$${item.priceNzd}` 
-    : typeof item.price === 'number' 
-      ? `$${(item.price / 100).toFixed(0)}` 
-      : '$0';
+  const isFree = item.isFree || item.price === 0 || item.priceNzd === '0' || Number(item.priceNzd) === 0;
+
+  const displayPrice = isFree
+    ? 'FREE'
+    : item.priceNzd 
+      ? `$${item.priceNzd}` 
+      : typeof item.price === 'number' 
+        ? `$${(item.price / 100).toFixed(0)}` 
+        : '$0';
 
   const imageUrl = item.imageUrl || (item.images && item.images.length > 0 ? item.images[0].url : null) || 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=500&auto=format&fit=crop&q=60';
 
@@ -151,8 +155,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item }) => {
         </h3>
 
         {/* Price Tag */}
-        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary-700)', marginBottom: '12px' }}>
-          {displayPrice} <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>NZD</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          {isFree ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span
+                className="badge"
+                style={{
+                  backgroundColor: '#059669',
+                  color: '#ffffff',
+                  fontWeight: 900,
+                  fontSize: '0.85rem',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  letterSpacing: '0.5px'
+                }}
+              >
+                FREE
+              </span>
+              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#059669' }}>$0 NZD</span>
+            </div>
+          ) : (
+            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary-700)' }}>
+              {displayPrice} <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>NZD</span>
+            </div>
+          )}
         </div>
 
         {/* Seller Info Row */}
@@ -213,9 +239,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item }) => {
             <span>{typeof item.location === 'string' ? item.location : item.location?.city || 'Auckland'}</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Tag size={13} />
-            <span style={{ textTransform: 'capitalize' }}>{item.category || 'General'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {(item.watchlistCount ?? item.favouriteCount ?? 0) > 0 && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#e11d48', fontWeight: 600 }} title="Watchlist count">
+                <Heart size={12} fill="#e11d48" /> {item.watchlistCount ?? item.favouriteCount}
+              </span>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Tag size={13} />
+              <span style={{ textTransform: 'capitalize' }}>{item.category || 'General'}</span>
+            </div>
           </div>
         </div>
       </div>

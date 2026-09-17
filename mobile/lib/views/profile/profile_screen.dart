@@ -13,6 +13,7 @@ import 'report_screen.dart';
 import 'notification_settings_screen.dart';
 import 'user_listings_screen.dart';
 import 'user_meetups_screen.dart';
+import 'user_orders_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -295,6 +296,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     builder: (_) => const UserListingsScreen(
                       mode: UserListingsMode.selling,
                     ),
+                  ),
+                ),
+                onOrdersTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const UserOrdersScreen(),
                   ),
                 ),
                 onSoldTap: () => Navigator.push(
@@ -663,12 +670,14 @@ class _ProfileHeader extends StatelessWidget {
 
 class _MarketplaceCard extends StatelessWidget {
   const _MarketplaceCard({
+    required this.onOrdersTap,
     required this.onWatchlistTap,
     required this.onSellingTap,
     required this.onSoldTap,
     required this.onMeetupsTap,
   });
 
+  final VoidCallback onOrdersTap;
   final VoidCallback onWatchlistTap;
   final VoidCallback onSellingTap;
   final VoidCallback onSoldTap;
@@ -725,14 +734,39 @@ class _MarketplaceCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _MarketplaceGridAction(
-                  icon: Icons.favorite_border,
+                  icon: Icons.receipt_long_rounded,
+                  iconBg: const Color(0xFFFEF3C7),
+                  iconColor: const Color(0xFFD97706),
+                  label: 'Orders',
+                  sublabel: 'Buying & Selling',
+                  onTap: onOrdersTap,
+                ),
+              ),
+              Expanded(
+                child: _MarketplaceGridAction(
+                  icon: Icons.qr_code_2_rounded,
                   iconBg: const Color(0xFFFDF2F8),
                   iconColor: const Color(0xFFDB2777),
+                  label: 'Meetups',
+                  sublabel: 'QR & Schedules',
+                  onTap: onMeetupsTap,
+                ),
+              ),
+              Expanded(
+                child: _MarketplaceGridAction(
+                  icon: Icons.favorite_border,
+                  iconBg: const Color(0xFFFEE2E2),
+                  iconColor: const Color(0xFFDC2626),
                   label: 'Watchlist',
                   sublabel: 'Saved items',
                   onTap: onWatchlistTap,
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
               Expanded(
                 child: _MarketplaceGridAction(
                   icon: Icons.sell_rounded,
@@ -751,16 +785,6 @@ class _MarketplaceCard extends StatelessWidget {
                   label: 'Sold',
                   sublabel: 'Sold history',
                   onTap: onSoldTap,
-                ),
-              ),
-              Expanded(
-                child: _MarketplaceGridAction(
-                  icon: Icons.qr_code_2_rounded,
-                  iconBg: const Color(0xFFFDF2F8),
-                  iconColor: const Color(0xFFDB2777),
-                  label: 'Meetups',
-                  sublabel: 'QR & Schedules',
-                  onTap: onMeetupsTap,
                 ),
               ),
             ],

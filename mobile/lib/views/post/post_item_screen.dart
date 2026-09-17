@@ -631,8 +631,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
       return requiredError;
     }
     final price = double.tryParse(value!);
-    if (price == null || price <= 0) {
-      return 'Enter a valid price';
+    if (price == null || price < 0) {
+      return 'Enter a valid price (0 for Free)';
     }
     return null;
   }

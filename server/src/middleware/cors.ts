@@ -6,7 +6,12 @@ const whitelist = [
   'http://kiwishare.online',
   'http://www.kiwishare.online',
   'http://localhost:3000',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:4173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174'
 ];
 
 const allowedSuffixes = [
@@ -44,7 +49,7 @@ export async function corsMiddleware(ctx: Context, next: Next) {
   } else {
     ctx.set('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-client-platform');
   }
-  ctx.set('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
+  ctx.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS');
   ctx.set('Access-Control-Allow-Credentials', 'true');
 
   if (ctx.method === 'OPTIONS') {

@@ -64,6 +64,7 @@ class ItemModel {
   final SellerInfo? seller;
   final double? latitude;
   final double? longitude;
+  final int watchlistCount;
 
   const ItemModel({
     required this.id,
@@ -81,9 +82,12 @@ class ItemModel {
     this.seller,
     this.latitude,
     this.longitude,
+    this.watchlistCount = 0,
   });
 
   double get numericPrice => double.tryParse(priceNzd) ?? 0;
+
+  bool get isFree => numericPrice <= 0;
 
   String get ownerName => seller?.displayName ?? 'Seller';
 
@@ -112,6 +116,7 @@ class ItemModel {
     String? ownerId,
     double? latitude,
     double? longitude,
+    int? watchlistCount,
   }) {
     return ItemModel(
       id: id ?? this.id,
@@ -128,6 +133,7 @@ class ItemModel {
       ownerId: ownerId ?? this.ownerId,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      watchlistCount: watchlistCount ?? this.watchlistCount,
     );
   }
 
@@ -149,6 +155,7 @@ class ItemModel {
       'seller': seller?.toMap(),
       'latitude': latitude,
       'longitude': longitude,
+      'watchlistCount': watchlistCount,
     };
   }
 
@@ -196,6 +203,7 @@ class ItemModel {
       seller: sellerInfo,
       latitude: _asDouble(map['latitude']),
       longitude: _asDouble(map['longitude']),
+      watchlistCount: _asInt(map['watchlistCount'] ?? map['favouriteCount']),
     );
   }
 
@@ -221,7 +229,8 @@ class ItemModel {
         other.condition == condition &&
         other.ownerId == ownerId &&
         other.latitude == latitude &&
-        other.longitude == longitude;
+        other.longitude == longitude &&
+        other.watchlistCount == watchlistCount;
   }
 
   @override
@@ -240,13 +249,19 @@ class ItemModel {
       ownerId,
       latitude,
       longitude,
+      watchlistCount,
     );
   }
 
   @override
   String toString() {
-    return 'ItemModel(id: $id, title: $title, priceNzd: $priceNzd, location: $location, category: $category, status: $status)';
+    return 'ItemModel(id: $id, title: $title, priceNzd: $priceNzd, location: $location, category: $category, status: $status, watchlistCount: $watchlistCount)';
   }
+}
+
+int _asInt(dynamic value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
 }
 
 double? _asDouble(dynamic value) {
