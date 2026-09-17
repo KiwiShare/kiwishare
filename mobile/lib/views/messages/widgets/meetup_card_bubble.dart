@@ -7,6 +7,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/meetup_provider.dart';
 import '../../../theme/app_theme.dart';
 
+import '../../../services/map_launcher_service.dart';
 import '../../scanner/qr_scanner_screen.dart';
 
 class MeetupCardBubble extends StatefulWidget {
@@ -214,25 +215,52 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                 ),
                 const SizedBox(height: 6),
 
-                // Location
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.place_outlined,
-                      size: 15,
-                      color: colors.onSurfaceVariant,
+                // Location with navigation launcher
+                InkWell(
+                  key: Key('meetup_location_nav_${widget.meetup.orderId}'),
+                  onTap: () {
+                    MapLauncherService.instance.showNavigationSheet(
+                      context: context,
+                      locationName: widget.meetup.locationName,
+                      latitude: widget.meetup.latitude,
+                      longitude: widget.meetup.longitude,
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.outline.withValues(alpha: 0.15)),
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        widget.meetup.locationName,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colors.onSurface,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.place_rounded,
+                          size: 16,
+                          color: AppColors.brandPrimary,
                         ),
-                      ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            widget.meetup.locationName,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurface,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.navigation_rounded,
+                          size: 15,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
 
                 if (widget.meetup.note != null &&

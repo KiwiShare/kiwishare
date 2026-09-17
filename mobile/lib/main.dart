@@ -16,6 +16,7 @@ import 'views/messages/messages_screen.dart';
 import 'views/messages/chat_conversation_screen.dart';
 import 'views/profile/profile_screen.dart';
 import 'views/profile/user_meetups_screen.dart';
+import 'views/profile/user_orders_screen.dart';
 import 'views/meetups/meetup_qr_screen.dart';
 import 'views/auth/login_view.dart';
 import 'views/products/product_detail_screen.dart';
@@ -30,6 +31,7 @@ import 'repositories/item_repository.dart';
 import 'repositories/watchlist_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/meetup_repository.dart';
+import 'repositories/order_repository.dart';
 import 'repositories/push_device_repository.dart';
 import 'repositories/report_repository.dart';
 import 'services/remote_config_service.dart';
@@ -140,6 +142,11 @@ final GoRouter _router = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/meetups',
       builder: (context, state) => const UserMeetupsScreen(),
+    ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: '/orders',
+      builder: (context, state) => const UserOrdersScreen(),
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
@@ -262,6 +269,14 @@ void main() async {
             auth.jwtToken,
           ),
         ),
+        Provider<OrderRepository>(create: (_) => RestOrderRepository()),
+        ChangeNotifierProxyProvider<AuthProvider, OrderProvider>(
+          create: (_) => OrderProvider(repository: RestOrderRepository()),
+          update: (_, auth, order) => syncOrderAuth(
+            order ?? OrderProvider(repository: RestOrderRepository()),
+            auth.jwtToken,
+          ),
+        ),
       ],
       child: const KiwiShareApp(),
     ),
@@ -272,6 +287,12 @@ void main() async {
 MeetupProvider syncMeetupAuth(MeetupProvider meetup, String? authToken) {
   meetup.updateAuthToken(authToken);
   return meetup;
+}
+
+@visibleForTesting
+OrderProvider syncOrderAuth(OrderProvider order, String? authToken) {
+  order.updateAuthToken(authToken);
+  return order;
 }
 
 @visibleForTesting

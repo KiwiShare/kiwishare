@@ -103,7 +103,7 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !category || !priceNzd) {
+    if (!title.trim() || !category || priceNzd === '' || priceNzd === undefined || priceNzd === null) {
       setError('Please fill in item title, category, and price.');
       return;
     }
@@ -281,12 +281,19 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>Price (NZD $) *</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Price (NZD $) *</label>
+                {(priceNzd === '0' || Number(priceNzd) === 0) && priceNzd.trim() !== '' && (
+                  <span className="badge" style={{ backgroundColor: '#dcfce7', color: '#15803d', fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>
+                    FREE Item
+                  </span>
+                )}
+              </div>
               <div style={{ position: 'relative' }}>
                 <DollarSign size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="number"
-                  placeholder="35"
+                  placeholder="0 for Free, or 35"
                   min="0"
                   step="1"
                   value={priceNzd}
@@ -296,6 +303,9 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
                   required
                 />
               </div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                Tip: Enter 0 to list this item as FREE.
+              </span>
             </div>
           </div>
 

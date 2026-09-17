@@ -107,6 +107,16 @@ class TestItemRepository implements ItemRepository {
   }
 
   @override
+  Future<ItemModel> updateItem({
+    required String id,
+    required String token,
+    required Map<String, dynamic> updates,
+  }) async {
+    final item = items.firstWhere((i) => i.id == id, orElse: () => items.first);
+    return item;
+  }
+
+  @override
   Future<DiscoveryOptionsModel> fetchDiscoveryOptions() async {
     final categories = <String, int>{};
     final locations = <String, List<ItemModel>>{};

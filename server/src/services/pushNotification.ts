@@ -6,6 +6,7 @@ import NotificationHistory, { NotificationStatus } from '../models/NotificationH
 import Watchlist from '../models/Watchlist';
 import User from '../models/User';
 import Item from '../models/Item';
+import { sendWatchlistPriceEmail } from './watchlistNotification';
 
 export interface ChatPushRequest {
   receiverId: mongoose.Types.ObjectId;
@@ -558,7 +559,7 @@ export async function notifyWatchlistPriceDrop(
       try {
         // Check user existence and opt-out preference
         const user = (await User.findById(userId)
-          .select('notificationPreferences status isBanned')
+          .select('email displayName notificationPreferences status isBanned')
           .lean()) as any;
 
         if (
@@ -589,6 +590,24 @@ export async function notifyWatchlistPriceDrop(
             if (err.code !== 11000) throw err;
           }
           continue;
+        }
+
+        // Send price drop email to watcher (non-blocking)
+        if (user.email) {
+          sendWatchlistPriceEmail({
+            to: user.email,
+            recipientName: user.displayName || 'Kiwi Member',
+            itemTitle: item.title,
+            itemId: itemId.toString(),
+            oldPriceNzd,
+            newPriceNzd,
+            newPriceCents
+          }).catch((emailErr) => {
+            console.warn(
+              `[Push Notification] Watchlist price email failure for ${user.email}:`,
+              emailErr instanceof Error ? emailErr.message : emailErr
+            );
+          });
         }
 
         // Retrieve active device tokens

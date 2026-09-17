@@ -17,12 +17,45 @@ abstract class ItemRepository {
     required bool sold,
     required String token,
   });
+  Future<ItemModel> updateItem({
+    required String id,
+    required String token,
+    required Map<String, dynamic> updates,
+  }) {
+    throw UnimplementedError('updateItem is not implemented');
+  }
 }
 
 class RestItemRepository implements ItemRepository {
   final http.Client _client;
 
   RestItemRepository({http.Client? client}) : _client = client ?? http.Client();
+
+  @override
+  Future<ItemModel> updateItem({
+    required String id,
+    required String token,
+    required Map<String, dynamic> updates,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/usedItems/$id');
+    final response = await _client.patch(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(updates),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update item (${response.statusCode}): ${response.body}');
+    }
+    final data = jsonDecode(response.body);
+    final itemData = data is Map<String, dynamic> && data['item'] is Map<String, dynamic>
+        ? data['item'] as Map<String, dynamic>
+        : data as Map<String, dynamic>;
+    return ItemModel.fromMap(itemData);
+  }
 
   @override
   Future<ItemModel?> fetchItemById(String id) async {

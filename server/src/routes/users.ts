@@ -162,7 +162,9 @@ async function getMyItemsHandler(ctx: any) {
     filter.status = { $ne: 'deleted' };
   }
 
-  const items = await Item.find(filter).sort({ createdAt: -1 });
+  const items = await Item.find(filter)
+    .populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role')
+    .sort({ createdAt: -1 });
   ctx.status = 200;
   ctx.body = items.map(formatItem);
 }

@@ -12,6 +12,7 @@ import notificationsRouter from './notifications';
 import listingSuggestionsRouter from './listingSuggestions';
 import meetupsRouter from './meetups';
 import reportsRouter from './reports';
+import ordersRouter from './orders';
 
 const router = new Router({ prefix: '/api' });
 router.use(reportsRouter.routes());
@@ -53,5 +54,8 @@ router.use(listingSuggestionsRouter.allowedMethods());
 
 router.use(meetupsRouter.routes());
 router.use(meetupsRouter.allowedMethods());
+
+router.use(ordersRouter.routes());
+router.use(ordersRouter.allowedMethods());
 
 export default router;

@@ -7,3 +7,5 @@ export 'search_provider.dart';
 export 'listing_provider.dart';
 export 'theme_provider.dart';
 export 'chat_provider.dart';
+export 'meetup_provider.dart';
+export 'order_provider.dart';

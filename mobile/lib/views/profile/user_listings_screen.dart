@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/listing_provider.dart';
+import '../products/product_detail_screen.dart';
+import '../shared/widgets/edit_item_sheet.dart';
 import '../shared/widgets/item_card.dart';
 
 enum UserListingsMode { selling, sold }
@@ -99,7 +101,57 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                     childAspectRatio: 0.76,
                   ),
                   itemCount: items.length,
-                  itemBuilder: (context, index) => ItemCard(item: items[index]),
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return Stack(
+                      children: [
+                        Positioned.fill(
+                          child: ItemCard(
+                            item: item,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ProductDetailScreen(
+                                    itemId: item.id,
+                                    item: item,
+                                  ),
+                                ),
+                              ).then((_) => setState(_load));
+                            },
+                          ),
+                        ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Material(
+                            color: Colors.white.withOpacity(0.9),
+                            shape: const CircleBorder(),
+                            elevation: 2,
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: () async {
+                                final updated = await EditItemSheet.show(
+                                  context,
+                                  item: item,
+                                );
+                                if (updated != null) {
+                                  setState(_load);
+                                }
+                              },
+                              child: const Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Icon(
+                                  Icons.edit_outlined,
+                                  size: 18,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             ),

@@ -65,6 +65,9 @@ export interface UsedItem {
   };
   status: string;
   isSustainable?: boolean;
+  isFree?: boolean;
+  watchlistCount?: number;
+  favouriteCount?: number;
   viewCount?: number;
   createdAt?: string;
 }
@@ -117,6 +120,54 @@ export interface AdminStats {
   recentItems: UsedItem[];
   orderStats?: AdminOrderStats;
 }
+
+export interface ConversationParticipant {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface ConversationItemSummary {
+  id: string;
+  title: string;
+  imageUrl: string;
+}
+
+export interface ConversationItem {
+  id: string;
+  status: string;
+  direction: 'buying' | 'selling';
+  unreadCount: number;
+  lastMessageText: string;
+  lastMessageAt: string | null;
+  item: ConversationItemSummary;
+  participant: ConversationParticipant;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  receiverId: string;
+  type: 'text' | 'image' | 'voice' | 'location';
+  text: string;
+  imageUrl: string | null;
+  audioUrl: string | null;
+  durationMs: number | null;
+  location?: {
+    name: string;
+    latitude: number;
+    longitude: number;
+  } | null;
+  status: string;
+  isMine: boolean;
+  readAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 
 /**
  * Resolves the backend API base URL.
@@ -301,6 +352,35 @@ export const itemsApi = {
     });
   },
 
+  updateItem: (id: string, body: {
+    title?: string;
+    description?: string;
+    category?: string;
+    priceNzd?: string | number;
+    condition?: string;
+    status?: string;
+    city?: string;
+    suburb?: string;
+    imageUrl?: string;
+    images?: Array<{ url: string; sortOrder?: number }>;
+    isSustainable?: boolean;
+  }) => {
+    const payload: any = { ...body };
+    if (body.city || body.suburb) {
+      payload.location = {
+        city: body.city || 'Auckland',
+        suburb: body.suburb || '',
+      };
+    }
+    if (body.priceNzd !== undefined) {
+      payload.priceNzd = body.priceNzd;
+    }
+    return apiRequest<{ status: string; item: UsedItem }>(`/usedItems/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
   deleteItem: (id: string) =>
     apiRequest<{ status: string; message: string }>(`/usedItems/${id}`, {
       method: 'DELETE',
@@ -374,6 +454,9 @@ export const watchlistApi = {
     apiRequest<{ status: string; message: string }>(`/watchlist/${itemId}`, {
       method: 'DELETE',
     }),
+
+  getWatchlistCount: (itemId: string) =>
+    apiRequest<{ status: string; itemId: string; count: number }>(`/watchlist/count/${itemId}`),
 };
 
 // Cloudflare R2 Image Upload APIs
@@ -416,4 +499,87 @@ export const uploadApi = {
       body: JSON.stringify({ fileName, contentType }),
     }),
 };
+
+// Chat & Conversation APIs
+export const chatApi = {
+  getConversations: () =>
+    apiRequest<{ status: string; conversations: ConversationItem[] }>('/conversations'),
+
+  startConversation: (itemId: string) =>
+    apiRequest<{ status: string; conversation: ConversationItem }>('/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ itemId }),
+    }),
+
+  getMessages: (conversationId: string, limit = 50, before?: string) => {
+    const query = new URLSearchParams();
+    if (limit) query.set('limit', String(limit));
+    if (before) query.set('before', before);
+    const qs = query.toString();
+    return apiRequest<{
+      status: string;
+      messages: ChatMessage[];
+      pagination: { hasMore: boolean; nextBefore: string | null };
+    }>(`/conversations/${conversationId}/messages${qs ? `?${qs}` : ''}`);
+  },
+
+  sendMessage: (conversationId: string, body: { type?: 'text' | 'image'; text?: string; imageUrl?: string }) =>
+    apiRequest<{ status: string; message: ChatMessage }>(`/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  markAsRead: (conversationId: string, throughMessageId?: string) =>
+    apiRequest<{ status: string; readCount?: number }>(`/conversations/${conversationId}/read`, {
+      method: 'PATCH',
+      body: JSON.stringify(throughMessageId ? { throughMessageId } : {}),
+    }),
+};
+
+// Orders APIs
+export interface OrderItem {
+  id: string;
+  orderNumber: string;
+  status: string;
+  role: 'buying' | 'selling';
+  itemId: string;
+  item: {
+    id: string;
+    title: string;
+    priceNzd: string;
+    imageUrl: string;
+    condition?: string;
+    category?: string;
+  };
+  counterparty: {
+    id: string;
+    displayName: string;
+    avatarUrl: string | null;
+    role: 'buyer' | 'seller';
+  };
+  meeting?: {
+    scheduledAt: string;
+    locationName: string;
+    latitude: number | null;
+    longitude: number | null;
+    proposalStatus: string;
+    note?: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
+export const ordersApi = {
+  getMyOrders: (params?: { type?: 'buying' | 'selling' | 'all'; status?: 'in_progress' | 'completed' | 'all' }) => {
+    const query = new URLSearchParams();
+    if (params?.type) query.set('type', params.type);
+    if (params?.status) query.set('status', params.status);
+    const qs = query.toString();
+    return apiRequest<{ status: string; orders: OrderItem[] }>(`/orders/my${qs ? `?${qs}` : ''}`);
+  },
+  getOrderById: (orderId: string) =>
+    apiRequest<{ status: string; order: OrderItem }>(`/orders/${orderId}`),
+};
+
 
