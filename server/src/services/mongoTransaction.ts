@@ -44,6 +44,38 @@ function isTransactionUnsupported(error: unknown): boolean {
   );
 }
 
+export class MongoTransactionsRequiredError extends Error {
+  constructor() {
+    super('This operation requires a transaction-capable MongoDB deployment.');
+    this.name = 'MongoTransactionsRequiredError';
+  }
+}
+
+/**
+ * Run integrity-critical work only when MongoDB can commit every write as one
+ * transaction. Unlike runMongoTransaction, this deliberately has no
+ * standalone fallback because a partial handover or credit award is unsafe.
+ */
+export async function runRequiredMongoTransaction<T>(
+  work: (session: ClientSession) => Promise<T>
+): Promise<T> {
+  const session = await mongoose.startSession();
+  try {
+    let result!: T;
+    await session.withTransaction(async () => {
+      result = await work(session);
+    });
+    return result;
+  } catch (error) {
+    if (isTransactionUnsupported(error)) {
+      throw new MongoTransactionsRequiredError();
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+}
+
 /**
  * Use MongoDB transactions when the connected deployment supports them.
  * The default local URI commonly points at a standalone mongod, so fall back

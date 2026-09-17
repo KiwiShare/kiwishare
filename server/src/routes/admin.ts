@@ -288,7 +288,17 @@ router.patch('/admin/users/:id/trust-score', authenticateToken, requireAdmin, as
   }
 
   if (trustScore !== undefined) {
-    user.trustScore = Math.max(0, Math.min(100, Number(trustScore)));
+    if (
+      typeof trustScore !== 'number' ||
+      !Number.isFinite(trustScore) ||
+      !Number.isSafeInteger(trustScore) ||
+      trustScore < 0
+    ) {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'Trust score must be a non-negative integer.' };
+      return;
+    }
+    user.trustScore = trustScore;
   }
   if (isStudentVerified !== undefined) {
     user.isStudentVerified = Boolean(isStudentVerified);

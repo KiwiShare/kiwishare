@@ -95,6 +95,17 @@ class _QrScannerScreenState extends State<QrScannerScreen>
         token: token,
       );
 
+      // Completion is already authoritative on the backend. Refreshing only
+      // observes the new score and must never turn a successful handover into
+      // a failed one or apply data to a replaced session.
+      if (auth.jwtToken == token) {
+        try {
+          await auth.refreshProfile();
+        } catch (_) {
+          // The next normal profile refresh will reconcile the display.
+        }
+      }
+
       if (!mounted) return;
       _showSuccessDialog(result);
     } catch (e) {

@@ -115,7 +115,7 @@ void main() {
 
     // Verify user info and trust badge
     expect(find.text('Riley'), findsWidgets);
-    expect(find.text('Trust score 95/100'), findsOneWidget);
+    expect(find.text('Trust score 95'), findsOneWidget);
     expect(find.byKey(const Key('profile-scan-qr-button')), findsOneWidget);
 
     // Verify Xianyu 3-column marketplace action grid
@@ -151,6 +151,44 @@ void main() {
     expect(insets.right, 16.0);
   });
 
+  testWidgets('public trust badge and semantics use 200+ above the ceiling', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":205,"isVerified":true}',
+    });
+    final auth = AuthProvider(
+      userRepository: _FixedProfileRepository(trustScore: 205),
+    );
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          Provider<NotificationPermissionCoordinator>.value(
+            value: NotificationPermissionCoordinator(
+              permissionController: null,
+              storage: _Storage(),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trust score 200+'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text('Trust score 200+')).label,
+      contains('Trust score 200+'),
+    );
+    expect(find.textContaining('/100'), findsNothing);
+    semantics.dispose();
+  });
+
   testWidgets('Account & security exposes photo, nickname, and password', (
     tester,
   ) async {
@@ -178,7 +216,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Account & security'), 100);
+    await tester.scrollUntilVisible(find.text('Profile photo'), 100);
     expect(find.text('Profile photo'), findsOneWidget);
     expect(find.text('Nickname'), findsOneWidget);
     expect(find.text('Riley'), findsWidgets);
@@ -290,4 +328,18 @@ class _FailingProfileRepository extends MockUserRepository {
 
   @override
   Future<UserModel> fetchProfile(String token) => Future.error(error);
+}
+
+class _FixedProfileRepository extends MockUserRepository {
+  _FixedProfileRepository({required this.trustScore});
+
+  final int trustScore;
+
+  @override
+  Future<UserModel> fetchProfile(String token) async => UserModel(
+    id: 'user-1',
+    displayName: 'Riley',
+    trustScore: trustScore,
+    isVerified: true,
+  );
 }
