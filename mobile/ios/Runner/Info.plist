@@ -87,5 +87,19 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+		<string>fb</string>
+		<string>fb-messenger</string>
+		<string>instagram</string>
+		<string>weixin</string>
+		<string>sms</string>
+		<string>tel</string>
+		<string>maps</string>
+		<string>comgooglemaps</string>
+		<string>https</string>
+		<string>http</string>
+	</array>
 </dict>
 </plist>

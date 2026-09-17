@@ -536,4 +536,50 @@ export const chatApi = {
     }),
 };
 
+// Orders APIs
+export interface OrderItem {
+  id: string;
+  orderNumber: string;
+  status: string;
+  role: 'buying' | 'selling';
+  itemId: string;
+  item: {
+    id: string;
+    title: string;
+    priceNzd: string;
+    imageUrl: string;
+    condition?: string;
+    category?: string;
+  };
+  counterparty: {
+    id: string;
+    displayName: string;
+    avatarUrl: string | null;
+    role: 'buyer' | 'seller';
+  };
+  meeting?: {
+    scheduledAt: string;
+    locationName: string;
+    latitude: number | null;
+    longitude: number | null;
+    proposalStatus: string;
+    note?: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
+export const ordersApi = {
+  getMyOrders: (params?: { type?: 'buying' | 'selling' | 'all'; status?: 'in_progress' | 'completed' | 'all' }) => {
+    const query = new URLSearchParams();
+    if (params?.type) query.set('type', params.type);
+    if (params?.status) query.set('status', params.status);
+    const qs = query.toString();
+    return apiRequest<{ status: string; orders: OrderItem[] }>(`/orders/my${qs ? `?${qs}` : ''}`);
+  },
+  getOrderById: (orderId: string) =>
+    apiRequest<{ status: string; order: OrderItem }>(`/orders/${orderId}`),
+};
+
 

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +20,7 @@ import '../auth/login_view.dart';
 import '../messages/widgets/schedule_meetup_sheet.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/edit_item_sheet.dart';
+import '../shared/widgets/share_bottom_sheet.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String? itemId;
@@ -336,21 +336,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  void _shareListing(ItemModel product) {
-    Clipboard.setData(
-      ClipboardData(
-        text:
-            'Check out "${product.title}" for \$${product.priceNzd} NZD on KiwiShare!',
-      ),
+  void _shareListing(ItemModel product, [BuildContext? originContext]) {
+    Rect? shareOrigin;
+    if (originContext != null) {
+      final box = originContext.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize) {
+        shareOrigin = box.localToGlobal(Offset.zero) & box.size;
+      }
+    }
+    ShareBottomSheet.show(
+      context,
+      item: product,
+      sharePositionOrigin: shareOrigin,
     );
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Listing link copied to clipboard!'),
-          duration: Duration(seconds: 2),
-        ),
-      );
   }
 
   Future<void> _editListing(ItemModel product) async {
@@ -398,10 +396,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     icon: const Icon(Icons.edit_outlined, size: 22),
                   );
                 }),
-                IconButton(
-                  tooltip: 'Share listing',
-                  onPressed: () => _shareListing(product),
-                  icon: const Icon(Icons.share_outlined, size: 22),
+                Builder(
+                  builder: (btnContext) => IconButton(
+                    tooltip: 'Share listing',
+                    onPressed: () => _shareListing(product, btnContext),
+                    icon: const Icon(Icons.share_outlined, size: 22),
+                  ),
                 ),
                 Consumer<WatchlistProvider>(
                   builder: (context, watchlist, _) {
