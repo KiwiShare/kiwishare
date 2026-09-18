@@ -109,14 +109,16 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                           child: ItemCard(
                             item: item,
                             onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => ProductDetailScreen(
-                                    itemId: item.id,
-                                    item: item,
-                                  ),
-                                ),
-                              ).then((_) => setState(_load));
+                              Navigator.of(context)
+                                  .push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ProductDetailScreen(
+                                        itemId: item.id,
+                                        item: item,
+                                      ),
+                                    ),
+                                  )
+                                  .then((_) => setState(_load));
                             },
                           ),
                         ),

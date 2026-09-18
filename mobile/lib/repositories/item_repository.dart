@@ -48,10 +48,13 @@ class RestItemRepository implements ItemRepository {
       body: jsonEncode(updates),
     );
     if (response.statusCode != 200) {
-      throw Exception('Failed to update item (${response.statusCode}): ${response.body}');
+      throw Exception(
+        'Failed to update item (${response.statusCode}): ${response.body}',
+      );
     }
     final data = jsonDecode(response.body);
-    final itemData = data is Map<String, dynamic> && data['item'] is Map<String, dynamic>
+    final itemData =
+        data is Map<String, dynamic> && data['item'] is Map<String, dynamic>
         ? data['item'] as Map<String, dynamic>
         : data as Map<String, dynamic>;
     return ItemModel.fromMap(itemData);

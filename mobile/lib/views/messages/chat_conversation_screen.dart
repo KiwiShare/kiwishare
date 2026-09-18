@@ -437,7 +437,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   Future<void> _loadItemDetails() async {
     if (widget.conversation.itemId.isEmpty) return;
     try {
-      final item = await RestItemRepository().fetchItemById(widget.conversation.itemId);
+      final item = await RestItemRepository().fetchItemById(
+        widget.conversation.itemId,
+      );
       if (mounted && item != null) {
         setState(() {
           _activeItem = item;
@@ -524,7 +526,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     if (confirmed == true && mounted) {
       await _chatProvider.sendText(
         conversation: widget.conversation,
-        text: '💳 I want to purchase this item ($priceStr). When would be convenient to meet or pick up?',
+        text:
+            '💳 I want to purchase this item ($priceStr). When would be convenient to meet or pick up?',
         token: token,
       );
       _scrollToEnd();
@@ -549,7 +552,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           return Container(
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             padding: EdgeInsets.only(
               top: 20,
@@ -653,13 +658,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           token: token,
         );
         _scrollToEnd();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Price updated to $priceLabel')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Price updated to $priceLabel')));
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update price: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update price: $e')));
       }
     }
   }
@@ -690,13 +695,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
               ),
               const Divider(height: 24),
               ListTile(
-                leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                leading: const Icon(
+                  Icons.check_circle_outline,
+                  color: Colors.green,
+                ),
                 title: const Text('Active (Available)'),
                 subtitle: const Text('Item is available for other buyers'),
                 onTap: () => Navigator.of(context).pop('active'),
               ),
               ListTile(
-                leading: const Icon(Icons.bookmark_outline, color: Colors.amber),
+                leading: const Icon(
+                  Icons.bookmark_outline,
+                  color: Colors.amber,
+                ),
                 title: const Text('Reserved'),
                 subtitle: const Text('Holding for this buyer'),
                 onTap: () => Navigator.of(context).pop('reserved'),
@@ -724,8 +735,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         final statusLabel = selected == 'active'
             ? 'Active'
             : selected == 'reserved'
-                ? 'Reserved'
-                : 'Sold';
+            ? 'Reserved'
+            : 'Sold';
         await _chatProvider.sendText(
           conversation: widget.conversation,
           text: '📦 [Seller Action] Item status updated to $statusLabel',
@@ -736,9 +747,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           SnackBar(content: Text('Status updated to $statusLabel')),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update status: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update status: $e')));
       }
     }
   }
@@ -762,14 +773,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
     final title = _activeItem?.title ?? widget.conversation.itemTitle;
     final imageUrl = _activeItem?.imageUrl ?? widget.conversation.itemImageUrl;
-    final isFree = _activeItem?.isFree == true ||
+    final isFree =
+        _activeItem?.isFree == true ||
         _activeItem?.priceNzd == '0' ||
-        (_activeItem?.priceNzd != null && double.tryParse(_activeItem!.priceNzd) == 0);
+        (_activeItem?.priceNzd != null &&
+            double.tryParse(_activeItem!.priceNzd) == 0);
     final priceText = isFree
         ? 'FREE'
         : _activeItem != null
-            ? '\$${_activeItem!.priceNzd}'
-            : '';
+        ? '\$${_activeItem!.priceNzd}'
+        : '';
 
     final status = _activeItem?.status ?? ItemStatus.active;
 
@@ -777,7 +790,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? colors.surfaceContainerHighest.withOpacity(0.4) : Colors.white,
+        color: isDark
+            ? colors.surfaceContainerHighest.withOpacity(0.4)
+            : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -787,20 +802,24 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           ),
         ],
         border: Border.all(
-          color: isDark ? colors.outline.withOpacity(0.2) : colors.outline.withOpacity(0.12),
+          color: isDark
+              ? colors.outline.withOpacity(0.2)
+              : colors.outline.withOpacity(0.12),
         ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ProductDetailScreen(
-                itemId: widget.conversation.itemId,
-                item: _activeItem,
-              ),
-            ),
-          ).then((_) => _loadItemDetails());
+          Navigator.of(context)
+              .push(
+                MaterialPageRoute(
+                  builder: (_) => ProductDetailScreen(
+                    itemId: widget.conversation.itemId,
+                    item: _activeItem,
+                  ),
+                ),
+              )
+              .then((_) => _loadItemDetails());
         },
         child: Row(
           children: [
@@ -814,7 +833,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) => Container(
                     color: colors.surfaceContainerHighest,
-                    child: const Icon(Icons.image_not_supported_outlined, size: 24),
+                    child: const Icon(
+                      Icons.image_not_supported_outlined,
+                      size: 24,
+                    ),
                   ),
                 ),
               ),
@@ -838,7 +860,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     children: [
                       if (isFree)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1.5,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFF059669),
                             borderRadius: BorderRadius.circular(4),
@@ -864,7 +889,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       if (status != ItemStatus.active) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: status == ItemStatus.reserved
                                 ? Colors.amber.shade800
@@ -938,7 +966,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         color: isDark ? colors.surface : const Color(0xFFF8FAFC),
         border: Border(
           top: BorderSide(
-            color: isDark ? colors.outline.withOpacity(0.15) : colors.outline.withOpacity(0.1),
+            color: isDark
+                ? colors.outline.withOpacity(0.15)
+                : colors.outline.withOpacity(0.1),
           ),
         ),
       ),
@@ -953,15 +983,25 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(color: colors.primary.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: BorderSide(
+                          color: colors.primary.withOpacity(0.5),
+                        ),
                       ),
                       onPressed: _scheduleMeetup,
                       icon: const Icon(Icons.location_on_outlined, size: 16),
                       label: const Text(
                         'Meetup Location',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -970,14 +1010,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF059669),
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
                       onPressed: _buyerBuyNow,
                       icon: const Icon(Icons.shopping_bag_outlined, size: 16),
                       label: const Text(
                         'Buy Now',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -985,15 +1033,25 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(color: colors.primary.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 6,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: BorderSide(
+                          color: colors.primary.withOpacity(0.5),
+                        ),
                       ),
                       onPressed: _sellerModifyPrice,
                       icon: const Icon(Icons.price_change_outlined, size: 16),
                       label: const Text(
                         'Edit Price',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -1001,15 +1059,25 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(color: colors.primary.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 6,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: BorderSide(
+                          color: colors.primary.withOpacity(0.5),
+                        ),
                       ),
                       onPressed: _scheduleMeetup,
                       icon: const Icon(Icons.handshake_outlined, size: 16),
                       label: const Text(
                         'Propose Meetup',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -1017,14 +1085,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   Expanded(
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 6,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
                       onPressed: _sellerChangeStatus,
                       icon: const Icon(Icons.sell_outlined, size: 16),
                       label: const Text(
                         'Item Status',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -1046,7 +1122,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     chipText,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark ? colors.onSurface : const Color(0xFF334155),
+                      color: isDark
+                          ? colors.onSurface
+                          : const Color(0xFF334155),
                     ),
                   ),
                   backgroundColor: isDark

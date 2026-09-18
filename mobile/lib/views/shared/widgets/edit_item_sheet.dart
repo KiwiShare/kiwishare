@@ -9,11 +9,7 @@ class EditItemSheet extends StatefulWidget {
   final ItemModel item;
   final ValueChanged<ItemModel>? onUpdated;
 
-  const EditItemSheet({
-    super.key,
-    required this.item,
-    this.onUpdated,
-  });
+  const EditItemSheet({super.key, required this.item, this.onUpdated});
 
   static Future<ItemModel?> show(
     BuildContext context, {
@@ -49,12 +45,7 @@ class _EditItemSheetState extends State<EditItemSheet> {
     'Other',
   ];
 
-  static const _conditions = <String>[
-    'New',
-    'Like new',
-    'Good',
-    'Fair',
-  ];
+  static const _conditions = <String>['New', 'Like new', 'Good', 'Fair'];
 
   late String _category;
   late String _condition;
@@ -108,8 +99,8 @@ class _EditItemSheetState extends State<EditItemSheet> {
     final statusStr = _status == ItemStatus.active
         ? 'active'
         : _status == ItemStatus.reserved
-            ? 'reserved'
-            : 'sold';
+        ? 'reserved'
+        : 'sold';
 
     final updates = <String, dynamic>{
       'title': _titleController.text.trim(),
@@ -124,10 +115,10 @@ class _EditItemSheetState extends State<EditItemSheet> {
 
     try {
       final updated = await context.read<ListingProvider>().updateItem(
-            id: widget.item.id,
-            token: token,
-            updates: updates,
-          );
+        id: widget.item.id,
+        token: token,
+        updates: updates,
+      );
       if (!mounted) return;
       widget.onUpdated?.call(updated);
       Navigator.of(context).pop(updated);
@@ -254,8 +245,9 @@ class _EditItemSheetState extends State<EditItemSheet> {
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.title),
                   ),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Please enter a title' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Please enter a title'
+                      : null,
                 ),
                 const SizedBox(height: 14),
 
@@ -277,9 +269,13 @@ class _EditItemSheetState extends State<EditItemSheet> {
                         ),
                         validator: (v) {
                           if (_isFree) return null;
-                          if (v == null || v.trim().isEmpty) return 'Enter price';
+                          if (v == null || v.trim().isEmpty) {
+                            return 'Enter price';
+                          }
                           final numVal = double.tryParse(v.trim());
-                          if (numVal == null || numVal < 0) return 'Invalid price';
+                          if (numVal == null || numVal < 0) {
+                            return 'Invalid price';
+                          }
                           return null;
                         },
                       ),
@@ -312,7 +308,9 @@ class _EditItemSheetState extends State<EditItemSheet> {
                           border: OutlineInputBorder(),
                         ),
                         items: _categories
-                            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                            .map(
+                              (c) => DropdownMenuItem(value: c, child: Text(c)),
+                            )
                             .toList(),
                         onChanged: (val) {
                           if (val != null) setState(() => _category = val);
@@ -328,7 +326,9 @@ class _EditItemSheetState extends State<EditItemSheet> {
                           border: OutlineInputBorder(),
                         ),
                         items: _conditions
-                            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                            .map(
+                              (c) => DropdownMenuItem(value: c, child: Text(c)),
+                            )
                             .toList(),
                         onChanged: (val) {
                           if (val != null) setState(() => _condition = val);

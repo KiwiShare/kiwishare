@@ -29,15 +29,15 @@ abstract class OrderRepository {
 
 class RestOrderRepository implements OrderRepository {
   RestOrderRepository({http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
   Map<String, String> _headers(String token) => {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $token',
+  };
 
   @override
   Future<List<OrderModel>> fetchMyOrders({
@@ -49,8 +49,9 @@ class RestOrderRepository implements OrderRepository {
     if (type != null) query['type'] = type;
     if (status != null) query['status'] = status;
 
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/orders/my')
-        .replace(queryParameters: query.isNotEmpty ? query : null);
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/orders/my',
+    ).replace(queryParameters: query.isNotEmpty ? query : null);
 
     final response = await _client.get(uri, headers: _headers(token));
 

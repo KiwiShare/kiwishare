@@ -69,7 +69,8 @@ class OrderMeetingInfo {
 
   factory OrderMeetingInfo.fromJson(Map<String, dynamic> json) {
     return OrderMeetingInfo(
-      scheduledAt: DateTime.tryParse(json['scheduledAt']?.toString() ?? '') ??
+      scheduledAt:
+          DateTime.tryParse(json['scheduledAt']?.toString() ?? '') ??
           DateTime.now(),
       locationName: (json['locationName'] ?? '').toString(),
       latitude: (json['latitude'] as num?)?.toDouble(),
@@ -111,7 +112,9 @@ class OrderModel {
   bool get isSelling => role == 'selling';
 
   bool get isCompleted =>
-      status == 'completed' || status == 'qr_scanned' || status == 'seller_paid';
+      status == 'completed' ||
+      status == 'qr_scanned' ||
+      status == 'seller_paid';
 
   bool get isInProgress =>
       status == 'meeting_scheduled' ||
@@ -153,12 +156,15 @@ class OrderModel {
             ? json['counterparty'] as Map<String, dynamic>
             : {},
       ),
-      meeting: json['meeting'] != null && json['meeting'] is Map<String, dynamic>
+      meeting:
+          json['meeting'] != null && json['meeting'] is Map<String, dynamic>
           ? OrderMeetingInfo.fromJson(json['meeting'] as Map<String, dynamic>)
           : null,
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
           DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
+      updatedAt:
+          DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
           DateTime.now(),
       completedAt: json['completedAt'] != null
           ? DateTime.tryParse(json['completedAt'].toString())

@@ -85,7 +85,8 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
                   _FilterChip(
                     label: 'All',
                     selected: _selectedStatusFilter == 'all',
-                    onSelected: () => setState(() => _selectedStatusFilter = 'all'),
+                    onSelected: () =>
+                        setState(() => _selectedStatusFilter = 'all'),
                   ),
                   const SizedBox(width: 8),
                   _FilterChip(
@@ -290,7 +291,10 @@ class _OrderItemCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: badgeBg,
                     borderRadius: BorderRadius.circular(10),
@@ -322,10 +326,11 @@ class _OrderItemCard extends StatelessWidget {
                         ? Image.network(
                             order.item.imageUrl,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const Icon(
-                              Icons.shopping_bag_outlined,
-                              color: AppColors.brandPrimary,
-                            ),
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(
+                                  Icons.shopping_bag_outlined,
+                                  color: AppColors.brandPrimary,
+                                ),
                           )
                         : const Icon(
                             Icons.shopping_bag_outlined,
@@ -415,7 +420,10 @@ class _OrderItemCard extends StatelessWidget {
                     ),
                     TextButton.icon(
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         visualDensity: VisualDensity.compact,
                       ),
                       onPressed: () {
@@ -427,7 +435,10 @@ class _OrderItemCard extends StatelessWidget {
                         );
                       },
                       icon: const Icon(Icons.navigation_rounded, size: 14),
-                      label: const Text('Directions', style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        'Directions',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                   ],
                 ),
@@ -443,20 +454,29 @@ class _OrderItemCard extends StatelessWidget {
                 if (isInProgress) ...[
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       visualDensity: VisualDensity.compact,
                     ),
                     onPressed: () {
                       context.push('/meetups/${order.id}/qr');
                     },
                     icon: const Icon(Icons.qr_code_2_rounded, size: 16),
-                    label: const Text('QR Handover', style: TextStyle(fontSize: 12)),
+                    label: const Text(
+                      'QR Handover',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                   const SizedBox(width: 8),
                 ],
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: () {
@@ -470,13 +490,19 @@ class _OrderItemCard extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.brandPrimary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: () {
                     context.push('/items/${order.itemId}');
                   },
-                  child: const Text('View Item', style: TextStyle(fontSize: 12)),
+                  child: const Text(
+                    'View Item',
+                    style: TextStyle(fontSize: 12),
+                  ),
                 ),
               ],
             ),

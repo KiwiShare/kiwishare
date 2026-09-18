@@ -228,11 +228,18 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                   },
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.03),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.03),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: colors.outline.withValues(alpha: 0.15)),
+                      border: Border.all(
+                        color: colors.outline.withValues(alpha: 0.15),
+                      ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
