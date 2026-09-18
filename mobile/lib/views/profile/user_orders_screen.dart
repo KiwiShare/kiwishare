@@ -301,363 +301,390 @@ class _OrderItemCard extends StatelessWidget {
           width: isPaid || isInProgress ? 1.2 : 1,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header: Order Number + Status
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Order #${order.orderNumber}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: badgeBg,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        onTap: () {
+          context.push('/items/${order.itemId}');
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header: Order Number + Status
+              Row(
+                children: [
+                  Expanded(
                     child: Text(
-                      order.statusDisplay,
+                      'Order #${order.orderNumber}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: badgeFg,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Item snapshot & price
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    width: 60,
-                    height: 60,
-                    color: colors.surfaceContainerHighest,
-                    child: order.item.imageUrl.isNotEmpty
-                        ? Image.network(
-                            order.item.imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(
-                                  Icons.shopping_bag_outlined,
-                                  color: AppColors.brandPrimary,
-                                ),
-                          )
-                        : const Icon(
-                            Icons.shopping_bag_outlined,
-                            color: AppColors.brandPrimary,
-                          ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: badgeBg,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        order.statusDisplay,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: badgeFg,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Item snapshot & price
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      color: colors.surfaceContainerHighest,
+                      child: order.item.imageUrl.isNotEmpty
+                          ? Image.network(
+                              order.item.imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(
+                                    Icons.shopping_bag_outlined,
+                                    color: AppColors.brandPrimary,
+                                  ),
+                            )
+                          : const Icon(
+                              Icons.shopping_bag_outlined,
+                              color: AppColors.brandPrimary,
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          order.item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '\$${order.item.priceNzd} NZD',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.brandPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${order.isBuying ? 'Seller' : 'Buyer'}: ${order.counterparty.displayName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              // Meetup info banner if present
+              if (order.meeting?.scheduledAt != null &&
+                  order.meeting?.locationName != null &&
+                  order.meeting!.locationName.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF192520)
+                        : const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF274337)
+                          : const Color(0xFFBBF7D0),
+                    ),
+                  ),
+                  child: Row(
                     children: [
-                      Text(
-                        order.item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
+                      const Icon(
+                        Icons.place_rounded,
+                        size: 16,
+                        color: Color(0xFF16A34A),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              order.meeting!.locationName,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '${order.meeting!.scheduledAt.day}/${order.meeting!.scheduledAt.month}/${order.meeting!.scheduledAt.year} • ${order.meeting!.scheduledAt.hour.toString().padLeft(2, '0')}:${order.meeting!.scheduledAt.minute.toString().padLeft(2, '0')}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: colors.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '\$${order.item.priceNzd} NZD',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.brandPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${order.isBuying ? 'Seller' : 'Buyer'}: ${order.counterparty.displayName}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: () {
+                          MapLauncherService.instance.showNavigationSheet(
+                            context: context,
+                            locationName: order.meeting!.locationName,
+                            latitude: order.meeting!.latitude,
+                            longitude: order.meeting!.longitude,
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.navigation_rounded,
+                                size: 13,
+                                color: AppColors.brandPrimary,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                'Directions',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
               ],
-            ),
 
-            // Meetup info banner if present
-            if (order.meeting?.scheduledAt != null &&
-                order.meeting?.locationName != null &&
-                order.meeting!.locationName.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF192520)
-                      : const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF274337)
-                        : const Color(0xFFBBF7D0),
+              // 48-Hour reminder banner if paid and no confirmed meetup
+              if (isPaid &&
+                  !isCompleted &&
+                  !order.isRefunded &&
+                  !(order.meeting?.proposalStatus == 'confirmed' ||
+                      order.meeting?.proposalStatus == 'accepted') &&
+                  (order.paidAt != null &&
+                      DateTime.now().difference(order.paidAt!).inHours >=
+                          48)) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        size: 16,
+                        color: Color(0xFFB45309),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          order.isSelling
+                              ? 'No meetup agreed after 2 days. You can issue a refund to the buyer now.'
+                              : '2 days without a confirmed meetup. You can claim a full refund now.',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF92400E),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
+              ],
+
+              const SizedBox(height: 12),
+
+              // Action buttons row wrapped to avoid overflow on narrow screens or multi-actions
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    const Icon(
-                      Icons.place_rounded,
-                      size: 16,
-                      color: Color(0xFF16A34A),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            order.meeting!.locationName,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                    // Pay Now — only for buyers with pending payment that is not yet paid
+                    if (order.isBuying &&
+                        order.status == 'pending_payment' &&
+                        !isPaid)
+                      FilledButton.icon(
+                        key: Key('pay_now_btn_${order.id}'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
                           ),
-                          Text(
-                            '${order.meeting!.scheduledAt.day}/${order.meeting!.scheduledAt.month}/${order.meeting!.scheduledAt.year} • ${order.meeting!.scheduledAt.hour.toString().padLeft(2, '0')}:${order.meeting!.scheduledAt.minute.toString().padLeft(2, '0')}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: colors.onSurfaceVariant,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: () {
-                        MapLauncherService.instance.showNavigationSheet(
-                          context: context,
-                          locationName: order.meeting!.locationName,
-                          latitude: order.meeting!.latitude,
-                          longitude: order.meeting!.longitude,
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 4,
+                          visualDensity: VisualDensity.compact,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.navigation_rounded,
-                              size: 13,
-                              color: AppColors.brandPrimary,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              'Directions',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: colors.primary,
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => PaymentCheckoutScreen(
+                                order: order,
+                                onSuccess: () {
+                                  // orders already refreshed inside checkout screen
+                                },
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            // 48-Hour reminder banner if paid and no confirmed meetup
-            if (isPaid &&
-                !isCompleted &&
-                !order.isRefunded &&
-                !(order.meeting?.proposalStatus == 'confirmed' ||
-                    order.meeting?.proposalStatus == 'accepted') &&
-                (order.paidAt != null &&
-                    DateTime.now().difference(order.paidAt!).inHours >=
-                        48)) ...[
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFF59E0B), width: 1),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.info_outline_rounded,
-                      size: 16,
-                      color: Color(0xFFB45309),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        order.isSelling
-                            ? 'No meetup agreed after 2 days. You can issue a refund to the buyer now.'
-                            : '2 days without a confirmed meetup. You can claim a full refund now.',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF92400E),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 12),
-
-            // Action buttons row wrapped to avoid overflow on narrow screens or multi-actions
-            Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  // Pay Now — only for buyers with pending payment that is not yet paid
-                  if (order.isBuying &&
-                      order.status == 'pending_payment' &&
-                      !isPaid)
-                    FilledButton.icon(
-                      key: Key('pay_now_btn_${order.id}'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                            builder: (_) => PaymentCheckoutScreen(
-                              order: order,
-                              onSuccess: () {
-                                // orders already refreshed inside checkout screen
-                              },
-                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.lock_outline, size: 14),
+                        label: const Text(
+                          'Pay Now',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.lock_outline, size: 14),
-                      label: const Text(
-                        'Pay Now',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ),
 
-                  // Invoice button for paid or completed orders
-                  if (isPaid || isCompleted)
-                    OutlinedButton.icon(
-                      key: Key('invoice_btn_${order.id}'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
+                    // Invoice button for paid or completed orders
+                    if (isPaid || isCompleted)
+                      OutlinedButton.icon(
+                        key: Key('invoice_btn_${order.id}'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          visualDensity: VisualDensity.compact,
                         ),
-                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _showInvoiceSheet(context, order),
+                        icon: const Icon(Icons.receipt_long_outlined, size: 15),
+                        label: const Text(
+                          'Invoice',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
-                      onPressed: () => _showInvoiceSheet(context, order),
-                      icon: const Icon(Icons.receipt_long_outlined, size: 15),
-                      label: const Text(
-                        'Invoice',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
 
-                  // Refund button for Seller (anytime before completed/refunded) or Buyer (after 48 hours without meetup)
-                  if (!isCompleted &&
-                      !order.isRefunded &&
-                      isPaid &&
-                      (order.isSelling ||
-                          (order.isBuying &&
-                              !(order.meeting?.proposalStatus == 'confirmed' ||
-                                  order.meeting?.proposalStatus ==
-                                      'accepted') &&
-                              order.paidAt != null &&
-                              DateTime.now()
-                                      .difference(order.paidAt!)
-                                      .inHours >=
-                                  48)))
-                    OutlinedButton.icon(
-                      key: Key('refund_btn_${order.id}'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFDC2626),
-                        side: const BorderSide(color: Color(0xFFFCA5A5)),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
+                    // Refund button for Seller (anytime before completed/refunded) or Buyer (after 48 hours without meetup)
+                    if (!isCompleted &&
+                        !order.isRefunded &&
+                        isPaid &&
+                        (order.isSelling ||
+                            (order.isBuying &&
+                                !(order.meeting?.proposalStatus ==
+                                        'confirmed' ||
+                                    order.meeting?.proposalStatus ==
+                                        'accepted') &&
+                                order.paidAt != null &&
+                                DateTime.now()
+                                        .difference(order.paidAt!)
+                                        .inHours >=
+                                    48)))
+                      OutlinedButton.icon(
+                        key: Key('refund_btn_${order.id}'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFDC2626),
+                          side: const BorderSide(color: Color(0xFFFCA5A5)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          visualDensity: VisualDensity.compact,
                         ),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: () => _showRefundConfirmation(context, order),
-                      icon: const Icon(Icons.restart_alt_rounded, size: 15),
-                      label: Text(
-                        order.isSelling ? 'Refund Order' : 'Claim Refund',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                        onPressed: () =>
+                            _showRefundConfirmation(context, order),
+                        icon: const Icon(Icons.restart_alt_rounded, size: 15),
+                        label: Text(
+                          order.isSelling ? 'Refund Order' : 'Claim Refund',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
 
-                  if ((isInProgress || isPaid) && !order.isRefunded)
+                    if ((isInProgress || isPaid) && !order.isRefunded)
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () {
+                          context.push('/meetups/${order.id}/qr');
+                        },
+                        icon: const Icon(Icons.qr_code_2_rounded, size: 16),
+                        label: const Text(
+                          'QR Handover',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
@@ -667,53 +694,19 @@ class _OrderItemCard extends StatelessWidget {
                         visualDensity: VisualDensity.compact,
                       ),
                       onPressed: () {
-                        context.push('/meetups/${order.id}/qr');
+                        context.push('/messages');
                       },
-                      icon: const Icon(Icons.qr_code_2_rounded, size: 16),
-                      label: const Text(
-                        'QR Handover',
-                        style: TextStyle(fontSize: 12),
+                      icon: const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 15,
                       ),
+                      label: const Text('Chat', style: TextStyle(fontSize: 12)),
                     ),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: () {
-                      context.push('/messages');
-                    },
-                    icon: const Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      size: 15,
-                    ),
-                    label: const Text('Chat', style: TextStyle(fontSize: 12)),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandPrimary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: () {
-                      context.push('/items/${order.itemId}');
-                    },
-                    child: const Text(
-                      'View Item',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

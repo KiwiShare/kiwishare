@@ -956,7 +956,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                                                 ),
                                           label: Text(
                                             _isGeneratingSuggestion
-                                                ? 'Writing…'
+                                                ? 'Creating suggestion…'
                                                 : 'AI Help Me Write',
                                             style: const TextStyle(
                                               fontSize: 11.5,
@@ -1032,7 +1032,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                       child: _ResponsiveFieldRow(
                         label: 'Location',
                         child: _CurrentLocationFormField(
-                          key: const Key('post_location_field'),
+                          key: const Key('post_location_container'),
                           value: _location,
                           isLocating: _isLocating,
                           onLocate: _findCurrentLocation,
@@ -2162,7 +2162,7 @@ class _ResponsiveFieldRow extends StatelessWidget {
   }
 }
 
-class _CurrentLocationFormField extends StatelessWidget {
+class _CurrentLocationFormField extends StatefulWidget {
   const _CurrentLocationFormField({
     super.key,
     required this.value,
@@ -2176,8 +2176,37 @@ class _CurrentLocationFormField extends StatelessWidget {
   final Future<ListingLocation?> Function() onLocate;
   final ValueChanged<ListingLocation> onChanged;
 
+  @override
+  State<_CurrentLocationFormField> createState() =>
+      _CurrentLocationFormFieldState();
+}
+
+class _CurrentLocationFormFieldState extends State<_CurrentLocationFormField> {
+  late TextEditingController _textController;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.value?.label ?? '');
+  }
+
+  @override
+  void didUpdateWidget(covariant _CurrentLocationFormField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value?.label != null &&
+        widget.value!.label != _textController.text) {
+      _textController.text = widget.value!.label;
+    }
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
   Future<String?> _requestManualLocation(BuildContext context) async {
-    var location = '';
+    String location = '';
     return showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -2245,47 +2274,25 @@ class _CurrentLocationFormField extends StatelessWidget {
                         }).toList(),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Autocomplete<String>(
-                    optionsBuilder: (TextEditingValue textEditingValue) {
-                      return CampusLocations.search(textEditingValue.text);
+                  TextField(
+                    key: const Key('post_manual_location_input'),
+                    autofocus: false,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.done,
+                    maxLength: 80,
+                    decoration: const InputDecoration(
+                      labelText: 'Suburb or city',
+                      hintText: 'e.g. Auckland Central',
+                    ),
+                    onChanged: (value) {
+                      setSheetState(() => location = value.trim());
                     },
-                    onSelected: (String selection) {
-                      setSheetState(() => location = selection.trim());
+                    onSubmitted: (value) {
+                      final trimmedValue = value.trim();
+                      if (trimmedValue.isNotEmpty) {
+                        Navigator.of(sheetContext).pop(trimmedValue);
+                      }
                     },
-                    fieldViewBuilder:
-                        (
-                          BuildContext context,
-                          TextEditingController fieldTextEditingController,
-                          FocusNode fieldFocusNode,
-                          VoidCallback onFieldSubmitted,
-                        ) {
-                          fieldTextEditingController.addListener(() {
-                            setSheetState(
-                              () => location = fieldTextEditingController.text
-                                  .trim(),
-                            );
-                          });
-                          return TextField(
-                            key: const Key('post_manual_location_input'),
-                            controller: fieldTextEditingController,
-                            focusNode: fieldFocusNode,
-                            autofocus: false,
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.done,
-                            maxLength: 80,
-                            decoration: const InputDecoration(
-                              labelText: 'Suburb or campus location',
-                              hintText:
-                                  'e.g. UoA General Library or Auckland Central',
-                            ),
-                            onSubmitted: (value) {
-                              final trimmedValue = value.trim();
-                              if (trimmedValue.isNotEmpty) {
-                                Navigator.of(sheetContext).pop(trimmedValue);
-                              }
-                            },
-                          );
-                        },
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   FilledButton(
@@ -2307,69 +2314,111 @@ class _CurrentLocationFormField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FormField<ListingLocation>(
-      initialValue: value,
-      validator: (value) => value == null ? 'Required' : null,
+      initialValue: widget.value,
+      validator: (value) =>
+          (widget.value == null && _textController.text.trim().isEmpty)
+          ? 'Required'
+          : null,
       autovalidateMode: AutovalidateMode.onUserInteraction,
       builder: (field) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Semantics(
-              button: true,
-              label: field.value == null
-                  ? 'Use current location'
-                  : 'Listing location: ${field.value!.label}',
-              child: InkWell(
-                borderRadius: BorderRadius.circular(AppRadius.medium),
-                onTap: isLocating
-                    ? null
-                    : () async {
-                        final location = await onLocate();
-                        if (location == null || !context.mounted) {
-                          return;
-                        }
-                        field.didChange(location);
-                        onChanged(location);
-                      },
-                child: InputDecorator(
-                  isEmpty: field.value == null,
-                  decoration: InputDecoration(
-                    hintText: isLocating
-                        ? 'Finding your location…'
-                        : 'Use current location',
-                    helperText:
-                        'Uses your suburb or city, not your street address',
-                    errorText: field.errorText,
-                    suffixIcon: isLocating
-                        ? const Padding(
-                            padding: EdgeInsets.all(14),
-                            child: SizedBox.square(
-                              dimension: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        : const Icon(Icons.my_location_rounded),
-                  ),
-                  child: Text(field.value?.label ?? ''),
-                ),
-              ),
-            ),
-            TextButton.icon(
-              key: const Key('post_manual_location_button'),
-              onPressed: () async {
-                final label = await _requestManualLocation(context);
-                if (label == null || !context.mounted) {
-                  return;
+            // 1. Direct Autocomplete location input
+            Autocomplete<String>(
+              initialValue: TextEditingValue(text: widget.value?.label ?? ''),
+              optionsBuilder: (TextEditingValue textVal) {
+                if (textVal.text.trim().isEmpty) {
+                  return const Iterable<String>.empty();
                 }
-                final location = ListingLocation(label: label);
-                field.didChange(location);
-                onChanged(location);
+                return CampusLocations.search(textVal.text);
               },
-              icon: const Icon(Icons.edit_location_alt_outlined, size: 16),
-              label: const Text(
-                'Enter suburb or city manually',
-                style: TextStyle(fontSize: 12),
-              ),
+              onSelected: (String selection) {
+                _textController.text = selection;
+                final loc = ListingLocation(label: selection);
+                field.didChange(loc);
+                widget.onChanged(loc);
+              },
+              fieldViewBuilder:
+                  (
+                    context,
+                    textEditingController,
+                    focusNode,
+                    onFieldSubmitted,
+                  ) {
+                    if (_textController.text.isNotEmpty &&
+                        textEditingController.text.isEmpty) {
+                      textEditingController.text = _textController.text;
+                    }
+                    return TextField(
+                      controller: textEditingController,
+                      focusNode: focusNode,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: 'Location / Campus / Suburb',
+                        hintText: 'Type campus or suburb (e.g. UoA, Newmarket)',
+                        prefixIcon: const Icon(Icons.location_on_outlined),
+                        errorText: field.errorText,
+                      ),
+                      onChanged: (val) {
+                        final trimmed = val.trim();
+                        _textController.text = trimmed;
+                        if (trimmed.isNotEmpty) {
+                          final loc = ListingLocation(label: trimmed);
+                          field.didChange(loc);
+                          widget.onChanged(loc);
+                        }
+                      },
+                    );
+                  },
+            ),
+            const SizedBox(height: 6),
+            // 2. Action buttons: "Find my location" button (GPS) + popular areas sheet
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('post_location_field'),
+                  onPressed: widget.isLocating
+                      ? null
+                      : () async {
+                          final location = await widget.onLocate();
+                          if (location == null || !context.mounted) return;
+                          _textController.text = location.label;
+                          field.didChange(location);
+                          widget.onChanged(location);
+                        },
+                  icon: widget.isLocating
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location_rounded, size: 15),
+                  label: Text(
+                    widget.isLocating
+                        ? 'Finding location…'
+                        : 'Find my location (GPS)',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                TextButton(
+                  key: const Key('post_manual_location_button'),
+                  onPressed: () async {
+                    final label = await _requestManualLocation(context);
+                    if (label == null || !context.mounted) return;
+                    _textController.text = label;
+                    final location = ListingLocation(label: label);
+                    field.didChange(location);
+                    widget.onChanged(location);
+                  },
+                  child: const Text(
+                    'Popular areas',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
             ),
           ],
         );

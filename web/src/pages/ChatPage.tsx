@@ -1239,7 +1239,7 @@ export const ChatPage: React.FC = () => {
             </div>
 
             {/* KiwiShare Safe Trade Action Bar */}
-            {activeConversation?.item && (
+            {activeConversation?.item && activeConversation.item.status !== 'sold' && (
               <div
                 style={{
                   padding: '8px 18px',
@@ -2296,6 +2296,28 @@ export const ChatPage: React.FC = () => {
                   <AlertCircle size={20} style={{ margin: '0 auto 6px', color: '#d97706' }} />
                   <div style={{ fontWeight: 700 }}>Payment Required First</div>
                   <div>Buyer must complete Safe Pay checkout before the handover QR code can be released.</div>
+                  {activeConversation?.direction === 'buying' && (
+                    <button
+                      onClick={() => {
+                        setShowQrModal(false);
+                        setShowCheckoutModal(true);
+                      }}
+                      className="btn btn-primary"
+                      style={{
+                        marginTop: '12px',
+                        padding: '8px 16px',
+                        fontSize: '0.85rem',
+                        backgroundColor: '#059669',
+                        borderColor: '#059669',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <CreditCard size={15} />
+                      <span>Pay Now (${activeConversation?.item?.priceNzd || '0'} NZD)</span>
+                    </button>
+                  )}
                 </div>
               ) : !isMeetupConfirmed ? (
                 <div style={{ padding: '16px', backgroundColor: '#eff6ff', borderRadius: '10px', border: '1px solid #bfdbfe', color: '#1e40af', fontSize: '0.88rem', marginBottom: '16px' }}>

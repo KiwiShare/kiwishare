@@ -124,7 +124,6 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Chat'), findsOneWidget);
-      expect(find.text('View Item'), findsOneWidget);
 
       // Verify zero RenderFlex overflow errors occurred
       expect(tester.takeException(), isNull);

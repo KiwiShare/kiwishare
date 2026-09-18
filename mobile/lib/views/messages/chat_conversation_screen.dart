@@ -1064,61 +1064,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                   ),
                                 ),
                             ],
-                            if (status == ItemStatus.delisted)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.orange.shade700,
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: Text(
-                                  'DELISTED',
-                                  style: TextStyle(
-                                    color: Colors.orange.shade900,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              )
-                            else if (status == ItemStatus.sold)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.grey.shade600,
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: Text(
-                                  'SOLD',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade800,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
+                    margin: const EdgeInsets.only(top: 6),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 4,
+                      vertical: 2,
                     ),
                     decoration: BoxDecoration(
                       color: colors.primary.withOpacity(0.08),
@@ -1149,7 +1105,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           ),
           // Top-right corner status badge
           Positioned(
-            top: -4,
+            top: -2,
             right: 0,
             child: _buildCornerStatusBadge(
               isPaid: isOrderPaid,
@@ -1281,6 +1237,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           ];
 
     final isItemSold = _activeItem?.status == ItemStatus.sold;
+    if (isItemSold) {
+      return const SizedBox.shrink();
+    }
     final orders = _getOrderProvider(listen: true)?.orders ?? const [];
     final isOrderPaid =
         _itemPaid ||

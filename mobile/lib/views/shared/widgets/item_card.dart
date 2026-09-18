@@ -414,105 +414,101 @@ class ItemCard extends StatelessWidget {
                       if (item.isSustainable ||
                           item.seller?.isStudentVerified == true) ...[
                         const SizedBox(height: 5),
-                        Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [
-                            if (item.isSustainable)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF064E3B).withOpacity(0.4)
-                                      : const Color(0xFFE8F5E9),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (item.isSustainable)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
                                     color: isDark
                                         ? const Color(
-                                            0xFF059669,
-                                          ).withOpacity(0.5)
-                                        : const Color(0xFFA5D6A7),
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.eco_rounded,
-                                      size: 10.5,
+                                            0xFF064E3B,
+                                          ).withOpacity(0.4)
+                                        : const Color(0xFFE8F5E9),
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
                                       color: isDark
-                                          ? const Color(0xFF6EE7B7)
-                                          : const Color(0xFF16A34A),
+                                          ? const Color(
+                                              0xFF059669,
+                                            ).withOpacity(0.4)
+                                          : const Color(0xFFA7F3D0),
+                                      width: 0.8,
                                     ),
-                                    const SizedBox(width: 2.5),
-                                    Flexible(
-                                      child: Text(
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.eco_rounded,
+                                        size: 10,
+                                        color: Color(0xFF059669),
+                                      ),
+                                      SizedBox(width: 2.5),
+                                      Text(
                                         'Sustainable',
                                         style: TextStyle(
+                                          color: Color(0xFF059669),
                                           fontSize: 9.5,
                                           fontWeight: FontWeight.w700,
-                                          color: isDark
-                                              ? const Color(0xFF6EE7B7)
-                                              : const Color(0xFF15803D),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            if (item.seller?.isStudentVerified == true)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF1E3A8A).withOpacity(0.4)
-                                      : const Color(0xFFEFF6FF),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: isDark
-                                        ? const Color(
-                                            0xFF3B82F6,
-                                          ).withOpacity(0.5)
-                                        : const Color(0xFF93C5FD),
-                                    width: 0.8,
+                                    ],
                                   ),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.verified,
-                                      size: 10.5,
-                                      color: Color(0xFF2563EB),
+                              if (item.isSustainable &&
+                                  item.seller?.isStudentVerified == true)
+                                const SizedBox(width: 4),
+                              if (item.seller?.isStudentVerified == true)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(
+                                            0xFF1E3A8A,
+                                          ).withOpacity(0.4)
+                                        : const Color(0xFFEFF6FF),
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? const Color(
+                                              0xFF2563EB,
+                                            ).withOpacity(0.4)
+                                          : const Color(0xFFBFDBFE),
+                                      width: 0.8,
                                     ),
-                                    const SizedBox(width: 2.5),
-                                    Flexible(
-                                      child: Text(
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.school_rounded,
+                                        size: 10,
+                                        color: Color(0xFF2563EB),
+                                      ),
+                                      SizedBox(width: 2.5),
+                                      Text(
                                         'Verified Student',
                                         style: TextStyle(
+                                          color: Color(0xFF2563EB),
                                           fontSize: 9.5,
                                           fontWeight: FontWeight.w700,
-                                          color: isDark
-                                              ? const Color(0xFF93C5FD)
-                                              : const Color(0xFF1D4ED8),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ],

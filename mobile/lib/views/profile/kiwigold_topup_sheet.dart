@@ -360,7 +360,7 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
               subPrice: '30-day access · Auto-boost ready',
               features: [
                 'Unlimited Listing Boosts (0 KiwiGold cost!)',
-                'Exclusive VIP Golden Crown Badge',
+                'Exclusive KiwiGold VIP Badge',
                 'Priority ranking in campus feed',
               ],
               icon: Container(

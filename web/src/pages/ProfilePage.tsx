@@ -587,13 +587,6 @@ export const ProfilePage: React.FC = () => {
                         <MessageCircle size={15} />
                         <span>Chat</span>
                       </Link>
-                      <Link
-                        to={`/products/${order.itemId}`}
-                        className="btn btn-primary"
-                        style={{ padding: '6px 14px', fontSize: '0.85rem' }}
-                      >
-                        <span>View Item</span>
-                      </Link>
                     </div>
                   </div>
                 );

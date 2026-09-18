@@ -627,6 +627,37 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                             : const Color(0xFF78350F),
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 46,
+                      child: FilledButton.icon(
+                        key: const Key('schedule_meetup_from_qr_screen_button'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.medium,
+                            ),
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(
+                          Icons.calendar_month_rounded,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Schedule Meetup in Chat',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

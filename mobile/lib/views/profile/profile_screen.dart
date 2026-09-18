@@ -398,8 +398,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 8),
                 const _VipPerkItem(
                   customIcon: VipCrownIcon(size: 18),
-                  title: 'VIP Golden Badge',
-                  desc: 'Crown badge displayed on your profile and listings',
+                  title: 'KiwiGold VIP Badge',
+                  desc: 'KiwiGold badge displayed on your profile and listings',
                 ),
                 const SizedBox(height: 8),
                 const _VipPerkItem(
