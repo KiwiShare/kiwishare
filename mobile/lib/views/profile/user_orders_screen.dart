@@ -7,9 +7,11 @@ import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../services/map_launcher_service.dart';
 import '../../theme/app_theme.dart';
+import 'payment_checkout_screen.dart';
 
 class UserOrdersScreen extends StatefulWidget {
-  const UserOrdersScreen({super.key});
+  final int initialTabIndex;
+  const UserOrdersScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<UserOrdersScreen> createState() => _UserOrdersScreenState();
@@ -23,7 +25,11 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 1),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadOrders());
   }
 
@@ -68,8 +74,8 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
           unselectedLabelColor: colors.onSurfaceVariant,
           indicatorColor: colors.primary,
           tabs: [
-            Tab(text: 'Buying (${orderProvider.buyingOrders.length})'),
-            Tab(text: 'Selling (${orderProvider.sellingOrders.length})'),
+            Tab(text: 'Purchases (${orderProvider.buyingOrders.length})'),
+            Tab(text: 'Sales Orders (${orderProvider.sellingOrders.length})'),
           ],
         ),
       ),
@@ -440,29 +446,65 @@ class _OrderItemCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                // Pay Now — only for buyers with pending payment
+                if (order.isBuying && order.status == 'pending_payment') ...[
+                  FilledButton.icon(
+                    key: Key('pay_now_btn_${order.id}'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => PaymentCheckoutScreen(
+                            order: order,
+                            onSuccess: () {
+                              // orders already refreshed inside checkout screen
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.lock_outline, size: 14),
+                    label: const Text(
+                      'Pay Now',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 if (isInProgress) ...[
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       visualDensity: VisualDensity.compact,
                     ),
                     onPressed: () {
                       context.push('/meetups/${order.id}/qr');
                     },
                     icon: const Icon(Icons.qr_code_2_rounded, size: 16),
-                    label: const Text('QR Handover', style: TextStyle(fontSize: 12)),
+                    label: const Text('QR Handover',
+                        style: TextStyle(fontSize: 12)),
                   ),
                   const SizedBox(width: 8),
                 ],
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: () {
                     context.push('/messages');
                   },
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
+                  icon:
+                      const Icon(Icons.chat_bubble_outline_rounded, size: 15),
                   label: const Text('Chat', style: TextStyle(fontSize: 12)),
                 ),
                 const SizedBox(width: 8),
@@ -470,13 +512,15 @@ class _OrderItemCard extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.brandPrimary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: () {
                     context.push('/items/${order.itemId}');
                   },
-                  child: const Text('View Item', style: TextStyle(fontSize: 12)),
+                  child:
+                      const Text('View Item', style: TextStyle(fontSize: 12)),
                 ),
               ],
             ),

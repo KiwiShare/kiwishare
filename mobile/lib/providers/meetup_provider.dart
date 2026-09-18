@@ -127,12 +127,18 @@ class MeetupProvider extends ChangeNotifier {
   Future<MeetupModel?> acceptMeetup({
     required String orderId,
     required String token,
+    String? messageId,
+    DateTime? scheduledAt,
+    String? locationName,
   }) async {
     _error = null;
     try {
       final meetup = await repository.acceptMeetup(
         orderId: orderId,
         token: token,
+        messageId: messageId,
+        scheduledAt: scheduledAt,
+        locationName: locationName,
       );
       _meetupCache[orderId] = meetup;
       final index = _meetups.indexWhere((m) => m.id == orderId);

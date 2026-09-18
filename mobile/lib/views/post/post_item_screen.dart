@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -81,8 +82,6 @@ class _PostItemScreenState extends State<PostItemScreen> {
         widget.suggestionService ?? RestListingSuggestionService();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _recoverLostPhotos();
-      // Auto-fill location when screen opens
-      await _autoFillLocation();
     });
   }
 
@@ -301,35 +300,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
     ).showSnackBar(SnackBar(content: Text(message), action: action));
   }
 
-  /// Auto-fills the location on screen open. Silently skips if already set.
-  /// Shows a non-intrusive rationale banner for permission-denied cases
-  /// instead of an error snackbar, so users are informed without being blocked.
-  Future<void> _autoFillLocation() async {
-    if (_location != null || _isLocating || !mounted) return;
 
-    setState(() => _isLocating = true);
-    try {
-      final location = await _locationService.getCurrentLocation();
-      if (!mounted) return;
-      setState(() {
-        _location = location;
-        _isLocating = false;
-      });
-    } on ListingLocationException catch (error) {
-      if (!mounted) return;
-      setState(() => _isLocating = false);
-      // For auto-fill, only show a banner for permission issues; skip for
-      // timedOut / unavailable (user can tap the field to try again).
-      if (error.code == ListingLocationErrorCode.permissionDenied ||
-          error.code == ListingLocationErrorCode.permissionDeniedForever ||
-          error.code == ListingLocationErrorCode.servicesDisabled) {
-        _showLocationError(error.code);
-      }
-      // timedOut / unavailable: stay silent; user can tap the location field.
-    } catch (_) {
-      if (mounted) setState(() => _isLocating = false);
-    }
-  }
 
   bool _validateForm({required bool requirePhoto}) {
     final fieldsAreValid = _formKey.currentState?.validate() ?? false;
@@ -459,9 +430,145 @@ class _PostItemScreenState extends State<PostItemScreen> {
     );
   }
 
+  void _showSustainableInfoDialog() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final isDark = theme.brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.eco_rounded, color: Color(0xFF059669), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'What is a Sustainable Item?',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Supporting the Circular Economy on Campus',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: const Color(0xFF059669),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'In a circular economy, items are kept in circulation for as long as possible rather than ending up in New Zealand landfills. Reusing, sharing, and re-homing items drastically cuts carbon emissions and campus waste.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  height: 1.45,
+                  color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'What qualifies as sustainable?',
+                style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              _buildBulletPoint(
+                ctx,
+                'Pre-loved textbooks, notes, and study essentials passed on to new students.',
+              ),
+              _buildBulletPoint(
+                ctx,
+                'Quality second-hand furniture and dorm gear given another lifecycle.',
+              ),
+              _buildBulletPoint(
+                ctx,
+                'Refurbished or working electronics and appliances.',
+              ),
+              _buildBulletPoint(
+                ctx,
+                'Eco-friendly, reusable, or zero-waste lifestyle products.',
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Got it, thanks!'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBulletPoint(BuildContext context, String text) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 5, right: 8),
+            child: Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF059669)),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                height: 1.4,
+                color: isDark ? Colors.grey.shade300 : const Color(0xFF475569),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _requestSuggestion() async {
     if (_isGeneratingSuggestion || _isPublishing) return;
-    final hasItemContext = [
+    final hasItemContext = _photos.isNotEmpty || [
       _titleController.text,
       _descriptionController.text,
       _category,
@@ -492,6 +599,14 @@ class _PostItemScreenState extends State<PostItemScreen> {
       _condition,
       _location?.label,
     );
+
+    String? photoBase64;
+    if (_photos.isNotEmpty) {
+      try {
+        photoBase64 = base64Encode(_photos.first.bytes);
+      } catch (_) {}
+    }
+
     setState(() => _isGeneratingSuggestion = true);
     try {
       final suggestion = await _suggestionService.suggest(
@@ -502,6 +617,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
           category: _category,
           condition: _condition,
           location: _location?.label,
+          imageBase64: photoBase64,
         ),
       );
       if (!mounted) return;
@@ -673,8 +789,13 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: isDark
+          ? const Color(0xFF0C1310)
+          : const Color(0xFFF8FAFC),
       resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: Column(
@@ -708,204 +829,267 @@ class _PostItemScreenState extends State<PostItemScreen> {
                       onRemovePhoto: _removePhoto,
                       onSetCoverPhoto: _setCoverPhoto,
                     ),
-                    const SizedBox(height: AppSpacing.xl),
-                    _ResponsiveFieldRow(
-                      label: 'Title',
-                      child: TextFormField(
-                        key: const Key('post_title_field'),
-                        controller: _titleController,
-                        textCapitalization: TextCapitalization.sentences,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          hintText: 'e.g. Solid Wood Desk',
-                        ),
-                        validator: _requiredTextValidator,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _ResponsiveFieldRow(
-                      label: 'Category',
-                      child: _MobileSelectionFormField(
-                        key: const Key('post_category_field'),
-                        value: _category,
-                        hintText: 'Select a category',
-                        sheetTitle: 'Choose category',
-                        options: _categories,
-                        onChanged: (value) => setState(() => _category = value),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _ResponsiveFieldRow(
-                      label: 'Price',
-                      child: TextFormField(
-                        key: const Key('post_price_field'),
-                        controller: _priceController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d{0,7}(\.\d{0,2})?'),
-                          ),
-                        ],
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          prefixText: '\$ ',
-                          hintText: 'e.g. 120',
-                        ),
-                        validator: _priceValidator,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _ResponsiveFieldRow(
-                      label: 'Location',
-                      child: _CurrentLocationFormField(
-                        key: const Key('post_location_field'),
-                        value: _location,
-                        isLocating: _isLocating,
-                        onLocate: _findCurrentLocation,
-                        onChanged: (value) {
-                          setState(() => _location = value);
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _ResponsiveFieldRow(
-                      label: 'Condition',
-                      child: _MobileSelectionFormField(
-                        key: const Key('post_condition_field'),
-                        value: _condition,
-                        hintText: 'Select condition',
-                        sheetTitle: 'Choose condition',
-                        options: _conditions,
-                        onChanged: (value) =>
-                            setState(() => _condition = value),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Material(
-                      color: _isSustainable
-                          ? Theme.of(context).colorScheme.primaryContainer
-                                .withValues(alpha: 0.42)
-                          : Theme.of(context).colorScheme.surfaceContainerLow,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.medium),
-                        side: BorderSide(
-                          color: _isSustainable
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).colorScheme.outlineVariant,
-                          width: _isSustainable ? 1.5 : 1.0,
-                        ),
-                      ),
-                      child: SwitchListTile.adaptive(
-                        key: const Key('post_sustainable_switch'),
-                        value: _isSustainable,
-                        onChanged: _isPublishing
-                            ? null
-                            : (value) => setState(() => _isSustainable = value),
-                        activeColor: Theme.of(context).colorScheme.primary,
-                        secondary: Container(
-                          padding: const EdgeInsets.all(AppSpacing.xs + 2),
-                          decoration: BoxDecoration(
-                            color: _isSustainable
-                                ? Theme.of(context).colorScheme.primaryContainer
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.small,
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // 1. Xianyu-style Content Card (Title + Description)
+                    _XianyuCardTile(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _ResponsiveFieldRow(
+                            label: 'Title',
+                            child: TextFormField(
+                              key: const Key('post_title_field'),
+                              controller: _titleController,
+                              textCapitalization: TextCapitalization.sentences,
+                              textInputAction: TextInputAction.next,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              decoration: const InputDecoration(
+                                hintText: 'e.g. Solid Wood Desk',
+                              ),
+                              validator: _requiredTextValidator,
                             ),
                           ),
-                          child: Icon(
-                            _isSustainable ? Icons.eco : Icons.eco_outlined,
-                            color: _isSustainable
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                            size: 22,
+                          const SizedBox(height: AppSpacing.sm),
+                          Divider(
+                            height: 1,
+                            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.35),
                           ),
-                        ),
-                        title: Text(
-                          'Sustainable Item',
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text(
-                          'Mark this item as eco-friendly, circular, or pre-loved',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.xs,
-                        ),
+                          const SizedBox(height: AppSpacing.sm),
+                          _ResponsiveFieldRow(
+                            label: 'Description',
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextFormField(
+                                  key: const Key('post_description_field'),
+                                  controller: _descriptionController,
+                                  minLines: 3,
+                                  maxLines: 6,
+                                  textCapitalization: TextCapitalization.sentences,
+                                  style: const TextStyle(fontSize: 14, height: 1.45),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Describe your item, condition, and details...',
+                                    alignLabelWithHint: true,
+                                  ),
+                                  validator: _requiredTextValidator,
+                                ),
+                                const SizedBox(height: AppSpacing.sm),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Semantics(
+                                    liveRegion: _isGeneratingSuggestion,
+                                    child: OutlinedButton.icon(
+                                      key: const Key('post_ai_suggestion_button'),
+                                      onPressed: _isPublishing || _isGeneratingSuggestion
+                                          ? null
+                                          : _requestSuggestion,
+                                      style: OutlinedButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        side: const BorderSide(color: Color(0xFFFDE68A)),
+                                        backgroundColor: const Color(0xFFFFFBEB),
+                                        foregroundColor: const Color(0xFFB45309),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                      ),
+                                      icon: _isGeneratingSuggestion
+                                          ? const SizedBox.square(
+                                              dimension: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFB45309)),
+                                              ),
+                                            )
+                                          : const Icon(Icons.auto_awesome_outlined, size: 16),
+                                      label: Text(
+                                        _isGeneratingSuggestion
+                                            ? 'Creating suggestion…'
+                                            : 'Help me write',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.xs),
+                                Text(
+                                  'Your entered listing details, but not photos, are sent to our AI provider. AI can make mistakes, so review every suggestion.',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontSize: 11,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Text(
-                      'Description',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextFormField(
-                      key: const Key('post_description_field'),
-                      controller: _descriptionController,
-                      minLines: 5,
-                      maxLines: 7,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText:
-                            'Describe your item, its condition and any details.',
-                        alignLabelWithHint: true,
-                      ),
-                      validator: _requiredTextValidator,
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    Semantics(
-                      liveRegion: _isGeneratingSuggestion,
-                      child: OutlinedButton.icon(
-                        key: const Key('post_ai_suggestion_button'),
-                        onPressed: _isPublishing || _isGeneratingSuggestion
-                            ? null
-                            : _requestSuggestion,
-                        icon: _isGeneratingSuggestion
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.auto_awesome_outlined),
-                        label: Text(
-                          _isGeneratingSuggestion
-                              ? 'Creating suggestion…'
-                              : 'Help me write',
+
+                    // 2. Xianyu-style Trading Details Tiles
+                    _XianyuCardTile(
+                      child: _ResponsiveFieldRow(
+                        label: 'Category',
+                        child: _MobileSelectionFormField(
+                          key: const Key('post_category_field'),
+                          value: _category,
+                          hintText: 'Select a category',
+                          sheetTitle: 'Choose category',
+                          options: _categories,
+                          onChanged: (value) => setState(() => _category = value),
                         ),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'Your entered listing details, but not photos, are sent to our AI provider. AI can make mistakes, so review every suggestion.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    const SizedBox(height: AppSpacing.sm),
+                    _XianyuCardTile(
+                      child: _ResponsiveFieldRow(
+                        label: 'Price',
+                        child: TextFormField(
+                          key: const Key('post_price_field'),
+                          controller: _priceController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d{0,7}(\.\d{0,2})?'),
+                            ),
+                          ],
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            prefixText: '\$ ',
+                            hintText: 'e.g. 120',
+                          ),
+                          validator: _priceValidator,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _XianyuCardTile(
+                      child: _ResponsiveFieldRow(
+                        label: 'Location',
+                        child: _CurrentLocationFormField(
+                          key: const Key('post_location_field'),
+                          value: _location,
+                          isLocating: _isLocating,
+                          onLocate: _findCurrentLocation,
+                          onChanged: (value) {
+                            setState(() => _location = value);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _XianyuCardTile(
+                      child: _ResponsiveFieldRow(
+                        label: 'Condition',
+                        child: _MobileSelectionFormField(
+                          key: const Key('post_condition_field'),
+                          value: _condition,
+                          hintText: 'Select condition',
+                          sheetTitle: 'Choose condition',
+                          options: _conditions,
+                          onChanged: (value) =>
+                              setState(() => _condition = value),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _XianyuCardTile(
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: SwitchListTile.adaptive(
+                          key: const Key('post_sustainable_switch'),
+                          contentPadding: EdgeInsets.zero,
+                          value: _isSustainable,
+                          onChanged: _isPublishing
+                              ? null
+                              : (value) => setState(() => _isSustainable = value),
+                          activeColor: Theme.of(context).colorScheme.primary,
+                          secondary: Container(
+                            padding: const EdgeInsets.all(AppSpacing.xs + 2),
+                            decoration: BoxDecoration(
+                              color: _isSustainable
+                                  ? Theme.of(context).colorScheme.primaryContainer
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.small,
+                              ),
+                            ),
+                            child: Icon(
+                              _isSustainable ? Icons.eco : Icons.eco_outlined,
+                              color: _isSustainable
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                              size: 22,
+                            ),
+                          ),
+                          title: Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: 'Sustainable Item ',
+                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.middle,
+                                  child: InkWell(
+                                    key: const Key('post_sustainable_help_button'),
+                                    onTap: _showSustainableInfoDialog,
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(2),
+                                      child: Icon(
+                                        Icons.help_outline_rounded,
+                                        size: 16,
+                                        color: Color(0xFF059669),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Mark this item as eco-friendly, circular, or pre-loved',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xl),
+
+                    // 3. Xianyu-style Publish Button
                     FilledButton(
                       key: const Key('post_submit_button'),
                       onPressed: _isPublishing || _isGeneratingSuggestion
                           ? null
                           : _postItem,
                       style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        backgroundColor: AppColors.brandPrimary,
+                        minimumSize: const Size.fromHeight(52),
+                        backgroundColor: const Color(0xFF059669),
                         foregroundColor: Colors.white,
-                        elevation: 1,
+                        elevation: 2,
+                        shadowColor: const Color(0xFF059669).withValues(alpha: 0.35),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.medium),
+                          borderRadius: BorderRadius.circular(26),
                         ),
                       ),
                       child: _isPublishing
@@ -918,12 +1102,19 @@ class _PostItemScreenState extends State<PostItemScreen> {
                                 ),
                               ),
                             )
-                          : const Text(
-                              'Post item',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                              ),
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Post item',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Icon(Icons.arrow_forward_rounded, size: 18),
+                              ],
                             ),
                     ),
                   ],
@@ -1826,6 +2017,43 @@ class _PhotoSourceSheet extends StatelessWidget {
   }
 }
 
+class _XianyuCardTile extends StatelessWidget {
+  final Widget child;
+
+  const _XianyuCardTile({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final borderColor = isDark
+        ? theme.colorScheme.outlineVariant.withValues(alpha: 0.25)
+        : const Color(0xFFE2E8F0);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? theme.colorScheme.surfaceContainerLow : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 6,
+                  offset: const Offset(0, 1.5),
+                ),
+              ],
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      child: child,
+    );
+  }
+}
+
 class _ResponsiveFieldRow extends StatelessWidget {
   final String label;
   final Widget child;
@@ -1860,11 +2088,11 @@ class _ResponsiveFieldRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              width: 68,
+              width: 82,
               height: 48,
               child: Align(alignment: Alignment.centerLeft, child: labelWidget),
             ),
-            const SizedBox(width: AppSpacing.md),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(child: child),
           ],
         );
@@ -1916,10 +2144,42 @@ class _CurrentLocationFormField extends StatelessWidget {
                     'Enter a suburb or city. Do not include a street address.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      'Auckland Central',
+                      'Newmarket',
+                      'Ponsonby',
+                      'Takapuna',
+                      'Mount Eden',
+                      'Wellington Central',
+                      'Christchurch Central',
+                      'Hamilton',
+                    ].map((area) {
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => Navigator.of(sheetContext).pop(area),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Text(
+                            area,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                   const SizedBox(height: AppSpacing.md),
                   TextField(
                     key: const Key('post_manual_location_input'),
-                    autofocus: true,
+                    autofocus: false,
                     textCapitalization: TextCapitalization.words,
                     textInputAction: TextInputAction.done,
                     maxLength: 80,
@@ -2015,8 +2275,8 @@ class _CurrentLocationFormField extends StatelessWidget {
                 field.didChange(location);
                 onChanged(location);
               },
-              icon: const Icon(Icons.edit_location_alt_outlined),
-              label: const Text('Enter suburb or city manually'),
+              icon: const Icon(Icons.edit_location_alt_outlined, size: 16),
+              label: const Text('Enter suburb or city manually', style: TextStyle(fontSize: 12)),
             ),
           ],
         );

@@ -176,6 +176,12 @@ export const ProductDetailPage: React.FC = () => {
     sellerId &&
     (user.id === sellerId || (typeof sellerId === 'object' && (sellerId as any)?._id === user.id))
   );
+  const effectiveSellerName = (isOwner && user?.displayName)
+    ? user.displayName
+    : item?.seller?.displayName || 'Kiwi Community Member';
+  const effectiveSellerAvatar = (isOwner && user?.avatarUrl)
+    ? user.avatarUrl
+    : item?.seller?.avatarUrl;
 
   return (
     <div className="container" style={{ padding: '24px 20px 80px' }}>
@@ -417,10 +423,10 @@ export const ProductDetailPage: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {item.seller?.avatarUrl ? (
+              {effectiveSellerAvatar ? (
                 <img
-                  src={item.seller.avatarUrl}
-                  alt={item.seller.displayName}
+                  src={effectiveSellerAvatar}
+                  alt={effectiveSellerName}
                   style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }}
                 />
               ) : (
@@ -438,13 +444,13 @@ export const ProductDetailPage: React.FC = () => {
                     justifyContent: 'center',
                   }}
                 >
-                  {(item.seller?.displayName || 'K').charAt(0).toUpperCase()}
+                  {(effectiveSellerName || 'K').charAt(0).toUpperCase()}
                 </div>
               )}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>
-                    {item.seller?.displayName || 'Kiwi Community Member'}
+                    {effectiveSellerName}
                   </span>
                   {item.seller?.isStudentVerified && (
                     <span

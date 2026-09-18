@@ -14,12 +14,14 @@ import '../../config/api_config.dart';
 import '../../navigation/app_route_observer.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/order_provider.dart';
 import '../../repositories/item_repository.dart';
 import '../../services/listing_image_picker.dart';
 import '../../services/chat_voice_service.dart';
 import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../products/product_detail_screen.dart';
+import '../profile/payment_checkout_screen.dart';
 import '../profile/report_screen.dart';
 import 'widgets/location_bubble.dart';
 import 'widgets/location_picker_sheet.dart';
@@ -76,10 +78,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   ModalRoute<dynamic>? _subscribedRoute;
   final Object _visibilityOwner = Object();
   ItemModel? _activeItem;
+  String? _specialOfferPrice;
 
   @override
   void initState() {
     super.initState();
+    _specialOfferPrice = widget.conversation.specialPrice;
     _messageFocusNode.addListener(_handleFocusChange);
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _voiceRecorder = widget.voiceRecorder ?? DeviceChatVoiceRecorder();
@@ -448,6 +452,61 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     } catch (_) {}
   }
 
+  Future<void> _autoReserveItem() async {
+    // Status available/reserved is no longer auto-mutated in chat flow.
+  }
+
+  Future<bool> _confirmCancelPreviousMeetupIfNeeded(
+    ChatMessageModel currentMessage,
+  ) async {
+    final messages = _chatProvider.messagesFor(widget.conversation.id);
+    final hasActiveConfirmed = messages.any(
+      (m) =>
+          m.id != currentMessage.id &&
+          m.isMeetup &&
+          m.meetup != null &&
+          m.meetup!.isConfirmed,
+    );
+
+    if (!hasActiveConfirmed) return true;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Cancel Previous Meetup?',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'A meetup has already been confirmed. Accepting this new proposal will cancel the previously scheduled meetup.\n\nDo you want to continue and accept this one?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep Previous'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+            ),
+            child: const Text('Cancel Previous & Accept'),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
+  }
+
   Future<void> _buyerBuyNow() async {
     final token = _currentAuthToken;
     if (token == null || token.isEmpty) return;
@@ -456,81 +515,78 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         ? 'FREE'
         : '\$${item?.priceNzd ?? "0"} NZD';
 
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        final theme = Theme.of(context);
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Confirm Purchase Intent',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Item: ${item?.title ?? widget.conversation.itemTitle}',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Price: $priceStr',
-                style: TextStyle(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'This will notify the seller that you intend to purchase and pick up this item.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                      ),
-                      onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text('Send Intent'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (confirmed == true && mounted) {
+    // 1. Immediately send in-chat purchase message
+    try {
       await _chatProvider.sendText(
         conversation: widget.conversation,
-        text: '💳 I want to purchase this item ($priceStr). When would be convenient to meet or pick up?',
+        text: '💳 [Buyer Action] I am buying this item ($priceStr) now! Proceeding to payment.',
         token: token,
       );
       _scrollToEnd();
       _requestNotificationPermissionAfterAction();
+    } catch (_) {}
+
+    // 2. Prepare order and navigate to payment checkout screen
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          elevation: 6,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text(
+                  'Preparing checkout...',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final orderProvider = context.read<OrderProvider>();
+      final order = await orderProvider.createOrGetOrder(
+        itemId: widget.conversation.itemId,
+        token: token,
+      );
+      if (mounted) Navigator.pop(context); // close loading dialog
+
+      if (mounted) {
+        final paymentResult = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute<bool>(
+            builder: (_) => PaymentCheckoutScreen(order: order),
+          ),
+        );
+
+        if (paymentResult == true && mounted) {
+          await _chatProvider.sendText(
+            conversation: widget.conversation,
+            text: '✅ [Payment Successful] Payment of $priceStr completed! Ready to arrange meetup or collection.',
+            token: token,
+          );
+          _scrollToEnd();
+        }
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // close loading dialog
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open checkout: $e')),
+        );
+      }
     }
   }
 
@@ -665,6 +721,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
     // Only send a chat message — do NOT modify the actual listing price
     if (newPrice != null && mounted) {
+      setState(() => _specialOfferPrice = newPrice);
       final priceLabel = newPrice == '0' ? 'FREE' : '\$$newPrice NZD';
       try {
         await _chatProvider.sendText(
@@ -684,81 +741,89 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
   }
 
-  Future<void> _sellerChangeStatus() async {
+  Future<void> _sellerToggleDelistRelist() async {
     final token = _currentAuthToken;
     if (token == null || token.isEmpty) return;
+    final item = _activeItem;
+    if (item == null || item.status == ItemStatus.sold) return;
 
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        final theme = Theme.of(context);
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Change Item Status',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Divider(height: 24),
-              ListTile(
-                leading: const Icon(Icons.check_circle_outline, color: Colors.green),
-                title: const Text('Active (Available)'),
-                subtitle: const Text('Item is available for other buyers'),
-                onTap: () => Navigator.of(context).pop('active'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.bookmark_outline, color: Colors.amber),
-                title: const Text('Reserved'),
-                subtitle: const Text('Holding for this buyer'),
-                onTap: () => Navigator.of(context).pop('reserved'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.lock_outline, color: Colors.grey),
-                title: const Text('Sold'),
-                subtitle: const Text('Transaction completed'),
-                onTap: () => Navigator.of(context).pop('sold'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    final isDelisted = item.status == ItemStatus.delisted;
 
-    if (selected != null && mounted) {
+    if (!isDelisted) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delist Item?'),
+          content: const Text(
+            'This listing will be taken down from the marketplace. You can relist it anytime before it is sold.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Delist'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+
       try {
         final updated = await RestItemRepository().updateItem(
           id: widget.conversation.itemId,
           token: token,
-          updates: {'status': selected},
+          updates: {'status': 'draft'},
         );
         setState(() => _activeItem = updated);
-        final statusLabel = selected == 'active'
-            ? 'Active'
-            : selected == 'reserved'
-                ? 'Reserved'
-                : 'Sold';
         await _chatProvider.sendText(
           conversation: widget.conversation,
-          text: '📦 [Seller Action] Item status updated to $statusLabel',
+          text: '[Seller Action] Item has been delisted from the marketplace.',
           token: token,
         );
         _scrollToEnd();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Status updated to $statusLabel')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Item has been delisted.')),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update status: $e')),
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delist item: $e')),
+          );
+        }
+      }
+    } else {
+      try {
+        final updated = await RestItemRepository().updateItem(
+          id: widget.conversation.itemId,
+          token: token,
+          updates: {'status': 'active'},
         );
+        setState(() => _activeItem = updated);
+        await _chatProvider.sendText(
+          conversation: widget.conversation,
+          text: '[Seller Action] Item has been relisted to the marketplace.',
+          token: token,
+        );
+        _scrollToEnd();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Item relisted successfully!')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to relist item: $e')),
+          );
+        }
       }
     }
   }
@@ -854,53 +919,105 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 4,
                     children: [
-                      if (isFree)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF059669),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'FREE',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        )
-                      else if (priceText.isNotEmpty)
+                      if (_specialOfferPrice != null) ...[
                         Text(
-                          priceText,
-                          style: TextStyle(
-                            color: colors.primary,
+                          _specialOfferPrice == '0' ? 'FREE' : '\$$_specialOfferPrice',
+                          style: const TextStyle(
+                            color: Color(0xFF059669),
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                      if (status != ItemStatus.active) ...[
-                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD1FAE5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Special Offer',
+                            style: TextStyle(
+                              color: Color(0xFF047857),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (priceText.isNotEmpty && priceText != (_specialOfferPrice == '0' ? 'FREE' : '\$$_specialOfferPrice'))
+                          Text(
+                            priceText,
+                            style: TextStyle(
+                              color: colors.onSurfaceVariant.withOpacity(0.6),
+                              fontSize: 12,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                      ] else ...[
+                        if (isFree)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF059669),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'FREE',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          )
+                        else if (priceText.isNotEmpty)
+                          Text(
+                            priceText,
+                            style: TextStyle(
+                              color: colors.primary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                      ],
+                      if (status == ItemStatus.delisted)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: status == ItemStatus.reserved
-                                ? Colors.amber.shade800
-                                : Colors.grey.shade700,
+                            color: Colors.orange.shade100,
                             borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.orange.shade700, width: 0.8),
                           ),
                           child: Text(
-                            status == ItemStatus.reserved ? 'RESERVED' : 'SOLD',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            'DELISTED',
+                            style: TextStyle(
+                              color: Colors.orange.shade900,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                      else if (status == ItemStatus.sold)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.grey.shade600, width: 0.8),
+                          ),
+                          child: Text(
+                            'SOLD',
+                            style: TextStyle(
+                              color: Colors.grey.shade800,
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                      ],
                     ],
                   ),
                 ],
@@ -1033,21 +1150,38 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                      onPressed: _sellerChangeStatus,
-                      icon: const Icon(Icons.sell_outlined, size: 16),
-                      label: const Text(
-                        'Item Status',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  if (_activeItem?.status != ItemStatus.sold) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          side: BorderSide(
+                            color: (_activeItem?.status == ItemStatus.delisted)
+                                ? const Color(0xFF059669)
+                                : Colors.orange.shade700,
+                          ),
+                          foregroundColor: (_activeItem?.status == ItemStatus.delisted)
+                              ? const Color(0xFF059669)
+                              : Colors.orange.shade900,
+                        ),
+                        onPressed: _sellerToggleDelistRelist,
+                        icon: Icon(
+                          (_activeItem?.status == ItemStatus.delisted)
+                              ? Icons.storefront_outlined
+                              : Icons.archive_outlined,
+                          size: 16,
+                        ),
+                        label: Text(
+                          (_activeItem?.status == ItemStatus.delisted)
+                              ? 'Relist Item'
+                              : 'Delist Item',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ],
             ),
@@ -1349,6 +1483,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
     final error = provider.messageLoadErrorFor(widget.conversation.id);
     final messages = provider.messagesFor(widget.conversation.id);
+    if (_specialOfferPrice == null) {
+      for (final m in messages.reversed) {
+        if (m.text.contains('Special offer just for you:')) {
+          final match = RegExp(r'Special offer just for you:\s*(FREE|\$[0-9.]+)').firstMatch(m.text);
+          if (match != null) {
+            final val = match.group(1)!;
+            _specialOfferPrice = val == 'FREE' ? '0' : val.replaceAll('\$', '');
+            break;
+          }
+        }
+      }
+    }
     if (error != null && messages.isEmpty) {
       return _ConversationState(
         key: const Key('conversation_error_state'),
@@ -1384,6 +1530,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             isBuyer: widget.conversation.direction == ChatDirection.buying,
             showReadReceipt:
                 index == latestSentIndex && message.status == 'read',
+            onBeforeAccept: () => _confirmCancelPreviousMeetupIfNeeded(message),
             onMeetupStatusChanged: () {
               final token = _currentAuthToken;
               if (token != null && token.isNotEmpty) {
@@ -1392,6 +1539,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   token: token,
                   shouldMarkRead: () => _isCurrentRoute,
                 );
+              }
+              if (_activeItem?.status == ItemStatus.active &&
+                  widget.conversation.direction == ChatDirection.selling) {
+                _autoReserveItem();
               }
             },
           );
@@ -1407,12 +1558,14 @@ class _MessageBubble extends StatelessWidget {
     required this.showReadReceipt,
     this.isBuyer = false,
     this.onMeetupStatusChanged,
+    this.onBeforeAccept,
   });
 
   final ChatMessageModel message;
   final bool showReadReceipt;
   final bool isBuyer;
   final VoidCallback? onMeetupStatusChanged;
+  final Future<bool> Function()? onBeforeAccept;
 
   @override
   Widget build(BuildContext context) {
@@ -1431,10 +1584,12 @@ class _MessageBubble extends StatelessWidget {
               MeetupCardBubble(
                 key: Key('chat_meetup_card_${message.id}'),
                 meetup: message.meetup!,
+                messageId: message.id,
                 isMine: message.isMine,
                 isBuyer: isBuyer,
                 createdAt: message.createdAt,
                 onStatusChanged: onMeetupStatusChanged,
+                onBeforeAccept: onBeforeAccept,
               ),
               if (showReadReceipt) _ReadReceipt(messageId: message.id),
             ],
@@ -1536,43 +1691,150 @@ class _MessageBubble extends StatelessWidget {
                   mine: mine,
                 )
               else
-                Text(
-                  message.text,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: mine
-                        ? Theme.of(context).colorScheme.onPrimary
-                        : Theme.of(context).colorScheme.onSurface,
-                  ),
+                _ActionOrTextMessage(
+                  text: message.text,
+                  mine: mine,
                 ),
               const SizedBox(height: 2),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _messageTime(message.createdAt),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: mine
-                          ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.78)
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (mine) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      showReadReceipt ? Icons.done_all : Icons.done,
-                      key: showReadReceipt ? Key('chat_read_receipt_${message.id}') : null,
-                      size: 13,
-                      color: showReadReceipt
-                          ? const Color(0xFF60AEFF) // blue = read
-                          : Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.65),
-                    ),
-                  ],
-                ],
+              Text(
+                _messageTime(message.createdAt),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: mine
+                      ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.78)
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
+              if (showReadReceipt)
+                Text(
+                  'Read',
+                  key: Key('chat_read_receipt_${message.id}'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.78),
+                  ),
+                ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ActionOrTextMessage extends StatelessWidget {
+  const _ActionOrTextMessage({
+    required this.text,
+    required this.mine,
+  });
+
+  final String text;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isSellerAction = text.contains('[Seller Action]');
+    final isBuyerAction = text.contains('[Buyer Action]');
+    final isPaymentAction = text.contains('[Payment Successful]');
+
+    if (!isSellerAction && !isBuyerAction && !isPaymentAction) {
+      return Text(
+        text,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: mine
+              ? theme.colorScheme.onPrimary
+              : theme.colorScheme.onSurface,
+        ),
+      );
+    }
+
+    final IconData icon;
+    final String badgeTitle;
+    final Color badgeColor;
+    final Color badgeTextColor;
+    String cleanBody = text;
+
+    if (isSellerAction) {
+      icon = Icons.inventory_2_rounded;
+      badgeTitle = 'Seller Action';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.22)
+          : const Color(0xFF2563EB).withValues(alpha: 0.12);
+      badgeTextColor = mine
+          ? Colors.white
+          : const Color(0xFF1D4ED8);
+      cleanBody = text
+          .replaceAll('📦', '')
+          .replaceAll('[Seller Action]', '')
+          .trim();
+    } else if (isBuyerAction) {
+      icon = Icons.shopping_bag_rounded;
+      badgeTitle = 'Buyer Action';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.22)
+          : const Color(0xFF059669).withValues(alpha: 0.12);
+      badgeTextColor = mine
+          ? Colors.white
+          : const Color(0xFF047857);
+      cleanBody = text
+          .replaceAll('💳', '')
+          .replaceAll('[Buyer Action]', '')
+          .trim();
+    } else {
+      icon = Icons.verified_rounded;
+      badgeTitle = 'Payment Confirmed';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.25)
+          : const Color(0xFF10B981).withValues(alpha: 0.15);
+      badgeTextColor = mine
+          ? Colors.white
+          : const Color(0xFF065F46);
+      cleanBody = text
+          .replaceAll('✅', '')
+          .replaceAll('[Payment Successful]', '')
+          .trim();
+    }
+
+    return Column(
+      crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: badgeColor,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 13,
+                color: badgeTextColor,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                badgeTitle,
+                style: TextStyle(
+                  color: badgeTextColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          cleanBody,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: mine
+                ? theme.colorScheme.onPrimary
+                : theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }

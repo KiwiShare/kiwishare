@@ -86,6 +86,24 @@ describe('listing AI suggestions', () => {
     });
   });
 
+  test('generates suggestion when seller provides only photo imageBase64', async () => {
+    const provider = new FakeSuggestionProvider();
+    setListingSuggestionProviderForTests(provider);
+
+    const response = await request(app.callback())
+      .post('/api/listing-suggestions')
+      .set('Authorization', `Bearer ${authToken()}`)
+      .send({
+        imageBase64: 'dGVzdGltYWdlZGF0YQ=='
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.suggestion).toEqual(validSuggestion);
+    expect(provider.lastInput).toEqual({
+      imageBase64: 'dGVzdGltYWdlZGF0YQ=='
+    });
+  });
+
   test('rejects empty, oversized, and unknown listing context', async () => {
     const provider = new FakeSuggestionProvider();
     setListingSuggestionProviderForTests(provider);

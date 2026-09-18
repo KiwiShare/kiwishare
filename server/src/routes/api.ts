@@ -13,6 +13,7 @@ import listingSuggestionsRouter from './listingSuggestions';
 import meetupsRouter from './meetups';
 import reportsRouter from './reports';
 import ordersRouter from './orders';
+import paymentsRouter from './payments';
 
 const router = new Router({ prefix: '/api' });
 router.use(reportsRouter.routes());
@@ -57,5 +58,8 @@ router.use(meetupsRouter.allowedMethods());
 
 router.use(ordersRouter.routes());
 router.use(ordersRouter.allowedMethods());
+
+router.use(paymentsRouter.routes());
+router.use(paymentsRouter.allowedMethods());
 
 export default router;

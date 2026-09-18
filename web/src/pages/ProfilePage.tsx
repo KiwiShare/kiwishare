@@ -237,7 +237,7 @@ export const ProfilePage: React.FC = () => {
           }}
         >
           <ArrowDownLeft size={18} />
-          <span>Purchases / Buying (我买过的)</span>
+          <span>Purchases</span>
         </button>
 
         <button
@@ -258,7 +258,7 @@ export const ProfilePage: React.FC = () => {
           }}
         >
           <ArrowUpRight size={18} />
-          <span>Sales / Selling (我卖出的)</span>
+          <span>Sales</span>
         </button>
       </div>
 
@@ -329,7 +329,7 @@ export const ProfilePage: React.FC = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
             <div>
               <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>
-                {activeTab === 'buying' ? 'My Purchase Orders (我买过的商品)' : 'My Sales Orders (我卖出的订单)'}
+                {activeTab === 'buying' ? 'My Purchase Orders' : 'My Sales Orders'}
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                 {activeTab === 'buying' ? 'Track ongoing purchases and historical orders' : 'Manage your sales and completed buyer handovers'}

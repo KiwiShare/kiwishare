@@ -84,6 +84,29 @@ class ListingProvider extends ChangeNotifier {
     return updated;
   }
 
+  Future<Map<String, dynamic>> promoteItem({
+    required String id,
+    required String token,
+  }) async {
+    final result = await itemRepository.promoteItem(id: id, token: token);
+    invalidateCaches();
+    return result;
+  }
+
+  Future<ItemModel> toggleListingStatus({
+    required String id,
+    required bool publish,
+    required String token,
+  }) async {
+    final updated = await itemRepository.toggleListingStatus(
+      id: id,
+      publish: publish,
+      token: token,
+    );
+    invalidateCaches();
+    return updated;
+  }
+
   void invalidateCaches() {
     _cachedPopularItems = null;
     _cachedRecommendedItems = null;

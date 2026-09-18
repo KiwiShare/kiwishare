@@ -1,7 +1,8 @@
 class OrderItemInfo {
   final String id;
   final String title;
-  final String priceNzd;
+  final String priceNzd;        // original list price
+  final String? originalPriceNzd; // kept for display as strikethrough
   final String imageUrl;
   final String? condition;
   final String? category;
@@ -10,6 +11,7 @@ class OrderItemInfo {
     required this.id,
     required this.title,
     required this.priceNzd,
+    this.originalPriceNzd,
     required this.imageUrl,
     this.condition,
     this.category,
@@ -20,6 +22,7 @@ class OrderItemInfo {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? 'KiwiShare Item').toString(),
       priceNzd: (json['priceNzd'] ?? '0.00').toString(),
+      originalPriceNzd: json['originalPriceNzd']?.toString(),
       imageUrl: (json['imageUrl'] ?? '').toString(),
       condition: json['condition']?.toString(),
       category: json['category']?.toString(),
@@ -92,6 +95,9 @@ class OrderModel {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? completedAt;
+  final DateTime? paidAt;
+  /// The actual agreed/settled price (may differ from item.priceNzd due to special price negotiation)
+  final String? itemAmountNzd;
 
   const OrderModel({
     required this.id,
@@ -105,10 +111,13 @@ class OrderModel {
     required this.createdAt,
     required this.updatedAt,
     this.completedAt,
+    this.paidAt,
+    this.itemAmountNzd,
   });
 
   bool get isBuying => role == 'buying';
   bool get isSelling => role == 'selling';
+  bool get isPaid => paidAt != null;
 
   bool get isCompleted =>
       status == 'completed' || status == 'qr_scanned' || status == 'seller_paid';
@@ -163,6 +172,11 @@ class OrderModel {
       completedAt: json['completedAt'] != null
           ? DateTime.tryParse(json['completedAt'].toString())
           : null,
+      paidAt: json['paidAt'] != null
+          ? DateTime.tryParse(json['paidAt'].toString())
+          : null,
+      itemAmountNzd: json['itemAmountNzd']?.toString() ??
+          json['itemAmount']?.toString(),
     );
   }
 }

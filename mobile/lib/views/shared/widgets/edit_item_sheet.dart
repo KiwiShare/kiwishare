@@ -220,23 +220,35 @@ class _EditItemSheetState extends State<EditItemSheet> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  _status == ItemStatus.active
+                      ? '🟢 Available: Visible & searchable by all students on campus.'
+                      : _status == ItemStatus.reserved
+                      ? '🟡 Reserved: Held for a buyer (e.g. meetup scheduled).'
+                      : '⚪ Sold: Deal completed; item marked as sold.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 SegmentedButton<ItemStatus>(
                   segments: const [
                     ButtonSegment(
                       value: ItemStatus.active,
-                      label: Text('Active'),
+                      label: Text('Available'),
                       icon: Icon(Icons.check_circle_outline),
                     ),
                     ButtonSegment(
                       value: ItemStatus.reserved,
                       label: Text('Reserved'),
-                      icon: Icon(Icons.bookmark_outline),
+                      icon: Icon(Icons.lock_clock),
                     ),
                     ButtonSegment(
                       value: ItemStatus.sold,
                       label: Text('Sold'),
-                      icon: Icon(Icons.lock_outline),
+                      icon: Icon(Icons.task_alt),
                     ),
                   ],
                   selected: {_status},

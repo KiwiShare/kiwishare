@@ -29,6 +29,9 @@ abstract class MeetupRepository {
   Future<MeetupModel> acceptMeetup({
     required String orderId,
     required String token,
+    String? messageId,
+    DateTime? scheduledAt,
+    String? locationName,
   });
 
   Future<void> declineMeetup({required String orderId, required String token});
@@ -97,10 +100,19 @@ class RestMeetupRepository implements MeetupRepository {
   Future<MeetupModel> acceptMeetup({
     required String orderId,
     required String token,
+    String? messageId,
+    DateTime? scheduledAt,
+    String? locationName,
   }) async {
+    final bodyData = <String, dynamic>{
+      'messageId': ?messageId,
+      if (scheduledAt != null) 'scheduledAt': scheduledAt.toIso8601String(),
+      'locationName': ?locationName,
+    };
     final response = await _client.post(
       Uri.parse('${ApiConfig.baseUrl}/api/meetups/$orderId/accept'),
       headers: _headers(token),
+      body: bodyData.isNotEmpty ? jsonEncode(bodyData) : null,
     );
     final data = _responseMap(response);
     final meetupJson = data['meetup'];

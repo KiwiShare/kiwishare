@@ -25,6 +25,11 @@ abstract class OrderRepository {
     required String orderId,
     required String token,
   });
+
+  Future<OrderModel> createOrGetOrder({
+    required String itemId,
+    required String token,
+  });
 }
 
 class RestOrderRepository implements OrderRepository {
@@ -83,5 +88,29 @@ class RestOrderRepository implements OrderRepository {
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return OrderModel.fromJson(data['order'] as Map<String, dynamic>);
+  }
+
+  @override
+  Future<OrderModel> createOrGetOrder({
+    required String itemId,
+    required String token,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/orders');
+    final response = await _client.post(
+      uri,
+      headers: _headers(token),
+      body: jsonEncode({'itemId': itemId}),
+    );
+
+    // 200 = existing order returned, 201 = new order created
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw OrderRepositoryException(
+        'Failed to create order (${response.statusCode}): ${response.body}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final orderJson = data['order'] ?? data;
+    return OrderModel.fromJson(orderJson as Map<String, dynamic>);
   }
 }

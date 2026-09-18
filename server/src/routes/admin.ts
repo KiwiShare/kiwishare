@@ -7,6 +7,7 @@ import Order from '../models/Order';
 import { authenticateToken } from '../middleware/auth';
 import { formatItem } from './usedItems';
 import { sendAdminItemNotification } from '../services/adminNotification';
+import { getPlatformFeeSettings, updatePlatformFeeSettings } from '../models/PlatformSetting';
 
 const router = new Router();
 
@@ -558,6 +559,26 @@ router.patch('/admin/items/:id/assign', authenticateToken, requireAdmin, async (
     status: 'success',
     message: `Item successfully reassigned to ${targetUser!.displayName} (${targetUser!.email}).`,
     item: formatItem(item)
+  };
+});
+
+// 12. GET /api/admin/settings/fees - Get platform fee settings
+router.get('/admin/settings/fees', authenticateToken, requireAdmin, async (ctx) => {
+  const fees = await getPlatformFeeSettings();
+  ctx.body = {
+    status: 'success',
+    data: fees
+  };
+});
+
+// 13. PUT /api/admin/settings/fees - Update platform fee settings
+router.put('/admin/settings/fees', authenticateToken, requireAdmin, async (ctx) => {
+  const { buyerFeePercent, minFeeCents } = ctx.request.body as any;
+  const updated = await updatePlatformFeeSettings(buyerFeePercent, minFeeCents);
+  ctx.body = {
+    status: 'success',
+    message: 'Platform fee settings updated successfully.',
+    data: updated
   };
 });
 

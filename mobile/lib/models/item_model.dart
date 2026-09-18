@@ -1,4 +1,4 @@
-enum ItemStatus { active, reserved, sold }
+enum ItemStatus { active, reserved, sold, delisted }
 
 class SellerInfo {
   final String id;
@@ -65,6 +65,8 @@ class ItemModel {
   final double? latitude;
   final double? longitude;
   final int watchlistCount;
+  final bool isPromoted;
+  final DateTime? promotedAt;
 
   const ItemModel({
     required this.id,
@@ -83,6 +85,8 @@ class ItemModel {
     this.latitude,
     this.longitude,
     this.watchlistCount = 0,
+    this.isPromoted = false,
+    this.promotedAt,
   });
 
   double get numericPrice => double.tryParse(priceNzd) ?? 0;
@@ -92,6 +96,10 @@ class ItemModel {
   String get ownerName => seller?.displayName ?? 'Seller';
 
   bool get hasMapLocation => latitude != null && longitude != null;
+
+  bool get isDelisted => status == ItemStatus.delisted;
+
+  bool get isActive => status == ItemStatus.active;
 
   /// Returns the complete list of images, falling back to imageUrl
   List<String> get allImages {
@@ -117,6 +125,8 @@ class ItemModel {
     double? latitude,
     double? longitude,
     int? watchlistCount,
+    bool? isPromoted,
+    DateTime? promotedAt,
   }) {
     return ItemModel(
       id: id ?? this.id,
@@ -134,6 +144,8 @@ class ItemModel {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       watchlistCount: watchlistCount ?? this.watchlistCount,
+      isPromoted: isPromoted ?? this.isPromoted,
+      promotedAt: promotedAt ?? this.promotedAt,
     );
   }
 
@@ -156,6 +168,8 @@ class ItemModel {
       'latitude': latitude,
       'longitude': longitude,
       'watchlistCount': watchlistCount,
+      'isPromoted': isPromoted,
+      'promotedAt': promotedAt?.toIso8601String(),
     };
   }
 
@@ -185,6 +199,11 @@ class ItemModel {
       sellerInfo = SellerInfo.fromMap(Map<String, dynamic>.from(rawSeller));
     }
 
+    DateTime? parsedPromotedAt;
+    if (map['promotedAt'] != null) {
+      parsedPromotedAt = DateTime.tryParse(map['promotedAt'].toString());
+    }
+
     return ItemModel(
       id: (map['id'] ?? map['_id'] ?? '').toString(),
       title: (map['title'] ?? '').toString(),
@@ -204,6 +223,8 @@ class ItemModel {
       latitude: _asDouble(map['latitude']),
       longitude: _asDouble(map['longitude']),
       watchlistCount: _asInt(map['watchlistCount'] ?? map['favouriteCount']),
+      isPromoted: map['isPromoted'] == true,
+      promotedAt: parsedPromotedAt,
     );
   }
 
@@ -272,5 +293,6 @@ double? _asDouble(dynamic value) {
 ItemStatus _parseStatus(dynamic value) => switch (value?.toString()) {
   'reserved' => ItemStatus.reserved,
   'sold' => ItemStatus.sold,
+  'delisted' || 'draft' || 'hidden' || 'unlisted' => ItemStatus.delisted,
   _ => ItemStatus.active,
 };

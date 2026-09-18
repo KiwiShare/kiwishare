@@ -24,6 +24,19 @@ abstract class ItemRepository {
   }) {
     throw UnimplementedError('updateItem is not implemented');
   }
+  Future<Map<String, dynamic>> promoteItem({
+    required String id,
+    required String token,
+  }) {
+    throw UnimplementedError('promoteItem is not implemented');
+  }
+  Future<ItemModel> toggleListingStatus({
+    required String id,
+    required bool publish,
+    required String token,
+  }) {
+    throw UnimplementedError('toggleListingStatus is not implemented');
+  }
 }
 
 class RestItemRepository implements ItemRepository {
@@ -87,12 +100,65 @@ class RestItemRepository implements ItemRepository {
   }) async {
     final uri = Uri.parse(
       '${ApiConfig.baseUrl}/api/users/me/usedItems',
-    ).replace(queryParameters: {'status': sold ? 'sold' : 'active,reserved'});
+    ).replace(
+      queryParameters: {
+        'status': sold ? 'sold' : 'active,reserved,draft,delisted',
+      },
+    );
     final response = await _client.get(
       uri,
       headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
     );
     return _parseItemsResponse(response, 'Failed to fetch your listings.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> promoteItem({
+    required String id,
+    required String token,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/usedItems/$id/promote');
+    final response = await _client.post(
+      uri,
+      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final item = ItemModel.fromMap(data['item'] as Map<String, dynamic>);
+      final kiwiGold = data['kiwiGold'] is num ? (data['kiwiGold'] as num).toInt() : null;
+      return {'item': item, 'kiwiGold': kiwiGold, 'message': data['message']};
+    }
+    String message = 'Failed to promote item.';
+    try {
+      final data = jsonDecode(response.body);
+      if (data is Map && data['message'] != null) {
+        message = data['message'].toString();
+      }
+    } catch (_) {}
+    throw Exception(message);
+  }
+
+  @override
+  Future<ItemModel> toggleListingStatus({
+    required String id,
+    required bool publish,
+    required String token,
+  }) async {
+    final endpoint = publish ? 'relist' : 'delist';
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/usedItems/$id/$endpoint');
+    final response = await _client.post(
+      uri,
+      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return ItemModel.fromMap(data['item'] as Map<String, dynamic>);
+    }
+    return updateItem(
+      id: id,
+      token: token,
+      updates: {'status': publish ? 'active' : 'draft'},
+    );
   }
 
   @override

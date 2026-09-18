@@ -58,4 +58,22 @@ class OrderProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+  Future<OrderModel> createOrGetOrder({
+    required String itemId,
+    required String token,
+  }) async {
+    final order = await repository.createOrGetOrder(
+      itemId: itemId,
+      token: token,
+    );
+    // Ensure local list is updated
+    final existing = _orders.indexWhere((o) => o.id == order.id);
+    if (existing >= 0) {
+      _orders[existing] = order;
+    } else {
+      _orders.insert(0, order);
+    }
+    notifyListeners();
+    return order;
+  }
 }

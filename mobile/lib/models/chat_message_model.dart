@@ -104,6 +104,8 @@ class ChatMeetupPayload {
     required this.proposalStatus,
     this.proposedBy,
     this.note,
+    this.agreedPriceNzd,
+    this.originalPriceNzd,
   });
 
   final String orderId;
@@ -114,6 +116,10 @@ class ChatMeetupPayload {
   final String proposalStatus;
   final String? proposedBy;
   final String? note;
+  /// The settled agreed price (special price if negotiated, else item price)
+  final String? agreedPriceNzd;
+  /// The original listed item price (for strikethrough display)
+  final String? originalPriceNzd;
 
   bool get isProposed => proposalStatus == 'proposed';
   bool get isConfirmed => proposalStatus == 'confirmed';
@@ -132,6 +138,9 @@ class ChatMeetupPayload {
       proposalStatus: (json['proposalStatus'] ?? 'proposed').toString(),
       proposedBy: json['proposedBy']?.toString(),
       note: json['note']?.toString(),
+      agreedPriceNzd: json['agreedPriceNzd']?.toString() ??
+          json['itemPriceNzd']?.toString(),
+      originalPriceNzd: json['originalPriceNzd']?.toString(),
     );
   }
 }

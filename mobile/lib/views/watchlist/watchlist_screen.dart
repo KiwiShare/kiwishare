@@ -519,18 +519,21 @@ class _WatchlistCard extends StatelessWidget {
     ItemStatus.active => AppColors.brandPrimaryContainer,
     ItemStatus.reserved => Colors.amber.shade100,
     ItemStatus.sold => Colors.grey.shade200,
+    ItemStatus.delisted => Colors.orange.shade100,
   };
 
   Color _statusTextColor(ItemStatus status) => switch (status) {
     ItemStatus.active => AppColors.brandPrimary,
     ItemStatus.reserved => Colors.amber.shade900,
     ItemStatus.sold => Colors.grey.shade700,
+    ItemStatus.delisted => Colors.orange.shade900,
   };
 
   String _statusText(ItemStatus status) => switch (status) {
     ItemStatus.active => 'Available',
     ItemStatus.reserved => 'Reserved',
     ItemStatus.sold => 'Sold',
+    ItemStatus.delisted => 'Delisted',
   };
 }
 

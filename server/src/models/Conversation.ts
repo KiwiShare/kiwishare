@@ -13,6 +13,7 @@ export interface IConversation extends Document {
   buyerUnreadCount: number;
   sellerUnreadCount: number;
   hiddenForUserIds: mongoose.Types.ObjectId[];
+  specialPrice?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,7 +31,8 @@ const ConversationSchema = new Schema<IConversation>(
     lastMessageSenderId: { type: Schema.Types.ObjectId, ref: 'User' },
     buyerUnreadCount: { type: Number, default: 0 },
     sellerUnreadCount: { type: Number, default: 0 },
-    hiddenForUserIds: [{ type: Schema.Types.ObjectId, ref: 'User' }]
+    hiddenForUserIds: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    specialPrice: { type: Number }
   },
   {
     timestamps: true

@@ -96,7 +96,7 @@ class TestItemRepository implements ItemRepository {
   final List<ItemModel> items;
 
   TestItemRepository({List<ItemModel>? items})
-    : items = List.unmodifiable(items ?? testCatalogItems);
+    : items = List<ItemModel>.from(items ?? testCatalogItems);
 
   @override
   Future<ItemModel?> fetchItemById(String id) async {
@@ -257,6 +257,50 @@ class TestItemRepository implements ItemRepository {
               : item.status != ItemStatus.sold,
         )
         .toList(growable: false);
+  }
+
+  @override
+  Future<Map<String, dynamic>> promoteItem({
+    required String id,
+    required String token,
+  }) async {
+    final item = items.firstWhere(
+      (i) => i.id == id,
+      orElse: () => items.first.copyWith(id: id),
+    );
+    final promoted = item.copyWith(
+      isPromoted: true,
+      promotedAt: DateTime.now(),
+    );
+    final idx = items.indexWhere((i) => i.id == id);
+    if (idx != -1) {
+      items[idx] = promoted;
+    }
+    return {
+      'item': promoted,
+      'kiwiGold': 5,
+      'message': 'Listing promoted successfully for 5 KiwiGold!',
+    };
+  }
+
+  @override
+  Future<ItemModel> toggleListingStatus({
+    required String id,
+    required bool publish,
+    required String token,
+  }) async {
+    final item = items.firstWhere(
+      (i) => i.id == id,
+      orElse: () => items.first.copyWith(id: id),
+    );
+    final updated = item.copyWith(
+      status: publish ? ItemStatus.active : ItemStatus.delisted,
+    );
+    final idx = items.indexWhere((i) => i.id == id);
+    if (idx != -1) {
+      items[idx] = updated;
+    }
+    return updated;
   }
 }
 
