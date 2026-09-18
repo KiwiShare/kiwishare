@@ -85,7 +85,7 @@ export function formatOrderMeetup(order: any, userId: string, qrCodeToken?: stri
     proposalStatus: order.meeting?.proposalStatus ?? 'proposed',
     proposedBy: objectId(order.meeting?.proposedBy),
     note: order.meeting?.note ?? '',
-    qrToken: isPaid ? (qrCodeToken ?? null) : null,
+    qrToken: qrCodeToken ?? null,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt
   };
