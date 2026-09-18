@@ -88,6 +88,25 @@ class FakeCooldownUserRepository implements UserRepository {
     trustScore: 90,
     isVerified: true,
   );
+
+  @override
+  Future<String> sendStudentVerificationOtp({
+    required String email,
+    required String token,
+  }) async => 'Verification code sent';
+
+  @override
+  Future<UserModel> verifyStudentOtp({
+    required String email,
+    required String code,
+    required String token,
+  }) async => const UserModel(
+    id: 'test_u',
+    displayName: 'Test User',
+    avatarUrl: '',
+    trustScore: 90,
+    isVerified: true,
+  );
 }
 
 void main() {

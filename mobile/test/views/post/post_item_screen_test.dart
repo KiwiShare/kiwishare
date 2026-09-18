@@ -94,7 +94,7 @@ void main() {
 
     await tester.pumpWidget(buildTestApp(onCancel: () {}));
 
-    expect(find.text('Post an item'), findsOneWidget);
+    expect(find.text('List an Item'), findsOneWidget);
     expect(find.text('Photos'), findsOneWidget);
     expect(find.text('0/10'), findsOneWidget);
     expect(find.byKey(const Key('post_title_field')), findsOneWidget);
@@ -317,7 +317,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Post an item'), findsOneWidget);
+    expect(find.text('List an Item'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -576,32 +576,36 @@ void main() {
     },
   );
 
-  testWidgets('opens circular economy educational sheet when help button is tapped', (
-    tester,
-  ) async {
-    await tester.pumpWidget(buildTestApp(onCancel: () {}));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'opens circular economy educational sheet when help button is tapped',
+    (tester) async {
+      await tester.pumpWidget(buildTestApp(onCancel: () {}));
+      await tester.pumpAndSettle();
 
-    final helpFinder = find.byKey(const Key('post_sustainable_help_button'));
-    await tester.scrollUntilVisible(
-      helpFinder,
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(helpFinder, findsOneWidget);
+      final helpFinder = find.byKey(const Key('post_sustainable_help_button'));
+      await tester.scrollUntilVisible(
+        helpFinder,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(helpFinder, findsOneWidget);
 
-    await tester.tap(helpFinder);
-    await tester.pumpAndSettle();
+      await tester.tap(helpFinder);
+      await tester.pumpAndSettle();
 
-    expect(find.text('What is a Sustainable Item?'), findsOneWidget);
-    expect(find.text('Supporting the Circular Economy on Campus'), findsOneWidget);
-    expect(find.text('Got it, thanks!'), findsOneWidget);
+      expect(find.text('What is a Sustainable Item?'), findsOneWidget);
+      expect(
+        find.text('Supporting the Circular Economy on Campus'),
+        findsOneWidget,
+      );
+      expect(find.text('Got it, thanks!'), findsOneWidget);
 
-    await tester.tap(find.text('Got it, thanks!'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Got it, thanks!'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('What is a Sustainable Item?'), findsNothing);
-  });
+      expect(find.text('What is a Sustainable Item?'), findsNothing);
+    },
+  );
 
   testWidgets('keeps the form open and explains a publish failure', (
     tester,
@@ -957,7 +961,10 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')), warnIfMissed: false);
+    await tester.tap(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      warnIfMissed: false,
+    );
     await tester.pump();
 
     expect(service.calls, 1);

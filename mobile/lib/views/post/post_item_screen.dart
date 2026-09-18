@@ -13,6 +13,7 @@ import '../../services/listing_location_service.dart';
 import '../../services/listing_publish_service.dart';
 import '../../services/listing_suggestion_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/campus_locations.dart';
 
 class PostItemScreen extends StatefulWidget {
   final VoidCallback onCancel;
@@ -300,8 +301,6 @@ class _PostItemScreenState extends State<PostItemScreen> {
     ).showSnackBar(SnackBar(content: Text(message), action: action));
   }
 
-
-
   bool _validateForm({required bool requirePhoto}) {
     final fieldsAreValid = _formKey.currentState?.validate() ?? false;
     if (requirePhoto && _photos.isEmpty) {
@@ -467,7 +466,11 @@ class _PostItemScreenState extends State<PostItemScreen> {
                       color: const Color(0xFFECFDF5),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.eco_rounded, color: Color(0xFF059669), size: 24),
+                    child: const Icon(
+                      Icons.eco_rounded,
+                      color: Color(0xFF059669),
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -493,13 +496,17 @@ class _PostItemScreenState extends State<PostItemScreen> {
                 'In a circular economy, items are kept in circulation for as long as possible rather than ending up in New Zealand landfills. Reusing, sharing, and re-homing items drastically cuts carbon emissions and campus waste.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   height: 1.45,
-                  color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                  color: isDark
+                      ? Colors.grey.shade300
+                      : const Color(0xFF334155),
                 ),
               ),
               const SizedBox(height: 14),
               Text(
                 'What qualifies as sustainable?',
-                style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 6),
               _buildBulletPoint(
@@ -550,7 +557,11 @@ class _PostItemScreenState extends State<PostItemScreen> {
         children: [
           const Padding(
             padding: EdgeInsets.only(top: 5, right: 8),
-            child: Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF059669)),
+            child: Icon(
+              Icons.check_circle_rounded,
+              size: 14,
+              color: Color(0xFF059669),
+            ),
           ),
           Expanded(
             child: Text(
@@ -568,12 +579,14 @@ class _PostItemScreenState extends State<PostItemScreen> {
 
   Future<void> _requestSuggestion() async {
     if (_isGeneratingSuggestion || _isPublishing) return;
-    final hasItemContext = _photos.isNotEmpty || [
-      _titleController.text,
-      _descriptionController.text,
-      _category,
-      _condition,
-    ].any((value) => value?.trim().isNotEmpty ?? false);
+    final hasItemContext =
+        _photos.isNotEmpty ||
+        [
+          _titleController.text,
+          _descriptionController.text,
+          _category,
+          _condition,
+        ].any((value) => value?.trim().isNotEmpty ?? false);
     if (!hasItemContext) {
       _showPhotoMessage(
         'Add a title, description, category, or condition before asking for help.',
@@ -856,7 +869,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
                           const SizedBox(height: AppSpacing.sm),
                           Divider(
                             height: 1,
-                            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.35),
+                            color: Theme.of(context).colorScheme.outlineVariant
+                                .withValues(alpha: 0.35),
                           ),
                           const SizedBox(height: AppSpacing.sm),
                           _ResponsiveFieldRow(
@@ -864,67 +878,107 @@ class _PostItemScreenState extends State<PostItemScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                TextFormField(
-                                  key: const Key('post_description_field'),
-                                  controller: _descriptionController,
-                                  minLines: 3,
-                                  maxLines: 6,
-                                  textCapitalization: TextCapitalization.sentences,
-                                  style: const TextStyle(fontSize: 14, height: 1.45),
-                                  decoration: const InputDecoration(
-                                    hintText: 'Describe your item, condition, and details...',
-                                    alignLabelWithHint: true,
-                                  ),
-                                  validator: _requiredTextValidator,
-                                ),
-                                const SizedBox(height: AppSpacing.sm),
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Semantics(
-                                    liveRegion: _isGeneratingSuggestion,
-                                    child: OutlinedButton.icon(
-                                      key: const Key('post_ai_suggestion_button'),
-                                      onPressed: _isPublishing || _isGeneratingSuggestion
-                                          ? null
-                                          : _requestSuggestion,
-                                      style: OutlinedButton.styleFrom(
-                                        visualDensity: VisualDensity.compact,
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        side: const BorderSide(color: Color(0xFFFDE68A)),
-                                        backgroundColor: const Color(0xFFFFFBEB),
-                                        foregroundColor: const Color(0xFFB45309),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16),
+                                Stack(
+                                  children: [
+                                    TextFormField(
+                                      key: const Key('post_description_field'),
+                                      controller: _descriptionController,
+                                      minLines: 3,
+                                      maxLines: 6,
+                                      textCapitalization:
+                                          TextCapitalization.sentences,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        height: 1.45,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        hintText:
+                                            'Describe your item, condition, and details...',
+                                        alignLabelWithHint: true,
+                                        contentPadding: EdgeInsets.fromLTRB(
+                                          14,
+                                          12,
+                                          14,
+                                          38,
                                         ),
                                       ),
-                                      icon: _isGeneratingSuggestion
-                                          ? const SizedBox.square(
-                                              dimension: 16,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFB45309)),
-                                              ),
-                                            )
-                                          : const Icon(Icons.auto_awesome_outlined, size: 16),
-                                      label: Text(
-                                        _isGeneratingSuggestion
-                                            ? 'Creating suggestion…'
-                                            : 'Help me write',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
+                                      validator: _requiredTextValidator,
+                                    ),
+                                    Positioned(
+                                      right: 8,
+                                      bottom: 8,
+                                      child: Semantics(
+                                        liveRegion: _isGeneratingSuggestion,
+                                        child: OutlinedButton.icon(
+                                          key: const Key(
+                                            'post_ai_suggestion_button',
+                                          ),
+                                          onPressed:
+                                              _isPublishing ||
+                                                  _isGeneratingSuggestion
+                                              ? null
+                                              : _requestSuggestion,
+                                          style: OutlinedButton.styleFrom(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            side: const BorderSide(
+                                              color: Color(0xFFFDE68A),
+                                            ),
+                                            backgroundColor: const Color(
+                                              0xFFFFFBEB,
+                                            ).withOpacity(0.95),
+                                            foregroundColor: const Color(
+                                              0xFFB45309,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            ),
+                                          ),
+                                          icon: _isGeneratingSuggestion
+                                              ? const SizedBox.square(
+                                                  dimension: 14,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation<
+                                                          Color
+                                                        >(Color(0xFFB45309)),
+                                                  ),
+                                                )
+                                              : const Icon(
+                                                  Icons.auto_awesome,
+                                                  size: 14,
+                                                ),
+                                          label: Text(
+                                            _isGeneratingSuggestion
+                                                ? 'Writing…'
+                                                : 'AI Help Me Write',
+                                            style: const TextStyle(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ),
                                 const SizedBox(height: AppSpacing.xs),
                                 Text(
                                   'Your entered listing details, but not photos, are sent to our AI provider. AI can make mistakes, so review every suggestion.',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontSize: 11,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-                                  ),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        fontSize: 11,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                            .withValues(alpha: 0.8),
+                                      ),
                                 ),
                               ],
                             ),
@@ -944,7 +998,8 @@ class _PostItemScreenState extends State<PostItemScreen> {
                           hintText: 'Select a category',
                           sheetTitle: 'Choose category',
                           options: _categories,
-                          onChanged: (value) => setState(() => _category = value),
+                          onChanged: (value) =>
+                              setState(() => _category = value),
                         ),
                       ),
                     ),
@@ -1012,13 +1067,16 @@ class _PostItemScreenState extends State<PostItemScreen> {
                           value: _isSustainable,
                           onChanged: _isPublishing
                               ? null
-                              : (value) => setState(() => _isSustainable = value),
+                              : (value) =>
+                                    setState(() => _isSustainable = value),
                           activeColor: Theme.of(context).colorScheme.primary,
                           secondary: Container(
                             padding: const EdgeInsets.all(AppSpacing.xs + 2),
                             decoration: BoxDecoration(
                               color: _isSustainable
-                                  ? Theme.of(context).colorScheme.primaryContainer
+                                  ? Theme.of(
+                                      context,
+                                    ).colorScheme.primaryContainer
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(
                                 AppRadius.small,
@@ -1039,14 +1097,15 @@ class _PostItemScreenState extends State<PostItemScreen> {
                               children: [
                                 TextSpan(
                                   text: 'Sustainable Item ',
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  style: Theme.of(context).textTheme.bodyLarge
+                                      ?.copyWith(fontWeight: FontWeight.w600),
                                 ),
                                 WidgetSpan(
                                   alignment: PlaceholderAlignment.middle,
                                   child: InkWell(
-                                    key: const Key('post_sustainable_help_button'),
+                                    key: const Key(
+                                      'post_sustainable_help_button',
+                                    ),
                                     onTap: _showSustainableInfoDialog,
                                     borderRadius: BorderRadius.circular(12),
                                     child: const Padding(
@@ -1087,7 +1146,9 @@ class _PostItemScreenState extends State<PostItemScreen> {
                         backgroundColor: const Color(0xFF059669),
                         foregroundColor: Colors.white,
                         elevation: 2,
-                        shadowColor: const Color(0xFF059669).withValues(alpha: 0.35),
+                        shadowColor: const Color(
+                          0xFF059669,
+                        ).withValues(alpha: 0.35),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(26),
                         ),
@@ -1230,7 +1291,7 @@ class _PostHeader extends StatelessWidget {
     final title = Semantics(
       header: true,
       child: Text(
-        'Post an item',
+        'List an Item',
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.titleMedium,
       ),
@@ -2148,54 +2209,83 @@ class _CurrentLocationFormField extends StatelessWidget {
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children: [
-                      'Auckland Central',
-                      'Newmarket',
-                      'Ponsonby',
-                      'Takapuna',
-                      'Mount Eden',
-                      'Wellington Central',
-                      'Christchurch Central',
-                      'Hamilton',
-                    ].map((area) {
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () => Navigator.of(sheetContext).pop(area),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
+                    children:
+                        [
+                          'Auckland Central',
+                          'Newmarket',
+                          'Ponsonby',
+                          'Takapuna',
+                          'Mount Eden',
+                          'Wellington Central',
+                          'Christchurch Central',
+                          'Hamilton',
+                        ].map((area) {
+                          return InkWell(
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Text(
-                            area,
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                            onTap: () => Navigator.of(sheetContext).pop(area),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Text(
+                                area,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  TextField(
-                    key: const Key('post_manual_location_input'),
-                    autofocus: false,
-                    textCapitalization: TextCapitalization.words,
-                    textInputAction: TextInputAction.done,
-                    maxLength: 80,
-                    decoration: const InputDecoration(
-                      labelText: 'Suburb or city',
-                      hintText: 'e.g. Auckland Central',
-                    ),
-                    onChanged: (value) {
-                      setSheetState(() => location = value.trim());
+                  Autocomplete<String>(
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      return CampusLocations.search(textEditingValue.text);
                     },
-                    onSubmitted: (value) {
-                      final trimmedValue = value.trim();
-                      if (trimmedValue.isNotEmpty) {
-                        Navigator.of(sheetContext).pop(trimmedValue);
-                      }
+                    onSelected: (String selection) {
+                      setSheetState(() => location = selection.trim());
                     },
+                    fieldViewBuilder:
+                        (
+                          BuildContext context,
+                          TextEditingController fieldTextEditingController,
+                          FocusNode fieldFocusNode,
+                          VoidCallback onFieldSubmitted,
+                        ) {
+                          fieldTextEditingController.addListener(() {
+                            setSheetState(
+                              () => location = fieldTextEditingController.text
+                                  .trim(),
+                            );
+                          });
+                          return TextField(
+                            key: const Key('post_manual_location_input'),
+                            controller: fieldTextEditingController,
+                            focusNode: fieldFocusNode,
+                            autofocus: false,
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.done,
+                            maxLength: 80,
+                            decoration: const InputDecoration(
+                              labelText: 'Suburb or campus location',
+                              hintText:
+                                  'e.g. UoA General Library or Auckland Central',
+                            ),
+                            onSubmitted: (value) {
+                              final trimmedValue = value.trim();
+                              if (trimmedValue.isNotEmpty) {
+                                Navigator.of(sheetContext).pop(trimmedValue);
+                              }
+                            },
+                          );
+                        },
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   FilledButton(
@@ -2276,7 +2366,10 @@ class _CurrentLocationFormField extends StatelessWidget {
                 onChanged(location);
               },
               icon: const Icon(Icons.edit_location_alt_outlined, size: 16),
-              label: const Text('Enter suburb or city manually', style: TextStyle(fontSize: 12)),
+              label: const Text(
+                'Enter suburb or city manually',
+                style: TextStyle(fontSize: 12),
+              ),
             ),
           ],
         );

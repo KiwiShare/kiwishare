@@ -87,13 +87,17 @@ class UserModel {
       id: (map['id'] ?? map['_id'] ?? '').toString(),
       displayName: (map['displayName'] ?? '').toString(),
       avatarUrl: map['avatarUrl'] as String?,
-      trustScore: (map['trustScore'] is num) ? (map['trustScore'] as num).toInt() : 100,
+      trustScore: (map['trustScore'] is num)
+          ? (map['trustScore'] as num).toInt()
+          : 100,
       isVerified: map['isVerified'] == true,
       isStudentVerified: map['isStudentVerified'] == true,
       studentInstitution: map['studentInstitution'] as String?,
       studentEmail: map['studentEmail'] as String?,
       authProvider: map['authProvider'] as String?,
-      kiwiGold: (map['kiwiGold'] is num) ? (map['kiwiGold'] as num).toInt() : 10,
+      kiwiGold: (map['kiwiGold'] is num)
+          ? (map['kiwiGold'] as num).toInt()
+          : 10,
       isVip: map['isVip'] == true,
       vipExpiresAt: map['vipExpiresAt'] != null
           ? DateTime.tryParse(map['vipExpiresAt'].toString())

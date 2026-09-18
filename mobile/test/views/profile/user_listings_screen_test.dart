@@ -66,7 +66,9 @@ void main() {
     );
   }
 
-  testWidgets('renders KiwiGold wallet banner with 10 KiwiGold', (tester) async {
+  testWidgets('renders KiwiGold wallet banner with 10 KiwiGold', (
+    tester,
+  ) async {
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pumpAndSettle();
 
@@ -75,7 +77,9 @@ void main() {
     expect(find.text('Top Up'), findsOneWidget);
   });
 
-  testWidgets('filters listings by Active, Delisted, and All tabs', (tester) async {
+  testWidgets('filters listings by Active, Delisted, and All tabs', (
+    tester,
+  ) async {
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pumpAndSettle();
 
@@ -98,7 +102,9 @@ void main() {
     expect(find.text('Vintage Chair'), findsOneWidget);
   });
 
-  testWidgets('can delist an active item via Delist action button', (tester) async {
+  testWidgets('can delist an active item via Delist action button', (
+    tester,
+  ) async {
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pumpAndSettle();
 
@@ -162,7 +168,9 @@ void main() {
     expect(find.text('VIP Monthly Membership'), findsOneWidget);
   });
 
-  testWidgets('renders VIP banner and VIP Boost (Free) for VIP users', (tester) async {
+  testWidgets('renders VIP banner and VIP Boost (Free) for VIP users', (
+    tester,
+  ) async {
     auth.updateVipStatus(isVip: true);
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pumpAndSettle();

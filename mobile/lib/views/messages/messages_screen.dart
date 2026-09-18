@@ -110,11 +110,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      filtered = filtered.where((chat) {
-        return chat.participantName.toLowerCase().contains(q) ||
-            chat.itemTitle.toLowerCase().contains(q) ||
-            chat.lastMessage.toLowerCase().contains(q);
-      }).toList(growable: false);
+      filtered = filtered
+          .where((chat) {
+            return chat.participantName.toLowerCase().contains(q) ||
+                chat.itemTitle.toLowerCase().contains(q) ||
+                chat.lastMessage.toLowerCase().contains(q);
+          })
+          .toList(growable: false);
     }
 
     return filtered;
@@ -196,21 +198,28 @@ class _MessagesScreenState extends State<MessagesScreen> {
             final isDark = Theme.of(context).brightness == Brightness.dark;
             final pushEnabled =
                 prefs.getBool('chat_push_notifications_enabled') ?? true;
-            final soundEnabled =
-                prefs.getBool('chat_sound_enabled') ?? true;
+            final soundEnabled = prefs.getBool('chat_sound_enabled') ?? true;
 
             return Material(
               color: isDark ? const Color(0xFF1B231E) : Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
               child: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 8,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -231,10 +240,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
                       const Divider(height: 1),
                       SwitchListTile.adaptive(
                         key: const Key('chat_push_notifications_switch'),
-                        secondary: const Icon(Icons.notifications_active_outlined),
+                        secondary: const Icon(
+                          Icons.notifications_active_outlined,
+                        ),
                         title: const Text(
                           'Message Push Notifications',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
                         ),
                         subtitle: const Text(
                           'Receive notifications when you receive new chat messages or offers',
@@ -243,10 +257,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         value: pushEnabled,
                         activeColor: const Color(0xFF059669),
                         onChanged: (val) async {
-                          await prefs.setBool('chat_push_notifications_enabled', val);
+                          await prefs.setBool(
+                            'chat_push_notifications_enabled',
+                            val,
+                          );
                           setSheetState(() {});
                           if (val && sheetContext.mounted) {
-                            await offerContextualNotificationPermission(sheetContext);
+                            await offerContextualNotificationPermission(
+                              sheetContext,
+                            );
                           }
                         },
                       ),
@@ -255,7 +274,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         secondary: const Icon(Icons.volume_up_outlined),
                         title: const Text(
                           'Message Sounds & Vibration',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
                         ),
                         subtitle: const Text(
                           'Play alert sounds when receiving messages',
@@ -273,7 +295,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         leading: const Icon(Icons.tune_rounded),
                         title: const Text(
                           'Device System Notifications',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
                         ),
                         subtitle: const Text(
                           'Manage OS permission and system banner alerts',
@@ -285,7 +310,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute<void>(
-                              builder: (_) => const NotificationSettingsScreen(),
+                              builder: (_) =>
+                                  const NotificationSettingsScreen(),
                             ),
                           );
                         },
@@ -548,10 +574,9 @@ class _ChatHeader extends StatelessWidget {
               child: Container(
                 height: 42,
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest
-                      .withValues(alpha: 0.5),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: TextField(
@@ -563,10 +588,9 @@ class _ChatHeader extends StatelessWidget {
                     hintText: 'Search chats, people, items...',
                     hintStyle: TextStyle(
                       fontSize: 14,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant
-                          .withValues(alpha: 0.7),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                     ),
                     prefixIcon: const Icon(Icons.search, size: 20),
                     suffixIcon: searchController.text.isNotEmpty

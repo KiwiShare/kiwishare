@@ -39,7 +39,8 @@ void showTopNotification({
 }) {
   dismissCurrentTopNotification();
 
-  final overlay = navigatorKey?.currentState?.overlay ??
+  final overlay =
+      navigatorKey?.currentState?.overlay ??
       (context != null ? Navigator.maybeOf(context)?.overlay : null);
 
   if (overlay == null) {
@@ -182,8 +183,9 @@ class _TopNotificationCardState extends State<_TopNotificationCard>
     final isDark = theme.brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF1E293B) : Colors.white;
     final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subtextColor =
-        isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+    final subtextColor = isDark
+        ? const Color(0xFF94A3B8)
+        : const Color(0xFF475569);
 
     return SafeArea(
       top: true,

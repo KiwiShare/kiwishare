@@ -33,7 +33,11 @@ class _KiwiGoldCoinPainter extends CustomPainter {
     final shadowPaint = Paint()
       ..color = const Color(0xFFB45309).withOpacity(0.35)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, max(1.0, radius * 0.3));
-    canvas.drawCircle(center + Offset(0, radius * 0.12), radius * 0.92, shadowPaint);
+    canvas.drawCircle(
+      center + Offset(0, radius * 0.12),
+      radius * 0.92,
+      shadowPaint,
+    );
 
     // 2. Coin body gradient
     final coinRect = Rect.fromCircle(center: center, radius: radius * 0.95);
@@ -54,11 +58,7 @@ class _KiwiGoldCoinPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = max(0.8, radius * 0.16)
       ..shader = const LinearGradient(
-        colors: [
-          Color(0xFFFFFBEB),
-          Color(0xFFFDE68A),
-          Color(0xFFB45309),
-        ],
+        colors: [Color(0xFFFFFBEB), Color(0xFFFDE68A), Color(0xFFB45309)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ).createShader(coinRect);

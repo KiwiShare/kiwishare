@@ -131,6 +131,8 @@ export interface ConversationItemSummary {
   id: string;
   title: string;
   imageUrl: string;
+  status?: string;
+  priceNzd?: string;
 }
 
 export interface ConversationItem {
@@ -543,6 +545,11 @@ export interface OrderItem {
   status: string;
   role: 'buying' | 'selling';
   itemId: string;
+  isPaid?: boolean;
+  buyerFeeAmountNzd?: string;
+  buyerTotalAmountNzd?: string;
+  refundedAt?: string | null;
+  isRefunded?: boolean;
   item: {
     id: string;
     title: string;
@@ -550,6 +557,7 @@ export interface OrderItem {
     imageUrl: string;
     condition?: string;
     category?: string;
+    status?: string;
   };
   counterparty: {
     id: string;
@@ -580,6 +588,87 @@ export const ordersApi = {
   },
   getOrderById: (orderId: string) =>
     apiRequest<{ status: string; order: OrderItem }>(`/orders/${orderId}`),
+  getOrderByItemId: (itemId: string) =>
+    apiRequest<{ status: string; order: OrderItem }>(`/orders/by-item/${itemId}`),
+  createOrder: (itemId: string) =>
+    apiRequest<{ status: string; order: OrderItem }>('/orders', {
+      method: 'POST',
+      body: JSON.stringify({ itemId }),
+    }),
+  refundOrder: (orderId: string, reason?: string) =>
+    apiRequest<{ status: string; message: string; order: OrderItem }>(`/orders/${orderId}/refund`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+};
+
+export const paymentsApi = {
+  createIntent: (orderId: string) =>
+    apiRequest<{
+      status: string;
+      clientSecret?: string;
+      paymentIntentId: string;
+      amountNzd: string;
+      itemAmountNzd: string;
+      buyerFeeNzd: string;
+    }>('/payments/create-intent', {
+      method: 'POST',
+      body: JSON.stringify({ orderId }),
+    }),
+  confirm: (orderId: string, paymentIntentId: string) =>
+    apiRequest<{ status: string; order: OrderItem; paymentStatus: string }>('/payments/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ orderId, paymentIntentId }),
+    }),
+};
+
+export const meetupsApi = {
+  getMeetup: (orderId: string) =>
+    apiRequest<{
+      status: string;
+      meetup: any;
+      qrToken?: string | null;
+      isUnlocked?: boolean;
+    }>(`/meetups/${orderId}`),
+  propose: (orderId: string, body: { scheduledAt: string; locationName: string; latitude?: number; longitude?: number; note?: string }) =>
+    apiRequest<{ status: string; meetup: any }>(`/meetups/${orderId}/propose`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  accept: (orderId: string) =>
+    apiRequest<{ status: string; meetup: any }>(`/meetups/${orderId}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  confirmHandover: (orderId: string, role: 'buyer' | 'seller') =>
+    apiRequest<{ status: string; message: string; order: any }>(`/meetups/${orderId}/confirm-handover`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    }),
+};
+
+export const aiApi = {
+  getListingSuggestion: (input: {
+    title?: string;
+    description?: string;
+    category?: string;
+    condition?: string;
+    location?: string;
+  }) =>
+    apiRequest<{
+      status: string;
+      suggestion: {
+        title: string;
+        description: string;
+        category: string;
+        condition: string;
+        priceNzd?: string;
+        tags?: string[];
+      };
+    }>('/listing-suggestions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 };
 
 

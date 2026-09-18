@@ -58,6 +58,7 @@ class OrderProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
   Future<OrderModel> createOrGetOrder({
     required String itemId,
     required String token,
@@ -75,5 +76,23 @@ class OrderProvider extends ChangeNotifier {
     }
     notifyListeners();
     return order;
+  }
+
+  Future<OrderModel> refundOrder({
+    required String orderId,
+    required String token,
+    String? reason,
+  }) async {
+    final updated = await repository.refundOrder(
+      orderId: orderId,
+      token: token,
+      reason: reason,
+    );
+    final existing = _orders.indexWhere((o) => o.id == updated.id);
+    if (existing >= 0) {
+      _orders[existing] = updated;
+    }
+    notifyListeners();
+    return updated;
   }
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kiwishare/models/chat_conversation_model.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/views/messages/messages_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,7 +14,9 @@ void main() {
     });
   });
 
-  testWidgets('Chat screen header has Search and Settings buttons', (tester) async {
+  testWidgets('Chat screen header has Search and Settings buttons', (
+    tester,
+  ) async {
     final conversations = [
       testConversation(
         id: 'c1',
@@ -38,10 +39,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: MessagesScreen(
-          chatProvider: provider,
-          authToken: 'test-token',
-        ),
+        home: MessagesScreen(chatProvider: provider, authToken: 'test-token'),
       ),
     );
     await tester.pumpAndSettle();
@@ -62,7 +60,10 @@ void main() {
     expect(find.byKey(const Key('chat_search_field')), findsOneWidget);
 
     // Enter query 'Textbook'
-    await tester.enterText(find.byKey(const Key('chat_search_field')), 'Textbook');
+    await tester.enterText(
+      find.byKey(const Key('chat_search_field')),
+      'Textbook',
+    );
     await tester.pumpAndSettle();
 
     // Only Bob Student conversation matches
@@ -83,7 +84,10 @@ void main() {
 
     // Settings sheet opens with push notification switch
     expect(find.text('Chat Settings'), findsOneWidget);
-    expect(find.byKey(const Key('chat_push_notifications_switch')), findsOneWidget);
+    expect(
+      find.byKey(const Key('chat_push_notifications_switch')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('chat_sound_switch')), findsOneWidget);
   });
 }

@@ -253,3 +253,53 @@ export async function detachCustomerCard(paymentMethodId: string): Promise<boole
   await stripeRequest(`/payment_methods/${paymentMethodId}/detach`, 'POST');
   return true;
 }
+
+/**
+ * Create a Stripe PaymentMethod using server-side secret key.
+ * This avoids Stripe publishable key tokenization restrictions (integration_surface_not_supported).
+ */
+export async function createStripePaymentMethod(card: {
+  number: string;
+  expMonth: number;
+  expYear: number;
+  cvc: string;
+}): Promise<string> {
+  const pm = await stripeRequest<{ id: string }>(
+    '/payment_methods',
+    'POST',
+    {
+      type: 'card',
+      'card[number]': card.number.replace(/\s+/g, ''),
+      'card[exp_month]': card.expMonth,
+      'card[exp_year]': card.expYear,
+      'card[cvc]': card.cvc,
+    }
+  );
+  return pm.id;
+}
+
+/**
+ * Creates a refund for a Stripe PaymentIntent.
+ */
+export async function createStripeRefund(params: {
+  paymentIntentId: string;
+  amountCents?: number;
+  reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer';
+}): Promise<{ id: string; status: string; amount: number }> {
+  const payload: Record<string, string | number | boolean | undefined> = {
+    payment_intent: params.paymentIntentId,
+  };
+  if (params.amountCents !== undefined && params.amountCents > 0) {
+    payload.amount = params.amountCents;
+  }
+  if (params.reason) {
+    payload.reason = params.reason;
+  }
+
+  const refund = await stripeRequest<{ id: string; status: string; amount: number }>(
+    '/refunds',
+    'POST',
+    payload
+  );
+  return refund;
+}

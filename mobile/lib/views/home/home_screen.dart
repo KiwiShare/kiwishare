@@ -1489,7 +1489,7 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.62 - (textScale - 1) * 0.20,
+        childAspectRatio: 0.74 - (textScale - 1) * 0.15,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
@@ -1520,7 +1520,7 @@ class _HomeLoadingState extends StatelessWidget {
             maxCrossAxisExtent: 220,
             crossAxisSpacing: AppSpacing.md,
             mainAxisSpacing: AppSpacing.md,
-            childAspectRatio: 0.65,
+            childAspectRatio: 0.74,
           ),
           itemCount: 4,
           itemBuilder: (_, _) => const ItemCardSkeleton(),

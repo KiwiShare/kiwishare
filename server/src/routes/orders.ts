@@ -5,8 +5,12 @@ import { authenticateToken } from '../middleware/auth';
 import Order from '../models/Order';
 import Item from '../models/Item';
 import Conversation from '../models/Conversation';
+import Message from '../models/Message';
+import Payment from '../models/Payment';
+import Refund from '../models/Refund';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import { resolveOrderEffectivePriceCents } from './payments';
+import { createStripeRefund } from '../services/stripeService';
 
 const router = new Router({ prefix: '/orders' });
 router.use(authenticateToken);
@@ -66,7 +70,8 @@ function formatOrder(order: any, userId: string) {
     buyerFeeAmountNzd: ((order.buyerFeeAmount ?? 0) / 100).toFixed(2),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
-    completedAt: order.completedAt || null
+    completedAt: order.completedAt || null,
+    refundedAt: order.refundedAt ? new Date(order.refundedAt).toISOString() : null
   };
 }
 
@@ -100,7 +105,7 @@ router.post('/', async (ctx: Context) => {
   }
 
   // Find existing order for this item and buyer if pending or active
-  let order = await Order.findOne({
+  const order = await Order.findOne({
     itemId: item._id,
     buyerId: userId,
     status: {
@@ -136,6 +141,13 @@ router.post('/', async (ctx: Context) => {
       status: 'success',
       order: formatOrder(order, userId.toString())
     };
+    return;
+  }
+
+  // If item is already sold and user has no existing order, block concurrent purchase
+  if (item.status === 'sold') {
+    ctx.status = 409;
+    ctx.body = { status: 'error', message: 'This item has already been sold and is no longer available.' };
     return;
   }
 
@@ -255,6 +267,42 @@ router.get('/my', async (ctx: Context) => {
   };
 });
 
+// 1.5 Get latest order by itemId for current user
+router.get('/by-item/:itemId', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Authentication required.' };
+    return;
+  }
+  const { itemId } = ctx.params;
+  if (!mongoose.Types.ObjectId.isValid(itemId)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Invalid item ID.' };
+    return;
+  }
+  const order = await Order.findOne({
+    itemId,
+    $or: [{ buyerId: userId }, { sellerId: userId }]
+  })
+    .sort({ createdAt: -1 })
+    .populate('buyerId', 'displayName avatarUrl email')
+    .populate('sellerId', 'displayName avatarUrl email')
+    .populate('itemId', 'title price images status category condition');
+
+  if (!order) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Order not found for this item.' };
+    return;
+  }
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    order: formatOrder(order, userId.toString())
+  };
+});
+
 // 2. Get order details by ID
 router.get('/:orderId', async (ctx: Context) => {
   const userId = currentUserId(ctx);
@@ -295,6 +343,175 @@ router.get('/:orderId', async (ctx: Context) => {
   ctx.status = 200;
   ctx.body = {
     status: 'success',
+    order: formatOrder(order, currentIdStr)
+  };
+});
+
+// 3. POST /:orderId/refund - Process order refund and relist item
+router.post('/:orderId/refund', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Authentication required.' };
+    return;
+  }
+
+  const { orderId } = ctx.params;
+  if (!mongoose.Types.ObjectId.isValid(orderId)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Invalid order ID.' };
+    return;
+  }
+
+  const order = await Order.findById(orderId)
+    .populate('buyerId', 'displayName avatarUrl email')
+    .populate('sellerId', 'displayName avatarUrl email')
+    .populate('itemId', 'title price images status category condition');
+
+  if (!order) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Order not found.' };
+    return;
+  }
+
+  const buyerId = objectId(order.buyerId);
+  const sellerId = objectId(order.sellerId);
+  const currentIdStr = userId.toString();
+  const isSeller = sellerId === currentIdStr;
+  const isBuyer = buyerId === currentIdStr;
+
+  if (!isSeller && !isBuyer) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Forbidden: You are not a party to this order.' };
+    return;
+  }
+
+  if (order.status === 'refunded') {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'This order has already been refunded.' };
+    return;
+  }
+
+  if (order.status === 'completed') {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Completed orders cannot be refunded.' };
+    return;
+  }
+
+  if (!order.paidAt) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Cannot refund an unpaid order.' };
+    return;
+  }
+
+  // If buyer is requesting, verify >= 48 hours have elapsed without a confirmed meetup
+  if (isBuyer) {
+    const paidTime = order.paidAt ? new Date(order.paidAt).getTime() : new Date(order.createdAt).getTime();
+    const hoursSincePaid = (Date.now() - paidTime) / (1000 * 60 * 60);
+    const isMeetupConfirmed =
+      order.meeting?.proposalStatus === 'confirmed' ||
+      order.meeting?.proposalStatus === 'accepted';
+
+    if (hoursSincePaid < 48 && !isMeetupConfirmed) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'Auto-refund is available 2 days (48 hours) after payment if no meetup is scheduled. You may message the seller to request an immediate refund.'
+      };
+      return;
+    }
+  }
+
+  const { reason } = (ctx.request.body as any) || {};
+
+  // Attempt Stripe refund if payment exists
+  const payment = await Payment.findOne({ orderId: order._id });
+  let stripeRefundId: string | undefined;
+
+  if (payment && payment.stripePaymentIntentId) {
+    try {
+      const refundResult = await createStripeRefund({
+        paymentIntentId: payment.stripePaymentIntentId,
+        amountCents: order.buyerTotalAmount || order.itemAmount || undefined,
+        reason: 'requested_by_customer'
+      });
+      stripeRefundId = refundResult.id;
+      payment.status = 'refunded';
+      payment.refundedAmount = order.buyerTotalAmount || order.itemAmount || 0;
+      await payment.save();
+    } catch (err: any) {
+      console.warn('[Orders] Stripe refund notice:', err.message);
+    }
+  }
+
+  // Create Refund record
+  try {
+    await Refund.create({
+      orderId: order._id,
+      paymentId: payment?._id || new mongoose.Types.ObjectId(),
+      requestedByUserId: userId,
+      reason: isSeller ? 'seller_cancelled' : 'buyer_cancelled',
+      amount: order.buyerTotalAmount || order.itemAmount || 0,
+      currency: 'NZD',
+      status: 'succeeded',
+      stripeRefundId,
+      idempotencyKey: `ref_${order._id}_${Date.now()}`,
+      processedAt: new Date()
+    });
+  } catch (err: any) {
+    console.warn('[Orders] Refund record creation notice:', err.message);
+  }
+
+  // Update order status
+  order.status = 'refunded';
+  order.refundedAt = new Date();
+  order.cancellation = {
+    cancelledBy: userId,
+    reason: reason || (isSeller ? 'Seller initiated refund' : 'Buyer refund (no meetup scheduled in 2 days)'),
+    cancelledAt: new Date()
+  };
+  await order.save();
+
+  // Immediately relist the item back to active
+  await Item.findByIdAndUpdate(order.itemId, { status: 'active' });
+
+  // Post system notice in conversation
+  try {
+    const conversation = await Conversation.findOne({
+      itemId: order.itemId,
+      $or: [
+        { buyerId: order.buyerId, sellerId: order.sellerId },
+        { buyerId: order.sellerId, sellerId: order.buyerId }
+      ]
+    });
+    if (conversation) {
+      const counterpartyId = isSeller ? order.buyerId : order.sellerId;
+      const amountNzd = ((order.buyerTotalAmount || order.itemAmount || 0) / 100).toFixed(2);
+      await new Message({
+        conversationId: conversation._id,
+        senderId: userId,
+        receiverId: counterpartyId,
+        type: 'text',
+        text: `🔄 [Refund Processed] Order #${order.orderNumber} has been refunded ($${amountNzd} NZD). The item has been relisted and is now active.`,
+        status: 'sent'
+      }).save();
+
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        $set: {
+          lastMessageText: `🔄 Order refunded ($${amountNzd} NZD). Item relisted.`,
+          lastMessageAt: new Date(),
+          lastMessageSenderId: userId
+        }
+      });
+    }
+  } catch (err: any) {
+    console.warn('[Orders] Refund message notice:', err.message);
+  }
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    message: 'Order refunded and item relisted successfully.',
     order: formatOrder(order, currentIdStr)
   };
 });

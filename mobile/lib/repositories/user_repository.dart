@@ -440,7 +440,9 @@ class RestUserRepository implements UserRepository {
     if (response.statusCode == 200) {
       return (data['institution'] ?? 'NZ University').toString();
     } else {
-      throw Exception(data['message'] ?? 'Failed to send student verification code.');
+      throw Exception(
+        data['message'] ?? 'Failed to send student verification code.',
+      );
     }
   }
 
@@ -451,7 +453,9 @@ class RestUserRepository implements UserRepository {
     required String token,
   }) async {
     final response = await _client.post(
-      Uri.parse('${ApiConfig.baseUrl}/api/users/student-verification/verify-otp'),
+      Uri.parse(
+        '${ApiConfig.baseUrl}/api/users/student-verification/verify-otp',
+      ),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',

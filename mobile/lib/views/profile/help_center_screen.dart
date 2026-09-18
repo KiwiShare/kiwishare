@@ -99,7 +99,8 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
     return _faqItems.where((faq) {
       final matchesCategory =
           _selectedCategory == 'All' || faq.category == _selectedCategory;
-      final matchesSearch = _searchQuery.isEmpty ||
+      final matchesSearch =
+          _searchQuery.isEmpty ||
           faq.question.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           faq.answer.toLowerCase().contains(_searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
@@ -116,7 +117,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
       length: 2,
       initialIndex: widget.initialTabIndex,
       child: Scaffold(
-        backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        backgroundColor: isDark
+            ? const Color(0xFF0F172A)
+            : const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: const Text(
             'Help & Guides',
@@ -129,8 +132,13 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
             indicatorColor: colors.primary,
             indicatorWeight: 3,
             labelColor: colors.primary,
-            unselectedLabelColor: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-            labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            unselectedLabelColor: isDark
+                ? const Color(0xFF94A3B8)
+                : const Color(0xFF64748B),
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
             tabs: const [
               Tab(
                 icon: Icon(Icons.explore_outlined, size: 20),
@@ -153,9 +161,15 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
     );
   }
 
-  Widget _buildHowItWorksTab(BuildContext context, ColorScheme colors, bool isDark) {
+  Widget _buildHowItWorksTab(
+    BuildContext context,
+    ColorScheme colors,
+    bool isDark,
+  ) {
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final borderColor = isDark
+        ? const Color(0xFF334155)
+        : const Color(0xFFE2E8F0);
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -203,7 +217,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : const Color(0xFF065F46),
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF065F46),
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -211,7 +227,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                           'Aotearoa Student Circular Marketplace',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? const Color(0xFFA7F3D0) : const Color(0xFF047857),
+                            color: isDark
+                                ? const Color(0xFFA7F3D0)
+                                : const Color(0xFF047857),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -226,7 +244,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.5,
-                  color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1F2937),
+                  color: isDark
+                      ? const Color(0xFFE2E8F0)
+                      : const Color(0xFF1F2937),
                 ),
               ),
             ],
@@ -341,7 +361,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                       'Encountered suspicious activity or need assistance?',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        color: isDark
+                            ? const Color(0xFF94A3B8)
+                            : const Color(0xFF64748B),
                       ),
                     ),
                   ],
@@ -407,11 +429,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
               color: accentColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: accentColor,
-              size: 22,
-            ),
+            child: Icon(icon, color: accentColor, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -446,7 +464,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
                         ),
                       ),
                     ),
@@ -458,7 +478,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.45,
-                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    color: isDark
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFF64748B),
                   ),
                 ),
               ],
@@ -471,7 +493,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
 
   Widget _buildFaqsTab(BuildContext context, ColorScheme colors, bool isDark) {
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final borderColor = isDark
+        ? const Color(0xFF334155)
+        : const Color(0xFFE2E8F0);
     final faqs = _filteredFaqs;
 
     return Column(
@@ -490,7 +514,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                   hintText: 'Search help questions & answers...',
                   hintStyle: TextStyle(
                     fontSize: 13,
-                    color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                    color: isDark
+                        ? const Color(0xFF64748B)
+                        : const Color(0xFF94A3B8),
                   ),
                   prefixIcon: const Icon(Icons.search, size: 20),
                   suffixIcon: _searchQuery.isNotEmpty
@@ -503,7 +529,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                         )
                       : null,
                   filled: true,
-                  fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                  fillColor: isDark
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFFF1F5F9),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -524,13 +552,19 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                         label: Text(cat),
                         labelStyle: TextStyle(
                           fontSize: 12,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                           color: isSelected
                               ? (isDark ? Colors.white : colors.primary)
-                              : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                              : (isDark
+                                    ? const Color(0xFF94A3B8)
+                                    : const Color(0xFF64748B)),
                         ),
                         selectedColor: colors.primary.withValues(alpha: 0.15),
-                        backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                        backgroundColor: isDark
+                            ? const Color(0xFF0F172A)
+                            : const Color(0xFFF8FAFC),
                         side: BorderSide(
                           color: isSelected ? colors.primary : borderColor,
                         ),
@@ -560,7 +594,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                         Icon(
                           Icons.search_off_rounded,
                           size: 48,
-                          color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                          color: isDark
+                              ? const Color(0xFF475569)
+                              : const Color(0xFFCBD5E1),
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -568,7 +604,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF1E293B),
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -577,7 +615,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            color: isDark
+                                ? const Color(0xFF94A3B8)
+                                : const Color(0xFF64748B),
                           ),
                         ),
                       ],
@@ -598,7 +638,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: Theme(
-                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        data: Theme.of(
+                          context,
+                        ).copyWith(dividerColor: Colors.transparent),
                         child: ExpansionTile(
                           tilePadding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -609,7 +651,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
                             ),
                           ),
                           subtitle: Padding(

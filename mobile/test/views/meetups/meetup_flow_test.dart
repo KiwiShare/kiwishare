@@ -110,6 +110,20 @@ class FakeMeetupRepository implements MeetupRepository {
       },
     };
   }
+
+  @override
+  Future<Map<String, dynamic>> confirmHandover({
+    required String orderId,
+    required String token,
+  }) async {
+    final m = sampleMeetup!.copyWith(status: 'completed');
+    sampleMeetup = m;
+    return {
+      'status': 'success',
+      'message': 'Handover confirmed successfully.',
+      'order': {'id': orderId, 'status': 'completed'},
+    };
+  }
 }
 
 void main() {
@@ -284,19 +298,22 @@ void main() {
         // Check header and item
         expect(find.text('Vintage Leather Jacket'), findsOneWidget);
         expect(find.text('Britomart Transport Centre'), findsOneWidget);
-        expect(find.text('Confirmed In-Person Meetup'), findsOneWidget);
+        expect(
+          find.text('Ready for Handover · QR Code Unlocked'),
+          findsOneWidget,
+        );
 
         // Check QR code card
         expect(find.byKey(const Key('meetup_qr_image')), findsOneWidget);
         expect(find.text('Copy verification token'), findsOneWidget);
         expect(find.byKey(const Key('buyer_scan_qr_button')), findsOneWidget);
 
-        // Check Reserved Payment section
+        // Check Direct Confirmation Action
         expect(
-          find.byKey(const Key('reserved_payment_section')),
+          find.byKey(const Key('buyer_confirm_receipt_button')),
           findsOneWidget,
         );
-        expect(find.text('In-Person Settlement'), findsOneWidget);
+        expect(find.text('Confirm Receipt (确认收货)'), findsOneWidget);
       },
     );
 
@@ -304,7 +321,26 @@ void main() {
       'MeetupCardBubble renders distinct actions for seller and buyer when confirmed',
       (tester) async {
         final fakeRepo = FakeMeetupRepository();
+        fakeRepo.sampleMeetup = MeetupModel(
+          id: 'order-789',
+          orderNumber: 'ORD-789',
+          itemId: 'item-789',
+          itemTitle: 'Vintage Lamp',
+          itemPriceNzd: '45',
+          itemImageUrl: '',
+          status: 'paid',
+          role: 'selling',
+          sellerId: 'seller-1',
+          sellerName: 'Alice',
+          buyerId: 'buyer-1',
+          buyerName: 'Bob',
+          proposalStatus: 'confirmed',
+          scheduledAt: DateTime(2026, 9, 20, 10, 0),
+          locationName: 'Ponsonby Central',
+          qrToken: 'QR_HANDOVER_TOKEN_789',
+        );
         final provider = MeetupProvider(repository: fakeRepo);
+        await provider.loadMyMeetups('test-token');
         final authProvider = AuthProvider(userRepository: MockUserRepository());
 
         final payload = ChatMeetupPayload(
@@ -525,7 +561,10 @@ void main() {
         );
 
         expect(find.text('Meetup Cancelled'), findsOneWidget);
-        expect(find.text('This proposal was superseded or cancelled.'), findsOneWidget);
+        expect(
+          find.text('This proposal was superseded or cancelled.'),
+          findsOneWidget,
+        );
         expect(find.text('Accept'), findsNothing);
       },
     );

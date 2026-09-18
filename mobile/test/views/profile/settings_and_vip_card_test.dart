@@ -10,7 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Profile renders Settings icon and Xianyu VIP banner card', (tester) async {
+  testWidgets('Profile renders Settings icon and Xianyu VIP banner card', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -30,9 +32,7 @@ void main() {
           ChangeNotifierProvider<AuthProvider>.value(value: auth),
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ],
-        child: const MaterialApp(
-          home: ProfileScreen(),
-        ),
+        child: const MaterialApp(home: ProfileScreen()),
       ),
     );
     await tester.pumpAndSettle();
@@ -70,57 +70,58 @@ void main() {
     expect(find.text('Boost & Perks'), findsNothing);
   });
 
-  testWidgets('VIP user can open management sheet and cancel next month renewal', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2400);
-    tester.view.devicePixelRatio = 2.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'VIP user can open management sheet and cancel next month renewal',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    SharedPreferences.setMockInitialValues({
-      'jwt_token': 'test-token',
-      'current_user':
-          '{"id":"user-1","displayName":"VIP Sam","trustScore":95,"isVerified":true,"isVip":true,"vipAutoRenew":true,"vipExpiresAt":"2026-10-18T12:00:00.000Z","kiwiGoldBalance":100}',
-    });
+      SharedPreferences.setMockInitialValues({
+        'jwt_token': 'test-token',
+        'current_user':
+            '{"id":"user-1","displayName":"VIP Sam","trustScore":95,"isVerified":true,"isVip":true,"vipAutoRenew":true,"vipExpiresAt":"2026-10-18T12:00:00.000Z","kiwiGoldBalance":100}',
+      });
 
-    final auth = AuthProvider(userRepository: MockUserRepository());
+      final auth = AuthProvider(userRepository: MockUserRepository());
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: auth),
-          ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ],
-        child: const MaterialApp(
-          home: ProfileScreen(),
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ],
+          child: const MaterialApp(home: ProfileScreen()),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    // 1. Verify VIP active banner & Manage button
-    expect(find.text('KiwiGold VIP'), findsOneWidget);
-    expect(find.text('ACTIVE'), findsOneWidget);
-    expect(find.text('Manage'), findsOneWidget);
+      // 1. Verify VIP active banner & Manage button
+      expect(find.text('KiwiGold VIP'), findsOneWidget);
+      expect(find.text('ACTIVE'), findsOneWidget);
+      expect(find.text('Manage'), findsOneWidget);
 
-    // 2. Tap Manage -> opens VIP management sheet
-    await tester.tap(find.text('Manage'));
-    await tester.pumpAndSettle();
+      // 2. Tap Manage -> opens VIP management sheet
+      await tester.tap(find.text('Manage'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('KiwiGold VIP Membership'), findsOneWidget);
-    expect(find.text('Cancel Next Month\'s Renewal'), findsOneWidget);
+      expect(find.text('KiwiGold VIP Membership'), findsOneWidget);
+      expect(find.text('Cancel Next Month\'s Renewal'), findsOneWidget);
 
-    // 3. Tap Cancel Next Month's Renewal -> shows confirmation dialog
-    await tester.tap(find.text('Cancel Next Month\'s Renewal'));
-    await tester.pumpAndSettle();
+      // 3. Tap Cancel Next Month's Renewal -> shows confirmation dialog
+      await tester.tap(find.text('Cancel Next Month\'s Renewal'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Cancel VIP Auto-Renewal?'), findsOneWidget);
-    expect(find.text('Confirm Cancellation'), findsOneWidget);
+      expect(find.text('Cancel VIP Auto-Renewal?'), findsOneWidget);
+      expect(find.text('Confirm Cancellation'), findsOneWidget);
 
-    // 4. Confirm cancellation
-    await tester.tap(find.text('Confirm Cancellation'));
-    await tester.pumpAndSettle();
+      // 4. Confirm cancellation
+      await tester.tap(find.text('Confirm Cancellation'));
+      await tester.pumpAndSettle();
 
-    // Verify cancellation snackbar feedback
-    expect(find.textContaining('VIP auto-renewal cancelled'), findsOneWidget);
-  });
+      // Verify cancellation snackbar feedback
+      expect(find.textContaining('VIP auto-renewal cancelled'), findsOneWidget);
+    },
+  );
 }

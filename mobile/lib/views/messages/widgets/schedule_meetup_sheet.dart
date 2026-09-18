@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../providers/auth_provider.dart';
 import '../../../providers/meetup_provider.dart';
+import '../../../utils/campus_locations.dart';
 
 class ScheduleMeetupSheet extends StatefulWidget {
   const ScheduleMeetupSheet({
@@ -245,22 +246,47 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
                 ),
               ),
               const SizedBox(height: 8),
-              TextField(
-                controller: _locationController,
-                decoration: InputDecoration(
-                  hintText: 'e.g. UoA Student Hub, Newmarket Station',
-                  prefixIcon: const Icon(Icons.place_outlined),
-                  filled: true,
-                  fillColor: colors.surfaceContainerHighest.withOpacity(0.5),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
-                ),
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: _locationController.text),
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  return CampusLocations.search(textEditingValue.text);
+                },
+                onSelected: (String selection) {
+                  setState(() => _locationController.text = selection);
+                },
+                fieldViewBuilder:
+                    (
+                      BuildContext context,
+                      TextEditingController fieldTextEditingController,
+                      FocusNode fieldFocusNode,
+                      VoidCallback onFieldSubmitted,
+                    ) {
+                      fieldTextEditingController.addListener(() {
+                        _locationController.text =
+                            fieldTextEditingController.text;
+                      });
+                      return TextField(
+                        controller: fieldTextEditingController,
+                        focusNode: fieldFocusNode,
+                        decoration: InputDecoration(
+                          hintText:
+                              'e.g. UoA General Library, Newmarket Westfield',
+                          prefixIcon: const Icon(Icons.place_outlined),
+                          filled: true,
+                          fillColor: colors.surfaceContainerHighest.withOpacity(
+                            0.5,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                      );
+                    },
               ),
               const SizedBox(height: 8),
 

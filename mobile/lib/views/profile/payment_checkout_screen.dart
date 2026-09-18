@@ -12,11 +12,7 @@ import '../../services/payment_service.dart';
 // ---------------------------------------------------------------------------
 
 class PaymentCheckoutScreen extends StatefulWidget {
-  const PaymentCheckoutScreen({
-    super.key,
-    required this.order,
-    this.onSuccess,
-  });
+  const PaymentCheckoutScreen({super.key, required this.order, this.onSuccess});
 
   final OrderModel order;
   final VoidCallback? onSuccess;
@@ -145,7 +141,8 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen>
     final token = context.read<AuthProvider>().jwtToken;
     if (token == null) return;
 
-    if (_selectedCardId == null && !(_formKey.currentState?.validate() ?? false)) {
+    if (_selectedCardId == null &&
+        !(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
@@ -173,6 +170,7 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen>
           expMonth: month,
           expYear: year,
           cvc: _cvcCtrl.text,
+          token: token,
         );
 
         // Optionally save card to profile
@@ -293,41 +291,37 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen>
       body: _intentLoading
           ? const Center(child: CircularProgressIndicator())
           : _intentError != null
-              ? _ErrorView(
-                  message: _intentError!,
-                  onRetry: _loadIntent,
-                )
-              : PageView(
-                  controller: _pageController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _SummaryPage(
-                      order: widget.order,
-                      intent: _intent,
-                      onNext: _nextPage,
-                    ),
-                    _CardEntryPage(
-                      intent: _intent,
-                      savedCards: _savedCards,
-                      selectedCardId: _selectedCardId,
-                      onCardSelected: (id) =>
-                          setState(() => _selectedCardId = id),
-                      cardNumberCtrl: _cardNumberCtrl,
-                      expiryCtrl: _expiryCtrl,
-                      cvcCtrl: _cvcCtrl,
-                      nameCtrl: _nameCtrl,
-                      formKey: _formKey,
-                      saveCard: _saveCard,
-                      onSaveCardChanged: (v) => setState(() => _saveCard = v),
-                      brand: _detectedBrand,
-                      onCardNumberChanged: () => setState(() {}),
-                      paying: _paying,
-                      error: _payError,
-                      onBack: _prevPage,
-                      onPay: _pay,
-                    ),
-                  ],
+          ? _ErrorView(message: _intentError!, onRetry: _loadIntent)
+          : PageView(
+              controller: _pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _SummaryPage(
+                  order: widget.order,
+                  intent: _intent,
+                  onNext: _nextPage,
                 ),
+                _CardEntryPage(
+                  intent: _intent,
+                  savedCards: _savedCards,
+                  selectedCardId: _selectedCardId,
+                  onCardSelected: (id) => setState(() => _selectedCardId = id),
+                  cardNumberCtrl: _cardNumberCtrl,
+                  expiryCtrl: _expiryCtrl,
+                  cvcCtrl: _cvcCtrl,
+                  nameCtrl: _nameCtrl,
+                  formKey: _formKey,
+                  saveCard: _saveCard,
+                  onSaveCardChanged: (v) => setState(() => _saveCard = v),
+                  brand: _detectedBrand,
+                  onCardNumberChanged: () => setState(() {}),
+                  paying: _paying,
+                  error: _payError,
+                  onBack: _prevPage,
+                  onPay: _pay,
+                ),
+              ],
+            ),
     );
   }
 }
@@ -350,7 +344,9 @@ class _StepProgressBar extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             height: 3,
-            color: i <= step ? colors.primary : colors.outline.withOpacity(0.25),
+            color: i <= step
+                ? colors.primary
+                : colors.outline.withOpacity(0.25),
           ),
         );
       }),
@@ -410,7 +406,11 @@ class _SummaryPage extends StatelessWidget {
             colors: colors,
             rows: [
               ('Item price', 'NZ\$${centsToNzd(itemCents)}', false),
-              ('Platform fee', 'NZ\$${centsToNzd(feeCents)}', false),
+              (
+                'Platform fee (incl. 15% NZ GST)',
+                'NZ\$${centsToNzd(feeCents)}',
+                false,
+              ),
               ('Total', 'NZ\$${centsToNzd(totalCents)}', true),
             ],
           ),
@@ -507,11 +507,13 @@ class _CardEntryPage extends StatelessWidget {
           if (savedCards.isNotEmpty) ...[
             _SectionLabel(label: 'Saved cards'),
             const SizedBox(height: 10),
-            ...savedCards.map((card) => _SavedCardTile(
-                  card: card,
-                  selected: selectedCardId == card.id,
-                  onTap: () => onCardSelected(card.id),
-                )),
+            ...savedCards.map(
+              (card) => _SavedCardTile(
+                card: card,
+                selected: selectedCardId == card.id,
+                onTap: () => onCardSelected(card.id),
+              ),
+            ),
             _SavedCardTile.newCard(
               selected: selectedCardId == null,
               onTap: () => onCardSelected(null),
@@ -578,7 +580,9 @@ class _CardEntryPage extends StatelessWidget {
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2.5, color: Colors.white),
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -658,10 +662,14 @@ class AcceptedPaymentProvidersWidget extends StatelessWidget {
               color: isDark
                   ? const Color(0xFF0F172A).withValues(alpha: 0.5)
                   : const Color(0xFFF8FAFC),
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(15),
+              ),
               border: Border(
                 top: BorderSide(
-                  color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
+                  color: isDark
+                      ? const Color(0xFF334155)
+                      : const Color(0xFFF1F5F9),
                   width: 1,
                 ),
               ),
@@ -687,7 +695,10 @@ class AcceptedPaymentProvidersWidget extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2.5,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF635BFF).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
@@ -704,7 +715,9 @@ class AcceptedPaymentProvidersWidget extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4F46E5),
+                          color: isDark
+                              ? const Color(0xFFA5B4FC)
+                              : const Color(0xFF4F46E5),
                         ),
                       ),
                       Text(
@@ -714,7 +727,9 @@ class AcceptedPaymentProvidersWidget extends StatelessWidget {
                           fontWeight: FontWeight.w900,
                           fontStyle: FontStyle.italic,
                           letterSpacing: -0.3,
-                          color: isDark ? const Color(0xFFC7D2FE) : const Color(0xFF635BFF),
+                          color: isDark
+                              ? const Color(0xFFC7D2FE)
+                              : const Color(0xFF635BFF),
                         ),
                       ),
                     ],
@@ -868,20 +883,13 @@ class _ApplePayBrandLogo extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.black,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: const Color(0xFF334155),
-          width: 1,
-        ),
+        border: Border.all(color: const Color(0xFF334155), width: 1),
       ),
       alignment: Alignment.center,
       child: const Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.apple,
-            size: 15,
-            color: Colors.white,
-          ),
+          Icon(Icons.apple, size: 15, color: Colors.white),
           SizedBox(width: 1),
           Text(
             'Pay',
@@ -1034,7 +1042,9 @@ class _CardForm extends StatelessWidget {
                     ],
                     maxLength: 7,
                     validator: (v) {
-                      final clean = (v ?? '').replaceAll(' ', '').replaceAll('/', '');
+                      final clean = (v ?? '')
+                          .replaceAll(' ', '')
+                          .replaceAll('/', '');
                       if (clean.length < 4) return 'Invalid expiry';
                       final month = int.tryParse(clean.substring(0, 2)) ?? 0;
                       if (month < 1 || month > 12) return 'Invalid month';
@@ -1091,13 +1101,17 @@ class _CardForm extends StatelessWidget {
                         onChanged: (v) => onSaveCardChanged(v ?? false),
                         activeColor: colors.primary,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     const Text(
                       'Save this card for future payments',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
@@ -1155,8 +1169,10 @@ class _CardField extends StatelessWidget {
         counterText: '',
         suffixIcon: suffixIcon,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
       ),
     );
   }
@@ -1195,18 +1211,24 @@ class _BrandIcon extends StatelessWidget {
             Positioned(
               left: 0,
               child: Container(
-                  width: 18,
-                  height: 18,
-                  decoration: const BoxDecoration(
-                      shape: BoxShape.circle, color: Color(0xFFEB001B))),
+                width: 18,
+                height: 18,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFFEB001B),
+                ),
+              ),
             ),
             Positioned(
               right: 0,
               child: Container(
-                  width: 18,
-                  height: 18,
-                  decoration: const BoxDecoration(
-                      shape: BoxShape.circle, color: Color(0xFFF79E1B))),
+                width: 18,
+                height: 18,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFFF79E1B),
+                ),
+              ),
             ),
             const SizedBox(width: 30),
           ],
@@ -1267,14 +1289,14 @@ class _SavedCardTile extends StatelessWidget {
             color: selected ? colors.primary : colors.outline.withOpacity(0.3),
             width: selected ? 2 : 1,
           ),
-          color: selected
-              ? colors.primary.withOpacity(0.05)
-              : colors.surface,
+          color: selected ? colors.primary.withOpacity(0.05) : colors.surface,
         ),
         child: Row(
           children: [
-            Icon(Icons.credit_card_rounded,
-                color: selected ? colors.primary : colors.onSurfaceVariant),
+            Icon(
+              Icons.credit_card_rounded,
+              color: selected ? colors.primary : colors.onSurfaceVariant,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -1291,7 +1313,9 @@ class _SavedCardTile extends StatelessWidget {
                   Text(
                     'Expires ${card.expMonth.toString().padLeft(2, '0')} / ${card.expYear}',
                     style: TextStyle(
-                        fontSize: 12, color: colors.onSurfaceVariant),
+                      fontSize: 12,
+                      color: colors.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -1324,14 +1348,14 @@ class _NewCardTile extends StatelessWidget {
             color: selected ? colors.primary : colors.outline.withOpacity(0.3),
             width: selected ? 2 : 1,
           ),
-          color: selected
-              ? colors.primary.withOpacity(0.05)
-              : colors.surface,
+          color: selected ? colors.primary.withOpacity(0.05) : colors.surface,
         ),
         child: Row(
           children: [
-            Icon(Icons.add_card_outlined,
-                color: selected ? colors.primary : colors.onSurfaceVariant),
+            Icon(
+              Icons.add_card_outlined,
+              color: selected ? colors.primary : colors.onSurfaceVariant,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -1364,10 +1388,10 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       label.toUpperCase(),
       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.2,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }
@@ -1397,7 +1421,11 @@ class _MerchantBanner extends StatelessWidget {
               color: colors.primary.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.storefront_rounded, color: colors.primary, size: 20),
+            child: Icon(
+              Icons.storefront_rounded,
+              color: colors.primary,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1411,8 +1439,9 @@ class _MerchantBanner extends StatelessWidget {
                 Text(
                   'Campus peer-to-peer exchange · NZ',
                   style: TextStyle(
-                      fontSize: 12,
-                      color: colors.onSurfaceVariant),
+                    fontSize: 12,
+                    color: colors.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -1478,7 +1507,9 @@ class _ItemCard extends StatelessWidget {
                 Text(
                   order.item.title,
                   style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 14),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1486,7 +1517,9 @@ class _ItemCard extends StatelessWidget {
                 Text(
                   'Seller: ${order.counterparty.displayName}',
                   style: TextStyle(
-                      fontSize: 12, color: colors.onSurfaceVariant),
+                    fontSize: 12,
+                    color: colors.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -1566,9 +1599,11 @@ class _SecureNote extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.lock_outline,
-            size: 13,
-            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        Icon(
+          Icons.lock_outline,
+          size: 13,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: 5),
         Text(
           'Secured by Stripe · 256-bit SSL encryption',
@@ -1589,7 +1624,9 @@ class _SecureNote extends StatelessWidget {
 class _CardNumberFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     final digits = newValue.text.replaceAll(' ', '');
     final buffer = StringBuffer();
     for (int i = 0; i < digits.length && i < 16; i++) {
@@ -1607,7 +1644,9 @@ class _CardNumberFormatter extends TextInputFormatter {
 class _ExpiryFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     final digits = newValue.text.replaceAll('/', '').replaceAll(' ', '');
     final buffer = StringBuffer();
     for (int i = 0; i < digits.length && i < 4; i++) {
@@ -1684,7 +1723,9 @@ class _SuccessSheetState extends State<_SuccessSheet>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 600));
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
     _scale = CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut);
     _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeIn);
     _ctrl.forward();
@@ -1734,16 +1775,16 @@ class _SuccessSheetState extends State<_SuccessSheet>
             const SizedBox(height: 8),
             Text(
               'Order #${widget.orderNumber}',
-              style: TextStyle(
-                  fontSize: 14, color: colors.onSurfaceVariant),
+              style: TextStyle(fontSize: 14, color: colors.onSurfaceVariant),
             ),
             const SizedBox(height: 6),
             Text(
               'NZ\$${widget.totalNzd} paid',
               style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: colors.primary),
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: colors.primary,
+              ),
             ),
             const SizedBox(height: 16),
             Container(
@@ -1755,8 +1796,11 @@ class _SuccessSheetState extends State<_SuccessSheet>
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.qr_code_2_rounded,
-                      color: Color(0xFF059669), size: 22),
+                  Icon(
+                    Icons.qr_code_2_rounded,
+                    color: Color(0xFF059669),
+                    size: 22,
+                  ),
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(

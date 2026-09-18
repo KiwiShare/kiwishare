@@ -1,7 +1,7 @@
 class OrderItemInfo {
   final String id;
   final String title;
-  final String priceNzd;        // original list price
+  final String priceNzd; // original list price
   final String? originalPriceNzd; // kept for display as strikethrough
   final String imageUrl;
   final String? condition;
@@ -72,7 +72,8 @@ class OrderMeetingInfo {
 
   factory OrderMeetingInfo.fromJson(Map<String, dynamic> json) {
     return OrderMeetingInfo(
-      scheduledAt: DateTime.tryParse(json['scheduledAt']?.toString() ?? '') ??
+      scheduledAt:
+          DateTime.tryParse(json['scheduledAt']?.toString() ?? '') ??
           DateTime.now(),
       locationName: (json['locationName'] ?? '').toString(),
       latitude: (json['latitude'] as num?)?.toDouble(),
@@ -96,8 +97,12 @@ class OrderModel {
   final DateTime updatedAt;
   final DateTime? completedAt;
   final DateTime? paidAt;
+  final DateTime? refundedAt;
+
   /// The actual agreed/settled price (may differ from item.priceNzd due to special price negotiation)
   final String? itemAmountNzd;
+  final String? buyerTotalAmountNzd;
+  final String? buyerFeeAmountNzd;
 
   const OrderModel({
     required this.id,
@@ -112,15 +117,21 @@ class OrderModel {
     required this.updatedAt,
     this.completedAt,
     this.paidAt,
+    this.refundedAt,
     this.itemAmountNzd,
+    this.buyerTotalAmountNzd,
+    this.buyerFeeAmountNzd,
   });
 
   bool get isBuying => role == 'buying';
   bool get isSelling => role == 'selling';
-  bool get isPaid => paidAt != null;
+  bool get isPaid => paidAt != null || status == 'paid';
+  bool get isRefunded => status == 'refunded' || refundedAt != null;
 
   bool get isCompleted =>
-      status == 'completed' || status == 'qr_scanned' || status == 'seller_paid';
+      status == 'completed' ||
+      status == 'qr_scanned' ||
+      status == 'seller_paid';
 
   bool get isInProgress =>
       status == 'meeting_scheduled' ||
@@ -134,14 +145,18 @@ class OrderModel {
 
   String get statusDisplay {
     if (isCompleted) return 'Completed';
-    if (status == 'meeting_scheduled' || status == 'meeting_in_progress') {
-      return 'Meeting Scheduled';
+    if (isCancelled) {
+      if (status == 'refunded') return 'Refunded';
+      if (status == 'disputed') return 'Disputed';
+      return 'Cancelled';
+    }
+    if (isPaid) {
+      if (status == 'meeting_scheduled' || status == 'meeting_in_progress') {
+        return 'Paid · Meetup Arranged';
+      }
+      return 'Paid · Awaiting Handover';
     }
     if (status == 'pending_payment') return 'Pending Payment';
-    if (status == 'paid') return 'Paid';
-    if (status == 'cancelled') return 'Cancelled';
-    if (status == 'refunded') return 'Refunded';
-    if (status == 'disputed') return 'Disputed';
     return status;
   }
 
@@ -162,12 +177,15 @@ class OrderModel {
             ? json['counterparty'] as Map<String, dynamic>
             : {},
       ),
-      meeting: json['meeting'] != null && json['meeting'] is Map<String, dynamic>
+      meeting:
+          json['meeting'] != null && json['meeting'] is Map<String, dynamic>
           ? OrderMeetingInfo.fromJson(json['meeting'] as Map<String, dynamic>)
           : null,
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
           DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
+      updatedAt:
+          DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
           DateTime.now(),
       completedAt: json['completedAt'] != null
           ? DateTime.tryParse(json['completedAt'].toString())
@@ -175,8 +193,17 @@ class OrderModel {
       paidAt: json['paidAt'] != null
           ? DateTime.tryParse(json['paidAt'].toString())
           : null,
-      itemAmountNzd: json['itemAmountNzd']?.toString() ??
-          json['itemAmount']?.toString(),
+      refundedAt: json['refundedAt'] != null
+          ? DateTime.tryParse(json['refundedAt'].toString())
+          : null,
+      itemAmountNzd:
+          json['itemAmountNzd']?.toString() ?? json['itemAmount']?.toString(),
+      buyerTotalAmountNzd:
+          json['buyerTotalAmountNzd']?.toString() ??
+          json['buyerTotalAmount']?.toString(),
+      buyerFeeAmountNzd:
+          json['buyerFeeAmountNzd']?.toString() ??
+          json['buyerFeeAmount']?.toString(),
     );
   }
 }

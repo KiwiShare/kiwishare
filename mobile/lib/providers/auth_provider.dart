@@ -363,12 +363,18 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  void applyTopUpResult({int? kiwiGold, bool? isVip, DateTime? vipExpiresAt}) {
+  void applyTopUpResult({
+    int? kiwiGold,
+    bool? isVip,
+    DateTime? vipExpiresAt,
+    bool? vipAutoRenew,
+  }) {
     if (_currentUser != null) {
       final updated = _currentUser!.copyWith(
         kiwiGold: kiwiGold ?? _currentUser!.kiwiGold,
         isVip: isVip ?? _currentUser!.isVip,
         vipExpiresAt: vipExpiresAt ?? _currentUser!.vipExpiresAt,
+        vipAutoRenew: vipAutoRenew ?? _currentUser!.vipAutoRenew,
       );
       _currentUser = updated;
       notifyListeners();
@@ -388,6 +394,25 @@ class AuthProvider extends ChangeNotifier {
     }
     if (_currentUser != null) {
       final updated = _currentUser!.copyWith(vipAutoRenew: false);
+      _currentUser = updated;
+      notifyListeners();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('current_user', jsonEncode(updated.toJson()));
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> resumeVipRenewal() async {
+    final token = _jwtToken;
+    if (token == null) return false;
+    try {
+      await PaymentService.instance.resumeVipRenewal(token: token);
+    } catch (_) {
+      // Fallback gracefully in case of mock/offline mode
+    }
+    if (_currentUser != null) {
+      final updated = _currentUser!.copyWith(vipAutoRenew: true, isVip: true);
       _currentUser = updated;
       notifyListeners();
       final prefs = await SharedPreferences.getInstance();

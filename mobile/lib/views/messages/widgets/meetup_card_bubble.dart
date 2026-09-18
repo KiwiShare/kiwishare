@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/chat_message_model.dart';
+import '../../../models/meetup_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/meetup_provider.dart';
 import '../../../providers/order_provider.dart';
@@ -144,9 +145,7 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
         _currentStatus == 'superseded' ||
         widget.meetup.isCancelled;
     final isDeclined =
-        _currentStatus == 'declined' ||
-        widget.meetup.isDeclined ||
-        isCancelled;
+        _currentStatus == 'declined' || widget.meetup.isDeclined || isCancelled;
     final isProposed = !isConfirmed && !isDeclined;
 
     final date = widget.meetup.scheduledAt.toLocal();
@@ -273,11 +272,18 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                   },
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.03),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.03),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: colors.outline.withValues(alpha: 0.15)),
+                      border: Border.all(
+                        color: colors.outline.withValues(alpha: 0.15),
+                      ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,7 +339,10 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                 // Agreed price display
                 if (widget.meetup.agreedPriceNzd != null) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.06)
@@ -386,7 +395,7 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                 if (isConfirmed) ...[
                   Builder(
                     builder: (ctx) {
-                      // Check if buyer has an unpaid order
+                      // Check if order is paid
                       OrderProvider? orderProvider;
                       try {
                         orderProvider = context.read<OrderProvider>();
@@ -394,28 +403,46 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                       final order = orderProvider?.orders
                           .where((o) => o.id == widget.meetup.orderId)
                           .firstOrNull;
-                      final buyerNeedsPay =
-                          widget.isBuyer == true &&
-                          order != null &&
-                          !order.isPaid &&
-                          order.status == 'pending_payment';
+                      MeetupModel? cachedMeetup;
+                      try {
+                        cachedMeetup = context
+                            .read<MeetupProvider>()
+                            .meetupById(widget.meetup.orderId);
+                      } catch (_) {}
+                      final isPaid =
+                          (order != null &&
+                              (order.isPaid || order.isCompleted)) ||
+                          (cachedMeetup != null && cachedMeetup.isPaid);
+                      final buyerNeedsPay = widget.isBuyer == true && !isPaid;
+                      final sellerNeedsWait = widget.isBuyer != true && !isPaid;
 
                       if (buyerNeedsPay) {
-                        // Show Pay Now button
+                        // Show Pay Now button for buyer
                         return SizedBox(
                           width: double.infinity,
                           height: 38,
                           child: FilledButton.icon(
-                            key: Key('pay_now_meetup_btn_${widget.meetup.orderId}'),
+                            key: Key(
+                              'pay_now_meetup_btn_${widget.meetup.orderId}',
+                            ),
                             onPressed: () {
-                              Navigator.push(
-                                ctx,
-                                MaterialPageRoute<void>(
-                                  builder: (_) => PaymentCheckoutScreen(
-                                    order: order,
+                              if (order != null) {
+                                Navigator.push(
+                                  ctx,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        PaymentCheckoutScreen(order: order),
                                   ),
-                                ),
-                              );
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Please use Buy Now from chat to complete payment.',
+                                    ),
+                                  ),
+                                );
+                              }
                             },
                             icon: const Icon(Icons.lock_open_rounded, size: 18),
                             label: const Text(
@@ -433,7 +460,53 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                         );
                       }
 
-                      // Paid or seller — show QR button
+                      if (sellerNeedsWait) {
+                        // Seller waiting for buyer payment
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF2A1C0B)
+                                : const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF854D0E)
+                                  : const Color(0xFFFDE68A),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.hourglass_top_rounded,
+                                size: 16,
+                                color: isDark
+                                    ? const Color(0xFFFBBF24)
+                                    : const Color(0xFFB45309),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Awaiting buyer payment to unlock handover QR',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? const Color(0xFFFBBF24)
+                                        : const Color(0xFFB45309),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      // Both confirmed and paid — show QR button
                       return SizedBox(
                         width: double.infinity,
                         height: 38,

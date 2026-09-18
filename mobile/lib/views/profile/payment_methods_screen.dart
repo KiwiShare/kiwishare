@@ -53,8 +53,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Remove card'),
-        content: const Text(
-            'Are you sure you want to remove this saved card?'),
+        content: const Text('Are you sure you want to remove this saved card?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -63,7 +62,8 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: const Text('Remove'),
           ),
         ],
@@ -90,9 +90,9 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     } on PaymentException catch (e) {
       if (!mounted) return;
       setState(() => _deletingId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -119,65 +119,64 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline,
-                            size: 48, color: colors.error),
-                        const SizedBox(height: 12),
-                        Text(_error!,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                            onPressed: _load,
-                            child: const Text('Retry')),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 48, color: colors.error),
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium,
                     ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-                    children: [
-                      // ── Security note ─────────────────────────────────
-                      _SecurityBanner(isDark: isDark, colors: colors),
-                      const SizedBox(height: 24),
-
-                      // ── Saved Cards ───────────────────────────────────
-                      if (_cards.isEmpty) ...[
-                        _EmptyState(colors: colors),
-                      ] else ...[
-                        Text(
-                          'SAVED CARDS',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ..._cards.map(
-                          (card) => _CardTile(
-                            key: ValueKey(card.id),
-                            card: card,
-                            isDeleting: _deletingId == card.id,
-                            onDelete: () => _delete(card.id),
-                          ),
-                        ),
-                      ],
-
-                      const SizedBox(height: 28),
-
-                      // ── Info note ─────────────────────────────────────
-                      _InfoNote(colors: colors, isDark: isDark),
-                    ],
-                  ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _load, child: const Text('Retry')),
+                  ],
                 ),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                children: [
+                  // ── Security note ─────────────────────────────────
+                  _SecurityBanner(isDark: isDark, colors: colors),
+                  const SizedBox(height: 24),
+
+                  // ── Saved Cards ───────────────────────────────────
+                  if (_cards.isEmpty) ...[
+                    _EmptyState(colors: colors),
+                  ] else ...[
+                    Text(
+                      'SAVED CARDS',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ..._cards.map(
+                      (card) => _CardTile(
+                        key: ValueKey(card.id),
+                        card: card,
+                        isDeleting: _deletingId == card.id,
+                        onDelete: () => _delete(card.id),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 28),
+
+                  // ── Info note ─────────────────────────────────────
+                  _InfoNote(colors: colors, isDark: isDark),
+                ],
+              ),
+            ),
     );
   }
 }
@@ -224,7 +223,9 @@ class _SecurityBanner extends StatelessWidget {
                 Text(
                   'Your card details are encrypted and stored securely. KiwiShare never stores raw card numbers.',
                   style: TextStyle(
-                      fontSize: 12, color: colors.onSurfaceVariant),
+                    fontSize: 12,
+                    color: colors.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -319,7 +320,9 @@ class _CardTile extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: Text(
-              card.brand == 'mastercard' ? 'MC' : _brandLabel.substring(0, _brandLabel.length.clamp(0, 4)),
+              card.brand == 'mastercard'
+                  ? 'MC'
+                  : _brandLabel.substring(0, _brandLabel.length.clamp(0, 4)),
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w900,
@@ -336,13 +339,17 @@ class _CardTile extends StatelessWidget {
                 Text(
                   '$_brandLabel •••• ${card.last4}',
                   style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 14),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   'Expires ${card.expMonth.toString().padLeft(2, '0')} / ${card.expYear}',
                   style: TextStyle(
-                      fontSize: 12, color: colors.onSurfaceVariant),
+                    fontSize: 12,
+                    color: colors.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -357,8 +364,11 @@ class _CardTile extends StatelessWidget {
           else
             IconButton(
               key: Key('delete_card_${card.id}'),
-              icon: Icon(Icons.delete_outline_rounded,
-                  color: colors.error, size: 20),
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                color: colors.error,
+                size: 20,
+              ),
               onPressed: onDelete,
               tooltip: 'Remove card',
               visualDensity: VisualDensity.compact,
@@ -407,8 +417,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               'Cards saved during checkout will appear here\nfor faster future payments.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 13, color: colors.onSurfaceVariant),
+              style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
             ),
           ],
         ),
@@ -442,7 +451,11 @@ class _InfoNote extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.info_outline, size: 16, color: colors.onSurfaceVariant),
+              Icon(
+                Icons.info_outline,
+                size: 16,
+                color: colors.onSurfaceVariant,
+              ),
               const SizedBox(width: 6),
               Text(
                 'About saved cards',

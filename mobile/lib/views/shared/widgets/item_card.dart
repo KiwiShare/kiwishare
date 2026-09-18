@@ -81,7 +81,7 @@ class ItemCard extends StatelessWidget {
               children: [
                 // 1. Photo Section with Overlays
                 AspectRatio(
-                  aspectRatio: 1.30,
+                  aspectRatio: 1.38,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [

@@ -48,6 +48,11 @@ abstract class MeetupRepository {
     String? itemId,
     required String token,
   });
+
+  Future<Map<String, dynamic>> confirmHandover({
+    required String orderId,
+    required String token,
+  });
 }
 
 class RestMeetupRepository implements MeetupRepository {
@@ -205,6 +210,18 @@ class RestMeetupRepository implements MeetupRepository {
       headers: _headers(token),
       body: jsonEncode({'claimCode': claimCode, 'itemId': ?itemId}),
     );
+    return _responseMap(response);
+  }
+
+  @override
+  Future<Map<String, dynamic>> confirmHandover({
+    required String orderId,
+    required String token,
+  }) async {
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/meetups/$orderId/confirm-handover',
+    );
+    final response = await _client.post(uri, headers: _headers(token));
     return _responseMap(response);
   }
 }

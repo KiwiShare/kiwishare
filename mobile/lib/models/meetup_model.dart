@@ -60,6 +60,10 @@ class MeetupModel {
   bool get isDeclined => proposalStatus == 'declined';
   bool get isCancelled => proposalStatus == 'cancelled';
   bool get isCompleted => status == 'completed';
+  bool get isPaid =>
+      (qrToken != null && qrToken!.isNotEmpty) ||
+      status == 'completed' ||
+      status == 'paid';
 
   bool get hasCoordinates => latitude != null && longitude != null;
 

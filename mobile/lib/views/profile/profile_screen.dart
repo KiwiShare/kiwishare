@@ -9,6 +9,7 @@ import '../../models/user_model.dart';
 import '../../providers/providers.dart';
 import '../../repositories/user_repository.dart';
 import '../../widgets/kiwigold_coin_icon.dart';
+import '../../widgets/vip_crown_icon.dart';
 import '../auth/login_view.dart';
 import 'help_center_screen.dart';
 import 'kiwigold_topup_sheet.dart';
@@ -222,11 +223,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _showVipManagementSheet(BuildContext context, UserModel user) async {
+  Future<void> _showVipManagementSheet(
+    BuildContext context,
+    UserModel user,
+  ) async {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final expiresAt = user.vipExpiresAt;
-    final dateStr = expiresAt != null ? _formatVipDate(expiresAt) : 'Next billing cycle';
+    final dateStr = expiresAt != null
+        ? _formatVipDate(expiresAt)
+        : 'Next billing cycle';
 
     await showModalBottomSheet<void>(
       context: context,
@@ -237,12 +243,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           final currentUser = auth.currentUser ?? user;
           final isAutoRenew = currentUser.vipAutoRenew;
           final currentExpiresAt = currentUser.vipExpiresAt ?? expiresAt;
-          final currentDateStr = currentExpiresAt != null ? _formatVipDate(currentExpiresAt) : dateStr;
+          final currentDateStr = currentExpiresAt != null
+              ? _formatVipDate(currentExpiresAt)
+              : dateStr;
 
           return Container(
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF181715) : Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
             child: Column(
@@ -274,14 +284,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFC89328).withValues(alpha: 0.35),
+                            color: const Color(
+                              0xFFC89328,
+                            ).withValues(alpha: 0.35),
                             blurRadius: 8,
                             offset: const Offset(0, 3),
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.workspace_premium_rounded,
+                      child: const VipCrownIcon(
                         color: Color(0xFF382305),
                         size: 28,
                       ),
@@ -300,17 +311,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(height: 3),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: isAutoRenew
-                                  ? const Color(0xFF059669).withValues(alpha: 0.15)
-                                  : const Color(0xFFD97706).withValues(alpha: 0.15),
+                                  ? const Color(
+                                      0xFF059669,
+                                    ).withValues(alpha: 0.15)
+                                  : const Color(
+                                      0xFFD97706,
+                                    ).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              isAutoRenew ? 'ACTIVE · AUTO-RENEWS' : 'EXPIRING · CANCELLATION PENDING',
+                              isAutoRenew
+                                  ? 'ACTIVE · AUTO-RENEWS'
+                                  : 'VIP ACTIVE · AUTO-RENEW OFF',
                               style: TextStyle(
-                                color: isAutoRenew ? const Color(0xFF059669) : const Color(0xFFD97706),
+                                color: isAutoRenew
+                                    ? const Color(0xFF059669)
+                                    : const Color(0xFFD97706),
                                 fontWeight: FontWeight.w800,
                                 fontSize: 10.5,
                                 letterSpacing: 0.4,
@@ -326,7 +348,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF24221E) : const Color(0xFFFBF8F2),
+                    color: isDark
+                        ? const Color(0xFF24221E)
+                        : const Color(0xFFFBF8F2),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: const Color(0xFFD4AF37).withValues(alpha: 0.3),
@@ -340,14 +364,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 10),
                       _VipInfoRow(
-                        label: isAutoRenew ? 'Next Renewal Date' : 'Access Valid Until',
-                        value: currentDateStr,
+                        label: 'Membership Access',
+                        value: 'Valid until $currentDateStr',
+                        valueColor: const Color(0xFF059669),
                       ),
                       const SizedBox(height: 10),
                       _VipInfoRow(
-                        label: 'Status',
-                        value: isAutoRenew ? 'Unlimited Boosts Active' : 'Cancelled (Perks Active Until Expiry)',
-                        valueColor: isAutoRenew ? const Color(0xFF059669) : const Color(0xFFD97706),
+                        label: 'Monthly Subscription',
+                        value: isAutoRenew
+                            ? 'Active (Auto-renews $currentDateStr)'
+                            : 'Paused (No future charges)',
+                        valueColor: isAutoRenew
+                            ? const Color(0xFF059669)
+                            : const Color(0xFFD97706),
                       ),
                     ],
                   ),
@@ -355,17 +384,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 16),
                 Text(
                   'Included Perks',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 const _VipPerkItem(
                   icon: Icons.rocket_launch_rounded,
                   title: 'Unlimited Listing Boosts',
-                  desc: 'Boost any listing to top of feeds without spending coins',
+                  desc:
+                      'Boost any listing to top of feeds without spending coins',
                 ),
                 const SizedBox(height: 8),
                 const _VipPerkItem(
-                  icon: Icons.workspace_premium_rounded,
+                  customIcon: VipCrownIcon(size: 18),
                   title: 'VIP Golden Badge',
                   desc: 'Crown badge displayed on your profile and listings',
                 ),
@@ -398,7 +430,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             actions: [
                               TextButton(
-                                onPressed: () => Navigator.pop(dialogCtx, false),
+                                onPressed: () =>
+                                    Navigator.pop(dialogCtx, false),
                                 child: const Text('Keep VIP'),
                               ),
                               FilledButton(
@@ -414,7 +447,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                         if (confirm == true && context.mounted) {
                           try {
-                            await context.read<AuthProvider>().cancelVipRenewal();
+                            await context
+                                .read<AuthProvider>()
+                                .cancelVipRenewal();
                             if (sheetCtx.mounted) {
                               Navigator.pop(sheetCtx);
                             }
@@ -451,18 +486,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     width: double.infinity,
                     child: FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFD97706),
+                        backgroundColor: const Color(0xFF059669),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      onPressed: () {
-                        Navigator.pop(sheetCtx);
-                        KiwiGoldTopUpSheet.show(
-                          context,
-                          initialPlan: TopUpPlanType.vipMonthly,
-                        );
+                      onPressed: () async {
+                        try {
+                          await context.read<AuthProvider>().resumeVipRenewal();
+                          if (sheetCtx.mounted) {
+                            Navigator.pop(sheetCtx);
+                          }
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'VIP auto-renewal resumed successfully! Your subscription will renew on $currentDateStr.',
+                                ),
+                                backgroundColor: const Color(0xFF059669),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to resume renewal: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
                       },
                       child: const Text(
                         'Resume VIP Auto-Renewal',
@@ -554,9 +609,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               tooltip: 'Settings',
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const SettingsScreen(),
-                ),
+                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
               ),
             ),
           ),
@@ -583,6 +636,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ? _ProfileHeader(
                     user: user,
                     onEdit: () => _editName(context, user),
+                    onStudentTap: () => _showStudentVerification(context),
                   )
                 : _GuestHeader(
                     onLogin: () => _showLogin(context),
@@ -597,13 +651,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 14),
             ],
             if (signedIn) ...[
-              if (user.isStudentVerified)
-                _StudentVerifiedBanner(user: user)
-              else
-                _StudentVerificationBanner(
-                  onTap: () => _showStudentVerification(context),
-                ),
-              const SizedBox(height: 12),
               _KiwigoldVipBannerCard(
                 user: user,
                 onTap: () {
@@ -730,11 +777,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.explore_outlined,
                   iconColor: const Color(0xFF059669),
                   title: 'How KiwiShare works',
-                  subtitle: '5-step guide to trading & supporting circular economy',
+                  subtitle:
+                      '5-step guide to trading & supporting circular economy',
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
-                      builder: (_) => const HelpCenterScreen(initialTabIndex: 0),
+                      builder: (_) =>
+                          const HelpCenterScreen(initialTabIndex: 0),
                     ),
                   ),
                 ),
@@ -742,11 +791,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.quiz_outlined,
                   iconColor: const Color(0xFF3B82F6),
                   title: 'Help Center & FAQs',
-                  subtitle: 'Answers to meetups, QR, KiwiGold, and safety questions',
+                  subtitle:
+                      'Answers to meetups, QR, KiwiGold, and safety questions',
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
-                      builder: (_) => const HelpCenterScreen(initialTabIndex: 1),
+                      builder: (_) =>
+                          const HelpCenterScreen(initialTabIndex: 1),
                     ),
                   ),
                 ),
@@ -852,9 +903,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.user, required this.onEdit});
+  const _ProfileHeader({
+    required this.user,
+    required this.onEdit,
+    this.onStudentTap,
+  });
   final UserModel user;
   final VoidCallback onEdit;
+  final VoidCallback? onStudentTap;
 
   @override
   Widget build(BuildContext context) {
@@ -883,7 +939,9 @@ class _ProfileHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Top User Info Row ──
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Stack(
                 clipBehavior: Clip.none,
@@ -898,7 +956,7 @@ class _ProfileHeader extends StatelessWidget {
                       ),
                     ),
                     child: CircleAvatar(
-                      radius: 34,
+                      radius: 32,
                       backgroundColor: scheme.primaryContainer,
                       foregroundImage:
                           user.avatarUrl == null || user.avatarUrl!.isEmpty
@@ -932,7 +990,7 @@ class _ProfileHeader extends StatelessWidget {
                         child: const Icon(
                           Icons.verified_rounded,
                           color: Color(0xFF10B981),
-                          size: 20,
+                          size: 18,
                         ),
                       ),
                     ),
@@ -942,28 +1000,72 @@ class _ProfileHeader extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      user.displayName,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            user.displayName,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (user.isVip) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF8B5CF6,
+                                  ).withValues(alpha: 0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                VipCrownIcon(size: 12),
+                                SizedBox(width: 3),
+                                Text(
+                                  'VIP',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
+                    Row(
                       children: [
                         Semantics(
                           label:
                               'Trust score ${formatPublicTrustScore(user.trustScore)}',
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
+                              horizontal: 8,
+                              vertical: 3.5,
                             ),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
@@ -984,7 +1086,7 @@ class _ProfileHeader extends StatelessWidget {
                               children: [
                                 Icon(
                                   Icons.verified_user_rounded,
-                                  size: 13,
+                                  size: 12,
                                   color: isDark
                                       ? const Color(0xFF92D4B3)
                                       : const Color(0xFF064B3A),
@@ -997,130 +1099,60 @@ class _ProfileHeader extends StatelessWidget {
                                         ? const Color(0xFFD6F6E3)
                                         : const Color(0xFF064B3A),
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 12,
+                                    fontSize: 11,
                                   ),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                        GestureDetector(
-                          onTap: () => KiwiGoldTopUpSheet.show(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF451A03) : const Color(0xFFFEF3C7),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: isDark ? const Color(0xFFB45309) : const Color(0xFFFCD34D),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const KiwiGoldCoinIcon(size: 14),
-                                const SizedBox(width: 5),
-                                Text(
-                                  '${user.kiwiGold} KiwiGold',
-                                  style: TextStyle(
-                                    color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.add_circle_outline,
-                                  size: 13,
-                                  color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (user.isVip)
+                        if (user.isStudentVerified) ...[
+                          const SizedBox(width: 6),
                           GestureDetector(
-                            onTap: () => KiwiGoldTopUpSheet.show(
-                              context,
-                              initialPlan: TopUpPlanType.vipMonthly,
-                            ),
+                            onTap: onStudentTap,
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
+                                horizontal: 8,
+                                vertical: 3.5,
                               ),
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
-                                ),
+                                color: isDark
+                                    ? const Color(
+                                        0xFF1E3A8A,
+                                      ).withValues(alpha: 0.5)
+                                    : const Color(0xFFEFF6FF),
                                 borderRadius: BorderRadius.circular(999),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF8B5CF6).withOpacity(0.3),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
+                                border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFF3B82F6)
+                                      : const Color(0xFFBFDBFE),
+                                  width: 0.8,
+                                ),
                               ),
-                              child: const Row(
+                              child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    Icons.workspace_premium_rounded,
-                                    size: 13,
-                                    color: Color(0xFFFFE082),
+                                  const Icon(
+                                    Icons.school_rounded,
+                                    size: 12,
+                                    color: Color(0xFF2563EB),
                                   ),
-                                  SizedBox(width: 3),
+                                  const SizedBox(width: 4),
                                   Text(
-                                    'VIP',
+                                    'Student',
                                     style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 12,
+                                      color: isDark
+                                          ? const Color(0xFF93C5FD)
+                                          : const Color(0xFF1E40AF),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 11,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
                           ),
-                        if (user.isStudentVerified)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF1E3A8A) : const Color(0xFFEFF6FF),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: isDark ? const Color(0xFF3B82F6) : const Color(0xFF93C5FD),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.school_rounded,
-                                  size: 13,
-                                  color: Color(0xFF2563EB),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Student',
-                                  style: TextStyle(
-                                    color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1E40AF),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -1138,13 +1170,80 @@ class _ProfileHeader extends StatelessWidget {
                     padding: const EdgeInsets.all(8),
                     child: Icon(
                       Icons.edit_outlined,
-                      size: 20,
+                      size: 18,
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ),
               ),
             ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // ── Bottom Wallet & Balance Shelf ──
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF221F1B) : const Color(0xFFFBF8F2),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark
+                    ? const Color(0xFFB45309).withValues(alpha: 0.25)
+                    : const Color(0xFFFDE68A),
+                width: 0.8,
+              ),
+            ),
+            child: Row(
+              children: [
+                const KiwiGoldCoinIcon(size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  '${user.kiwiGold} KiwiGold',
+                  style: TextStyle(
+                    color: isDark
+                        ? const Color(0xFFFDE68A)
+                        : const Color(0xFF92400E),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                const Spacer(),
+                InkWell(
+                  onTap: () => KiwiGoldTopUpSheet.show(context),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.add_circle,
+                          size: 14,
+                          color: isDark
+                              ? const Color(0xFFFDE68A)
+                              : const Color(0xFFB45309),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Top Up',
+                          style: TextStyle(
+                            color: isDark
+                                ? const Color(0xFFFDE68A)
+                                : const Color(0xFFB45309),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1872,209 +1971,8 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   );
 }
 
-class _StudentVerificationBanner extends StatelessWidget {
-  const _StudentVerificationBanner({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-              : [const Color(0xFFEFF6FF), const Color(0xFFDBEAFE)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? const Color(0xFF3B82F6).withOpacity(0.3)
-              : const Color(0xFF93C5FD),
-          width: 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB).withOpacity(0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.school_rounded,
-                    color: Color(0xFF2563EB),
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              'NZ Student Verification',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: isDark
-                                    ? Colors.white
-                                    : const Color(0xFF1E3A8A),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2563EB),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              '+15 Trust',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Verify your university email (.ac.nz) for campus badge & perks',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: isDark
-                              ? const Color(0xFF94A3B8)
-                              : const Color(0xFF1D4ED8),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 14,
-                  color: Color(0xFF2563EB),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StudentVerifiedBanner extends StatelessWidget {
-  const _StudentVerifiedBanner({required this.user});
-  final UserModel user;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final institution = user.studentInstitution ?? 'New Zealand University';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF064E3B).withOpacity(0.3)
-            : const Color(0xFFECFDF5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? const Color(0xFF059669).withOpacity(0.4)
-              : const Color(0xFFA7F3D0),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: const Color(0xFF059669).withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.verified_rounded,
-              color: Color(0xFF059669),
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Verified NZ Student',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: isDark
-                            ? const Color(0xFF6EE7B7)
-                            : const Color(0xFF065F46),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Icon(
-                      Icons.check_circle_rounded,
-                      size: 14,
-                      color: Color(0xFF059669),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  institution,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: isDark
-                        ? const Color(0xFFA7F3D0)
-                        : const Color(0xFF047857),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _KiwigoldVipBannerCard extends StatelessWidget {
-  const _KiwigoldVipBannerCard({
-    this.user,
-    required this.onTap,
-  });
+  const _KiwigoldVipBannerCard({this.user, required this.onTap});
 
   final UserModel? user;
   final VoidCallback onTap;
@@ -2087,12 +1985,18 @@ class _KiwigoldVipBannerCard extends StatelessWidget {
     final dateStr = expiresAt != null ? _formatVipDate(expiresAt) : null;
 
     final String badgeText;
+    final now = DateTime.now();
+    final daysRemaining = expiresAt != null
+        ? expiresAt.difference(now).inDays
+        : 999;
     if (!isVip) {
       badgeText = 'MEMBER';
     } else if (isAutoRenew) {
       badgeText = 'ACTIVE';
-    } else {
+    } else if (daysRemaining <= 3 && daysRemaining >= 0) {
       badgeText = 'EXPIRING';
+    } else {
+      badgeText = 'ACTIVE';
     }
 
     final String subtitleText;
@@ -2104,8 +2008,8 @@ class _KiwigoldVipBannerCard extends StatelessWidget {
           : 'Unlimited boosts active';
     } else {
       subtitleText = dateStr != null
-          ? 'Perks valid until $dateStr · Renewal cancelled'
-          : 'Perks active · Renewal cancelled';
+          ? 'Perks active until $dateStr · Auto-renew off'
+          : 'Perks active · Auto-renew off';
     }
 
     final String actionText = isVip ? 'Manage' : 'Get VIP';
@@ -2114,11 +2018,7 @@ class _KiwigoldVipBannerCard extends StatelessWidget {
       decoration: BoxDecoration(
         // Xianyu VIP luxury aesthetic: deep charcoal & dark gold gradient
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFF1F1D1A),
-            Color(0xFF2B2319),
-            Color(0xFF382C1C),
-          ],
+          colors: [Color(0xFF1F1D1A), Color(0xFF2B2319), Color(0xFF382C1C)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -2162,10 +2062,8 @@ class _KiwigoldVipBannerCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.workspace_premium_rounded,
-                    color: Color(0xFF382305),
-                    size: 24,
+                  child: const Center(
+                    child: VipCrownIcon(color: Color(0xFF382305), size: 24),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2194,8 +2092,14 @@ class _KiwigoldVipBannerCard extends StatelessWidget {
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: (!isVip || isAutoRenew)
-                                    ? const [Color(0xFFF59E0B), Color(0xFFD97706)]
-                                    : const [Color(0xFFDC2626), Color(0xFFB91C1C)],
+                                    ? const [
+                                        Color(0xFFF59E0B),
+                                        Color(0xFFD97706),
+                                      ]
+                                    : const [
+                                        Color(0xFFDC2626),
+                                        Color(0xFFB91C1C),
+                                      ],
                               ),
                               borderRadius: BorderRadius.circular(6),
                             ),
@@ -2218,7 +2122,9 @@ class _KiwigoldVipBannerCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: const Color(0xFFF5E6C8).withValues(alpha: 0.85),
+                          color: const Color(
+                            0xFFF5E6C8,
+                          ).withValues(alpha: 0.85),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -2245,7 +2151,9 @@ class _KiwigoldVipBannerCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(18),
                     border: isVip
                         ? Border.all(
-                            color: const Color(0xFFE5A93C).withValues(alpha: 0.6),
+                            color: const Color(
+                              0xFFE5A93C,
+                            ).withValues(alpha: 0.6),
                             width: 1,
                           )
                         : null,
@@ -2253,7 +2161,9 @@ class _KiwigoldVipBannerCard extends StatelessWidget {
                         ? null
                         : [
                             BoxShadow(
-                              color: const Color(0xFFE5A93C).withValues(alpha: 0.3),
+                              color: const Color(
+                                0xFFE5A93C,
+                              ).withValues(alpha: 0.3),
                               blurRadius: 6,
                               offset: const Offset(0, 2),
                             ),
@@ -2305,7 +2215,7 @@ String _formatVipDate(DateTime dt) {
     'Sep',
     'Oct',
     'Nov',
-    'Dec'
+    'Dec',
   ];
   return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
 }
@@ -2351,12 +2261,14 @@ class _VipInfoRow extends StatelessWidget {
 
 class _VipPerkItem extends StatelessWidget {
   const _VipPerkItem({
-    required this.icon,
+    this.icon,
+    this.customIcon,
     required this.title,
     required this.desc,
-  });
+  }) : assert(icon != null || customIcon != null);
 
-  final IconData icon;
+  final IconData? icon;
+  final Widget? customIcon;
   final String title;
   final String desc;
 
@@ -2370,11 +2282,16 @@ class _VipPerkItem extends StatelessWidget {
         Container(
           width: 32,
           height: 32,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: const Color(0xFFD4AF37).withValues(alpha: isDark ? 0.2 : 0.12),
+            color: const Color(
+              0xFFD4AF37,
+            ).withValues(alpha: isDark ? 0.2 : 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, size: 18, color: const Color(0xFFD4AF37)),
+          child:
+              customIcon ??
+              Icon(icon!, size: 18, color: const Color(0xFFD4AF37)),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -2383,14 +2300,19 @@ class _VipPerkItem extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 1),
               Text(
                 desc,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                 ),
               ),
             ],
@@ -2483,7 +2405,9 @@ class _StudentVerificationSheetState extends State<_StudentVerificationSheet> {
     final email = _emailCtrl.text.trim().toLowerCase();
     final code = _otpCtrl.text.trim();
     if (code.length != 6) {
-      setState(() => _error = 'Please enter the full 6-digit verification code.');
+      setState(
+        () => _error = 'Please enter the full 6-digit verification code.',
+      );
       return;
     }
 
@@ -2584,7 +2508,9 @@ class _StudentVerificationSheetState extends State<_StudentVerificationSheet> {
             Text(
               'Enter your official university email (ending in .ac.nz) to receive a 6-digit verification code. Supported institutions include University of Auckland, AUT, Otago, Canterbury, Victoria Wellington, Massey, Waikato, Lincoln, and other NZ tertiary colleges.',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF4B5563),
+                color: isDark
+                    ? const Color(0xFF94A3B8)
+                    : const Color(0xFF4B5563),
                 height: 1.4,
               ),
             ),
@@ -2673,7 +2599,9 @@ class _StudentVerificationSheetState extends State<_StudentVerificationSheet> {
             Text(
               'We sent a 6-digit verification code to ${_emailCtrl.text.trim()}. Please enter it below:',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF4B5563),
+                color: isDark
+                    ? const Color(0xFF94A3B8)
+                    : const Color(0xFF4B5563),
               ),
             ),
             const SizedBox(height: 18),
@@ -2718,7 +2646,10 @@ class _StudentVerificationSheetState extends State<_StudentVerificationSheet> {
                     _step = 1;
                     _error = null;
                   }),
-                  child: const Text('Change email', style: TextStyle(fontSize: 13)),
+                  child: const Text(
+                    'Change email',
+                    style: TextStyle(fontSize: 13),
+                  ),
                 ),
               ],
             ),

@@ -12,7 +12,8 @@ import {
   getOrCreateStripeCustomer,
   listCustomerCards,
   attachCustomerCard,
-  detachCustomerCard
+  detachCustomerCard,
+  createStripePaymentMethod
 } from '../services/stripeService';
 import { ensureOrderMeetupQr } from './meetups';
 
@@ -202,6 +203,31 @@ router.post('/payments/confirm', authenticateToken, async (ctx) => {
     return;
   }
 
+  // Concurrency guard: verify item is not already sold/paid by another buyer
+  const item = await Item.findById(order.itemId);
+  if (!item || item.status === 'deleted') {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Item not found or no longer available.' };
+    return;
+  }
+
+  if (item.status === 'sold') {
+    const existingPaidOrder = await Order.findOne({
+      itemId: item._id,
+      _id: { $ne: order._id },
+      paidAt: { $exists: true, $ne: null },
+      status: { $in: ['paid', 'meeting_scheduled', 'meeting_in_progress', 'completed'] }
+    });
+    if (existingPaidOrder) {
+      ctx.status = 409;
+      ctx.body = {
+        status: 'error',
+        message: 'This item has already been purchased by another buyer.'
+      };
+      return;
+    }
+  }
+
   // If paymentIntentId is provided, confirm via Stripe service
   if (paymentIntentId) {
     try {
@@ -214,12 +240,16 @@ router.post('/payments/confirm', authenticateToken, async (ctx) => {
     }
   }
 
-  // Mark order as paid
+  // Mark order as paid. Only transition to meeting_scheduled if meeting was already agreed.
   order.paidAt = new Date();
-  if (order.status === 'pending_payment') {
-    order.status = 'meeting_scheduled';
-  }
+  const isMeetupAgreed =
+    order.meeting?.proposalStatus === 'confirmed' ||
+    order.meeting?.proposalStatus === 'accepted';
+  order.status = isMeetupAgreed ? 'meeting_scheduled' : 'paid';
   await order.save();
+
+  // Immediately delist item and set to sold to prevent concurrent purchases
+  await Item.findByIdAndUpdate(order.itemId, { status: 'sold' });
 
   // Generate dynamic QR token
   const qrToken = await ensureOrderMeetupQr(order);
@@ -253,6 +283,44 @@ router.get('/payments/cards', authenticateToken, async (ctx) => {
     ctx.body = { status: 'success', cards };
   } catch (err: any) {
     ctx.body = { status: 'success', cards: [] };
+  }
+});
+
+/**
+ * POST /api/payments/payment-methods
+ * Creates a Stripe PaymentMethod using server secret key.
+ * Resolves 'Integration surface is not supported for publishible key tokenization'.
+ */
+router.post('/payments/payment-methods', authenticateToken, async (ctx) => {
+  const { cardNumber, expMonth, expYear, cvc } = ctx.request.body as any;
+
+  if (!cardNumber || !expMonth || !expYear || !cvc) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'Card number, expiry month, expiry year, and cvc are required.'
+    };
+    return;
+  }
+
+  try {
+    const paymentMethodId = await createStripePaymentMethod({
+      number: String(cardNumber),
+      expMonth: Number(expMonth),
+      expYear: Number(expYear),
+      cvc: String(cvc)
+    });
+
+    ctx.body = {
+      status: 'success',
+      paymentMethodId
+    };
+  } catch (err: any) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: err.message || 'Failed to tokenize card details.'
+    };
   }
 });
 
@@ -500,6 +568,32 @@ router.post('/payments/vip/cancel-renewal', authenticateToken, async (ctx) => {
     isVip: Boolean(user.isVip && (!user.vipExpiresAt || new Date(user.vipExpiresAt) > new Date())),
     vipExpiresAt: user.vipExpiresAt || null,
     vipAutoRenew: false
+  };
+});
+
+/**
+ * POST /api/payments/vip/resume-renewal
+ * Resumes auto-renewal for VIP membership.
+ */
+router.post('/payments/vip/resume-renewal', authenticateToken, async (ctx) => {
+  const userId = ctx.state.user?.id || ctx.state.user?._id;
+  const user = await User.findById(userId);
+  if (!user) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'User not found.' };
+    return;
+  }
+
+  user.vipAutoRenew = true;
+  user.isVip = true;
+  await user.save();
+
+  ctx.body = {
+    status: 'success',
+    message: 'VIP auto-renewal resumed. Your subscription will renew automatically at the end of your billing cycle.',
+    isVip: Boolean(user.isVip && (!user.vipExpiresAt || new Date(user.vipExpiresAt) > new Date())),
+    vipExpiresAt: user.vipExpiresAt || null,
+    vipAutoRenew: true
   };
 });
 

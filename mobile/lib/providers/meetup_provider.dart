@@ -217,4 +217,18 @@ class MeetupProvider extends ChangeNotifier {
     await loadMyMeetups(token);
     return result;
   }
+
+  Future<Map<String, dynamic>> confirmHandover({
+    required String orderId,
+    required String token,
+  }) async {
+    final result = await repository.confirmHandover(
+      orderId: orderId,
+      token: token,
+    );
+    // Reload meetup details and list to keep local cache in sync
+    await loadMeetupDetails(orderId, token);
+    await loadMyMeetups(token);
+    return result;
+  }
 }

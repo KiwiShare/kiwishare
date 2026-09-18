@@ -24,12 +24,14 @@ abstract class ItemRepository {
   }) {
     throw UnimplementedError('updateItem is not implemented');
   }
+
   Future<Map<String, dynamic>> promoteItem({
     required String id,
     required String token,
   }) {
     throw UnimplementedError('promoteItem is not implemented');
   }
+
   Future<ItemModel> toggleListingStatus({
     required String id,
     required bool publish,
@@ -61,10 +63,13 @@ class RestItemRepository implements ItemRepository {
       body: jsonEncode(updates),
     );
     if (response.statusCode != 200) {
-      throw Exception('Failed to update item (${response.statusCode}): ${response.body}');
+      throw Exception(
+        'Failed to update item (${response.statusCode}): ${response.body}',
+      );
     }
     final data = jsonDecode(response.body);
-    final itemData = data is Map<String, dynamic> && data['item'] is Map<String, dynamic>
+    final itemData =
+        data is Map<String, dynamic> && data['item'] is Map<String, dynamic>
         ? data['item'] as Map<String, dynamic>
         : data as Map<String, dynamic>;
     return ItemModel.fromMap(itemData);
@@ -98,13 +103,12 @@ class RestItemRepository implements ItemRepository {
     required bool sold,
     required String token,
   }) async {
-    final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/api/users/me/usedItems',
-    ).replace(
-      queryParameters: {
-        'status': sold ? 'sold' : 'active,reserved,draft,delisted',
-      },
-    );
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/users/me/usedItems')
+        .replace(
+          queryParameters: {
+            'status': sold ? 'sold' : 'active,reserved,draft,delisted',
+          },
+        );
     final response = await _client.get(
       uri,
       headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
@@ -125,7 +129,9 @@ class RestItemRepository implements ItemRepository {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final item = ItemModel.fromMap(data['item'] as Map<String, dynamic>);
-      final kiwiGold = data['kiwiGold'] is num ? (data['kiwiGold'] as num).toInt() : null;
+      final kiwiGold = data['kiwiGold'] is num
+          ? (data['kiwiGold'] as num).toInt()
+          : null;
       return {'item': item, 'kiwiGold': kiwiGold, 'message': data['message']};
     }
     String message = 'Failed to promote item.';

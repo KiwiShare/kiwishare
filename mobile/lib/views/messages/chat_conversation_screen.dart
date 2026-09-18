@@ -79,6 +79,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   final Object _visibilityOwner = Object();
   ItemModel? _activeItem;
   String? _specialOfferPrice;
+  bool _itemPaid = false;
 
   @override
   void initState() {
@@ -443,7 +444,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   Future<void> _loadItemDetails() async {
     if (widget.conversation.itemId.isEmpty) return;
     try {
-      final item = await RestItemRepository().fetchItemById(widget.conversation.itemId);
+      final item = await RestItemRepository().fetchItemById(
+        widget.conversation.itemId,
+      );
       if (mounted && item != null) {
         setState(() {
           _activeItem = item;
@@ -507,26 +510,47 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     return result ?? false;
   }
 
+  OrderProvider? _getOrderProvider({bool listen = false}) {
+    try {
+      return Provider.of<OrderProvider>(context, listen: listen);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _buyerBuyNow() async {
     final token = _currentAuthToken;
     if (token == null || token.isEmpty) return;
+
+    final isSold = _activeItem?.status == ItemStatus.sold;
+    final orders = _getOrderProvider()?.orders ?? const [];
+    final isAlreadyPaid =
+        _itemPaid ||
+        orders.any(
+          (o) =>
+              o.itemId == widget.conversation.itemId &&
+              (o.isPaid || o.isCompleted),
+        );
+
+    if (isSold || isAlreadyPaid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isSold
+                ? 'This item has already been sold.'
+                : 'You have already completed payment for this item.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final item = _activeItem;
     final priceStr = item?.isFree == true || item?.priceNzd == '0'
         ? 'FREE'
         : '\$${item?.priceNzd ?? "0"} NZD';
 
-    // 1. Immediately send in-chat purchase message
-    try {
-      await _chatProvider.sendText(
-        conversation: widget.conversation,
-        text: '💳 [Buyer Action] I am buying this item ($priceStr) now! Proceeding to payment.',
-        token: token,
-      );
-      _scrollToEnd();
-      _requestNotificationPermissionAfterAction();
-    } catch (_) {}
-
-    // 2. Prepare order and navigate to payment checkout screen
+    // 1. Prepare order and navigate to payment checkout screen without premature chat message
     if (!mounted) return;
     showDialog<void>(
       context: context,
@@ -556,7 +580,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     );
 
     try {
-      final orderProvider = context.read<OrderProvider>();
+      final orderProvider = _getOrderProvider();
+      if (orderProvider == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
       final order = await orderProvider.createOrGetOrder(
         itemId: widget.conversation.itemId,
         token: token,
@@ -572,10 +600,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         );
 
         if (paymentResult == true && mounted) {
+          setState(() {
+            _itemPaid = true;
+          });
+          _loadItemDetails();
+          final token = _currentAuthToken;
+          if (token != null && token.isNotEmpty) {
+            orderProvider.loadMyOrders(token);
+          }
           await _chatProvider.sendText(
             conversation: widget.conversation,
-            text: '✅ [Payment Successful] Payment of $priceStr completed! Ready to arrange meetup or collection.',
-            token: token,
+            text:
+                '💳 [Payment Confirmed] Payment of $priceStr confirmed! Order #${order.orderNumber}. I have completed the payment via KiwiShare Safe Pay.',
+            token: token ?? '',
           );
           _scrollToEnd();
         }
@@ -583,9 +620,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     } catch (e) {
       if (mounted) Navigator.pop(context); // close loading dialog
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open checkout: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not open checkout: $e')));
       }
     }
   }
@@ -607,7 +644,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           return Container(
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             padding: EdgeInsets.only(
               top: 20,
@@ -678,7 +717,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                           decimal: true,
                         ),
                         decoration: InputDecoration(
-                          labelText: isFree ? 'Free Item' : 'Special Price (NZD)',
+                          labelText: isFree
+                              ? 'Free Item'
+                              : 'Special Price (NZD)',
                           prefixText: isFree ? '' : '\$ ',
                           border: const OutlineInputBorder(),
                         ),
@@ -726,7 +767,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       try {
         await _chatProvider.sendText(
           conversation: widget.conversation,
-          text: '🏷️ Special offer just for you: $priceLabel (listing price unchanged for others)',
+          text:
+              '🏷️ Special offer just for you: $priceLabel (listing price unchanged for others)',
           token: token,
         );
         _scrollToEnd();
@@ -734,9 +776,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           SnackBar(content: Text('Price offer sent: $priceLabel')),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send offer: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send offer: $e')));
       }
     }
   }
@@ -794,9 +836,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delist item: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to delist item: $e')));
         }
       }
     } else {
@@ -820,9 +862,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to relist item: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to relist item: $e')));
         }
       }
     }
@@ -847,22 +889,34 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
     final title = _activeItem?.title ?? widget.conversation.itemTitle;
     final imageUrl = _activeItem?.imageUrl ?? widget.conversation.itemImageUrl;
-    final isFree = _activeItem?.isFree == true ||
+    final isFree =
+        _activeItem?.isFree == true ||
         _activeItem?.priceNzd == '0' ||
-        (_activeItem?.priceNzd != null && double.tryParse(_activeItem!.priceNzd) == 0);
+        (_activeItem?.priceNzd != null &&
+            double.tryParse(_activeItem!.priceNzd) == 0);
     final priceText = isFree
         ? 'FREE'
         : _activeItem != null
-            ? '\$${_activeItem!.priceNzd}'
-            : '';
+        ? '\$${_activeItem!.priceNzd}'
+        : '';
 
     final status = _activeItem?.status ?? ItemStatus.active;
+    final orders = _getOrderProvider(listen: true)?.orders ?? const [];
+    final isOrderPaid =
+        _itemPaid ||
+        orders.any(
+          (o) =>
+              o.itemId == widget.conversation.itemId &&
+              (o.isPaid || o.isCompleted),
+        );
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? colors.surfaceContainerHighest.withOpacity(0.4) : Colors.white,
+        color: isDark
+            ? colors.surfaceContainerHighest.withOpacity(0.4)
+            : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -872,179 +926,335 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           ),
         ],
         border: Border.all(
-          color: isDark ? colors.outline.withOpacity(0.2) : colors.outline.withOpacity(0.12),
+          color: isDark
+              ? colors.outline.withOpacity(0.2)
+              : colors.outline.withOpacity(0.12),
         ),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ProductDetailScreen(
-                itemId: widget.conversation.itemId,
-                item: _activeItem,
-              ),
-            ),
-          ).then((_) => _loadItemDetails());
-        },
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                width: 54,
-                height: 54,
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: colors.surfaceContainerHighest,
-                    child: const Icon(Icons.image_not_supported_outlined, size: 24),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(
+                      builder: (_) => ProductDetailScreen(
+                        itemId: widget.conversation.itemId,
+                        item: _activeItem,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      if (_specialOfferPrice != null) ...[
-                        Text(
-                          _specialOfferPrice == '0' ? 'FREE' : '\$$_specialOfferPrice',
-                          style: const TextStyle(
-                            color: Color(0xFF059669),
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFD1FAE5),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'Special Offer',
-                            style: TextStyle(
-                              color: Color(0xFF047857),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        if (priceText.isNotEmpty && priceText != (_specialOfferPrice == '0' ? 'FREE' : '\$$_specialOfferPrice'))
-                          Text(
-                            priceText,
-                            style: TextStyle(
-                              color: colors.onSurfaceVariant.withOpacity(0.6),
-                              fontSize: 12,
-                              decoration: TextDecoration.lineThrough,
-                            ),
-                          ),
-                      ] else ...[
-                        if (isFree)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF059669),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'FREE',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          )
-                        else if (priceText.isNotEmpty)
-                          Text(
-                            priceText,
-                            style: TextStyle(
-                              color: colors.primary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                      ],
-                      if (status == ItemStatus.delisted)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.orange.shade700, width: 0.8),
-                          ),
-                          child: Text(
-                            'DELISTED',
-                            style: TextStyle(
-                              color: Colors.orange.shade900,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        )
-                      else if (status == ItemStatus.sold)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.grey.shade600, width: 0.8),
-                          ),
-                          child: Text(
-                            'SOLD',
-                            style: TextStyle(
-                              color: Colors.grey.shade800,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: colors.primary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
+                  )
+                  .then((_) => _loadItemDetails());
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Details',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colors.primary,
-                      fontWeight: FontWeight.w600,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      width: 54,
+                      height: 54,
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: colors.surfaceContainerHighest,
+                          child: const Icon(
+                            Icons.image_not_supported_outlined,
+                            size: 24,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  Icon(Icons.chevron_right, size: 16, color: colors.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (_specialOfferPrice != null) ...[
+                              Text(
+                                _specialOfferPrice == '0'
+                                    ? 'FREE'
+                                    : '\$$_specialOfferPrice',
+                                style: const TextStyle(
+                                  color: Color(0xFF059669),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFD1FAE5),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'Special Offer',
+                                  style: TextStyle(
+                                    color: Color(0xFF047857),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              if (priceText.isNotEmpty &&
+                                  priceText !=
+                                      (_specialOfferPrice == '0'
+                                          ? 'FREE'
+                                          : '\$$_specialOfferPrice'))
+                                Text(
+                                  priceText,
+                                  style: TextStyle(
+                                    color: colors.onSurfaceVariant.withOpacity(
+                                      0.6,
+                                    ),
+                                    fontSize: 12,
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                                ),
+                            ] else ...[
+                              if (isFree)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF059669),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'FREE',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                )
+                              else if (priceText.isNotEmpty)
+                                Text(
+                                  priceText,
+                                  style: TextStyle(
+                                    color: colors.primary,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                            ],
+                            if (status == ItemStatus.delisted)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: Colors.orange.shade700,
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  'DELISTED',
+                                  style: TextStyle(
+                                    color: Colors.orange.shade900,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            else if (status == ItemStatus.sold)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: Colors.grey.shade600,
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  'SOLD',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade800,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Details',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: colors.primary,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
+              ),
+            ),
+          ),
+          // Top-right corner status badge
+          Positioned(
+            top: -4,
+            right: 0,
+            child: _buildCornerStatusBadge(
+              isPaid: isOrderPaid,
+              status: status,
+              isDark: isDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCornerStatusBadge({
+    required bool isPaid,
+    required ItemStatus status,
+    required bool isDark,
+  }) {
+    if (isPaid) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF059669),
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF059669).withOpacity(0.3),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_rounded, size: 10, color: Colors.white),
+            SizedBox(width: 3),
+            Text(
+              'PAID',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.4,
               ),
             ),
           ],
+        ),
+      );
+    }
+
+    if (status == ItemStatus.sold) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF475569),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text(
+          'SOLD',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.4,
+          ),
+        ),
+      );
+    }
+
+    if (status == ItemStatus.delisted) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFFD97706),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text(
+          'DELISTED',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.4,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF132A22) : const Color(0xFFECFDF5),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: const Color(0xFF10B981).withOpacity(0.4),
+          width: 0.8,
+        ),
+      ),
+      child: const Text(
+        'AVAILABLE',
+        style: TextStyle(
+          color: Color(0xFF059669),
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
         ),
       ),
     );
@@ -1070,12 +1280,24 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             'Item in great condition',
           ];
 
+    final isItemSold = _activeItem?.status == ItemStatus.sold;
+    final orders = _getOrderProvider(listen: true)?.orders ?? const [];
+    final isOrderPaid =
+        _itemPaid ||
+        orders.any(
+          (o) =>
+              o.itemId == widget.conversation.itemId &&
+              (o.isPaid || o.isCompleted),
+        );
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? colors.surface : const Color(0xFFF8FAFC),
         border: Border(
           top: BorderSide(
-            color: isDark ? colors.outline.withOpacity(0.15) : colors.outline.withOpacity(0.1),
+            color: isDark
+                ? colors.outline.withOpacity(0.15)
+                : colors.outline.withOpacity(0.1),
           ),
         ),
       ),
@@ -1090,47 +1312,149 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(color: colors.primary.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: BorderSide(
+                          color: colors.primary.withOpacity(0.5),
+                        ),
                       ),
                       onPressed: _scheduleMeetup,
                       icon: const Icon(Icons.location_on_outlined, size: 16),
                       label: const Text(
                         'Meetup Location',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                      onPressed: _buyerBuyNow,
-                      icon: const Icon(Icons.shopping_bag_outlined, size: 16),
-                      label: const Text(
-                        'Buy Now',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  if (!isItemSold && !isOrderPaid) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        onPressed: _buyerBuyNow,
+                        icon: const Icon(Icons.shopping_bag_outlined, size: 16),
+                        label: const Text(
+                          'Buy Now',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ] else if (isOrderPaid) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1FAE5),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle_rounded,
+                            size: 14,
+                            color: Color(0xFF047857),
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Paid · Ready to Meet',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF047857),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? colors.surfaceContainerHighest.withValues(
+                                alpha: 0.4,
+                              )
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: colors.outline.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 14,
+                            color: colors.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Item Sold',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ] else ...[
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(color: colors.primary.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 6,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: BorderSide(
+                          color: colors.primary.withOpacity(0.5),
+                        ),
                       ),
                       onPressed: _sellerModifyPrice,
                       icon: const Icon(Icons.price_change_outlined, size: 16),
                       label: const Text(
                         'Edit Price',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -1138,15 +1462,25 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(color: colors.primary.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 6,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: BorderSide(
+                          color: colors.primary.withOpacity(0.5),
+                        ),
                       ),
                       onPressed: _scheduleMeetup,
                       icon: const Icon(Icons.handshake_outlined, size: 16),
                       label: const Text(
                         'Propose Meetup',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -1155,14 +1489,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     Expanded(
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 6,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                           side: BorderSide(
                             color: (_activeItem?.status == ItemStatus.delisted)
                                 ? const Color(0xFF059669)
                                 : Colors.orange.shade700,
                           ),
-                          foregroundColor: (_activeItem?.status == ItemStatus.delisted)
+                          foregroundColor:
+                              (_activeItem?.status == ItemStatus.delisted)
                               ? const Color(0xFF059669)
                               : Colors.orange.shade900,
                         ),
@@ -1177,7 +1517,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                           (_activeItem?.status == ItemStatus.delisted)
                               ? 'Relist Item'
                               : 'Delist Item',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -1200,7 +1543,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     chipText,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark ? colors.onSurface : const Color(0xFF334155),
+                      color: isDark
+                          ? colors.onSurface
+                          : const Color(0xFF334155),
                     ),
                   ),
                   backgroundColor: isDark
@@ -1486,7 +1831,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     if (_specialOfferPrice == null) {
       for (final m in messages.reversed) {
         if (m.text.contains('Special offer just for you:')) {
-          final match = RegExp(r'Special offer just for you:\s*(FREE|\$[0-9.]+)').firstMatch(m.text);
+          final match = RegExp(
+            r'Special offer just for you:\s*(FREE|\$[0-9.]+)',
+          ).firstMatch(m.text);
           if (match != null) {
             final val = match.group(1)!;
             _specialOfferPrice = val == 'FREE' ? '0' : val.replaceAll('\$', '');
@@ -1691,16 +2038,15 @@ class _MessageBubble extends StatelessWidget {
                   mine: mine,
                 )
               else
-                _ActionOrTextMessage(
-                  text: message.text,
-                  mine: mine,
-                ),
+                _ActionOrTextMessage(text: message.text, mine: mine),
               const SizedBox(height: 2),
               Text(
                 _messageTime(message.createdAt),
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: mine
-                      ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.78)
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.onPrimary.withValues(alpha: 0.78)
                       : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -1709,7 +2055,9 @@ class _MessageBubble extends StatelessWidget {
                   'Read',
                   key: Key('chat_read_receipt_${message.id}'),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.78),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onPrimary.withValues(alpha: 0.78),
                   ),
                 ),
             ],
@@ -1721,10 +2069,7 @@ class _MessageBubble extends StatelessWidget {
 }
 
 class _ActionOrTextMessage extends StatelessWidget {
-  const _ActionOrTextMessage({
-    required this.text,
-    required this.mine,
-  });
+  const _ActionOrTextMessage({required this.text, required this.mine});
 
   final String text;
   final bool mine;
@@ -1734,9 +2079,17 @@ class _ActionOrTextMessage extends StatelessWidget {
     final theme = Theme.of(context);
     final isSellerAction = text.contains('[Seller Action]');
     final isBuyerAction = text.contains('[Buyer Action]');
-    final isPaymentAction = text.contains('[Payment Successful]');
+    final isPaymentConfirmed =
+        text.contains('[Payment Successful]') ||
+        text.contains('[Payment Confirmed]');
+    final isPaymentRequest = text.contains('[Payment Request]');
+    final isHandoverCompleted = text.contains('[Handover Completed]');
 
-    if (!isSellerAction && !isBuyerAction && !isPaymentAction) {
+    if (!isSellerAction &&
+        !isBuyerAction &&
+        !isPaymentConfirmed &&
+        !isPaymentRequest &&
+        !isHandoverCompleted) {
       return Text(
         text,
         style: theme.textTheme.bodyMedium?.copyWith(
@@ -1759,9 +2112,7 @@ class _ActionOrTextMessage extends StatelessWidget {
       badgeColor = mine
           ? Colors.white.withValues(alpha: 0.22)
           : const Color(0xFF2563EB).withValues(alpha: 0.12);
-      badgeTextColor = mine
-          ? Colors.white
-          : const Color(0xFF1D4ED8);
+      badgeTextColor = mine ? Colors.white : const Color(0xFF1D4ED8);
       cleanBody = text
           .replaceAll('📦', '')
           .replaceAll('[Seller Action]', '')
@@ -1772,12 +2123,32 @@ class _ActionOrTextMessage extends StatelessWidget {
       badgeColor = mine
           ? Colors.white.withValues(alpha: 0.22)
           : const Color(0xFF059669).withValues(alpha: 0.12);
-      badgeTextColor = mine
-          ? Colors.white
-          : const Color(0xFF047857);
+      badgeTextColor = mine ? Colors.white : const Color(0xFF047857);
       cleanBody = text
           .replaceAll('💳', '')
           .replaceAll('[Buyer Action]', '')
+          .trim();
+    } else if (isPaymentRequest) {
+      icon = Icons.payment_rounded;
+      badgeTitle = 'Payment Request';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.25)
+          : const Color(0xFFD97706).withValues(alpha: 0.15);
+      badgeTextColor = mine ? Colors.white : const Color(0xFFB45309);
+      cleanBody = text
+          .replaceAll('💳', '')
+          .replaceAll('[Payment Request]', '')
+          .trim();
+    } else if (isHandoverCompleted) {
+      icon = Icons.handshake_rounded;
+      badgeTitle = 'Handover Completed';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.25)
+          : const Color(0xFF10B981).withValues(alpha: 0.15);
+      badgeTextColor = mine ? Colors.white : const Color(0xFF065F46);
+      cleanBody = text
+          .replaceAll('🤝', '')
+          .replaceAll('[Handover Completed]', '')
           .trim();
     } else {
       icon = Icons.verified_rounded;
@@ -1785,17 +2156,19 @@ class _ActionOrTextMessage extends StatelessWidget {
       badgeColor = mine
           ? Colors.white.withValues(alpha: 0.25)
           : const Color(0xFF10B981).withValues(alpha: 0.15);
-      badgeTextColor = mine
-          ? Colors.white
-          : const Color(0xFF065F46);
+      badgeTextColor = mine ? Colors.white : const Color(0xFF065F46);
       cleanBody = text
           .replaceAll('✅', '')
+          .replaceAll('💳', '')
+          .replaceAll('[Payment Confirmed]', '')
           .replaceAll('[Payment Successful]', '')
           .trim();
     }
 
     return Column(
-      crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: mine
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         Container(
           margin: const EdgeInsets.only(bottom: 5),
@@ -1807,11 +2180,7 @@ class _ActionOrTextMessage extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 13,
-                color: badgeTextColor,
-              ),
+              Icon(icon, size: 13, color: badgeTextColor),
               const SizedBox(width: 4),
               Text(
                 badgeTitle,
@@ -1852,9 +2221,9 @@ class _ReadReceipt extends StatelessWidget {
         Text(
           'Read',
           key: Key('chat_read_receipt_$messageId'),
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: const Color(0xFF60AEFF),
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: const Color(0xFF60AEFF)),
         ),
         const SizedBox(width: 3),
         const Icon(Icons.done_all, size: 12, color: Color(0xFF60AEFF)),

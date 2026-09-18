@@ -4,10 +4,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/payment_service.dart';
 import '../../widgets/kiwigold_coin_icon.dart';
 
-enum TopUpPlanType {
-  gold100,
-  vipMonthly,
-}
+enum TopUpPlanType { gold100, vipMonthly }
 
 /// A modal sheet allowing users to top up KiwiGold or subscribe to VIP Membership.
 class KiwiGoldTopUpSheet extends StatefulWidget {
@@ -18,7 +15,10 @@ class KiwiGoldTopUpSheet extends StatefulWidget {
     this.initialPlan = TopUpPlanType.gold100,
   });
 
-  static Future<bool?> show(BuildContext context, {TopUpPlanType initialPlan = TopUpPlanType.gold100}) {
+  static Future<bool?> show(
+    BuildContext context, {
+    TopUpPlanType initialPlan = TopUpPlanType.gold100,
+  }) {
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -104,7 +104,9 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
       _errorMessage = null;
     });
 
-    final planKey = _selectedPlan == TopUpPlanType.gold100 ? 'gold_100' : 'vip_monthly';
+    final planKey = _selectedPlan == TopUpPlanType.gold100
+        ? 'gold_100'
+        : 'vip_monthly';
 
     try {
       // 1. Create top-up PaymentIntent
@@ -121,9 +123,12 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
         paymentMethodId = _selectedCardId;
       } else if (_cardNumberController.text.isNotEmpty) {
         final expParts = _expiryController.text.trim().split('/');
-        final expMonth = expParts.isNotEmpty ? int.tryParse(expParts[0]) ?? 12 : 12;
+        final expMonth = expParts.isNotEmpty
+            ? int.tryParse(expParts[0]) ?? 12
+            : 12;
         final expYear = expParts.length > 1
-            ? (int.tryParse(expParts[1]) ?? 28) + (expParts[1].length == 2 ? 2000 : 0)
+            ? (int.tryParse(expParts[1]) ?? 28) +
+                  (expParts[1].length == 2 ? 2000 : 0)
             : 2028;
 
         try {
@@ -131,7 +136,10 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
             cardNumber: _cardNumberController.text,
             expMonth: expMonth,
             expYear: expYear,
-            cvc: _cvcController.text.trim().isEmpty ? '123' : _cvcController.text.trim(),
+            cvc: _cvcController.text.trim().isEmpty
+                ? '123'
+                : _cvcController.text.trim(),
+            token: token,
           );
         } catch (_) {
           // If tokeniseCard fails in simulator/offline, proceed to server confirm which has fallback
@@ -153,10 +161,13 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
           ? DateTime.tryParse(confirmRes['vipExpiresAt'].toString())
           : null;
 
+      final vipAutoRenew = confirmRes['vipAutoRenew'] as bool?;
+
       auth.applyTopUpResult(
         kiwiGold: newGold,
         isVip: isVip,
         vipExpiresAt: vipExpiresAt,
+        vipAutoRenew: vipAutoRenew ?? (isVip == true ? true : null),
       );
 
       if (mounted) {
@@ -169,7 +180,8 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    confirmRes['message']?.toString() ?? 'Purchase completed successfully!',
+                    confirmRes['message']?.toString() ??
+                        'Purchase completed successfully!',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -232,7 +244,11 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                 const SizedBox(width: 10),
                 const Text(
                   'KiwiGold & VIP Perks',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1E293B),
+                  ),
                 ),
                 const Spacer(),
                 IconButton(
@@ -253,18 +269,28 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
               ),
               child: Row(
                 children: [
-                  const Text('Current Balance:', style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+                  const Text(
+                    'Current Balance:',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                  ),
                   const SizedBox(width: 6),
                   const KiwiGoldCoinIcon(size: 14),
                   const SizedBox(width: 4),
                   Text(
                     '$goldBalance KiwiGold',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF78350F)),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Color(0xFF78350F),
+                    ),
                   ),
                   const Spacer(),
                   if (isVipActive)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
@@ -274,10 +300,19 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('👑 ', style: TextStyle(fontSize: 11)),
+                          Icon(
+                            Icons.auto_awesome,
+                            size: 13,
+                            color: Color(0xFFFFDF73),
+                          ),
+                          SizedBox(width: 4),
                           Text(
                             'VIP Active',
-                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ],
                       ),
@@ -288,14 +323,19 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
 
             const Text(
               'Select a Boost Plan',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF334155),
+              ),
             ),
             const SizedBox(height: 10),
 
             // Plan 1: 100 KiwiGold ($5.99 NZD)
             _buildPlanCard(
               type: TopUpPlanType.gold100,
-              badgeText: '🪙 Most Flexible',
+              badgeIcon: Icons.toll_rounded,
+              badgeText: 'Most Flexible',
               badgeColor: const Color(0xFFD97706),
               title: '100 KiwiGold Coins',
               priceText: '\$5.99 NZD',
@@ -312,23 +352,46 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
             // Plan 2: VIP Monthly Membership ($9.00 NZD/mo)
             _buildPlanCard(
               type: TopUpPlanType.vipMonthly,
-              badgeText: '👑 Unlimited Boosts · Best Value',
+              badgeIcon: Icons.auto_awesome,
+              badgeText: 'Most Valuable',
               badgeColor: const Color(0xFF7C3AED),
               title: 'VIP Monthly Membership',
               priceText: '\$9.00 NZD / mo',
               subPrice: '30-day access · Auto-boost ready',
               features: [
                 'Unlimited Listing Boosts (0 KiwiGold cost!)',
-                'Exclusive 👑 VIP Profile & Listing Badge',
+                'Exclusive VIP Golden Crown Badge',
                 'Priority ranking in campus feed',
               ],
               icon: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)]),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFFFDF73).withValues(alpha: 0.6),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF7C3AED).withValues(alpha: 0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: const Text('👑', style: TextStyle(fontSize: 18)),
+                child: const Center(
+                  child: Icon(
+                    Icons.workspace_premium_rounded,
+                    color: Color(0xFFFFDF73),
+                    size: 22,
+                  ),
+                ),
               ),
               isVipGradient: true,
             ),
@@ -341,12 +404,23 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
               children: [
                 const Text(
                   'Payment Card',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF334155),
+                  ),
                 ),
                 TextButton.icon(
                   onPressed: _fillTestCard,
-                  icon: const Icon(Icons.flash_on, size: 14, color: Color(0xFF0284C7)),
-                  label: const Text('Use Test Card', style: TextStyle(fontSize: 12, color: Color(0xFF0284C7))),
+                  icon: const Icon(
+                    Icons.flash_on,
+                    size: 14,
+                    color: Color(0xFF0284C7),
+                  ),
+                  label: const Text(
+                    'Use Test Card',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF0284C7)),
+                  ),
                 ),
               ],
             ),
@@ -369,7 +443,10 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                 value: false,
                 groupValue: _useSavedCard,
                 onChanged: (val) => setState(() => _useSavedCard = false),
-                title: const Text('Use a different card', style: TextStyle(fontSize: 13)),
+                title: const Text(
+                  'Use a different card',
+                  style: TextStyle(fontSize: 13),
+                ),
               ),
             ],
 
@@ -382,8 +459,13 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                   labelText: 'Card Number',
                   hintText: '4242 4242 4242 4242',
                   prefixIcon: const Icon(Icons.credit_card_outlined, size: 18),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -396,8 +478,13 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                       decoration: InputDecoration(
                         labelText: 'MM/YY',
                         hintText: '12/28',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ),
@@ -410,8 +497,13 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                       decoration: InputDecoration(
                         labelText: 'CVC',
                         hintText: '123',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ),
@@ -430,12 +522,19 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.error_outline, size: 16, color: Colors.red.shade700),
+                    Icon(
+                      Icons.error_outline,
+                      size: 16,
+                      color: Colors.red.shade700,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _errorMessage!,
-                        style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red.shade700,
+                        ),
                       ),
                     ),
                   ],
@@ -452,20 +551,28 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                 backgroundColor: _selectedPlan == TopUpPlanType.vipMonthly
                     ? const Color(0xFF7C3AED)
                     : const Color(0xFFD97706),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               onPressed: _isLoading ? null : _handlePayment,
               child: _isLoading
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : Text(
                       _selectedPlan == TopUpPlanType.vipMonthly
                           ? 'Subscribe to VIP · \$9.00 NZD / mo'
                           : 'Get 100 KiwiGold · \$5.99 NZD',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
             ),
           ],
@@ -478,6 +585,7 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
     required TopUpPlanType type,
     required String badgeText,
     required Color badgeColor,
+    IconData? badgeIcon,
     required String title,
     required String priceText,
     required String subPrice,
@@ -494,19 +602,25 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isSelected
-              ? (isVipGradient ? const Color(0xFFF5F3FF) : const Color(0xFFFFFBEB))
+              ? (isVipGradient
+                    ? const Color(0xFFF5F3FF)
+                    : const Color(0xFFFFFBEB))
               : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected
-                ? (isVipGradient ? const Color(0xFF8B5CF6) : const Color(0xFFF59E0B))
+                ? (isVipGradient
+                      ? const Color(0xFF8B5CF6)
+                      : const Color(0xFFF59E0B))
                 : const Color(0xFFE2E8F0),
             width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: (isVipGradient ? const Color(0xFF8B5CF6) : Colors.amber).withOpacity(0.14),
+                    color:
+                        (isVipGradient ? const Color(0xFF8B5CF6) : Colors.amber)
+                            .withOpacity(0.14),
                     blurRadius: 10,
                     offset: const Offset(0, 3),
                   ),
@@ -525,20 +639,44 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: badgeColor,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(
-                          badgeText,
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (badgeIcon != null) ...[
+                              Icon(badgeIcon, size: 11, color: Colors.white),
+                              const SizedBox(width: 3),
+                            ],
+                            Flexible(
+                              child: Text(
+                                badgeText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         title,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1E293B),
+                        ),
                       ),
                     ],
                   ),
@@ -551,12 +689,17 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
-                        color: isVipGradient ? const Color(0xFF6D28D9) : const Color(0xFFB45309),
+                        color: isVipGradient
+                            ? const Color(0xFF6D28D9)
+                            : const Color(0xFFB45309),
                       ),
                     ),
                     Text(
                       subPrice,
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF64748B),
+                      ),
                     ),
                   ],
                 ),
@@ -573,13 +716,18 @@ class _KiwiGoldTopUpSheetState extends State<KiwiGoldTopUpSheet> {
                     Icon(
                       Icons.check_circle_rounded,
                       size: 14,
-                      color: isVipGradient ? const Color(0xFF8B5CF6) : const Color(0xFF10B981),
+                      color: isVipGradient
+                          ? const Color(0xFF8B5CF6)
+                          : const Color(0xFF10B981),
                     ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         f,
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF334155)),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF334155),
+                        ),
                       ),
                     ),
                   ],

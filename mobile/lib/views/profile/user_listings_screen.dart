@@ -5,6 +5,7 @@ import '../../models/item_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/listing_provider.dart';
 import '../../widgets/kiwigold_coin_icon.dart';
+import '../../widgets/vip_crown_icon.dart';
 import '../products/product_detail_screen.dart';
 import '../shared/widgets/edit_item_sheet.dart';
 import 'kiwigold_topup_sheet.dart';
@@ -59,7 +60,9 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: const Row(
             children: [
               KiwiGoldCoinIcon(size: 20),
@@ -98,7 +101,11 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Text(isVip ? '👑 ' : '🚀 '),
+            if (isVip) ...[
+              const VipCrownIcon(size: 20),
+              const SizedBox(width: 8),
+            ] else
+              const Text('🚀 '),
             Text(isVip ? 'VIP Boost Listing' : 'Promote Listing'),
           ],
         ),
@@ -116,12 +123,16 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
               decoration: BoxDecoration(
                 color: isVip ? const Color(0xFFF5F3FF) : Colors.amber.shade50,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: isVip ? const Color(0xFFC4B5FD) : Colors.amber.shade300),
+                border: Border.all(
+                  color: isVip
+                      ? const Color(0xFFC4B5FD)
+                      : Colors.amber.shade300,
+                ),
               ),
               child: Row(
                 children: [
                   isVip
-                      ? const Text('👑', style: TextStyle(fontSize: 24))
+                      ? const VipCrownIcon(size: 24)
                       : const KiwiGoldCoinIcon(size: 24),
                   const SizedBox(width: 10),
                   Expanded(
@@ -132,14 +143,19 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                           isVip ? 'VIP Free Promotion' : 'Cost: 5 KiwiGold',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: isVip ? const Color(0xFF6D28D9) : const Color(0xFF78350F),
+                            color: isVip
+                                ? const Color(0xFF6D28D9)
+                                : const Color(0xFF78350F),
                           ),
                         ),
                         Text(
                           isVip
                               ? 'Unlimited listing boosts active (0 KiwiGold used)'
                               : 'Your balance: $currentGold KiwiGold → ${currentGold - 5} KiwiGold',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                          ),
                         ),
                       ],
                     ),
@@ -156,11 +172,15 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: isVip ? const Color(0xFF7C3AED) : const Color(0xFFD97706),
+              backgroundColor: isVip
+                  ? const Color(0xFF7C3AED)
+                  : const Color(0xFFD97706),
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(isVip ? 'Boost Listing (VIP Free)' : 'Promote (5 KiwiGold)'),
+            child: Text(
+              isVip ? 'Boost Listing (VIP Free)' : 'Promote (5 KiwiGold)',
+            ),
           ),
         ],
       ),
@@ -170,7 +190,10 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
 
     try {
       final listingProvider = context.read<ListingProvider>();
-      final result = await listingProvider.promoteItem(id: item.id, token: token);
+      final result = await listingProvider.promoteItem(
+        id: item.id,
+        token: token,
+      );
       final newGold = result['kiwiGold'] as int?;
       if (newGold != null) {
         auth.updateKiwiGold(newGold);
@@ -186,16 +209,18 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                   ? '👑 Listing boosted to top ranking with VIP Unlimited Boost!'
                   : '🚀 Listing boosted to top ranking! (-5 KiwiGold)',
             ),
-            backgroundColor: isVip ? const Color(0xFF7C3AED) : const Color(0xFFD97706),
+            backgroundColor: isVip
+                ? const Color(0xFF7C3AED)
+                : const Color(0xFFD97706),
             duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to promote: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to promote: $e')));
       }
     }
   }
@@ -222,7 +247,9 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: publish ? const Color(0xFF059669) : Colors.grey.shade700,
+              backgroundColor: publish
+                  ? const Color(0xFF059669)
+                  : Colors.grey.shade700,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: Text(actionLabel),
@@ -235,7 +262,11 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
 
     try {
       final listingProvider = context.read<ListingProvider>();
-      await listingProvider.toggleListingStatus(id: item.id, publish: publish, token: token);
+      await listingProvider.toggleListingStatus(
+        id: item.id,
+        publish: publish,
+        token: token,
+      );
       setState(_load);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -250,14 +281,18 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update listing: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update listing: $e')));
       }
     }
   }
 
-  Widget _buildKiwiGoldBanner(BuildContext context, int goldBalance, {bool isVip = false}) {
+  Widget _buildKiwiGoldBanner(
+    BuildContext context,
+    int goldBalance, {
+    bool isVip = false,
+  }) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -275,7 +310,9 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: (isVip ? const Color(0xFF8B5CF6) : Colors.amber).withOpacity(0.12),
+            color: (isVip ? const Color(0xFF8B5CF6) : Colors.amber).withOpacity(
+              0.12,
+            ),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -290,13 +327,14 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: (isVip ? const Color(0xFF8B5CF6) : Colors.amber).withOpacity(0.25),
+                  color: (isVip ? const Color(0xFF8B5CF6) : Colors.amber)
+                      .withOpacity(0.25),
                   blurRadius: 6,
                 ),
               ],
             ),
             child: isVip
-                ? const Text('👑', style: TextStyle(fontSize: 20))
+                ? const Center(child: VipCrownIcon(size: 22))
                 : const KiwiGoldCoinIcon(size: 22),
           ),
           const SizedBox(width: 14),
@@ -311,19 +349,30 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
-                        color: isVip ? const Color(0xFF5B21B6) : const Color(0xFF78350F),
+                        color: isVip
+                            ? const Color(0xFF5B21B6)
+                            : const Color(0xFF78350F),
                       ),
                     ),
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: isVip ? const Color(0xFF7C3AED) : const Color(0xFFD97706),
+                        color: isVip
+                            ? const Color(0xFF7C3AED)
+                            : const Color(0xFFD97706),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         isVip ? 'Unlimited Boosts' : 'Boost Credits',
-                        style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -335,7 +384,9 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                       : 'Promote listings to top ranking · 5 KiwiGold per boost',
                   style: TextStyle(
                     fontSize: 12,
-                    color: isVip ? const Color(0xFF6D28D9) : Colors.brown.shade700,
+                    color: isVip
+                        ? const Color(0xFF6D28D9)
+                        : Colors.brown.shade700,
                   ),
                 ),
               ],
@@ -346,9 +397,13 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
             style: FilledButton.styleFrom(
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              backgroundColor: isVip ? const Color(0xFF7C3AED) : const Color(0xFFD97706),
+              backgroundColor: isVip
+                  ? const Color(0xFF7C3AED)
+                  : const Color(0xFFD97706),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: () => KiwiGoldTopUpSheet.show(context),
             child: Text(
@@ -379,10 +434,7 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
             label: Text('Delisted ($delistedCount)'),
             icon: const Icon(Icons.archive_outlined, size: 16),
           ),
-          ButtonSegment(
-            value: 2,
-            label: Text('All (${allItems.length})'),
-          ),
+          ButtonSegment(value: 2, label: Text('All (${allItems.length})')),
         ],
         selected: {_selectedFilterIndex},
         onSelectionChanged: (set) {
@@ -413,14 +465,14 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ProductDetailScreen(
-                itemId: item.id,
-                item: item,
-              ),
-            ),
-          ).then((_) => setState(_load));
+          Navigator.of(context)
+              .push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ProductDetailScreen(itemId: item.id, item: item),
+                ),
+              )
+              .then((_) => setState(_load));
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -443,14 +495,21 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                               ? Image.network(
                                   item.imageUrl,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    color: Colors.grey.shade200,
-                                    child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                                  ),
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                        color: Colors.grey.shade200,
+                                        child: const Icon(
+                                          Icons.image_not_supported,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
                                 )
                               : Container(
                                   color: Colors.grey.shade200,
-                                  child: const Icon(Icons.image, color: Colors.grey),
+                                  child: const Icon(
+                                    Icons.image,
+                                    color: Colors.grey,
+                                  ),
                                 ),
                           if (isDelisted)
                             Container(
@@ -521,7 +580,10 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                             if (item.isPromoted) ...[
                               const SizedBox(width: 4),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFD97706),
                                   borderRadius: BorderRadius.circular(4),
@@ -551,38 +613,48 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: isDelisted
                                     ? Colors.orange.shade50
                                     : isReserved
-                                        ? Colors.amber.shade50
-                                        : const Color(0xFFECFDF5),
+                                    ? Colors.amber.shade50
+                                    : const Color(0xFFECFDF5),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 isDelisted
                                     ? 'Delisted'
                                     : isReserved
-                                        ? 'Reserved'
-                                        : 'Active',
+                                    ? 'Reserved'
+                                    : 'Active',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                   color: isDelisted
                                       ? Colors.orange.shade800
                                       : isReserved
-                                          ? Colors.amber.shade900
-                                          : const Color(0xFF047857),
+                                      ? Colors.amber.shade900
+                                      : const Color(0xFF047857),
                                 ),
                               ),
                             ),
                             const Spacer(),
-                            Icon(Icons.favorite_outline, size: 14, color: Colors.grey.shade500),
+                            Icon(
+                              Icons.favorite_outline,
+                              size: 14,
+                              color: Colors.grey.shade500,
+                            ),
                             const SizedBox(width: 3),
                             Text(
                               '${item.watchlistCount}',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
                             ),
                           ],
                         ),
@@ -604,28 +676,56 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          side: BorderSide(
-                            color: isVipUser ? const Color(0xFF8B5CF6) : const Color(0xFFD97706),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
                           ),
-                          foregroundColor: isVipUser ? const Color(0xFF7C3AED) : const Color(0xFFB45309),
+                          side: BorderSide(
+                            color: isVipUser
+                                ? const Color(0xFF8B5CF6)
+                                : const Color(0xFFD97706),
+                          ),
+                          foregroundColor: isVipUser
+                              ? const Color(0xFF7C3AED)
+                              : const Color(0xFFB45309),
                         ),
                         onPressed: () => _handlePromote(item),
-                        icon: Icon(isVipUser ? Icons.workspace_premium : Icons.rocket_launch_outlined, size: 13),
+                        icon: isVipUser
+                            ? const VipCrownIcon(size: 14)
+                            : const Icon(
+                                Icons.rocket_launch_outlined,
+                                size: 13,
+                              ),
                         label: isVipUser
                             ? Text(
-                                item.isPromoted ? 'VIP Boosted' : 'VIP Boost (Free)',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                item.isPromoted
+                                    ? 'VIP Boosted'
+                                    : 'VIP Boost (Free)',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
                               )
                             : Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    item.isPromoted ? 'Boost Again (' : 'Promote (',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                    item.isPromoted
+                                        ? 'Boost Again ('
+                                        : 'Promote (',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                   const KiwiGoldCoinIcon(size: 12),
-                                  const Text(' 5)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  const Text(
+                                    ' 5)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ],
                               ),
                       ),
@@ -636,32 +736,50 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           side: BorderSide(color: Colors.grey.shade400),
                           foregroundColor: Colors.grey.shade800,
                         ),
                         onPressed: () => _handleToggleListing(item, false),
                         icon: const Icon(Icons.archive_outlined, size: 14),
-                        label: const Text('Delist', style: TextStyle(fontSize: 12)),
+                        label: const Text(
+                          'Delist',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       )
                     else if (isDelisted)
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
                           visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           backgroundColor: const Color(0xFF059669),
                           foregroundColor: Colors.white,
                         ),
                         onPressed: () => _handleToggleListing(item, true),
                         icon: const Icon(Icons.unarchive_outlined, size: 14),
-                        label: const Text('Relist', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        label: const Text(
+                          'Relist',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     const SizedBox(width: 8),
                     // Edit Button
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                       ),
                       onPressed: () async {
                         final updated = await EditItemSheet.show(
@@ -729,7 +847,12 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                 if (allItems.isEmpty) {
                   return Column(
                     children: [
-                      if (!sold) _buildKiwiGoldBanner(context, goldBalance, isVip: isVip),
+                      if (!sold)
+                        _buildKiwiGoldBanner(
+                          context,
+                          goldBalance,
+                          isVip: isVip,
+                        ),
                       Expanded(
                         child: _ListingsMessage(
                           icon: sold
@@ -777,7 +900,9 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                         ),
                       )
                     else
-                      ...displayItems.map((item) => _buildItemCard(context, item)),
+                      ...displayItems.map(
+                        (item) => _buildItemCard(context, item),
+                      ),
                   ],
                 );
               },

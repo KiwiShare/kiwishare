@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { authenticateToken } from '../middleware/auth';
 import Order from '../models/Order';
 import Item from '../models/Item';
+import User from '../models/User';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import QrCode from '../models/QrCode';
@@ -474,6 +475,28 @@ router.post('/:orderId/accept', async (ctx: Context) => {
         session ? { session } : {}
       );
     });
+
+    const isPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
+    if (!isPaid) {
+      const priceNzd = ((order.buyerTotalAmount ?? order.itemAmount ?? 0) / 100).toFixed(2);
+      const paymentReqMsg = await new Message({
+        conversationId: conversation._id,
+        senderId: order.sellerId,
+        receiverId: order.buyerId,
+        type: 'text',
+        text: `💳 [Payment Request] Meetup location confirmed! Seller requested payment of $${priceNzd} NZD to prepare for meetup handover.`,
+        status: 'sent'
+      }).save();
+
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        $set: {
+          lastMessageText: `💳 Payment request: $${priceNzd} NZD`,
+          lastMessageAt: paymentReqMsg.createdAt,
+          lastMessageId: paymentReqMsg._id,
+          lastMessageSenderId: order.sellerId
+        }
+      });
+    }
   }
 
   // Dispatch push notifications to both parties
@@ -628,6 +651,140 @@ router.get('/:orderId', async (ctx: Context) => {
   ctx.body = {
     status: 'success',
     meetup: formatOrderMeetup(order, userStr, qrCode?.tokenHash)
+  };
+});
+
+// 6. Direct confirmation of handover (by buyer as "Confirm Receipt" or seller as "Confirm Handover")
+router.post('/:orderId/confirm-handover', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Unauthorized user.' };
+    return;
+  }
+
+  const { orderId } = ctx.params;
+  if (!mongoose.Types.ObjectId.isValid(orderId)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Invalid order ID.' };
+    return;
+  }
+
+  const order = await Order.findById(orderId)
+    .populate('buyerId', 'displayName avatarUrl')
+    .populate('sellerId', 'displayName avatarUrl');
+
+  if (!order) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Order not found.' };
+    return;
+  }
+
+  const buyerId = objectId(order.buyerId);
+  const sellerId = objectId(order.sellerId);
+  const userStr = userId.toString();
+  const isBuyer = buyerId === userStr;
+  const isSeller = sellerId === userStr;
+
+  if (!isBuyer && !isSeller) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Not authorized for this order.' };
+    return;
+  }
+
+  if (order.status === 'completed') {
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      message: 'This handover was already completed.',
+      meetup: formatOrderMeetup(order, userStr)
+    };
+    return;
+  }
+
+  // Check state machine: Order must be paid and location confirmed
+  const isPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
+  if (!isPaid && order.status === 'pending_payment') {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Order must be paid before completing handover.' };
+    return;
+  }
+
+  const proposalStatus = order.meeting?.proposalStatus;
+  if (proposalStatus !== 'confirmed' && proposalStatus !== 'accepted') {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Meetup location must be confirmed before completing handover.' };
+    return;
+  }
+
+  const now = new Date();
+  order.status = 'completed';
+  order.completedAt = now;
+  order.qrScannedAt = now;
+  if (isBuyer) {
+    order.buyerConfirmedAt = now;
+  }
+  if (!order.completionCredit?.awardedAt) {
+    order.completionCredit = {
+      pointsPerParticipant: 10,
+      awardedAt: now
+    };
+  }
+  await order.save();
+
+  // Mark active QR as consumed
+  await QrCode.updateMany(
+    { orderId: order._id, status: 'active' },
+    { $set: { status: 'consumed', scannedAt: now, consumedAt: now, scannedByUserId: userId } }
+  );
+
+  // Update item status and transfer ownership
+  await Item.findByIdAndUpdate(order.itemId, {
+    $set: { status: 'sold', sellerId: order.buyerId, ownerId: buyerId }
+  });
+
+  // Award trust score (+10)
+  await User.updateMany(
+    { _id: { $in: [order.buyerId, order.sellerId] } },
+    { $inc: { trustScore: 10 } }
+  );
+
+  // Post in-chat notification message to conversation
+  const counterpartyId = isBuyer ? sellerId : buyerId;
+  const conversation = await Conversation.findOne({
+    itemId: order.itemId,
+    buyerId: order.buyerId,
+    sellerId: order.sellerId
+  });
+  if (conversation) {
+    const actionText = isBuyer
+      ? 'Buyer confirmed receipt of the item.'
+      : 'Seller confirmed handover of the item.';
+    await new Message({
+      conversationId: conversation._id,
+      senderId: userId,
+      receiverId: new mongoose.Types.ObjectId(counterpartyId),
+      type: 'text',
+      text: `🤝 [Handover Completed] ${actionText} Transaction successfully completed!`,
+      status: 'sent'
+    }).save();
+
+    await Conversation.findByIdAndUpdate(conversation._id, {
+      $set: {
+        lastMessageText: `🤝 Handover completed!`,
+        lastMessageAt: now,
+        lastMessageSenderId: userId
+      }
+    });
+  }
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    message: isBuyer
+      ? 'Receipt confirmed successfully! Transaction complete.'
+      : 'Handover confirmed successfully! Transaction complete.',
+    meetup: formatOrderMeetup(order, userStr)
   };
 });
 

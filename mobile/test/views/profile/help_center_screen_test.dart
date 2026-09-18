@@ -10,7 +10,9 @@ void main() {
   }
 
   group('HelpCenterScreen', () {
-    testWidgets('renders How It Works tab with 5 steps and welcome hero', (tester) async {
+    testWidgets('renders How It Works tab with 5 steps and welcome hero', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildSubject(initialTabIndex: 0));
       await tester.pumpAndSettle();
 
@@ -46,15 +48,18 @@ void main() {
       await tester.pumpWidget(buildSubject(initialTabIndex: 1));
       await tester.pumpAndSettle();
 
-      final backupQrQuestion =
-          find.text('What is the "Backup verification code / QR" used for?');
+      final backupQrQuestion = find.text(
+        'What is the "Backup verification code / QR" used for?',
+      );
       expect(backupQrQuestion, findsOneWidget);
 
       await tester.tap(backupQrQuestion);
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('If the seller\'s phone camera has difficulty scanning'),
+        find.textContaining(
+          'If the seller\'s phone camera has difficulty scanning',
+        ),
         findsOneWidget,
       );
     });
@@ -69,7 +74,10 @@ void main() {
       await tester.enterText(searchField, 'KiwiGold');
       await tester.pumpAndSettle();
 
-      expect(find.text('What is KiwiGold and how do I use it?'), findsOneWidget);
+      expect(
+        find.text('What is KiwiGold and how do I use it?'),
+        findsOneWidget,
+      );
       expect(find.text('How do I earn more KiwiGold?'), findsOneWidget);
       // Non-matching question should be filtered out
       expect(
@@ -86,7 +94,10 @@ void main() {
       await tester.enterText(searchField, 'XYZUnknownQuery123');
       await tester.pumpAndSettle();
 
-      expect(find.text('No answers found for "XYZUnknownQuery123"'), findsOneWidget);
+      expect(
+        find.text('No answers found for "XYZUnknownQuery123"'),
+        findsOneWidget,
+      );
     });
   });
 }

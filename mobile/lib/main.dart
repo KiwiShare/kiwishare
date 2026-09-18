@@ -423,7 +423,8 @@ void _showForegroundChatNotification(
     title: message.participantName.isNotEmpty
         ? message.participantName
         : 'New message',
-    body: envelope.body ??
+    body:
+        envelope.body ??
         (message.itemTitle.isNotEmpty
             ? 'Sent you a message about ${message.itemTitle}'
             : 'You have a new KiwiShare message.'),
@@ -799,7 +800,11 @@ class KiwiShareShell extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: const Icon(Icons.photo_camera_rounded, color: Colors.white, size: 18),
+                child: const Icon(
+                  Icons.photo_camera_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
               activeIcon: Container(
                 margin: const EdgeInsets.only(bottom: 2.0),
@@ -816,7 +821,11 @@ class KiwiShareShell extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: const Icon(Icons.photo_camera_rounded, color: Colors.white, size: 20),
+                child: const Icon(
+                  Icons.photo_camera_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
               label: 'Sell',
             ),

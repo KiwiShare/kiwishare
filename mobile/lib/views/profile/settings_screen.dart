@@ -240,7 +240,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? 'Verified (${user.studentInstitution ?? "NZ University"})'
                       : 'Unverified · Verify to get 100 KiwiGold',
                   trailing: user.isStudentVerified
-                      ? const Icon(Icons.check_circle, color: Color(0xFF059669), size: 20)
+                      ? const Icon(
+                          Icons.check_circle,
+                          color: Color(0xFF059669),
+                          size: 20,
+                        )
                       : const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.pop(context),
                 ),
@@ -404,7 +408,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(width: 8),
                     Text(
                       'Sign Out',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -525,9 +532,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (updated == true && mounted) {
       try {
-        await context
-            .read<AuthProvider>()
-            .updateDisplayName(controller.text.trim());
+        await context.read<AuthProvider>().updateDisplayName(
+          controller.text.trim(),
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Display name updated successfully.')),
@@ -658,10 +665,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Text(
-                content,
-                style: const TextStyle(fontSize: 15, height: 1.5),
-              ),
+              Text(content, style: const TextStyle(fontSize: 15, height: 1.5)),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
