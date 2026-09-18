@@ -11,6 +11,7 @@ import 'package:kiwishare/views/meetups/meetup_qr_screen.dart';
 import 'package:kiwishare/views/messages/widgets/location_bubble.dart';
 import 'package:kiwishare/views/messages/widgets/meetup_card_bubble.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FakeMeetupRepository implements MeetupRepository {
   MeetupModel? sampleMeetup;
@@ -71,6 +72,9 @@ class FakeMeetupRepository implements MeetupRepository {
   Future<MeetupModel> acceptMeetup({
     required String orderId,
     required String token,
+    String? messageId,
+    DateTime? scheduledAt,
+    String? locationName,
   }) async {
     acceptCalled = true;
     final m = sampleMeetup!.copyWith(
@@ -104,6 +108,20 @@ class FakeMeetupRepository implements MeetupRepository {
         'title': 'Test Item',
         'priceNzd': '50',
       },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> confirmHandover({
+    required String orderId,
+    required String token,
+  }) async {
+    final m = sampleMeetup!.copyWith(status: 'completed');
+    sampleMeetup = m;
+    return {
+      'status': 'success',
+      'message': 'Handover confirmed successfully.',
+      'order': {'id': orderId, 'status': 'completed'},
     };
   }
 }
@@ -280,19 +298,22 @@ void main() {
         // Check header and item
         expect(find.text('Vintage Leather Jacket'), findsOneWidget);
         expect(find.text('Britomart Transport Centre'), findsOneWidget);
-        expect(find.text('Confirmed In-Person Meetup'), findsOneWidget);
+        expect(
+          find.text('Ready for Handover · QR Code Unlocked'),
+          findsOneWidget,
+        );
 
         // Check QR code card
         expect(find.byKey(const Key('meetup_qr_image')), findsOneWidget);
         expect(find.text('Copy verification token'), findsOneWidget);
         expect(find.byKey(const Key('buyer_scan_qr_button')), findsOneWidget);
 
-        // Check Reserved Payment section
+        // Check Direct Confirmation Action
         expect(
-          find.byKey(const Key('reserved_payment_section')),
+          find.byKey(const Key('buyer_confirm_receipt_button')),
           findsOneWidget,
         );
-        expect(find.text('In-Person Settlement'), findsOneWidget);
+        expect(find.text('Confirm Receipt (确认收货)'), findsOneWidget);
       },
     );
 
@@ -300,7 +321,26 @@ void main() {
       'MeetupCardBubble renders distinct actions for seller and buyer when confirmed',
       (tester) async {
         final fakeRepo = FakeMeetupRepository();
+        fakeRepo.sampleMeetup = MeetupModel(
+          id: 'order-789',
+          orderNumber: 'ORD-789',
+          itemId: 'item-789',
+          itemTitle: 'Vintage Lamp',
+          itemPriceNzd: '45',
+          itemImageUrl: '',
+          status: 'paid',
+          role: 'selling',
+          sellerId: 'seller-1',
+          sellerName: 'Alice',
+          buyerId: 'buyer-1',
+          buyerName: 'Bob',
+          proposalStatus: 'confirmed',
+          scheduledAt: DateTime(2026, 9, 20, 10, 0),
+          locationName: 'Ponsonby Central',
+          qrToken: 'QR_HANDOVER_TOKEN_789',
+        );
         final provider = MeetupProvider(repository: fakeRepo);
+        await provider.loadMyMeetups('test-token');
         final authProvider = AuthProvider(userRepository: MockUserRepository());
 
         final payload = ChatMeetupPayload(
@@ -355,6 +395,177 @@ void main() {
 
         expect(find.text('Scan Seller\'s QR Code'), findsOneWidget);
         expect(find.text('View meetup schedule & details'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'MeetupCardBubble updates immediately to confirmed state upon tapping Accept',
+      (tester) async {
+        final fakeRepo = FakeMeetupRepository();
+        fakeRepo.sampleMeetup = MeetupModel(
+          id: 'order-123',
+          orderNumber: 'ORD-123',
+          itemId: 'item-1',
+          itemTitle: 'Item',
+          itemPriceNzd: '20',
+          itemImageUrl: '',
+          status: 'meeting_scheduled',
+          role: 'selling',
+          sellerId: 'user-1',
+          sellerName: 'User',
+          buyerId: 'buyer-1',
+          buyerName: 'Buyer',
+          proposalStatus: 'confirmed',
+          scheduledAt: DateTime(2026, 9, 20, 14, 0),
+          locationName: 'UoA Student Hub',
+        );
+        SharedPreferences.setMockInitialValues({
+          'jwt_token': 'mock-jwt-token',
+          'current_user':
+              '{"id":"user-1","displayName":"User","trustScore":100,"isVerified":true}',
+        });
+        final provider = MeetupProvider(repository: fakeRepo);
+        final authProvider = AuthProvider(userRepository: MockUserRepository());
+
+        final payload = ChatMeetupPayload(
+          orderId: 'order-123',
+          scheduledAt: DateTime(2026, 9, 20, 14, 0),
+          locationName: 'UoA Student Hub',
+          proposalStatus: 'proposed',
+          proposedBy: 'buyer-1',
+        );
+
+        bool statusChangedCalled = false;
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: provider),
+              ChangeNotifierProvider.value(value: authProvider),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: MeetupCardBubble(
+                  meetup: payload,
+                  isMine: false,
+                  isBuyer: false,
+                  createdAt: DateTime.now(),
+                  onStatusChanged: () => statusChangedCalled = true,
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('Meetup Proposed'), findsOneWidget);
+        expect(find.text('Accept'), findsOneWidget);
+
+        // Tap accept
+        await tester.tap(find.text('Accept'));
+        await tester.pumpAndSettle();
+
+        expect(fakeRepo.acceptCalled, isTrue);
+        expect(statusChangedCalled, isTrue);
+        // Card immediately transitions to Confirmed
+        expect(find.text('Meetup Confirmed'), findsOneWidget);
+        expect(find.text('Show Handover QR Code'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'MeetupCardBubble respects onBeforeAccept callback when acceptance is aborted',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({
+          'jwt_token': 'mock-jwt-token',
+          'current_user':
+              '{"id":"user-1","displayName":"User","trustScore":100,"isVerified":true}',
+        });
+        final fakeRepo = FakeMeetupRepository();
+        final provider = MeetupProvider(repository: fakeRepo);
+        final authProvider = AuthProvider(userRepository: MockUserRepository());
+
+        final payload = ChatMeetupPayload(
+          orderId: 'order-123',
+          scheduledAt: DateTime(2026, 9, 20, 14, 0),
+          locationName: 'UoA Student Hub',
+          proposalStatus: 'proposed',
+          proposedBy: 'buyer-1',
+        );
+
+        bool promptShowed = false;
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: provider),
+              ChangeNotifierProvider.value(value: authProvider),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: MeetupCardBubble(
+                  meetup: payload,
+                  isMine: false,
+                  isBuyer: false,
+                  createdAt: DateTime.now(),
+                  onBeforeAccept: () async {
+                    promptShowed = true;
+                    return false; // user cancelled in dialog
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Accept'));
+        await tester.pumpAndSettle();
+
+        expect(promptShowed, isTrue);
+        expect(fakeRepo.acceptCalled, isFalse);
+        // Remains proposed because user rejected confirmation
+        expect(find.text('Meetup Proposed'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'MeetupCardBubble displays superseded/cancelled state without action buttons',
+      (tester) async {
+        final fakeRepo = FakeMeetupRepository();
+        final provider = MeetupProvider(repository: fakeRepo);
+        final authProvider = AuthProvider(userRepository: MockUserRepository());
+
+        final payload = ChatMeetupPayload(
+          orderId: 'order-123',
+          scheduledAt: DateTime(2026, 9, 20, 14, 0),
+          locationName: 'UoA Student Hub',
+          proposalStatus: 'cancelled',
+        );
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: provider),
+              ChangeNotifierProvider.value(value: authProvider),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: MeetupCardBubble(
+                  meetup: payload,
+                  isMine: false,
+                  isBuyer: false,
+                  createdAt: DateTime.now(),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('Meetup Cancelled'), findsOneWidget);
+        expect(
+          find.text('This proposal was superseded or cancelled.'),
+          findsOneWidget,
+        );
+        expect(find.text('Accept'), findsNothing);
       },
     );
   });

@@ -28,7 +28,10 @@ void main() {
 
     test('generates expected share text', () {
       final text = service.getItemShareText(testItem);
-      expect(text, 'Check out "Ergonomic Office Chair" for \$150 NZD on KiwiShare!');
+      expect(
+        text,
+        'Check out "Ergonomic Office Chair" for \$150 NZD on KiwiShare!',
+      );
     });
 
     test('generates combined share text including title, price and url', () {

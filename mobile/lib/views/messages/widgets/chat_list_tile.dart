@@ -24,6 +24,9 @@ class ChatListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Semantics(
       button: true,
       label: '$name, $itemTitle, $lastMessage',
@@ -52,22 +55,25 @@ class ChatListTile extends StatelessWidget {
                                 name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.labelLarge
-                                    ?.copyWith(
-                                      fontSize: 12,
-                                      color: const Color(0xFF17221E),
-                                    ),
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? const Color(0xFFF1F5F9)
+                                      : const Color(0xFF17221E),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
                               time,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    fontSize: 10,
-                                    color: const Color(0xFF909692),
-                                    fontWeight: FontWeight.w400,
-                                  ),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontSize: 10,
+                                color: isDark
+                                    ? const Color(0xFF94A3B8)
+                                    : const Color(0xFF909692),
+                                fontWeight: FontWeight.w400,
+                              ),
                             ),
                           ],
                         ),
@@ -76,12 +82,13 @@ class ChatListTile extends StatelessWidget {
                           itemTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                fontSize: 11,
-                                color: const Color(0xFF747C78),
-                                fontWeight: FontWeight.w400,
-                              ),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontSize: 11,
+                            color: isDark
+                                ? const Color(0xFF6EE7B7)
+                                : const Color(0xFF065F46),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Row(
@@ -91,13 +98,14 @@ class ChatListTile extends StatelessWidget {
                                 lastMessage,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(
-                                      fontSize: 11,
-                                      height: 1.15,
-                                      color: const Color(0xFF515A56),
-                                      fontWeight: FontWeight.w400,
-                                    ),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontSize: 11,
+                                  height: 1.15,
+                                  color: isDark
+                                      ? const Color(0xFFCBD5E1)
+                                      : const Color(0xFF515A56),
+                                  fontWeight: FontWeight.w400,
+                                ),
                               ),
                             ),
                             if (unreadCount > 0) ...[

@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/chat_conversation_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
+import '../profile/notification_settings_screen.dart';
 import 'widgets/chat_list_tile.dart';
 
 export '../../models/chat_conversation_model.dart'
@@ -48,6 +51,26 @@ class _MessagesScreenState extends State<MessagesScreen> {
   ChatFilter _selectedFilter = ChatFilter.all;
   String? _loadedToken;
   String? _currentAuthToken;
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      final text = _searchController.text.trim();
+      if (text != _searchQuery) {
+        setState(() => _searchQuery = text);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   ChatProvider get _chatProvider =>
       widget.chatProvider ?? context.read<ChatProvider>();
@@ -69,7 +92,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   List<ChatConversationModel> _visibleChats(
     List<ChatConversationModel> conversations,
   ) {
-    return switch (_selectedFilter) {
+    var filtered = switch (_selectedFilter) {
       ChatFilter.all => conversations,
       ChatFilter.unread =>
         conversations
@@ -84,6 +107,19 @@ class _MessagesScreenState extends State<MessagesScreen> {
             .where((chat) => chat.direction == ChatDirection.selling)
             .toList(growable: false),
     };
+
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      filtered = filtered
+          .where((chat) {
+            return chat.participantName.toLowerCase().contains(q) ||
+                chat.itemTitle.toLowerCase().contains(q) ||
+                chat.lastMessage.toLowerCase().contains(q);
+          })
+          .toList(growable: false);
+    }
+
+    return filtered;
   }
 
   Future<void> _refresh() async {
@@ -148,6 +184,150 @@ class _MessagesScreenState extends State<MessagesScreen> {
     }
   }
 
+  Future<void> _openChatSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final pushEnabled =
+                prefs.getBool('chat_push_notifications_enabled') ?? true;
+            final soundEnabled = prefs.getBool('chat_sound_enabled') ?? true;
+
+            return Material(
+              color: isDark ? const Color(0xFF1B231E) : Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 8,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Chat Settings',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => Navigator.pop(sheetContext),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      SwitchListTile.adaptive(
+                        key: const Key('chat_push_notifications_switch'),
+                        secondary: const Icon(
+                          Icons.notifications_active_outlined,
+                        ),
+                        title: const Text(
+                          'Message Push Notifications',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          'Receive notifications when you receive new chat messages or offers',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        value: pushEnabled,
+                        activeColor: const Color(0xFF059669),
+                        onChanged: (val) async {
+                          await prefs.setBool(
+                            'chat_push_notifications_enabled',
+                            val,
+                          );
+                          setSheetState(() {});
+                          if (val && sheetContext.mounted) {
+                            await offerContextualNotificationPermission(
+                              sheetContext,
+                            );
+                          }
+                        },
+                      ),
+                      SwitchListTile.adaptive(
+                        key: const Key('chat_sound_switch'),
+                        secondary: const Icon(Icons.volume_up_outlined),
+                        title: const Text(
+                          'Message Sounds & Vibration',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          'Play alert sounds when receiving messages',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        value: soundEnabled,
+                        activeColor: const Color(0xFF059669),
+                        onChanged: (val) async {
+                          await prefs.setBool('chat_sound_enabled', val);
+                          setSheetState(() {});
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.tune_rounded),
+                        title: const Text(
+                          'Device System Notifications',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          'Manage OS permission and system banner alerts',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  const NotificationSettingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = _chatProvider;
@@ -159,7 +339,26 @@ class _MessagesScreenState extends State<MessagesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ChatHeader(onComposePressed: widget.onComposePressed),
+            _ChatHeader(
+              isSearching: _isSearching,
+              searchController: _searchController,
+              onComposePressed: widget.onComposePressed,
+              onSearchPressed: () => setState(() => _isSearching = true),
+              onCloseSearch: () {
+                setState(() {
+                  _isSearching = false;
+                  _searchController.clear();
+                  _searchQuery = '';
+                });
+              },
+              onClearSearch: () {
+                setState(() {
+                  _searchController.clear();
+                  _searchQuery = '';
+                });
+              },
+              onSettingsPressed: _openChatSettings,
+            ),
             _ChatFilters(
               selectedFilter: _selectedFilter,
               onSelected: (filter) {
@@ -214,6 +413,21 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
     final chats = _visibleChats(provider.conversations);
     if (chats.isEmpty) {
+      if (_searchQuery.isNotEmpty) {
+        return _ChatMessageState(
+          key: const Key('chat_search_empty_state'),
+          icon: Icons.search_off_rounded,
+          title: 'No conversations found',
+          message: 'No chats matching "$_searchQuery".',
+          actionLabel: 'Clear search',
+          onAction: () {
+            setState(() {
+              _searchController.clear();
+              _searchQuery = '';
+            });
+          },
+        );
+      }
       return _ChatMessageState(
         key: const Key('chat_empty_state'),
         icon: Icons.forum_outlined,
@@ -331,14 +545,82 @@ String _conversationTime(DateTime? dateTime) {
 }
 
 class _ChatHeader extends StatelessWidget {
-  const _ChatHeader({required this.onComposePressed});
+  const _ChatHeader({
+    required this.isSearching,
+    required this.searchController,
+    required this.onComposePressed,
+    required this.onSearchPressed,
+    required this.onCloseSearch,
+    required this.onClearSearch,
+    required this.onSettingsPressed,
+  });
 
+  final bool isSearching;
+  final TextEditingController searchController;
   final VoidCallback? onComposePressed;
+  final VoidCallback onSearchPressed;
+  final VoidCallback onCloseSearch;
+  final VoidCallback onClearSearch;
+  final VoidCallback onSettingsPressed;
 
   @override
   Widget build(BuildContext context) {
+    if (isSearching) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: TextField(
+                  key: const Key('chat_search_field'),
+                  controller: searchController,
+                  autofocus: true,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Search chats, people, items...',
+                    hintStyle: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                    ),
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: onClearSearch,
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 8,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              key: const Key('chat_cancel_search_button'),
+              onPressed: onCloseSearch,
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(24, 16, 12, 8),
       child: Row(
         children: [
           Expanded(
@@ -352,11 +634,26 @@ class _ChatHeader extends StatelessWidget {
             ),
           ),
           IconButton(
-            key: const Key('chat_compose_button'),
-            onPressed: onComposePressed,
-            tooltip: 'Start a new chat',
-            icon: const Icon(Icons.open_in_new_rounded),
-            color: Theme.of(context).colorScheme.primary,
+            key: const Key('chat_search_button'),
+            onPressed: onSearchPressed,
+            tooltip: 'Search chats',
+            icon: const Icon(Icons.search_rounded),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          if (onComposePressed != null)
+            IconButton(
+              key: const Key('chat_compose_button'),
+              onPressed: onComposePressed,
+              tooltip: 'Start a new chat',
+              icon: const Icon(Icons.open_in_new_rounded),
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          IconButton(
+            key: const Key('chat_settings_button'),
+            onPressed: onSettingsPressed,
+            tooltip: 'Chat settings',
+            icon: const Icon(Icons.settings_outlined),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ],
       ),

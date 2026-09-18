@@ -156,7 +156,7 @@ void main() {
     );
     await repo.fetchMyItems(sold: false, token: 'token');
     await repo.fetchMyItems(sold: true, token: 'token');
-    expect(statuses, ['active,reserved', 'sold']);
+    expect(statuses, ['active,reserved,draft,delisted', 'sold']);
   });
   final draft = ReportDraft(
     context: const ReportContext.general(),

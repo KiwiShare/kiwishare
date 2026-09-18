@@ -5,6 +5,8 @@ import { authenticateToken } from '../middleware/auth';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Item from '../models/Item';
+import Order from '../models/Order';
+import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import {
   getR2ObjectBytes,
   R2_CONFIG,
@@ -60,10 +62,12 @@ function formatConversation(conversation: any, userId: string) {
       : conversation.sellerUnreadCount ?? 0,
     lastMessageText: conversation.lastMessageText ?? '',
     lastMessageAt: conversation.lastMessageAt ?? null,
+    specialPrice: conversation.specialPrice !== undefined ? conversation.specialPrice : null,
     item: {
       id: objectId(item),
       title: item?.title ?? 'Unavailable item',
-      imageUrl: item?.imageUrl ?? rawImages[0]?.url ?? ''
+      imageUrl: item?.imageUrl ?? rawImages[0]?.url ?? '',
+      specialPrice: conversation.specialPrice !== undefined ? conversation.specialPrice : null
     },
     participant: {
       id: objectId(participant),
@@ -603,15 +607,28 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
     );
     message = createdMessage;
 
+    const updateFields: Record<string, any> = {
+      lastMessageText: conversationPreview,
+      lastMessageAt: createdMessage.createdAt,
+      lastMessageId: createdMessage._id,
+      lastMessageSenderId: userId
+    };
+
+    if (!sendingAsBuyer && messageType === 'text') {
+      const offerMatch = /Special offer just for you:\s*(FREE|\$[0-9.]+)/i.exec(normalizedText);
+      if (offerMatch) {
+        const valStr = offerMatch[1];
+        const val = valStr.toUpperCase() === 'FREE' ? 0 : Number(valStr.replace('$', ''));
+        if (!isNaN(val)) {
+          updateFields.specialPrice = val;
+        }
+      }
+    }
+
     await Conversation.findByIdAndUpdate(
       conversation._id,
       {
-        $set: {
-          lastMessageText: conversationPreview,
-          lastMessageAt: createdMessage.createdAt,
-          lastMessageId: createdMessage._id,
-          lastMessageSenderId: userId
-        },
+        $set: updateFields,
         $inc: sendingAsBuyer
           ? { sellerUnreadCount: 1 }
           : { buyerUnreadCount: 1 },
@@ -619,6 +636,36 @@ router.post('/:conversationId/messages', async (ctx: Context) => {
       },
       session ? { session } : {}
     );
+
+    if (updateFields.specialPrice !== undefined) {
+      try {
+        const specialCents = Math.round(Number(updateFields.specialPrice) * 100);
+        const feeSettings = await getPlatformFeeSettings();
+        const feeCents = specialCents > 0
+          ? Math.max(feeSettings.minFeeCents, Math.round(specialCents * (feeSettings.buyerFeePercent / 100)))
+          : 0;
+
+        await Order.updateMany(
+          {
+            itemId: conversation.itemId,
+            buyerId: conversation.buyerId,
+            sellerId: conversation.sellerId,
+            paidAt: { $exists: false },
+            status: { $in: ['pending_payment', 'meeting_scheduled', 'meeting_in_progress'] }
+          },
+          {
+            $set: {
+              itemAmount: specialCents,
+              buyerFeeAmount: feeCents,
+              buyerTotalAmount: specialCents + feeCents,
+              sellerReceiveAmount: specialCents
+            }
+          }
+        );
+      } catch (syncErr) {
+        console.warn('[Chat] Failed to sync special price to order:', syncErr);
+      }
+    }
   });
 
   if (!message) {

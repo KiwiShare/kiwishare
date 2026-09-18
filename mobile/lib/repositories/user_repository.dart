@@ -78,6 +78,15 @@ abstract class UserRepository {
     required String currentPassword,
     required String newPassword,
   });
+  Future<String> sendStudentVerificationOtp({
+    required String email,
+    required String token,
+  });
+  Future<UserModel> verifyStudentOtp({
+    required String email,
+    required String code,
+    required String token,
+  });
 }
 
 class RestUserRepository implements UserRepository {
@@ -412,6 +421,55 @@ class RestUserRepository implements UserRepository {
       }
     }
   }
+
+  @override
+  Future<String> sendStudentVerificationOtp({
+    required String email,
+    required String token,
+  }) async {
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/users/student-verification/send-otp'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'email': email}),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 200) {
+      return (data['institution'] ?? 'NZ University').toString();
+    } else {
+      throw Exception(
+        data['message'] ?? 'Failed to send student verification code.',
+      );
+    }
+  }
+
+  @override
+  Future<UserModel> verifyStudentOtp({
+    required String email,
+    required String code,
+    required String token,
+  }) async {
+    final response = await _client.post(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/api/users/student-verification/verify-otp',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'email': email, 'code': code}),
+    );
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 200) {
+      return UserModel.fromJson(data['user'] as Map<String, dynamic>);
+    } else {
+      throw Exception(data['message'] ?? 'Failed to verify student code.');
+    }
+  }
 }
 
 class MockUserRepository implements UserRepository {
@@ -536,5 +594,34 @@ class MockUserRepository implements UserRepository {
       isVerified: true,
     );
     return {'token': 'mock_jwt_token', 'user': user};
+  }
+
+  @override
+  Future<String> sendStudentVerificationOtp({
+    required String email,
+    required String token,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!email.toLowerCase().endsWith('.ac.nz')) {
+      throw Exception('Only NZ universities are supported.');
+    }
+    return 'University of Auckland';
+  }
+
+  @override
+  Future<UserModel> verifyStudentOtp({
+    required String email,
+    required String code,
+    required String token,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return const UserModel(
+      id: 'mock_user_1',
+      displayName: 'Mock Student',
+      trustScore: 100,
+      isVerified: true,
+      isStudentVerified: true,
+      studentInstitution: 'University of Auckland',
+    );
   }
 }

@@ -25,19 +25,30 @@ abstract class OrderRepository {
     required String orderId,
     required String token,
   });
+
+  Future<OrderModel> createOrGetOrder({
+    required String itemId,
+    required String token,
+  });
+
+  Future<OrderModel> refundOrder({
+    required String orderId,
+    required String token,
+    String? reason,
+  });
 }
 
 class RestOrderRepository implements OrderRepository {
   RestOrderRepository({http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
   Map<String, String> _headers(String token) => {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $token',
+  };
 
   @override
   Future<List<OrderModel>> fetchMyOrders({
@@ -49,8 +60,9 @@ class RestOrderRepository implements OrderRepository {
     if (type != null) query['type'] = type;
     if (status != null) query['status'] = status;
 
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/orders/my')
-        .replace(queryParameters: query.isNotEmpty ? query : null);
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/orders/my',
+    ).replace(queryParameters: query.isNotEmpty ? query : null);
 
     final response = await _client.get(uri, headers: _headers(token));
 
@@ -83,5 +95,57 @@ class RestOrderRepository implements OrderRepository {
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return OrderModel.fromJson(data['order'] as Map<String, dynamic>);
+  }
+
+  @override
+  Future<OrderModel> createOrGetOrder({
+    required String itemId,
+    required String token,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/orders');
+    final response = await _client.post(
+      uri,
+      headers: _headers(token),
+      body: jsonEncode({'itemId': itemId}),
+    );
+
+    // 200 = existing order returned, 201 = new order created
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw OrderRepositoryException(
+        'Failed to create order (${response.statusCode}): ${response.body}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final orderJson = data['order'] ?? data;
+    return OrderModel.fromJson(orderJson as Map<String, dynamic>);
+  }
+
+  @override
+  Future<OrderModel> refundOrder({
+    required String orderId,
+    required String token,
+    String? reason,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/orders/$orderId/refund');
+    final payload = <String, dynamic>{};
+    if (reason != null) payload['reason'] = reason;
+    final response = await _client.post(
+      uri,
+      headers: _headers(token),
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode != 200) {
+      final errorBody = jsonDecode(response.body) as Map<String, dynamic>?;
+      throw OrderRepositoryException(
+        errorBody?['message'] as String? ??
+            'Failed to refund order (${response.statusCode})',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final orderJson = data['order'] ?? data;
+    return OrderModel.fromJson(orderJson as Map<String, dynamic>);
   }
 }

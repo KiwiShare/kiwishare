@@ -19,9 +19,11 @@ import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
 import '../messages/widgets/schedule_meetup_sheet.dart';
+import '../profile/payment_checkout_screen.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/edit_item_sheet.dart';
 import '../shared/widgets/share_bottom_sheet.dart';
+import '../../providers/order_provider.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String? itemId;
@@ -80,16 +82,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _loadedItem != null) _loadSimilarItems(_loadedItem!);
+        if (mounted && _loadedItem != null) {
+          _loadSimilarItems(_loadedItem!);
+          if (id != null && _objectId.hasMatch(id)) {
+            _fetchItem(id, silent: true);
+          }
+        }
       });
     }
   }
 
-  Future<void> _fetchItem(String id) async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  Future<void> _fetchItem(String id, {bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
     try {
       final repo =
           widget.itemRepository ??
@@ -98,9 +107,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       final fetched = await repo.fetchItemById(id);
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
-        _loadedItem = fetched;
-        if (fetched == null) {
+        if (!silent) _isLoading = false;
+        if (fetched != null || _loadedItem == null) {
+          _loadedItem = fetched;
+        }
+        if (fetched == null && _loadedItem == null) {
           _errorMessage = 'Item not found or no longer available.';
         }
       });
@@ -109,11 +120,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage =
-            'Unable to load item details. Please check your connection and try again.';
-      });
+      if (!silent) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage =
+              'Unable to load item details. Please check your connection and try again.';
+        });
+      }
     }
   }
 
@@ -337,6 +350,35 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  Future<void> _buyNow(ItemModel product) async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.jwtToken;
+    if (token == null) {
+      widget.onSignInRequired?.call();
+      return;
+    }
+    // Create / retrieve the pending_payment order for this item
+    try {
+      final orderProvider = context.read<OrderProvider>();
+      final order = await orderProvider.createOrGetOrder(
+        itemId: product.id,
+        token: token,
+      );
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => PaymentCheckoutScreen(order: order),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not initiate purchase: $e')),
+      );
+    }
+  }
+
   void _shareListing(ItemModel product, [BuildContext? originContext]) {
     Rect? shareOrigin;
     if (originContext != null) {
@@ -364,6 +406,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final product = _loadedItem;
+    final auth = context.watch<AuthProvider?>();
+    final currentUser = auth?.currentUser;
+    final isOwner =
+        currentUser != null &&
+        product != null &&
+        (currentUser.id == product.ownerId ||
+            currentUser.id == product.seller?.id);
+    final effectiveSeller = isOwner
+        ? SellerInfo(
+            id: currentUser.id,
+            displayName: currentUser.displayName,
+            email: product.seller?.email,
+            avatarUrl: currentUser.avatarUrl ?? product.seller?.avatarUrl,
+            trustScore: currentUser.trustScore,
+            isVerified: currentUser.isVerified,
+            isStudentVerified: product.seller?.isStudentVerified ?? false,
+            studentInstitution: product.seller?.studentInstitution,
+          )
+        : product?.seller;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -478,6 +539,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onMessageSeller: canMessage
                           ? () => _messageSeller(product)
                           : null,
+                      onBuyNow: canMessage ? () => _buyNow(product) : null,
                       onScheduleMeetup: canMessage
                           ? () => _scheduleMeetupDirectly(product)
                           : null,
@@ -637,8 +699,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       const SizedBox(height: AppSpacing.xl),
 
                       // Seller Profile Card (theme-adaptive)
-                      if (product.seller != null) ...[
-                        _SellerProfileCard(seller: product.seller!),
+                      if (effectiveSeller != null) ...[
+                        _SellerProfileCard(seller: effectiveSeller),
                         const SizedBox(height: AppSpacing.xl),
                       ],
 
@@ -762,6 +824,16 @@ Widget _buildStatusBadge(BuildContext context, ItemStatus status) {
           : const Color(0xFFD1D5DB),
       isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
       Icons.remove_circle_outline,
+    ),
+    ItemStatus.delisted => (
+      isDark
+          ? const Color(0xFF451A03).withOpacity(0.5)
+          : const Color(0xFFFFF7ED),
+      isDark
+          ? const Color(0xFFC2410C).withOpacity(0.5)
+          : const Color(0xFFFED7AA),
+      isDark ? const Color(0xFFFDBA74) : const Color(0xFFC2410C),
+      Icons.visibility_off_outlined,
     ),
   };
 
@@ -1264,6 +1336,7 @@ class _ProductActions extends StatelessWidget {
     required this.isStartingConversation,
     required this.onMessageSeller,
     this.onScheduleMeetup,
+    this.onBuyNow,
     this.messageSellerLabel = 'Message seller',
     this.ownsListing = false,
     this.onEditListing,
@@ -1276,6 +1349,7 @@ class _ProductActions extends StatelessWidget {
   final bool isStartingConversation;
   final VoidCallback? onMessageSeller;
   final VoidCallback? onScheduleMeetup;
+  final VoidCallback? onBuyNow;
   final String messageSellerLabel;
   final bool ownsListing;
   final VoidCallback? onEditListing;
@@ -1327,8 +1401,8 @@ class _ProductActions extends StatelessWidget {
     final watchButton = OutlinedButton.icon(
       key: const Key('detail-watch-action-button'),
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 52),
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        minimumSize: const Size(0, 50),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.medium),
         ),
@@ -1351,18 +1425,19 @@ class _ProductActions extends StatelessWidget {
       onPressed: onToggleWatch,
       icon: Icon(
         isWatched ? Icons.favorite : Icons.favorite_border,
+        size: 18,
         color: isWatched
             ? const Color(0xFFEF4444)
             : theme.colorScheme.onSurface,
       ),
       label: Text(
-        'Watching',
+        isWatched ? 'Watchlisted' : 'Watchlist',
         maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         softWrap: false,
         style: GoogleFonts.inter(
-          fontSize: 16,
+          fontSize: 14,
           fontWeight: FontWeight.w600,
-          height: 1.25,
           color: isWatched
               ? const Color(0xFFEF4444)
               : theme.colorScheme.onSurface,
@@ -1370,12 +1445,18 @@ class _ProductActions extends StatelessWidget {
       ),
     );
 
-    final messageButton = FilledButton.icon(
+    final messageButton = IconButton.outlined(
       key: const Key('detail-message-seller-button'),
-      style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 50),
+      tooltip: isStartingConversation ? 'Opening chat...' : messageSellerLabel,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(50, 50),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+        side: BorderSide(
+          color: messageSellerEnabled
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline.withOpacity(0.3),
         ),
       ),
       onPressed: messageSellerEnabled && !isStartingConversation
@@ -1385,15 +1466,29 @@ class _ProductActions extends StatelessWidget {
           ? const SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.chat_bubble_outline),
+    );
+
+    final buyNowButton = FilledButton.icon(
+      key: const Key('detail-buy-now-button'),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 50),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        backgroundColor: const Color(0xFF059669),
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+      ),
+      onPressed: onBuyNow,
+      icon: const Icon(Icons.shopping_bag_outlined, size: 18),
       label: Text(
-        isStartingConversation ? 'Opening chat' : messageSellerLabel,
-        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
+        'Buy Now  \$${product.priceNzd}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
       ),
     );
 
@@ -1422,17 +1517,44 @@ class _ProductActions extends StatelessWidget {
                     editButton,
                     const SizedBox(height: AppSpacing.sm),
                   ],
-                  Row(
-                    children: [
-                      if (onScheduleMeetup != null) ...[
-                        meetupButton,
+                  if (!ownsListing && onBuyNow != null) ...[
+                    Row(
+                      children: [
+                        messageButton,
                         const SizedBox(width: AppSpacing.sm),
+                        Expanded(child: watchButton),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(child: buyNowButton),
                       ],
-                      Expanded(child: watchButton),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  messageButton,
+                    ),
+                  ] else ...[
+                    Row(
+                      children: [
+                        if (onScheduleMeetup != null) ...[
+                          meetupButton,
+                          const SizedBox(width: AppSpacing.sm),
+                        ],
+                        Expanded(child: watchButton),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (messageSellerEnabled)
+                      Row(
+                        children: [
+                          messageButton,
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              'or chat with seller',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
                 ],
               )
             : Row(
@@ -1455,9 +1577,54 @@ class _ProductActions extends StatelessWidget {
                     meetupButton,
                     const SizedBox(width: AppSpacing.sm),
                   ],
-                  Expanded(flex: 3, child: watchButton),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(flex: 5, child: messageButton),
+                  // For non-owner: show message icon on left + equal sized Watchlist & Buy Now buttons on right
+                  if (!ownsListing && onBuyNow != null) ...[
+                    messageButton,
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: watchButton),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: buyNowButton),
+                  ] else ...[
+                    Expanded(flex: 3, child: watchButton),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      flex: 5,
+                      child: FilledButton.icon(
+                        key: const Key('detail-message-seller-button-full'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.medium,
+                            ),
+                          ),
+                        ),
+                        onPressed:
+                            messageSellerEnabled && !isStartingConversation
+                            ? onMessageSeller
+                            : null,
+                        icon: isStartingConversation
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.chat_bubble_outline),
+                        label: Text(
+                          isStartingConversation
+                              ? 'Opening chat'
+                              : messageSellerLabel,
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
       ),
@@ -1638,6 +1805,7 @@ String _statusLabel(ItemStatus status) => switch (status) {
   ItemStatus.active => 'Available',
   ItemStatus.reserved => 'Reserved',
   ItemStatus.sold => 'Sold',
+  ItemStatus.delisted => 'Delisted',
 };
 
 IconData _getCategoryIcon(String category) {

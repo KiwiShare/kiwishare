@@ -94,12 +94,19 @@ void main() {
 
     await tester.pumpWidget(buildTestApp(onCancel: () {}));
 
-    expect(find.text('Post an item'), findsOneWidget);
+    expect(find.text('List an Item'), findsOneWidget);
     expect(find.text('Photos'), findsOneWidget);
     expect(find.text('0/10'), findsOneWidget);
     expect(find.byKey(const Key('post_title_field')), findsOneWidget);
+    expect(find.byKey(const Key('post_description_field')), findsOneWidget);
     expect(find.byKey(const Key('post_category_field')), findsOneWidget);
     expect(find.byKey(const Key('post_price_field')), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_location_field')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.byKey(const Key('post_location_field')), findsOneWidget);
     expect(find.byKey(const Key('post_condition_field')), findsOneWidget);
 
@@ -109,7 +116,6 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     await tester.ensureVisible(find.byKey(const Key('post_submit_button')));
-    expect(find.byKey(const Key('post_description_field')), findsOneWidget);
     expect(find.byKey(const Key('post_submit_button')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -311,7 +317,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Post an item'), findsOneWidget);
+    expect(find.text('List an Item'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -567,6 +573,37 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(publishService.draft?.isSustainable, isTrue);
+    },
+  );
+
+  testWidgets(
+    'opens circular economy educational sheet when help button is tapped',
+    (tester) async {
+      await tester.pumpWidget(buildTestApp(onCancel: () {}));
+      await tester.pumpAndSettle();
+
+      final helpFinder = find.byKey(const Key('post_sustainable_help_button'));
+      await tester.scrollUntilVisible(
+        helpFinder,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(helpFinder, findsOneWidget);
+
+      await tester.tap(helpFinder);
+      await tester.pumpAndSettle();
+
+      expect(find.text('What is a Sustainable Item?'), findsOneWidget);
+      expect(
+        find.text('Supporting the Circular Economy on Campus'),
+        findsOneWidget,
+      );
+      expect(find.text('Got it, thanks!'), findsOneWidget);
+
+      await tester.tap(find.text('Got it, thanks!'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('What is a Sustainable Item?'), findsNothing);
     },
   );
 
@@ -924,11 +961,19 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
+    await tester.tap(
+      find.byKey(const Key('post_ai_suggestion_button')),
+      warnIfMissed: false,
+    );
     await tester.pump();
 
     expect(service.calls, 1);
     expect(find.text('Creating suggestion…'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_submit_button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     final submit = tester.widget<FilledButton>(
       find.byKey(const Key('post_submit_button')),
     );
@@ -1137,39 +1182,32 @@ Future<void> completeValidListing(WidgetTester tester) async {
     find.byKey(const Key('post_title_field')),
     'Solid wood desk',
   );
+  await tester.enterText(
+    find.byKey(const Key('post_description_field')),
+    'A sturdy study desk.',
+  );
+  await tester.ensureVisible(find.byKey(const Key('post_category_field')));
+  await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('post_category_field')));
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('post_selection_option_Furniture')));
   await tester.pumpAndSettle();
   await tester.enterText(find.byKey(const Key('post_price_field')), '120');
 
-  await tester.scrollUntilVisible(
-    find.byKey(const Key('post_location_field')),
-    250,
-    scrollable: find.byType(Scrollable).first,
-  );
+  await tester.ensureVisible(find.byKey(const Key('post_location_field')));
+  await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('post_location_field')));
   await tester.pumpAndSettle();
 
+  await tester.ensureVisible(find.byKey(const Key('post_condition_field')));
+  await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('post_condition_field')));
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('post_selection_option_Good')));
   await tester.pumpAndSettle();
 
-  await tester.scrollUntilVisible(
-    find.byKey(const Key('post_description_field')),
-    250,
-    scrollable: find.byType(Scrollable).first,
-  );
-  await tester.enterText(
-    find.byKey(const Key('post_description_field')),
-    'A sturdy study desk.',
-  );
-  await tester.scrollUntilVisible(
-    find.byKey(const Key('post_submit_button')),
-    250,
-    scrollable: find.byType(Scrollable).first,
-  );
+  await tester.ensureVisible(find.byKey(const Key('post_submit_button')));
+  await tester.pumpAndSettle();
 }
 
 class FakeListingImagePicker implements ListingImagePicker {

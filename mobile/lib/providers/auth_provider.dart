@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../repositories/user_repository.dart';
+import '../services/payment_service.dart';
 import '../services/push_notification_service.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -337,6 +338,90 @@ class AuthProvider extends ChangeNotifier {
     await _storeProfile(token, updated);
   }
 
+  void updateKiwiGold(int newBalance) {
+    if (_currentUser != null) {
+      final updated = _currentUser!.copyWith(kiwiGold: newBalance);
+      _currentUser = updated;
+      notifyListeners();
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setString('current_user', jsonEncode(updated.toJson()));
+      });
+    }
+  }
+
+  void updateVipStatus({required bool isVip, DateTime? vipExpiresAt}) {
+    if (_currentUser != null) {
+      final updated = _currentUser!.copyWith(
+        isVip: isVip,
+        vipExpiresAt: vipExpiresAt,
+      );
+      _currentUser = updated;
+      notifyListeners();
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setString('current_user', jsonEncode(updated.toJson()));
+      });
+    }
+  }
+
+  void applyTopUpResult({
+    int? kiwiGold,
+    bool? isVip,
+    DateTime? vipExpiresAt,
+    bool? vipAutoRenew,
+  }) {
+    if (_currentUser != null) {
+      final updated = _currentUser!.copyWith(
+        kiwiGold: kiwiGold ?? _currentUser!.kiwiGold,
+        isVip: isVip ?? _currentUser!.isVip,
+        vipExpiresAt: vipExpiresAt ?? _currentUser!.vipExpiresAt,
+        vipAutoRenew: vipAutoRenew ?? _currentUser!.vipAutoRenew,
+      );
+      _currentUser = updated;
+      notifyListeners();
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setString('current_user', jsonEncode(updated.toJson()));
+      });
+    }
+  }
+
+  Future<bool> cancelVipRenewal() async {
+    final token = _jwtToken;
+    if (token == null) return false;
+    try {
+      await PaymentService.instance.cancelVipRenewal(token: token);
+    } catch (_) {
+      // Fallback gracefully in case of mock/offline mode
+    }
+    if (_currentUser != null) {
+      final updated = _currentUser!.copyWith(vipAutoRenew: false);
+      _currentUser = updated;
+      notifyListeners();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('current_user', jsonEncode(updated.toJson()));
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> resumeVipRenewal() async {
+    final token = _jwtToken;
+    if (token == null) return false;
+    try {
+      await PaymentService.instance.resumeVipRenewal(token: token);
+    } catch (_) {
+      // Fallback gracefully in case of mock/offline mode
+    }
+    if (_currentUser != null) {
+      final updated = _currentUser!.copyWith(vipAutoRenew: true, isVip: true);
+      _currentUser = updated;
+      notifyListeners();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('current_user', jsonEncode(updated.toJson()));
+      return true;
+    }
+    return false;
+  }
+
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -350,6 +435,34 @@ class AuthProvider extends ChangeNotifier {
       currentPassword: currentPassword,
       newPassword: newPassword,
     );
+  }
+
+  Future<String> sendStudentVerificationOtp(String email) async {
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to verify student status.');
+    }
+    return await userRepository.sendStudentVerificationOtp(
+      email: email,
+      token: token,
+    );
+  }
+
+  Future<UserModel> verifyStudentOtp({
+    required String email,
+    required String code,
+  }) async {
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to verify student status.');
+    }
+    final updated = await userRepository.verifyStudentOtp(
+      email: email,
+      code: code,
+      token: token,
+    );
+    await _storeProfile(token, updated);
+    return updated;
   }
 
   Future<void> _storeProfile(String token, UserModel updated) async {

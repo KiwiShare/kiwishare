@@ -29,6 +29,9 @@ abstract class MeetupRepository {
   Future<MeetupModel> acceptMeetup({
     required String orderId,
     required String token,
+    String? messageId,
+    DateTime? scheduledAt,
+    String? locationName,
   });
 
   Future<void> declineMeetup({required String orderId, required String token});
@@ -43,6 +46,11 @@ abstract class MeetupRepository {
   Future<Map<String, dynamic>> claimHandover({
     required String claimCode,
     String? itemId,
+    required String token,
+  });
+
+  Future<Map<String, dynamic>> confirmHandover({
+    required String orderId,
     required String token,
   });
 }
@@ -97,10 +105,19 @@ class RestMeetupRepository implements MeetupRepository {
   Future<MeetupModel> acceptMeetup({
     required String orderId,
     required String token,
+    String? messageId,
+    DateTime? scheduledAt,
+    String? locationName,
   }) async {
+    final bodyData = <String, dynamic>{
+      'messageId': ?messageId,
+      if (scheduledAt != null) 'scheduledAt': scheduledAt.toIso8601String(),
+      'locationName': ?locationName,
+    };
     final response = await _client.post(
       Uri.parse('${ApiConfig.baseUrl}/api/meetups/$orderId/accept'),
       headers: _headers(token),
+      body: bodyData.isNotEmpty ? jsonEncode(bodyData) : null,
     );
     final data = _responseMap(response);
     final meetupJson = data['meetup'];
@@ -193,6 +210,18 @@ class RestMeetupRepository implements MeetupRepository {
       headers: _headers(token),
       body: jsonEncode({'claimCode': claimCode, 'itemId': ?itemId}),
     );
+    return _responseMap(response);
+  }
+
+  @override
+  Future<Map<String, dynamic>> confirmHandover({
+    required String orderId,
+    required String token,
+  }) async {
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/meetups/$orderId/confirm-handover',
+    );
+    final response = await _client.post(uri, headers: _headers(token));
     return _responseMap(response);
   }
 }

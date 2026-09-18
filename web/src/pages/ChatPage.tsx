@@ -2,7 +2,18 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
-import { chatApi, uploadApi, getApiBaseUrl, ConversationItem, ChatMessage } from '../api/client';
+import {
+  chatApi,
+  uploadApi,
+  getApiBaseUrl,
+  ConversationItem,
+  ChatMessage,
+  OrderItem,
+  ordersApi,
+  paymentsApi,
+  meetupsApi,
+} from '../api/client';
+import { CAMPUS_LOCATIONS } from '../utils/campusLocations';
 import {
   Send,
   Image as ImageIcon,
@@ -21,6 +32,15 @@ import {
   Play,
   Pause,
   Mic,
+  CreditCard,
+  Calendar,
+  MapPin,
+  QrCode,
+  ShieldCheck,
+  RotateCcw,
+  Receipt,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 const VoiceAudioPlayer: React.FC<{
@@ -254,6 +274,33 @@ export const ChatPage: React.FC = () => {
   // Selected image preview for lightbox
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
+  // Order & Meetup transaction state for current conversation
+  const [currentOrder, setCurrentOrder] = useState<OrderItem | null>(null);
+  const [meetupDetails, setMeetupDetails] = useState<any | null>(null);
+  const [, setLoadingOrder] = useState(false);
+
+  // Modals state
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+
+  // Modal actions loading state
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isSubmittingMeetup, setIsSubmittingMeetup] = useState(false);
+  const [isConfirmingHandover, setIsConfirmingHandover] = useState(false);
+  const [isRefunding, setIsRefunding] = useState(false);
+
+  // Meetup schedule form state
+  const [meetupDate, setMeetupDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(14, 0, 0, 0);
+    return d.toISOString().slice(0, 16);
+  });
+  const [meetupLocation, setMeetupLocation] = useState('UoA City Campus - Quad / General Library');
+  const [meetupNote, setMeetupNote] = useState('');
+
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isPollingRef = useRef(false);
@@ -450,6 +497,216 @@ export const ChatPage: React.FC = () => {
 
   // Active conversation object
   const activeConversation = conversations.find((c) => c.id === conversationId);
+
+  // Load Order & Meetup for active item
+  const loadOrderAndMeetup = useCallback(async (itemId?: string) => {
+    if (!itemId) {
+      setCurrentOrder(null);
+      setMeetupDetails(null);
+      return;
+    }
+    setLoadingOrder(true);
+    try {
+      const res = await ordersApi.getOrderByItemId(itemId);
+      if (res?.order) {
+        setCurrentOrder(res.order);
+        try {
+          const meetupRes = await meetupsApi.getMeetup(res.order.id);
+          setMeetupDetails(meetupRes?.meetup || null);
+        } catch {
+          setMeetupDetails(null);
+        }
+      } else {
+        setCurrentOrder(null);
+        setMeetupDetails(null);
+      }
+    } catch {
+      setCurrentOrder(null);
+      setMeetupDetails(null);
+    } finally {
+      setLoadingOrder(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeConversation?.item?.id) {
+      loadOrderAndMeetup(activeConversation.item.id);
+    } else {
+      setCurrentOrder(null);
+      setMeetupDetails(null);
+    }
+  }, [activeConversation?.item?.id, loadOrderAndMeetup]);
+
+  // Buyer Checkout with Safe Pay
+  const handleSafePayCheckout = async () => {
+    if (!activeConversation?.item || isProcessingPayment) return;
+    setIsProcessingPayment(true);
+    try {
+      let orderToPay = currentOrder;
+      if (!orderToPay || orderToPay.status === 'pending' || orderToPay.status === 'refunded') {
+        const orderRes = await ordersApi.createOrder(activeConversation.item.id);
+        orderToPay = orderRes.order;
+        setCurrentOrder(orderToPay);
+      }
+
+      const intentRes = await paymentsApi.createIntent(orderToPay.id);
+      const confirmRes = await paymentsApi.confirm(orderToPay.id, intentRes.paymentIntentId);
+      if (confirmRes?.order) {
+        setCurrentOrder(confirmRes.order);
+      }
+
+      // Mark item as sold locally in conversation item
+      activeConversation.item.status = 'sold';
+
+      // Send chat confirmation message
+      const itemPriceNum = parseFloat(activeConversation.item.priceNzd || '0') || 0;
+      const totalAmount = intentRes.amountNzd || (itemPriceNum + Math.max(1, Math.round(itemPriceNum * 0.05 * 100) / 100)).toFixed(2);
+      await chatApi.sendMessage(activeConversation.id, {
+        type: 'text',
+        text: `[Payment Confirmed] Safe Pay payment of $${totalAmount} NZD completed. Item is now SOLD and reserved. Funds held securely in KiwiShare Escrow until meetup handover.`,
+      });
+
+      setShowCheckoutModal(false);
+      fetchMessages(activeConversation.id, false);
+      fetchConversations(true);
+      loadOrderAndMeetup(activeConversation.item.id);
+    } catch (err: any) {
+      alert(err.message || 'Payment processing failed. Please try again.');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  // Propose Meetup
+  const handleProposeMeetup = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!currentOrder || isSubmittingMeetup) return;
+    if (!meetupLocation.trim()) {
+      alert('Please enter or select a meetup location.');
+      return;
+    }
+
+    setIsSubmittingMeetup(true);
+    try {
+      const res = await meetupsApi.propose(currentOrder.id, {
+        scheduledAt: new Date(meetupDate).toISOString(),
+        locationName: meetupLocation.trim(),
+        note: meetupNote.trim() || undefined,
+      });
+      if (res?.meetup) {
+        setMeetupDetails(res.meetup);
+      }
+
+      // Send proposal in chat
+      const formattedDate = new Date(meetupDate).toLocaleString('en-NZ', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+      await chatApi.sendMessage(activeConversation!.id, {
+        type: 'text',
+        text: `[Meetup Proposal] Location: ${meetupLocation.trim()} | Time: ${formattedDate}${meetupNote.trim() ? ` | Note: ${meetupNote.trim()}` : ''}`,
+      });
+
+      setShowScheduleModal(false);
+      fetchMessages(activeConversation!.id, false);
+      loadOrderAndMeetup(activeConversation!.item.id);
+    } catch (err: any) {
+      alert(err.message || 'Failed to propose meetup.');
+    } finally {
+      setIsSubmittingMeetup(false);
+    }
+  };
+
+  // Accept Meetup Proposal
+  const handleAcceptMeetup = async () => {
+    if (!currentOrder) return;
+    try {
+      const res = await meetupsApi.accept(currentOrder.id);
+      if (res?.meetup) {
+        setMeetupDetails(res.meetup);
+      }
+
+      await chatApi.sendMessage(activeConversation!.id, {
+        type: 'text',
+        text: `[Meetup Confirmed] Meetup proposal accepted. Please meet at the designated campus location on time!`,
+      });
+
+      fetchMessages(activeConversation!.id, false);
+      loadOrderAndMeetup(activeConversation!.item.id);
+    } catch (err: any) {
+      alert(err.message || 'Failed to accept meetup.');
+    }
+  };
+
+  // Confirm Handover (Buyer confirms receipt OR Seller confirms handover)
+  const handleConfirmHandover = async (role: 'buyer' | 'seller') => {
+    if (!currentOrder || isConfirmingHandover) return;
+    setIsConfirmingHandover(true);
+    try {
+      const res = await meetupsApi.confirmHandover(currentOrder.id, role);
+      await chatApi.sendMessage(activeConversation!.id, {
+        type: 'text',
+        text: `[Handover Confirmed] ${role === 'buyer' ? 'Buyer confirmed safe receipt of the item. KiwiShare Escrow funds released to seller.' : 'Seller confirmed handing over the item to buyer.'}`,
+      });
+
+      setShowQrModal(false);
+      fetchMessages(activeConversation!.id, false);
+      loadOrderAndMeetup(activeConversation!.item.id);
+      if (res?.order) {
+        setCurrentOrder(res.order);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to confirm handover.');
+    } finally {
+      setIsConfirmingHandover(false);
+    }
+  };
+
+  // Refund Order (Seller direct refund or Buyer 48h claim)
+  const handleRefundOrder = async () => {
+    if (!currentOrder || isRefunding) return;
+    if (!window.confirm('Are you sure you want to refund this order? Funds will be returned to the buyer and the listing will be relisted.')) {
+      return;
+    }
+
+    setIsRefunding(true);
+    try {
+      const res = await ordersApi.refundOrder(currentOrder.id, 'Refund issued via chat');
+      if (res?.order) {
+        setCurrentOrder(res.order);
+      }
+      if (activeConversation?.item) {
+        activeConversation.item.status = 'active';
+      }
+
+      await chatApi.sendMessage(activeConversation!.id, {
+        type: 'text',
+        text: `[Order Refunded] The order has been refunded. Funds will return to buyer account and the listing is active again.`,
+      });
+
+      fetchMessages(activeConversation!.id, false);
+      loadOrderAndMeetup(activeConversation!.item.id);
+      alert('Order successfully refunded.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to refund order.');
+    } finally {
+      setIsRefunding(false);
+    }
+  };
+
+  // Seller request payment from buyer
+  const handleSendPaymentRequest = async () => {
+    if (!activeConversation?.item) return;
+    try {
+      await chatApi.sendMessage(activeConversation.id, {
+        type: 'text',
+        text: `[Payment Request] Seller requested KiwiShare Safe Pay payment for "${activeConversation.item.title}" ($${activeConversation.item.priceNzd} NZD). Click below to complete secure escrow checkout.`,
+      });
+      fetchMessages(activeConversation.id, false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to send payment request.');
+    }
+  };
 
   // Filtered conversation list
   const filteredConversations = conversations.filter((c) => {
@@ -853,70 +1110,276 @@ export const ChatPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Linked Product Banner */}
-              {activeConversation?.item && (
-                <Link
-                  to={`/products/${activeConversation.item.id}`}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '6px 12px',
-                    backgroundColor: '#f8fafc',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-md)',
-                    textDecoration: 'none',
-                    maxWidth: '280px',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--primary-400)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
-                  title="View item detail"
-                >
-                  {activeConversation.item.imageUrl ? (
-                    <img
-                      src={activeConversation.item.imageUrl}
-                      alt={activeConversation.item.title}
-                      style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div
+              {/* Linked Product Banner with Top-Right Corner Status Badge */}
+              {activeConversation?.item && (() => {
+                const isPaid = currentOrder?.status === 'paid' || currentOrder?.status === 'meeting_scheduled';
+                const isRefunded = currentOrder?.status === 'refunded' || currentOrder?.isRefunded;
+                const isCompleted = currentOrder?.status === 'completed';
+                const isSold = activeConversation.item.status === 'sold' || isPaid || isCompleted;
+                const isDelisted = activeConversation.item.status === 'delisted';
+
+                let badgeText = 'AVAILABLE';
+                let badgeBg = '#ecfdf5';
+                let badgeColor = '#059669';
+                let badgeBorder = '#a7f3d0';
+
+                if (isRefunded) {
+                  badgeText = 'REFUNDED';
+                  badgeBg = '#fee2e2';
+                  badgeColor = '#dc2626';
+                  badgeBorder = '#fca5a5';
+                } else if (isCompleted) {
+                  badgeText = 'COMPLETED';
+                  badgeBg = '#e0e7ff';
+                  badgeColor = '#4338ca';
+                  badgeBorder = '#c7d2fe';
+                } else if (isPaid) {
+                  badgeText = 'PAID';
+                  badgeBg = '#d1fae5';
+                  badgeColor = '#065f46';
+                  badgeBorder = '#34d399';
+                } else if (isSold) {
+                  badgeText = 'SOLD';
+                  badgeBg = '#f1f5f9';
+                  badgeColor = '#475569';
+                  badgeBorder = '#cbd5e1';
+                } else if (isDelisted) {
+                  badgeText = 'DELISTED';
+                  badgeBg = '#f3f4f6';
+                  badgeColor = '#6b7280';
+                  badgeBorder = '#d1d5db';
+                }
+
+                return (
+                  <div style={{ position: 'relative' }}>
+                    <Link
+                      to={`/products/${activeConversation.item.id}`}
                       style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '6px',
-                        backgroundColor: '#e2e8f0',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--text-muted)',
+                        gap: '10px',
+                        padding: '6px 12px',
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-md)',
+                        textDecoration: 'none',
+                        maxWidth: '280px',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--primary-400)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
+                      title="View item detail"
+                    >
+                      {activeConversation.item.imageUrl ? (
+                        <img
+                          src={activeConversation.item.imageUrl}
+                          alt={activeConversation.item.title}
+                          style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '6px',
+                            backgroundColor: '#e2e8f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          <ShoppingBag size={16} />
+                        </div>
+                      )}
+
+                      <div style={{ overflow: 'hidden', textAlign: 'left' }}>
+                        <div
+                          style={{
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            color: 'var(--text-main)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {activeConversation.item.title}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--primary-600)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <span>${activeConversation.item.priceNzd} NZD • View</span>
+                          <ExternalLink size={10} />
+                        </div>
+                      </div>
+                    </Link>
+
+                    {/* Corner Status Badge */}
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: '-8px',
+                        right: '-6px',
+                        backgroundColor: badgeBg,
+                        color: badgeColor,
+                        border: `1px solid ${badgeBorder}`,
+                        fontSize: '0.62rem',
+                        fontWeight: 800,
+                        padding: '1px 6px',
+                        borderRadius: '6px',
+                        letterSpacing: '0.04em',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                        pointerEvents: 'none',
                       }}
                     >
-                      <ShoppingBag size={16} />
-                    </div>
+                      {badgeText}
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* KiwiShare Safe Trade Action Bar */}
+            {activeConversation?.item && activeConversation.item.status !== 'sold' && (
+              <div
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: '#f8fafc',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  fontSize: '0.82rem',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+                  <ShieldCheck size={16} color="#059669" />
+                  <span style={{ fontWeight: 500 }}>
+                    {currentOrder?.status === 'paid' || currentOrder?.status === 'meeting_scheduled'
+                      ? 'KiwiShare Escrow Active: Payment protected until meetup handover.'
+                      : currentOrder?.status === 'completed'
+                      ? 'Order Completed: Handover verified.'
+                      : currentOrder?.status === 'refunded' || currentOrder?.isRefunded
+                      ? 'Order Refunded: Funds returned to buyer.'
+                      : 'Campus Safe Trade: NZ Escrow Protection.'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {/* Buyer: Buy Now */}
+                  {activeConversation.direction === 'buying' && (!currentOrder || currentOrder.status === 'pending' || currentOrder.status === 'refunded') && (
+                    <button
+                      onClick={() => setShowCheckoutModal(true)}
+                      className="btn btn-primary"
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: '0.82rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        backgroundColor: '#059669',
+                        borderColor: '#059669',
+                      }}
+                    >
+                      <CreditCard size={14} />
+                      <span>Buy Now (${activeConversation.item.priceNzd} NZD)</span>
+                    </button>
                   )}
 
-                  <div style={{ overflow: 'hidden', textAlign: 'left' }}>
-                    <div
-                      style={{
-                        fontSize: '0.78rem',
-                        fontWeight: 600,
-                        color: 'var(--text-main)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
+                  {/* Seller: Request Safe Pay */}
+                  {activeConversation.direction === 'selling' && (!currentOrder || currentOrder.status === 'pending' || currentOrder.status === 'refunded') && (
+                    <button
+                      onClick={handleSendPaymentRequest}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                     >
-                      {activeConversation.item.title}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--primary-600)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <span>View Listing</span>
-                      <ExternalLink size={10} />
-                    </div>
-                  </div>
-                </Link>
-              )}
-            </div>
+                      <CreditCard size={14} />
+                      <span>Request Payment</span>
+                    </button>
+                  )}
+
+                  {/* If Paid / Scheduled */}
+                  {(currentOrder?.status === 'paid' || currentOrder?.status === 'meeting_scheduled') && !currentOrder?.isRefunded && (
+                    <>
+                      <button
+                        onClick={() => setShowScheduleModal(true)}
+                        className="btn btn-secondary"
+                        style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <Calendar size={14} />
+                        <span>{currentOrder.meeting ? 'Reschedule' : 'Schedule Meetup'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => setShowQrModal(true)}
+                        className="btn btn-primary"
+                        style={{ padding: '6px 14px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <QrCode size={14} />
+                        <span>Meetup & QR</span>
+                      </button>
+
+                      <button
+                        onClick={() => setShowInvoiceModal(true)}
+                        className="btn btn-secondary"
+                        style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                        title="View Tax Invoice"
+                      >
+                        <Receipt size={14} />
+                        <span>Invoice</span>
+                      </button>
+
+                      {/* Seller Refund */}
+                      {activeConversation.direction === 'selling' && (
+                        <button
+                          onClick={handleRefundOrder}
+                          disabled={isRefunding}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#dc2626', borderColor: '#fca5a5' }}
+                        >
+                          <RotateCcw size={14} />
+                          <span>{isRefunding ? 'Refunding…' : 'Refund'}</span>
+                        </button>
+                      )}
+
+                      {/* Buyer 48h Refund Claim */}
+                      {activeConversation.direction === 'buying' && (() => {
+                        const ageHours = (Date.now() - new Date(currentOrder.createdAt).getTime()) / (1000 * 3600);
+                        const isUnmet48h = ageHours >= 48 && (!currentOrder.meeting || currentOrder.meeting.proposalStatus !== 'accepted');
+                        if (isUnmet48h) {
+                          return (
+                            <button
+                              onClick={handleRefundOrder}
+                              disabled={isRefunding}
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#b45309', borderColor: '#fde68a', backgroundColor: '#fffbeb' }}
+                            >
+                              <RotateCcw size={14} />
+                              <span>Claim Refund (48h)</span>
+                            </button>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </>
+                  )}
+
+                  {/* If Completed */}
+                  {currentOrder?.status === 'completed' && (
+                    <button
+                      onClick={() => setShowInvoiceModal(true)}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Receipt size={14} />
+                      <span>Invoice</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Messages Area */}
             <div
@@ -960,6 +1423,219 @@ export const ChatPage: React.FC = () => {
               ) : (
                 messages.map((msg) => {
                   const isMine = msg.isMine || msg.senderId === user?.id;
+
+                  const isPaymentConfirmed = msg.text?.startsWith('[Payment Confirmed]');
+                  const isMeetupProposal = msg.text?.startsWith('[Meetup Proposal]');
+                  const isPaymentRequest = msg.text?.startsWith('[Payment Request]');
+                  const isMeetupConfirmed = msg.text?.startsWith('[Meetup Confirmed]');
+                  const isHandoverConfirmed = msg.text?.startsWith('[Handover Confirmed]');
+                  const isOrderRefunded = msg.text?.startsWith('[Order Refunded]');
+                  const isTransactionEvent = isPaymentConfirmed || isMeetupProposal || isPaymentRequest || isMeetupConfirmed || isHandoverConfirmed || isOrderRefunded;
+
+                  if (isTransactionEvent) {
+                    return (
+                      <div
+                        key={msg.id}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          width: '100%',
+                          margin: '4px 0',
+                        }}
+                      >
+                        {isPaymentConfirmed && (
+                          <div
+                            style={{
+                              padding: '12px 18px',
+                              borderRadius: '12px',
+                              backgroundColor: '#ecfdf5',
+                              border: '1.5px solid #a7f3d0',
+                              color: '#065f46',
+                              boxShadow: '0 2px 6px rgba(16, 185, 129, 0.1)',
+                              maxWidth: '460px',
+                              width: '100%',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '0.92rem' }}>
+                                <ShieldCheck size={20} color="#059669" />
+                                <span>Safe Pay Confirmed</span>
+                              </div>
+                              <span style={{ fontSize: '0.68rem', backgroundColor: '#d1fae5', color: '#047857', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>PAID</span>
+                            </div>
+                            <div style={{ fontSize: '0.85rem', lineHeight: 1.45, color: '#047857', marginBottom: '10px' }}>
+                              {msg.text?.replace('[Payment Confirmed] ', '')}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              <button
+                                onClick={() => setShowInvoiceModal(true)}
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 10px', fontSize: '0.78rem', backgroundColor: '#fff' }}
+                              >
+                                <Receipt size={12} />
+                                <span>View Invoice</span>
+                              </button>
+                              <button
+                                onClick={() => setShowScheduleModal(true)}
+                                className="btn btn-primary"
+                                style={{ padding: '4px 10px', fontSize: '0.78rem', backgroundColor: '#059669', borderColor: '#059669' }}
+                              >
+                                <Calendar size={12} />
+                                <span>Schedule Meetup</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {isMeetupProposal && (
+                          <div
+                            style={{
+                              padding: '12px 18px',
+                              borderRadius: '12px',
+                              backgroundColor: '#eff6ff',
+                              border: '1.5px solid #bfdbfe',
+                              color: '#1e40af',
+                              boxShadow: '0 2px 6px rgba(59, 130, 246, 0.1)',
+                              maxWidth: '460px',
+                              width: '100%',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', fontWeight: 800, fontSize: '0.92rem' }}>
+                              <MapPin size={18} color="#2563eb" />
+                              <span>Meetup Proposal</span>
+                            </div>
+                            <div style={{ fontSize: '0.85rem', lineHeight: 1.45, color: '#1d4ed8', marginBottom: '10px' }}>
+                              {msg.text?.replace('[Meetup Proposal] ', '')}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                              {!isMine && (!meetupDetails || meetupDetails.proposalStatus === 'proposed') && (
+                                <button
+                                  onClick={handleAcceptMeetup}
+                                  className="btn btn-primary"
+                                  style={{ padding: '4px 12px', fontSize: '0.78rem', backgroundColor: '#2563eb', borderColor: '#2563eb' }}
+                                >
+                                  <Check size={13} />
+                                  <span>Accept Meetup</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setShowQrModal(true)}
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 10px', fontSize: '0.78rem', backgroundColor: '#fff' }}
+                              >
+                                <QrCode size={12} />
+                                <span>View Handover Info</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {isPaymentRequest && (
+                          <div
+                            style={{
+                              padding: '12px 18px',
+                              borderRadius: '12px',
+                              backgroundColor: '#fffbeb',
+                              border: '1.5px solid #fde68a',
+                              color: '#92400e',
+                              boxShadow: '0 2px 6px rgba(245, 158, 11, 0.1)',
+                              maxWidth: '460px',
+                              width: '100%',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', fontWeight: 800, fontSize: '0.92rem' }}>
+                              <CreditCard size={18} color="#d97706" />
+                              <span>Payment Request</span>
+                            </div>
+                            <div style={{ fontSize: '0.85rem', lineHeight: 1.45, color: '#78350f', marginBottom: '10px' }}>
+                              {msg.text?.replace('[Payment Request] ', '')}
+                            </div>
+                            {!isMine && (
+                              <button
+                                onClick={() => setShowCheckoutModal(true)}
+                                className="btn btn-primary"
+                                style={{ padding: '6px 14px', fontSize: '0.82rem', backgroundColor: '#059669', borderColor: '#059669' }}
+                              >
+                                <CreditCard size={14} />
+                                <span>Pay Now with Safe Pay</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {isMeetupConfirmed && (
+                          <div
+                            style={{
+                              padding: '10px 16px',
+                              borderRadius: '10px',
+                              backgroundColor: '#f0fdf4',
+                              border: '1px solid #bbf7d0',
+                              color: '#166534',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              fontSize: '0.84rem',
+                              fontWeight: 600,
+                              maxWidth: '460px',
+                              width: '100%',
+                            }}
+                          >
+                            <CheckCircle2 size={16} color="#16a34a" style={{ flexShrink: 0 }} />
+                            <span>{msg.text?.replace('[Meetup Confirmed] ', '')}</span>
+                          </div>
+                        )}
+
+                        {isHandoverConfirmed && (
+                          <div
+                            style={{
+                              padding: '10px 16px',
+                              borderRadius: '10px',
+                              backgroundColor: '#f5f3ff',
+                              border: '1px solid #ddd6fe',
+                              color: '#5b21b6',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              fontSize: '0.84rem',
+                              fontWeight: 600,
+                              maxWidth: '460px',
+                              width: '100%',
+                            }}
+                          >
+                            <CheckCircle2 size={16} color="#7c3aed" style={{ flexShrink: 0 }} />
+                            <span>{msg.text?.replace('[Handover Confirmed] ', '')}</span>
+                          </div>
+                        )}
+
+                        {isOrderRefunded && (
+                          <div
+                            style={{
+                              padding: '10px 16px',
+                              borderRadius: '10px',
+                              backgroundColor: '#fee2e2',
+                              border: '1px solid #fca5a5',
+                              color: '#991b1b',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              fontSize: '0.84rem',
+                              fontWeight: 600,
+                              maxWidth: '460px',
+                              width: '100%',
+                            }}
+                          >
+                            <RotateCcw size={16} color="#dc2626" style={{ flexShrink: 0 }} />
+                            <span>{msg.text?.replace('[Order Refunded] ', '')}</span>
+                          </div>
+                        )}
+
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {formatTimestamp(msg.createdAt)}
+                        </div>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div
@@ -1179,6 +1855,757 @@ export const ChatPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* 1. KiwiShare Safe Pay Checkout Modal */}
+      {showCheckoutModal && activeConversation?.item && (() => {
+        const priceNum = parseFloat(activeConversation.item.priceNzd || '0') || 0;
+        const feeNum = Math.max(1, Math.round(priceNum * 0.05 * 100) / 100);
+        const gstNum = feeNum * (3 / 23); // 15% NZ GST included in platform fee
+        const totalNum = priceNum + feeNum;
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.65)',
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+              backdropFilter: 'blur(3px)',
+            }}
+          >
+            <div
+              className="glass-card"
+              style={{
+                backgroundColor: '#ffffff',
+                borderRadius: 'var(--radius-lg)',
+                padding: '24px',
+                maxWidth: '480px',
+                width: '100%',
+                boxShadow: 'var(--shadow-xl)',
+                position: 'relative',
+              }}
+            >
+              <button
+                onClick={() => setShowCheckoutModal(false)}
+                disabled={isProcessingPayment}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <X size={20} />
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    backgroundColor: '#ecfdf5',
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ShieldCheck size={24} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>KiwiShare Safe Pay</h3>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Campus Escrow Protection • 100% In-Person Guarantee
+                  </p>
+                </div>
+              </div>
+
+              {/* Item Snapshot */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '10px',
+                  marginBottom: '16px',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                {activeConversation.item.imageUrl ? (
+                  <img
+                    src={activeConversation.item.imageUrl}
+                    alt=""
+                    style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '8px',
+                      backgroundColor: '#e2e8f0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <ShoppingBag size={20} color="var(--primary-600)" />
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.92rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {activeConversation.item.title}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Seller: {activeConversation.participant.displayName}
+                  </div>
+                </div>
+                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-main)' }}>
+                  ${priceNum.toFixed(2)}
+                </div>
+              </div>
+
+              {/* Price Breakdown with NZ 15% GST */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  fontSize: '0.86rem',
+                  padding: '12px 14px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '10px',
+                  marginBottom: '16px',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Item Price (Private C2C Sale)</span>
+                  <span style={{ fontWeight: 600 }}>${priceNum.toFixed(2)} NZD</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>KiwiShare Escrow Protection</span>
+                  <span style={{ fontWeight: 600 }}>${feeNum.toFixed(2)} NZD</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '12px', color: '#64748b', fontSize: '0.78rem' }}>
+                  <span>  └ Includes 15% NZ GST on platform fee</span>
+                  <span>${gstNum.toFixed(2)} NZD</span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderTop: '1px dashed var(--border-subtle)',
+                    paddingTop: '8px',
+                    marginTop: '4px',
+                    fontSize: '1rem',
+                    fontWeight: 800,
+                  }}
+                >
+                  <span>Total Amount</span>
+                  <span style={{ color: '#059669', fontSize: '1.2rem' }}>${totalNum.toFixed(2)} NZD</span>
+                </div>
+              </div>
+
+              {/* NZ Tax and Escrow Note */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  padding: '10px 12px',
+                  backgroundColor: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '8px',
+                  color: '#166534',
+                  fontSize: '0.78rem',
+                  lineHeight: 1.45,
+                  marginBottom: '18px',
+                }}
+              >
+                <ShieldCheck size={16} color="#16a34a" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>
+                  <strong>NZ Tax & Protection Note:</strong> Peer-to-peer individual sales are not subject to GST under NZ IRD rules. Platform escrow fee includes 15% NZ GST. Funds are held in KiwiShare Escrow and will only be released when you inspect the item and confirm handover.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCheckoutModal(false)}
+                  disabled={isProcessingPayment}
+                  className="btn btn-secondary"
+                  style={{ flex: 1, padding: '10px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSafePayCheckout}
+                  disabled={isProcessingPayment}
+                  className="btn btn-primary"
+                  style={{
+                    flex: 2,
+                    padding: '10px',
+                    backgroundColor: '#059669',
+                    borderColor: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  {isProcessingPayment ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Authorizing…</span>
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard size={16} />
+                      <span>Authorize & Pay ${totalNum.toFixed(2)} NZD</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 2. Schedule Meetup Modal */}
+      {showScheduleModal && currentOrder && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            backdropFilter: 'blur(3px)',
+          }}
+        >
+          <div
+            className="glass-card"
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: 'var(--radius-lg)',
+              padding: '24px',
+              maxWidth: '480px',
+              width: '100%',
+              boxShadow: 'var(--shadow-xl)',
+              position: 'relative',
+            }}
+          >
+            <button
+              onClick={() => setShowScheduleModal(false)}
+              disabled={isSubmittingMeetup}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Calendar size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Schedule Campus Meetup</h3>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Coordinate in-person item inspection and handover
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleProposeMeetup} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  Meetup Date & Time
+                </label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={meetupDate}
+                  onChange={(e) => setMeetupDate(e.target.value)}
+                  className="form-input"
+                  style={{ width: '100%', padding: '9px 12px', fontSize: '0.9rem', borderRadius: '8px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  Campus / Suburb Location
+                </label>
+                <input
+                  type="text"
+                  required
+                  list="chat-campus-datalist"
+                  value={meetupLocation}
+                  onChange={(e) => setMeetupLocation(e.target.value)}
+                  placeholder="Type or select a campus or suburb..."
+                  className="form-input"
+                  style={{ width: '100%', padding: '9px 12px', fontSize: '0.9rem', borderRadius: '8px' }}
+                />
+                <datalist id="chat-campus-datalist">
+                  {CAMPUS_LOCATIONS.map((loc) => (
+                    <option key={loc.name} value={loc.name}>
+                      {loc.city} • {loc.category}
+                    </option>
+                  ))}
+                </datalist>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  Meeting Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={meetupNote}
+                  onChange={(e) => setMeetupNote(e.target.value)}
+                  placeholder="e.g. Near the library entrance, wearing a blue jacket"
+                  className="form-input"
+                  style={{ width: '100%', padding: '9px 12px', fontSize: '0.9rem', borderRadius: '8px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowScheduleModal(false)}
+                  disabled={isSubmittingMeetup}
+                  className="btn btn-secondary"
+                  style={{ flex: 1, padding: '10px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingMeetup}
+                  className="btn btn-primary"
+                  style={{
+                    flex: 2,
+                    padding: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  {isSubmittingMeetup ? <Loader2 size={16} className="animate-spin" /> : <Calendar size={16} />}
+                  <span>Send Proposal</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Meetup Handover QR & Confirmation Modal */}
+      {showQrModal && currentOrder && (() => {
+        const isPaid = currentOrder.status === 'paid' || currentOrder.status === 'meeting_scheduled' || currentOrder.status === 'completed';
+        const isMeetupConfirmed = currentOrder.meeting?.proposalStatus === 'accepted' || meetupDetails?.proposalStatus === 'accepted';
+        const role = activeConversation?.direction === 'buying' ? 'buyer' : 'seller';
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.65)',
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+              backdropFilter: 'blur(3px)',
+            }}
+          >
+            <div
+              className="glass-card"
+              style={{
+                backgroundColor: '#ffffff',
+                borderRadius: 'var(--radius-lg)',
+                padding: '24px',
+                maxWidth: '440px',
+                width: '100%',
+                boxShadow: 'var(--shadow-xl)',
+                position: 'relative',
+                textAlign: 'center',
+              }}
+            >
+              <button
+                onClick={() => setShowQrModal(false)}
+                disabled={isConfirmingHandover}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <X size={20} />
+              </button>
+
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: '#e0e7ff', color: '#4338ca', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <QrCode size={26} />
+              </div>
+
+              <h3 style={{ margin: '0 0 4px', fontSize: '1.25rem', fontWeight: 800 }}>Campus Handover QR</h3>
+              <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Order #{currentOrder.orderNumber || currentOrder.id.slice(0, 8)}
+              </p>
+
+              {!isPaid ? (
+                <div style={{ padding: '16px', backgroundColor: '#fffbeb', borderRadius: '10px', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.88rem', marginBottom: '16px' }}>
+                  <AlertCircle size={20} style={{ margin: '0 auto 6px', color: '#d97706' }} />
+                  <div style={{ fontWeight: 700 }}>Payment Required First</div>
+                  <div>Buyer must complete Safe Pay checkout before the handover QR code can be released.</div>
+                  {activeConversation?.direction === 'buying' && (
+                    <button
+                      onClick={() => {
+                        setShowQrModal(false);
+                        setShowCheckoutModal(true);
+                      }}
+                      className="btn btn-primary"
+                      style={{
+                        marginTop: '12px',
+                        padding: '8px 16px',
+                        fontSize: '0.85rem',
+                        backgroundColor: '#059669',
+                        borderColor: '#059669',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <CreditCard size={15} />
+                      <span>Pay Now (${activeConversation?.item?.priceNzd || '0'} NZD)</span>
+                    </button>
+                  )}
+                </div>
+              ) : !isMeetupConfirmed ? (
+                <div style={{ padding: '16px', backgroundColor: '#eff6ff', borderRadius: '10px', border: '1px solid #bfdbfe', color: '#1e40af', fontSize: '0.88rem', marginBottom: '16px' }}>
+                  <Calendar size={20} style={{ margin: '0 auto 6px', color: '#2563eb' }} />
+                  <div style={{ fontWeight: 700 }}>Meetup Agreement Required</div>
+                  <div>Both parties must agree on the meetup time and campus location before item handover.</div>
+                  <button
+                    onClick={() => {
+                      setShowQrModal(false);
+                      setShowScheduleModal(true);
+                    }}
+                    className="btn btn-primary"
+                    style={{ marginTop: '12px', padding: '6px 14px', fontSize: '0.82rem' }}
+                  >
+                    Schedule Meetup
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Visual QR Code Card */}
+                  <div
+                    style={{
+                      padding: '20px',
+                      backgroundColor: '#f8fafc',
+                      border: '2px dashed var(--primary-300)',
+                      borderRadius: '16px',
+                      display: 'inline-flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '10px',
+                      marginBottom: '16px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '160px',
+                        height: '160px',
+                        backgroundColor: '#ffffff',
+                        padding: '10px',
+                        borderRadius: '12px',
+                        boxShadow: 'var(--shadow-sm)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <svg viewBox="0 0 100 100" width="140" height="140">
+                        {/* Styled QR pattern placeholder */}
+                        <rect width="100" height="100" fill="white" />
+                        <rect x="10" y="10" width="25" height="25" fill="#0f172a" />
+                        <rect x="15" y="15" width="15" height="15" fill="white" />
+                        <rect x="18" y="18" width="9" height="9" fill="#0f172a" />
+
+                        <rect x="65" y="10" width="25" height="25" fill="#0f172a" />
+                        <rect x="70" y="15" width="15" height="15" fill="white" />
+                        <rect x="73" y="18" width="9" height="9" fill="#0f172a" />
+
+                        <rect x="10" y="65" width="25" height="25" fill="#0f172a" />
+                        <rect x="15" y="70" width="15" height="15" fill="white" />
+                        <rect x="18" y="73" width="9" height="9" fill="#0f172a" />
+
+                        <rect x="42" y="10" width="8" height="8" fill="#059669" />
+                        <rect x="42" y="24" width="8" height="8" fill="#059669" />
+                        <rect x="10" y="42" width="8" height="8" fill="#059669" />
+                        <rect x="24" y="42" width="8" height="8" fill="#059669" />
+                        <rect x="42" y="42" width="16" height="16" fill="#0f172a" rx="4" />
+                        <rect x="46" y="46" width="8" height="8" fill="#10b981" />
+                        <rect x="65" y="42" width="10" height="8" fill="#0f172a" />
+                        <rect x="80" y="42" width="10" height="8" fill="#0f172a" />
+                        <rect x="42" y="65" width="10" height="10" fill="#0f172a" />
+                        <rect x="58" y="65" width="15" height="10" fill="#0f172a" />
+                        <rect x="78" y="65" width="12" height="10" fill="#0f172a" />
+                        <rect x="42" y="80" width="20" height="10" fill="#0f172a" />
+                        <rect x="68" y="80" width="22" height="10" fill="#059669" />
+                      </svg>
+                    </div>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                      Token: {currentOrder.id.slice(0, 16).toUpperCase()}
+                    </span>
+                  </div>
+
+                  {/* Scheduled location and time */}
+                  {currentOrder.meeting && (
+                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '10px 14px', textAlign: 'left', fontSize: '0.82rem', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#166534', marginBottom: '4px' }}>
+                        <MapPin size={14} />
+                        <span>{currentOrder.meeting.locationName}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534' }}>
+                        <Calendar size={14} />
+                        <span>{new Date(currentOrder.meeting.scheduledAt).toLocaleString('en-NZ', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Role Confirmation Button */}
+                  <button
+                    onClick={() => handleConfirmHandover(role)}
+                    disabled={isConfirmingHandover}
+                    className="btn btn-primary"
+                    style={{
+                      width: '100%',
+                      padding: '11px',
+                      backgroundColor: role === 'buyer' ? '#059669' : 'var(--primary-600)',
+                      borderColor: role === 'buyer' ? '#059669' : 'var(--primary-600)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      fontSize: '0.92rem',
+                    }}
+                  >
+                    {isConfirmingHandover ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Confirming Handover…</span>
+                      </>
+                    ) : role === 'buyer' ? (
+                      <>
+                        <CheckCircle2 size={18} />
+                        <span>Confirm Receipt & Release Escrow</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={18} />
+                        <span>Confirm Handover to Buyer</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 4. Tax Invoice Modal with NZ 15% GST */}
+      {showInvoiceModal && currentOrder && (() => {
+        const priceNum = parseFloat(currentOrder.item?.priceNzd || '0') || 0;
+        const feeNum = currentOrder.buyerFeeAmountNzd ? parseFloat(currentOrder.buyerFeeAmountNzd) : Math.max(1, Math.round(priceNum * 0.05 * 100) / 100);
+        const gstNum = feeNum * (3 / 23); // 15% NZ GST included in fee
+        const totalNum = currentOrder.buyerTotalAmountNzd ? parseFloat(currentOrder.buyerTotalAmountNzd) : priceNum + feeNum;
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.65)',
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+              backdropFilter: 'blur(3px)',
+            }}
+          >
+            <div
+              className="glass-card"
+              style={{
+                backgroundColor: '#ffffff',
+                borderRadius: 'var(--radius-lg)',
+                padding: '24px',
+                maxWidth: '480px',
+                width: '100%',
+                boxShadow: 'var(--shadow-xl)',
+                position: 'relative',
+              }}
+            >
+              <button
+                onClick={() => setShowInvoiceModal(false)}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <X size={20} />
+              </button>
+
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Receipt size={22} color="#059669" />
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Payment Invoice</h3>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    KiwiShare NZ C2C Marketplace
+                  </div>
+                </div>
+                <span
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.5px',
+                    backgroundColor: currentOrder.isRefunded || currentOrder.status === 'refunded' ? '#fee2e2' : '#d1fae5',
+                    color: currentOrder.isRefunded || currentOrder.status === 'refunded' ? '#991b1b' : '#065f46',
+                    border: `1.2px solid ${currentOrder.isRefunded || currentOrder.status === 'refunded' ? '#ef4444' : '#10b981'}`,
+                  }}
+                >
+                  {currentOrder.isRefunded || currentOrder.status === 'refunded' ? 'REFUNDED' : 'PAID'}
+                </span>
+              </div>
+
+              {/* Metadata Rows */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Invoice Number</span>
+                  <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>INV-ORD-{currentOrder.orderNumber || currentOrder.id.slice(0, 8)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Order ID</span>
+                  <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{currentOrder.id}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Date</span>
+                  <span style={{ fontWeight: 600 }}>{new Date(currentOrder.createdAt).toLocaleDateString('en-NZ', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              </div>
+
+              {/* Item Snapshot */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '18px' }}>
+                {currentOrder.item?.imageUrl ? (
+                  <img src={currentOrder.item.imageUrl} alt="" style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: '48px', height: '48px', borderRadius: '6px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ShoppingBag size={20} color="var(--primary-600)" />
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentOrder.item?.title}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Counterparty: {currentOrder.counterparty?.displayName || activeConversation?.participant?.displayName}
+                  </div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                  ${priceNum.toFixed(2)} NZD
+                </div>
+              </div>
+
+              {/* Financial Breakdown with 15% NZ GST */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Item Subtotal (Private Sale)</span>
+                  <span style={{ fontWeight: 600 }}>${priceNum.toFixed(2)} NZD</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Buyer Escrow & Protection</span>
+                  <span style={{ fontWeight: 600 }}>${feeNum.toFixed(2)} NZD</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '12px', color: '#64748b', fontSize: '0.78rem' }}>
+                  <span>  └ Includes 15% NZ GST on platform fee</span>
+                  <span>${gstNum.toFixed(2)} NZD</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '1rem', fontWeight: 800, marginTop: '6px', paddingTop: '8px', borderTop: '1px dashed var(--border-subtle)' }}>
+                  <span>Total Paid</span>
+                  <span style={{ color: '#059669', fontSize: '1.15rem' }}>
+                    ${totalNum.toFixed(2)} NZD
+                  </span>
+                </div>
+              </div>
+
+              {/* Guarantee Note */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0', color: '#166534', fontSize: '0.78rem', marginBottom: '20px' }}>
+                <ShieldCheck size={16} color="#16a34a" style={{ flexShrink: 0 }} />
+                <span>KiwiShare Campus Escrow Protection Guarantee: Funds held securely until handover.</span>
+              </div>
+
+              <button
+                onClick={() => setShowInvoiceModal(false)}
+                className="btn btn-primary"
+                style={{ width: '100%', padding: '10px' }}
+              >
+                Close Invoice
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Lightbox Image Preview Modal */}
       {previewImageUrl && (

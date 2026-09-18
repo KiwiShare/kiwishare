@@ -48,15 +48,21 @@ class MapLauncherService {
 
     // Try app schemes first, then universal web URL
     final List<Uri> candidates = [
-      if (Platform.isIOS) Uri.parse('comgooglemaps://?daddr=$dest&directionsmode=driving'),
+      if (Platform.isIOS)
+        Uri.parse('comgooglemaps://?daddr=$dest&directionsmode=driving'),
       if (Platform.isAndroid) Uri.parse('google.navigation:q=$dest&mode=d'),
-      Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$dest&travelmode=driving'),
+      Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=$dest&travelmode=driving',
+      ),
     ];
 
     for (final uri in candidates) {
       try {
         if (await canLaunchUrl(uri)) {
-          final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          final launched = await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
           if (launched) return true;
         }
       } catch (_) {}
@@ -64,7 +70,9 @@ class MapLauncherService {
 
     // Final fallback to web
     try {
-      final webUri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$dest');
+      final webUri = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=$dest',
+      );
       return await launchUrl(webUri, mode: LaunchMode.externalApplication);
     } catch (_) {
       return false;
@@ -186,7 +194,10 @@ class MapLauncherService {
               Text(
                 locationName.isNotEmpty ? locationName : 'Meetup Location',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
               const SizedBox(height: 4),
               const Text(
@@ -198,9 +209,15 @@ class MapLauncherService {
               ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: Color(0xFFE8F0FE),
-                  child: Icon(Icons.navigation_rounded, color: Color(0xFF1A73E8)),
+                  child: Icon(
+                    Icons.navigation_rounded,
+                    color: Color(0xFF1A73E8),
+                  ),
                 ),
-                title: const Text('Google Maps', style: TextStyle(fontWeight: FontWeight.w600)),
+                title: const Text(
+                  'Google Maps',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 subtitle: const Text('Navigate with Google Maps'),
                 onTap: () {
                   Navigator.of(ctx).pop();
@@ -216,7 +233,10 @@ class MapLauncherService {
                   backgroundColor: Color(0xFFEFF6FF),
                   child: Icon(Icons.map_rounded, color: Color(0xFF2563EB)),
                 ),
-                title: const Text('Apple Maps', style: TextStyle(fontWeight: FontWeight.w600)),
+                title: const Text(
+                  'Apple Maps',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 subtitle: const Text('Navigate with Apple Maps'),
                 onTap: () {
                   Navigator.of(ctx).pop();
@@ -230,9 +250,15 @@ class MapLauncherService {
               ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: Color(0xFFF3F4F6),
-                  child: Icon(Icons.copy_rounded, color: AppColors.textSecondary),
+                  child: Icon(
+                    Icons.copy_rounded,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-                title: const Text('Copy Address', style: TextStyle(fontWeight: FontWeight.w600)),
+                title: const Text(
+                  'Copy Address',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 onTap: () {
                   Navigator.of(ctx).pop();
                   Clipboard.setData(ClipboardData(text: locationName));

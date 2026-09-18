@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { categoriesApi, itemsApi, uploadApi, adminApi, CategoryItem, UserProfile } from '../api/client';
+import { categoriesApi, itemsApi, uploadApi, adminApi, aiApi, CategoryItem, UserProfile } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { CAMPUS_LOCATIONS } from '../utils/campusLocations';
 import { 
   X, 
   PlusCircle, 
@@ -11,7 +12,8 @@ import {
   AlertCircle, 
   Cloud,
   Layers,
-  User
+  User,
+  Sparkles
 } from 'lucide-react';
 
 interface PostItemModalProps {
@@ -40,6 +42,7 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -99,6 +102,33 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
 
   const handleRemoveImage = (index: number) => {
     setUploadedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAiHelpWrite = async () => {
+    if (!title.trim() && !category) {
+      alert('Please enter an item title or select a category first.');
+      return;
+    }
+    setIsGeneratingAi(true);
+    try {
+      const res = await aiApi.getListingSuggestion({
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        condition,
+        location: suburb.trim() ? `${suburb.trim()}, ${city}` : city,
+      });
+      if (res?.suggestion?.description) {
+        setDescription(res.suggestion.description);
+      }
+    } catch (err: any) {
+      const conditionText = condition === 'like_new' ? 'Like new / mint condition' : condition === 'fair' ? 'Fair / well-used condition' : 'Good condition with normal gentle wear';
+      const locText = suburb.trim() ? `${suburb.trim()} (${city})` : city;
+      const fallbackDesc = `${title.trim() || 'Item'} in ${conditionText.toLowerCase()}.\n• Condition: ${conditionText}\n• Pickup Location: Available near ${locText}.\n• Details: Well maintained, fully working, and ready for pickup. Open to friendly negotiation.`;
+      setDescription(fallbackDesc);
+    } finally {
+      setIsGeneratingAi(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -341,16 +371,26 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
             </div>
           </div>
 
-          {/* Suburb */}
+          {/* Suburb / Campus Hub */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>Suburb (Optional)</label>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+              Campus Hub or Suburb (Optional)
+            </label>
             <input
               type="text"
-              placeholder="e.g. Ponsonby / Te Aro / Riccarton"
+              placeholder="e.g. UoA City Campus / Britomart / Ponsonby"
               value={suburb}
               onChange={(e) => setSuburb(e.target.value)}
               className="form-input"
+              list="post-campus-locations-list"
             />
+            <datalist id="post-campus-locations-list">
+              {CAMPUS_LOCATIONS.map((loc) => (
+                <option key={loc.name} value={loc.name}>
+                  {loc.city} • {loc.category}
+                </option>
+              ))}
+            </datalist>
           </div>
 
           {/* Photo Upload: Multi-Image Cloudflare R2 Upload */}
@@ -499,15 +539,57 @@ export const PostItemModal: React.FC<PostItemModalProps> = ({ isOpen, onClose, o
 
           {/* Description */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>Description</label>
-            <textarea
-              rows={3}
-              placeholder="Provide key dimensions, history, or pickup details..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="form-input"
-              style={{ resize: 'vertical' }}
-            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Description</label>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Condition, specs & campus pickup info</span>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <textarea
+                rows={4}
+                placeholder="Provide key dimensions, history, or pickup details..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="form-input"
+                style={{ resize: 'vertical', paddingBottom: '44px' }}
+              />
+              <button
+                type="button"
+                onClick={handleAiHelpWrite}
+                disabled={isGeneratingAi}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  bottom: '8px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '5px 12px',
+                  borderRadius: '16px',
+                  border: '1px solid #fde68a',
+                  backgroundColor: '#fffbeb',
+                  color: '#b45309',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: isGeneratingAi ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                  transition: 'all 0.15s ease',
+                  zIndex: 2,
+                }}
+                title="AI Help Me Write: generate or polish item description"
+              >
+                {isGeneratingAi ? (
+                  <>
+                    <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                    <span>Writing…</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={13} />
+                    <span>AI Help Me Write</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Sustainable Checkbox */}

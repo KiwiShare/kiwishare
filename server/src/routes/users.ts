@@ -1,9 +1,11 @@
 import Router from 'koa-router';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { Resend } from 'resend';
 import { authenticateToken } from '../middleware/auth';
 import User from '../models/User';
 import Item from '../models/Item';
+import Otp from '../models/Otp';
 import { formatItem } from './usedItems';
 
 const router = new Router();
@@ -33,6 +35,13 @@ router.get('/users/me', authenticateToken, async (ctx) => {
       role: user.role || 'user',
       trustScore: user.trustScore,
       isVerified: user.isVerified,
+      isStudentVerified: Boolean(user.isStudentVerified),
+      studentInstitution: user.studentInstitution || null,
+      studentEmail: user.studentEmail || null,
+      kiwiGold: user.kiwiGold ?? 10,
+      isVip: Boolean(user.isVip && (!user.vipExpiresAt || new Date(user.vipExpiresAt) > new Date())),
+      vipExpiresAt: user.vipExpiresAt || null,
+      vipAutoRenew: user.vipAutoRenew ?? true,
       authProvider: user.authProvider,
       registrationPlatform: user.registrationPlatform,
       lastUsedPlatform: user.lastUsedPlatform,
@@ -170,5 +179,216 @@ async function getMyItemsHandler(ctx: any) {
 }
 
 router.get('/users/me/usedItems', authenticateToken, getMyItemsHandler);
+
+// ---------------------------------------------------------------------------
+// Student Verification Endpoints (NZ Universities Only)
+// ---------------------------------------------------------------------------
+
+const NZ_UNIVERSITY_DOMAINS: Record<string, string> = {
+  'aucklanduni.ac.nz': 'University of Auckland',
+  'auckland.ac.nz': 'University of Auckland',
+  'autuni.ac.nz': 'Auckland University of Technology',
+  'aut.ac.nz': 'Auckland University of Technology',
+  'waikato.ac.nz': 'University of Waikato',
+  'massey.ac.nz': 'Massey University',
+  'myvuw.ac.nz': 'Victoria University of Wellington',
+  'vuw.ac.nz': 'Victoria University of Wellington',
+  'canterbury.ac.nz': 'University of Canterbury',
+  'uclive.ac.nz': 'University of Canterbury',
+  'otago.ac.nz': 'University of Otago',
+  'student.otago.ac.nz': 'University of Otago',
+  'lincoln.ac.nz': 'Lincoln University',
+  'lincolnuni.ac.nz': 'Lincoln University'
+};
+
+export function resolveNzUniversity(email: string): string | null {
+  const parts = email.toLowerCase().trim().split('@');
+  if (parts.length !== 2) return null;
+  const domain = parts[1].trim();
+
+  // Direct match
+  if (NZ_UNIVERSITY_DOMAINS[domain]) {
+    return NZ_UNIVERSITY_DOMAINS[domain];
+  }
+
+  // Check subdomains or any NZ tertiary (.ac.nz)
+  if (domain.endsWith('.ac.nz')) {
+    for (const [key, val] of Object.entries(NZ_UNIVERSITY_DOMAINS)) {
+      if (domain === key || domain.endsWith('.' + key)) {
+        return val;
+      }
+    }
+    return 'New Zealand Tertiary Institution';
+  }
+
+  return null;
+}
+
+// POST /users/student-verification/send-otp
+router.post('/users/student-verification/send-otp', authenticateToken, async (ctx) => {
+  const { email } = ctx.request.body as { email?: string };
+
+  if (!email || typeof email !== 'string') {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Student email is required.' };
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const institution = resolveNzUniversity(normalizedEmail);
+
+  if (!institution) {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'Only New Zealand university emails (ending in .ac.nz) are supported for student verification.'
+    };
+    return;
+  }
+
+  // Check cooldown (60s)
+  const now = Date.now();
+  const recentOtp = await Otp.findOne({
+    email: normalizedEmail,
+    used: false
+  }).sort({ createdAt: -1 });
+
+  if (recentOtp) {
+    const elapsedSeconds = Math.floor((now - recentOtp.createdAt.getTime()) / 1000);
+    if (elapsedSeconds < 60) {
+      ctx.status = 429;
+      ctx.body = {
+        status: 'error',
+        message: `Please wait ${60 - elapsedSeconds}s before requesting a new code.`,
+        cooldownSeconds: 60 - elapsedSeconds
+      };
+      return;
+    }
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(now + 10 * 60 * 1000); // 10 minutes
+
+  await Otp.create({
+    email: normalizedEmail,
+    code,
+    expiresAt,
+    used: false
+  });
+
+  console.log(`\n🎓 [Student Verification OTP] Email: ${normalizedEmail} (${institution}) | Code: ${code} (Expires in 10m)\n`);
+
+  // Attempt to send email via Resend if available
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const resendFrom = process.env.RESEND_FROM || 'onboarding@kiwishare.online';
+
+  if (resendApiKey) {
+    try {
+      const resend = new Resend(resendApiKey);
+      await resend.emails.send({
+        from: resendFrom,
+        to: normalizedEmail,
+        subject: 'KiwiShare Student Verification Code',
+        text: `Kia ora!\n\nYour KiwiShare student verification code is: ${code}\n\nThis confirms your enrollment at ${institution}. Code expires in 10 minutes.\n\nNgā mihi,\nThe KiwiShare Team`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #d1fae5; border-radius: 12px; background-color: #f0fdf4; color: #1f2937;">
+            <h2 style="color: #059669; text-align: center; margin-bottom: 16px;">KiwiShare Student Verification</h2>
+            <p>Kia ora!</p>
+            <p>Use the following 6-digit code to verify your student status at <strong>${institution}</strong>:</p>
+            <div style="font-size: 32px; font-weight: bold; color: #059669; text-align: center; padding: 20px; letter-spacing: 6px; background-color: #d1fae5; border-radius: 8px; margin: 20px 0;">
+              ${code}
+            </div>
+            <p>This code will expire in 10 minutes.</p>
+            <hr style="border: none; border-top: 1px solid #059669; opacity: 0.2; margin: 24px 0;" />
+            <p style="font-size: 12px; color: #6b7280; text-align: center;">Ngā mihi,<br>The KiwiShare Team</p>
+          </div>
+        `
+      });
+      console.log(`✉️ [Student Verification Email Sent] via Resend to ${normalizedEmail}`);
+    } catch (err: any) {
+      console.warn(`[Student Verification Resend Warn] ${err.message}`);
+    }
+  }
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    message: `Verification code sent to ${normalizedEmail}`,
+    institution
+  };
+});
+
+// POST /users/student-verification/verify-otp
+router.post('/users/student-verification/verify-otp', authenticateToken, async (ctx) => {
+  const userId = ctx.state.user.id;
+  const { email, code } = ctx.request.body as { email?: string; code?: string };
+
+  if (!email || !code) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Email and verification code are required.' };
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const trimmedCode = code.trim();
+
+  const institution = resolveNzUniversity(normalizedEmail);
+  if (!institution) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Invalid university email domain.' };
+    return;
+  }
+
+  const otp = await Otp.findOne({
+    email: normalizedEmail,
+    code: trimmedCode,
+    used: false
+  }).sort({ createdAt: -1 });
+
+  if (!otp || otp.expiresAt < new Date()) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Invalid or expired verification code.' };
+    return;
+  }
+
+  otp.used = true;
+  await otp.save();
+
+  const user = mongoose.Types.ObjectId.isValid(userId)
+    ? await User.findById(userId)
+    : await User.findOne({ id: userId });
+
+  if (!user) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'User not found.' };
+    return;
+  }
+
+  user.isStudentVerified = true;
+  user.studentInstitution = institution;
+  user.studentEmail = normalizedEmail;
+  user.trustScore = Math.min(100, Math.max(80, (user.trustScore || 80) + 15));
+  await user.save();
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    message: `Congratulations! You are verified as a student at ${institution}.`,
+    user: {
+      id: user._id.toString(),
+      email: user.email,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      role: user.role || 'user',
+      trustScore: user.trustScore,
+      isVerified: user.isVerified,
+      isStudentVerified: true,
+      studentInstitution: institution,
+      studentEmail: normalizedEmail,
+      kiwiGold: user.kiwiGold ?? 10,
+      authProvider: user.authProvider
+    }
+  };
+});
 
 export default router;

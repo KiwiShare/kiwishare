@@ -141,6 +141,7 @@ router.post('/auth/register', async (ctx) => {
       role: newUser.role,
       trustScore: newUser.trustScore,
       isVerified: newUser.isVerified,
+      kiwiGold: newUser.kiwiGold ?? 10,
       registrationPlatform: newUser.registrationPlatform,
       lastUsedPlatform: newUser.lastUsedPlatform
     }
@@ -187,6 +188,7 @@ router.post('/auth/login', async (ctx) => {
       role: user.role,
       trustScore: user.trustScore,
       isVerified: user.isVerified,
+      kiwiGold: user.kiwiGold ?? 10,
       registrationPlatform: user.registrationPlatform,
       lastUsedPlatform: user.lastUsedPlatform
     }
@@ -419,6 +421,7 @@ router.post('/auth/verify-otp', async (ctx) => {
       avatarUrl: user.avatarUrl,
       trustScore: user.trustScore,
       isVerified: user.isVerified,
+      kiwiGold: user.kiwiGold ?? 10,
       registrationPlatform: user.registrationPlatform,
       lastUsedPlatform: user.lastUsedPlatform
     }
@@ -649,6 +652,7 @@ router.post('/auth/google', async (ctx) => {
       avatarUrl: user.avatarUrl,
       trustScore: user.trustScore,
       isVerified: user.isVerified,
+      kiwiGold: user.kiwiGold ?? 10,
       registrationPlatform: user.registrationPlatform,
       lastUsedPlatform: user.lastUsedPlatform
     }

@@ -77,7 +77,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Preferences'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Notifications'), 100);
     expect(find.text('Notifications'), findsOneWidget);
     await tester.ensureVisible(find.text('Notifications'));
     await tester.pump();
@@ -118,15 +118,17 @@ void main() {
     expect(find.text('Trust score 95'), findsOneWidget);
     expect(find.byKey(const Key('profile-scan-qr-button')), findsOneWidget);
 
-    // Verify Xianyu 3-column marketplace action grid
+    // Verify Xianyu 3-column marketplace action grid (6 modules)
     expect(find.text('My marketplace'), findsOneWidget);
-    expect(find.text('Selling'), findsOneWidget);
-    expect(find.text('Watchlist'), findsOneWidget);
-    expect(find.text('Sold'), findsOneWidget);
+    expect(find.text('Orders'), findsOneWidget);
     expect(find.text('Meetups'), findsOneWidget);
+    expect(find.text('Watchlist'), findsOneWidget);
+    expect(find.text('Listings'), findsOneWidget);
+    expect(find.text('Sold'), findsOneWidget);
+    expect(find.text('Payment'), findsOneWidget);
 
     // Verify preference & safety sections
-    expect(find.text('Preferences'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Appearance'), 100);
     expect(find.text('Appearance'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Report a safety issue'), 100);
     expect(find.text('Safety & support'), findsOneWidget);
@@ -308,6 +310,41 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'opens How KiwiShare Works and Help Center from Safety & support',
+    (tester) async {
+      final auth = AuthProvider(userRepository: MockUserRepository());
+      final theme = ThemeProvider();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<ThemeProvider>.value(value: theme),
+            Provider<NotificationPermissionCoordinator>.value(
+              value: NotificationPermissionCoordinator(
+                permissionController: null,
+                storage: _Storage(),
+              ),
+            ),
+          ],
+          child: const MaterialApp(home: ProfileScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(find.text('How KiwiShare works'), 200);
+      expect(find.text('How KiwiShare works'), findsOneWidget);
+      expect(find.text('Help Center & FAQs'), findsOneWidget);
+
+      await tester.tap(find.text('How KiwiShare works'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Help & Guides'), findsOneWidget);
+      expect(find.text('Welcome to KiwiShare'), findsOneWidget);
+    },
+  );
 }
 
 class _Storage implements NotificationPermissionStorage {

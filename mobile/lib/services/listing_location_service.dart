@@ -70,10 +70,15 @@ class DeviceListingLocationService implements ListingLocationService {
     }
 
     try {
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 15),
+      // 1. Check cached/last known position first (instant, <10ms)
+      Position? position = await Geolocator.getLastKnownPosition();
+
+      // 2. If no cached position, get current position with low accuracy (fast cell/wifi fix, no satellite wait)
+      position ??= await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
+        timeLimit: const Duration(seconds: 3),
       );
+
       final label = await _locationLabel(position);
       return ListingLocation(
         label: label,
@@ -95,7 +100,7 @@ class DeviceListingLocationService implements ListingLocationService {
     try {
       final placemarks = await _geocoding
           .placemarkFromCoordinates(position.latitude, position.longitude)
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(milliseconds: 2000));
       if (placemarks.isNotEmpty) {
         final label = _areaLabel(placemarks.first);
         if (label.isNotEmpty) {

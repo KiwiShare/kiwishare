@@ -224,18 +224,20 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
+                    final textScale = MediaQuery.textScalerOf(
+                      context,
+                    ).scale(1).clamp(1, 2);
                     return GridView.builder(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 8,
                       ),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 0.76,
-                          ),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        childAspectRatio: 0.60 - (textScale - 1) * 0.20,
+                      ),
                       itemCount: 6,
                       itemBuilder: (context, index) => const ItemCardSkeleton(),
                     );
@@ -337,21 +339,29 @@ class _SearchScreenState extends State<SearchScreen> {
                           ),
                         ),
                         Expanded(
-                          child: GridView.builder(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                  childAspectRatio: 0.76,
+                          child: Builder(
+                            builder: (context) {
+                              final textScale = MediaQuery.textScalerOf(
+                                context,
+                              ).scale(1).clamp(1, 2);
+                              return GridView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
                                 ),
-                            itemCount: items.length,
-                            itemBuilder: (context, index) {
-                              return ItemCard(item: items[index]);
+                                gridDelegate:
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 16,
+                                      mainAxisSpacing: 16,
+                                      childAspectRatio:
+                                          0.58 - (textScale - 1) * 0.20,
+                                    ),
+                                itemCount: items.length,
+                                itemBuilder: (context, index) {
+                                  return ItemCard(item: items[index]);
+                                },
+                              );
                             },
                           ),
                         ),
