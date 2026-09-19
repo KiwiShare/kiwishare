@@ -34,6 +34,8 @@ Widget _buildSubject({
   ChatConversationModel? conversation,
   String? authToken = 'valid-token',
   TextScaler textScaler = TextScaler.noScaling,
+  EdgeInsets viewPadding = EdgeInsets.zero,
+  EdgeInsets viewInsets = EdgeInsets.zero,
   ChatPhotoUploader? photoUploader,
   ListingImagePicker? imagePicker,
   ChatVoiceUploader? voiceUploader,
@@ -50,7 +52,12 @@ Widget _buildSubject({
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF064B3A)),
     ),
     home: MediaQuery(
-      data: MediaQueryData(textScaler: textScaler),
+      data: MediaQueryData(
+        textScaler: textScaler,
+        padding: viewInsets == EdgeInsets.zero ? viewPadding : EdgeInsets.zero,
+        viewPadding: viewPadding,
+        viewInsets: viewInsets,
+      ),
       child: ChatConversationScreen(
         conversation: value,
         chatProvider: ChatProvider(
@@ -1187,6 +1194,61 @@ void main() {
     expect(find.byKey(const Key('conversation_message_list')), findsOneWidget);
   });
 
+  testWidgets('keeps composer actions above the Android navigation inset', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const navigationInset = 24.0;
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: FakeChatRepository(),
+        viewPadding: const EdgeInsets.only(bottom: navigationInset),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final safeArea = tester.widget<SafeArea>(
+      find.byKey(const Key('chat_composer_safe_area')),
+    );
+    expect(safeArea.top, isFalse);
+    expect(safeArea.bottom, isTrue);
+    expect(safeArea.maintainBottomViewPadding, isTrue);
+
+    final sendButtonBottom = tester
+        .getBottomRight(find.byKey(const Key('chat_send_button')))
+        .dy;
+    expect(sendButtonBottom, lessThanOrEqualTo(844 - navigationInset));
+  });
+
+  testWidgets(
+    'retains the composer navigation inset while the keyboard is open',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _buildSubject(
+          repository: FakeChatRepository(),
+          viewPadding: const EdgeInsets.only(bottom: 24),
+          viewInsets: const EdgeInsets.only(bottom: 300),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final safeArea = tester.widget<SafeArea>(
+        find.byKey(const Key('chat_composer_safe_area')),
+      );
+      expect(safeArea.maintainBottomViewPadding, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'chat message input requests focus and message list has keyboard dismiss on drag',
     (tester) async {
@@ -1257,29 +1319,32 @@ void main() {
     expect(find.text('New incoming message'), findsOneWidget);
   });
 
-  testWidgets('tapping participant header navigates to counterpart public profile', (tester) async {
-    final repository = FakeChatRepository();
-    final mockUserRepo = MockUserRepository();
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          Provider<UserRepository>.value(value: mockUserRepo),
-          ChangeNotifierProvider<AuthProvider>(
-            create: (_) => AuthProvider(userRepository: mockUserRepo),
-          ),
-        ],
-        child: _buildSubject(repository: repository),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'tapping participant header navigates to counterpart public profile',
+    (tester) async {
+      final repository = FakeChatRepository();
+      final mockUserRepo = MockUserRepository();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            Provider<UserRepository>.value(value: mockUserRepo),
+            ChangeNotifierProvider<AuthProvider>(
+              create: (_) => AuthProvider(userRepository: mockUserRepo),
+            ),
+          ],
+          child: _buildSubject(repository: repository),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final header = find.byKey(const Key('conversation_participant_header'));
-    expect(header, findsOneWidget);
-    await tester.tap(header);
-    await tester.pumpAndSettle();
+      final header = find.byKey(const Key('conversation_participant_header'));
+      expect(header, findsOneWidget);
+      await tester.tap(header);
+      await tester.pumpAndSettle();
 
-    expect(find.byType(PublicProfileScreen), findsOneWidget);
-  });
+      expect(find.byType(PublicProfileScreen), findsOneWidget);
+    },
+  );
 }
 
 class _FakePermissionController implements PushPermissionController {

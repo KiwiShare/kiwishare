@@ -1245,8 +1245,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         .firstOrNull;
 
     final messages = _chatProvider.messagesFor(widget.conversation.id);
-    final latestMeetupMsg =
-        messages.reversed.where((m) => m.meetup != null).firstOrNull;
+    final latestMeetupMsg = messages.reversed
+        .where((m) => m.meetup != null)
+        .firstOrNull;
     final meetup = latestMeetupMsg?.meetup;
 
     MeetupModel? cachedMeetup;
@@ -2025,21 +2026,28 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
               children: [
                 CircleAvatar(
                   radius: 17,
-                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                  backgroundImage: widget.conversation.participantAvatarUrl != null &&
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer,
+                  backgroundImage:
+                      widget.conversation.participantAvatarUrl != null &&
                           widget.conversation.participantAvatarUrl!.isNotEmpty
                       ? NetworkImage(widget.conversation.participantAvatarUrl!)
                       : null,
-                  child: widget.conversation.participantAvatarUrl == null ||
+                  child:
+                      widget.conversation.participantAvatarUrl == null ||
                           widget.conversation.participantAvatarUrl!.isEmpty
                       ? Text(
                           widget.conversation.participantName.isNotEmpty
-                              ? widget.conversation.participantName[0].toUpperCase()
+                              ? widget.conversation.participantName[0]
+                                    .toUpperCase()
                               : '?',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onPrimaryContainer,
                           ),
                         )
                       : null,
@@ -2053,9 +2061,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       Text(
                         widget.conversation.participantName,
                         key: const Key('conversation_participant_name'),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -2131,6 +2138,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       ),
       body: SafeArea(
         top: false,
+        bottom: false,
         child: ListenableBuilder(
           listenable: provider,
           builder: (context, _) => Column(
@@ -2681,190 +2689,213 @@ class _MessageComposer extends StatelessWidget {
     return Material(
       elevation: 3,
       color: Theme.of(context).colorScheme.surface,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.sm,
-              AppSpacing.sm,
-              AppSpacing.sm,
-              AppSpacing.sm,
-            ),
-            child: isRecording
-                ? _RecordingComposer(
-                    seconds: recordingSeconds,
-                    onCancel: onCancelRecording,
-                    onSend: onSendRecording,
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      SizedBox(
-                        width: 44,
-                        height: 48,
-                        child: IconButton(
-                          key: const Key('chat_action_panel_toggle_button'),
-                          tooltip: showActionPanel ? 'Close actions' : 'More actions',
-                          onPressed: enabled && !isSending ? onToggleActionPanel : null,
-                          icon: Icon(
-                            showActionPanel
-                                ? Icons.cancel_outlined
-                                : Icons.add_circle_outline_rounded,
-                            size: 24,
-                            color: showActionPanel
-                                ? Theme.of(context).colorScheme.primary
+      child: SafeArea(
+        key: const Key('chat_composer_safe_area'),
+        top: false,
+        maintainBottomViewPadding: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.sm,
+                AppSpacing.sm,
+                AppSpacing.sm,
+                AppSpacing.sm,
+              ),
+              child: isRecording
+                  ? _RecordingComposer(
+                      seconds: recordingSeconds,
+                      onCancel: onCancelRecording,
+                      onSend: onSendRecording,
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          height: 48,
+                          child: IconButton(
+                            key: const Key('chat_action_panel_toggle_button'),
+                            tooltip: showActionPanel
+                                ? 'Close actions'
+                                : 'More actions',
+                            onPressed: enabled && !isSending
+                                ? onToggleActionPanel
                                 : null,
+                            icon: Icon(
+                              showActionPanel
+                                  ? Icons.cancel_outlined
+                                  : Icons.add_circle_outline_rounded,
+                              size: 24,
+                              color: showActionPanel
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                            ),
                           ),
                         ),
-                      ),
-                      SizedBox(
-                        width: 44,
-                        height: 48,
-                        child: IconButton(
-                          key: const Key('chat_add_photo_button'),
-                          tooltip: 'Add photo',
-                          onPressed: enabled && !isSending ? onAddPhoto : null,
-                          icon: const Icon(Icons.add_photo_alternate_outlined),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 44,
-                        height: 48,
-                        child: IconButton(
-                          key: const Key('chat_share_location_button'),
-                          tooltip: 'Share location',
-                          onPressed: enabled && !isSending ? onShareLocation : null,
-                          icon: const Icon(Icons.place_outlined),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.xs),
-                      Expanded(
-                        child: TextField(
-                          key: const Key('chat_message_input'),
-                          controller: controller,
-                          focusNode: focusNode,
-                          enabled: enabled && !isSending,
-                          keyboardType: TextInputType.multiline,
-                          minLines: 1,
-                          maxLines: 5,
-                          maxLength: 2000,
-                          buildCounter:
-                              (
-                                context, {
-                                required currentLength,
-                                required isFocused,
-                                required maxLength,
-                              }) => null,
-                          textCapitalization: TextCapitalization.sentences,
-                          textInputAction: TextInputAction.newline,
-                          decoration: InputDecoration(
-                            labelText: enabled ? 'Message' : 'Conversation closed',
-                            hintText: enabled ? 'Write a message' : null,
+                        SizedBox(
+                          width: 44,
+                          height: 48,
+                          child: IconButton(
+                            key: const Key('chat_add_photo_button'),
+                            tooltip: 'Add photo',
+                            onPressed: enabled && !isSending
+                                ? onAddPhoto
+                                : null,
+                            icon: const Icon(
+                              Icons.add_photo_alternate_outlined,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      SizedBox(
-                        width: 44,
-                        height: 48,
-                        child: IconButton(
-                          key: const Key('chat_record_voice_button'),
-                          tooltip: 'Record voice message',
-                          onPressed: enabled && !isSending
-                              ? onStartRecording
-                              : null,
-                          icon: const Icon(Icons.mic_none_rounded),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.xs),
-                      SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: IconButton.filled(
-                          key: const Key('chat_send_button'),
-                          tooltip: 'Send message',
-                          style: IconButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(48, 48),
+                        SizedBox(
+                          width: 44,
+                          height: 48,
+                          child: IconButton(
+                            key: const Key('chat_share_location_button'),
+                            tooltip: 'Share location',
+                            onPressed: enabled && !isSending
+                                ? onShareLocation
+                                : null,
+                            icon: const Icon(Icons.place_outlined),
                           ),
-                          onPressed: enabled && !isSending ? onSend : null,
-                          icon: isSending
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: TextField(
+                            key: const Key('chat_message_input'),
+                            controller: controller,
+                            focusNode: focusNode,
+                            enabled: enabled && !isSending,
+                            keyboardType: TextInputType.multiline,
+                            minLines: 1,
+                            maxLines: 5,
+                            maxLength: 2000,
+                            buildCounter:
+                                (
+                                  context, {
+                                  required currentLength,
+                                  required isFocused,
+                                  required maxLength,
+                                }) => null,
+                            textCapitalization: TextCapitalization.sentences,
+                            textInputAction: TextInputAction.newline,
+                            decoration: InputDecoration(
+                              labelText: enabled
+                                  ? 'Message'
+                                  : 'Conversation closed',
+                              hintText: enabled ? 'Write a message' : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        SizedBox(
+                          width: 44,
+                          height: 48,
+                          child: IconButton(
+                            key: const Key('chat_record_voice_button'),
+                            tooltip: 'Record voice message',
+                            onPressed: enabled && !isSending
+                                ? onStartRecording
+                                : null,
+                            icon: const Icon(Icons.mic_none_rounded),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: IconButton.filled(
+                            key: const Key('chat_send_button'),
+                            tooltip: 'Send message',
+                            style: IconButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(48, 48),
+                            ),
+                            onPressed: enabled && !isSending ? onSend : null,
+                            icon: isSending
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Center(
+                                    child: Transform.translate(
+                                      offset: const Offset(1.5, 0),
+                                      child: const Icon(
+                                        Icons.send_rounded,
+                                        size: 22,
+                                      ),
+                                    ),
                                   ),
-                                )
-                              : Center(
-                                  child: Transform.translate(
-                                    offset: const Offset(1.5, 0),
-                                    child: const Icon(Icons.send_rounded, size: 22),
-                                  ),
-                                ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-          ),
-          if (!isRecording && showActionPanel) ...[
-            const Divider(height: 1),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _ActionPanelItem(
-                    key: const Key('chat_action_panel_photos'),
-                    icon: Icons.image_rounded,
-                    label: 'Photos',
-                    color: const Color(0xFF0284C7),
-                    onTap: onAddPhoto,
-                  ),
-                  _ActionPanelItem(
-                    key: const Key('chat_action_panel_orders'),
-                    icon: Icons.receipt_long_rounded,
-                    label: 'Orders',
-                    color: const Color(0xFF6366F1),
-                    onTap: () {
-                      onOpenOrders?.call();
-                    },
-                  ),
-                  _ActionPanelItem(
-                    key: const Key('chat_action_panel_pay'),
-                    icon: Icons.payment_rounded,
-                    label: 'Pay',
-                    color: const Color(0xFFD97706),
-                    onTap: () {
-                      onPay?.call();
-                    },
-                  ),
-                  _ActionPanelItem(
-                    key: const Key('chat_action_panel_meetup'),
-                    icon: Icons.handshake_rounded,
-                    label: 'Meetup',
-                    color: const Color(0xFF059669),
-                    onTap: () {
-                      onScheduleMeetup?.call();
-                    },
-                  ),
-                  _ActionPanelItem(
-                    key: const Key('chat_action_panel_location'),
-                    icon: Icons.place_rounded,
-                    label: 'Location',
-                    color: const Color(0xFFEA580C),
-                    onTap: onShareLocation,
-                  ),
-                ],
-              ),
+                      ],
+                    ),
             ),
+            if (!isRecording && showActionPanel) ...[
+              const Divider(height: 1),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_photos'),
+                      icon: Icons.image_rounded,
+                      label: 'Photos',
+                      color: const Color(0xFF0284C7),
+                      onTap: onAddPhoto,
+                    ),
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_orders'),
+                      icon: Icons.receipt_long_rounded,
+                      label: 'Orders',
+                      color: const Color(0xFF6366F1),
+                      onTap: () {
+                        onOpenOrders?.call();
+                      },
+                    ),
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_pay'),
+                      icon: Icons.payment_rounded,
+                      label: 'Pay',
+                      color: const Color(0xFFD97706),
+                      onTap: () {
+                        onPay?.call();
+                      },
+                    ),
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_meetup'),
+                      icon: Icons.handshake_rounded,
+                      label: 'Meetup',
+                      color: const Color(0xFF059669),
+                      onTap: () {
+                        onScheduleMeetup?.call();
+                      },
+                    ),
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_location'),
+                      icon: Icons.place_rounded,
+                      label: 'Location',
+                      color: const Color(0xFFEA580C),
+                      onTap: onShareLocation,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -2906,9 +2937,7 @@ class _ActionPanelItem extends StatelessWidget {
                   width: 1,
                 ),
               ),
-              child: Center(
-                child: Icon(icon, size: 24, color: color),
-              ),
+              child: Center(child: Icon(icon, size: 24, color: color)),
             ),
             const SizedBox(height: 6),
             Text(
@@ -2916,9 +2945,9 @@ class _ActionPanelItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: 0.8,
-                ),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.8),
               ),
             ),
           ],
@@ -3238,7 +3267,11 @@ class _ConversationState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
+              Icon(
+                icon,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(height: AppSpacing.sm),
               Text(message, textAlign: TextAlign.center),
               if (actionLabel != null && onAction != null) ...[
