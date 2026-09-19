@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/item_model.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/favorites_provider.dart';
 import '../../../providers/watchlist_provider.dart';
 import '../../../services/notification_permission_coordinator.dart';
@@ -45,6 +46,8 @@ class HomeProductPreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final isLoggedIn = auth.isLoggedIn;
     final favorites = context.watch<FavoritesProvider>();
     final isFavorite = favorites.isFavorite(item.id);
     return Material(
@@ -138,20 +141,21 @@ class HomeProductPreviewCard extends StatelessWidget {
                     onPressed: onClose,
                     icon: const Icon(Icons.close),
                   ),
-                  IconButton(
-                    key: const Key('home-preview-favorite-button'),
-                    tooltip: isFavorite
-                        ? 'Remove from saved items'
-                        : 'Save item',
-                    onPressed: () =>
-                        unawaited(_toggleFavorite(context, favorites)),
-                    icon: Icon(
-                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                      color: isFavorite
-                          ? AppColors.error
-                          : AppColors.brandPrimary,
+                  if (isLoggedIn)
+                    IconButton(
+                      key: const Key('home-preview-favorite-button'),
+                      tooltip: isFavorite
+                          ? 'Remove from saved items'
+                          : 'Save item',
+                      onPressed: () =>
+                          unawaited(_toggleFavorite(context, favorites)),
+                      icon: Icon(
+                        isFavorite ? Icons.favorite : Icons.favorite_border,
+                        color: isFavorite
+                            ? AppColors.error
+                            : AppColors.brandPrimary,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],

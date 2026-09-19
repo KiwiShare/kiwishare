@@ -736,7 +736,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _SoftMenuContainer(
                 children: [
                   _ModernMenuTile(
-                    icon: Icons.add_a_photo_outlined,
+                    icon: Icons.portrait_rounded,
                     iconColor: colors.primary,
                     title: _avatarBusy ? 'Saving photo...' : 'Profile photo',
                     subtitle: 'Photo and avatar',
@@ -802,7 +802,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 _ModernMenuTile(
-                  icon: Icons.history_rounded,
+                  icon: Icons.shield_outlined,
                   iconColor: colors.primary,
                   title: 'My reports',
                   subtitle: 'View your report history and review status',

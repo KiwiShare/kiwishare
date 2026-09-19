@@ -253,6 +253,7 @@ router.get('/admin/users', authenticateToken, requireAdmin, async (ctx) => {
     status: u.isBanned ? 'banned' : (u.status || 'active'),
     isBanned: Boolean(u.isBanned || u.status === 'banned'),
     trustScore: u.trustScore ?? 100,
+    kiwiGold: u.kiwiGold ?? 100,
     isVerified: Boolean(u.isVerified),
     isStudentVerified: Boolean(u.isStudentVerified),
     studentInstitution: u.studentInstitution || 'University of Auckland',
@@ -273,10 +274,18 @@ router.get('/admin/users', authenticateToken, requireAdmin, async (ctx) => {
   };
 });
 
-// 3. PATCH /api/admin/users/:id/trust-score - Update user trust score & student status
+// 3. PATCH /api/admin/users/:id/trust-score - Update user trust score & profile admin fields
 router.patch('/admin/users/:id/trust-score', authenticateToken, requireAdmin, async (ctx) => {
   const { id } = ctx.params;
-  const { trustScore, isStudentVerified, studentInstitution } = ctx.request.body as any;
+  const {
+    trustScore,
+    kiwiGold,
+    role,
+    isVerified,
+    displayName,
+    isStudentVerified,
+    studentInstitution
+  } = ctx.request.body as any;
 
   const user = mongoose.Types.ObjectId.isValid(id)
     ? await User.findById(id)
@@ -292,14 +301,39 @@ router.patch('/admin/users/:id/trust-score', authenticateToken, requireAdmin, as
     if (
       typeof trustScore !== 'number' ||
       !Number.isFinite(trustScore) ||
-      !Number.isSafeInteger(trustScore) ||
-      trustScore < 0
+      !Number.isSafeInteger(trustScore)
     ) {
       ctx.status = 400;
-      ctx.body = { status: 'error', message: 'Trust score must be a non-negative integer.' };
+      ctx.body = { status: 'error', message: 'Trust score must be a safe integer.' };
       return;
     }
     user.trustScore = trustScore;
+  }
+  if (kiwiGold !== undefined) {
+    if (
+      typeof kiwiGold !== 'number' ||
+      !Number.isFinite(kiwiGold) ||
+      !Number.isSafeInteger(kiwiGold)
+    ) {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'KiwiGold must be a safe integer.' };
+      return;
+    }
+    user.kiwiGold = kiwiGold;
+  }
+  if (role !== undefined) {
+    if (role !== 'user' && role !== 'admin') {
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'Role must be user or admin.' };
+      return;
+    }
+    user.role = role;
+  }
+  if (isVerified !== undefined) {
+    user.isVerified = Boolean(isVerified);
+  }
+  if (displayName !== undefined && typeof displayName === 'string') {
+    user.displayName = displayName.trim();
   }
   if (isStudentVerified !== undefined) {
     user.isStudentVerified = Boolean(isStudentVerified);
@@ -313,12 +347,15 @@ router.patch('/admin/users/:id/trust-score', authenticateToken, requireAdmin, as
   ctx.status = 200;
   ctx.body = {
     status: 'success',
-    message: 'User trust score updated successfully.',
+    message: 'User profile updated successfully.',
     user: {
       id: user._id.toString(),
       email: user.email,
       displayName: user.displayName,
+      role: user.role,
+      kiwiGold: user.kiwiGold ?? 100,
       trustScore: user.trustScore,
+      isVerified: Boolean(user.isVerified),
       isStudentVerified: user.isStudentVerified,
       studentInstitution: user.studentInstitution,
       isBanned: Boolean(user.isBanned || user.status === 'banned')

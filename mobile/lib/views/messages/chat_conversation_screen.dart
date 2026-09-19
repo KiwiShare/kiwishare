@@ -2334,6 +2334,10 @@ class _MessageComposer extends StatelessWidget {
                     child: IconButton.filled(
                       key: const Key('chat_send_button'),
                       tooltip: 'Send message',
+                      style: IconButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(48, 48),
+                      ),
                       onPressed: enabled && !isSending ? onSend : null,
                       icon: isSending
                           ? const SizedBox(
@@ -2344,7 +2348,12 @@ class _MessageComposer extends StatelessWidget {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(Icons.send_rounded),
+                          : Center(
+                              child: Transform.translate(
+                                offset: const Offset(1.5, 0),
+                                child: const Icon(Icons.send_rounded, size: 22),
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -2385,11 +2394,24 @@ class _RecordingComposer extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
-        IconButton.filled(
-          key: const Key('chat_send_voice_button'),
-          tooltip: 'Send voice message',
-          onPressed: onSend,
-          icon: const Icon(Icons.send_rounded),
+        SizedBox(
+          width: 48,
+          height: 48,
+          child: IconButton.filled(
+            key: const Key('chat_send_voice_button'),
+            tooltip: 'Send voice message',
+            style: IconButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(48, 48),
+            ),
+            onPressed: onSend,
+            icon: Center(
+              child: Transform.translate(
+                offset: const Offset(1.5, 0),
+                child: const Icon(Icons.send_rounded, size: 22),
+              ),
+            ),
+          ),
         ),
       ],
     );

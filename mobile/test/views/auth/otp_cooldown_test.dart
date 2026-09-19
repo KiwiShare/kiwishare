@@ -145,17 +145,16 @@ void main() {
 
       // Verify initial cooldown is active at 60s
       expect(find.text('Resend (60s)'), findsOneWidget);
-      expect(find.text('You can request a new code in 60s'), findsOneWidget);
+      expect(find.text("Didn't receive code? "), findsOneWidget);
+      expect(find.textContaining('You can request a new code in'), findsNothing);
 
       // Advance 1 second -> should dynamically tick down to 59s
       await tester.pump(const Duration(seconds: 1));
       expect(find.text('Resend (59s)'), findsOneWidget);
-      expect(find.text('You can request a new code in 59s'), findsOneWidget);
 
       // Advance another 5 seconds -> should dynamically tick down to 54s
       await tester.pump(const Duration(seconds: 5));
       expect(find.text('Resend (54s)'), findsOneWidget);
-      expect(find.text('You can request a new code in 54s'), findsOneWidget);
 
       // Tap resend button while disabled or trigger sendOtp
       // Verify no static number like "42 seconds" in any SnackBar message

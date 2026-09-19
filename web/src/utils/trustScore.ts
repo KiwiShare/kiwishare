@@ -6,6 +6,14 @@ export function formatPublicTrustScore(score: number): string {
     : String(score);
 }
 
+export function parseSafeInteger(input: string): number | null {
+  const trimmed = input.trim();
+  if (trimmed.length === 0 || !/^-?[0-9]+$/.test(trimmed)) return null;
+
+  const value = Number(trimmed);
+  return Number.isSafeInteger(value) ? value : null;
+}
+
 export function parseNonNegativeSafeInteger(input: string): number | null {
   const trimmed = input.trim();
   if (trimmed.length === 0 || !/^[0-9]+$/.test(trimmed)) return null;
