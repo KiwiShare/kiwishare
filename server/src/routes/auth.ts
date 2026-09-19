@@ -100,6 +100,11 @@ router.post('/auth/register', async (ctx) => {
     ctx.body = { status: 'error', message: 'Missing required registration parameters.' };
     return;
   }
+  if (displayName.trim().length < 2 || displayName.trim().length > 30) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Username must be between 2 and 30 characters.' };
+    return;
+  }
 
   // Check if user already exists
   const existingUser = await User.findOne({ email });
@@ -390,7 +395,7 @@ router.post('/auth/verify-otp', async (ctx) => {
   if (!user) {
     user = await User.create({
       email: normalizedEmail,
-      displayName: trimmedName || normalizedEmail.split('@')[0],
+      displayName: (trimmedName || normalizedEmail.split('@')[0]).slice(0, 30),
       avatarUrl: null,
       trustScore: 100,
       kiwiGold: 100,
@@ -405,7 +410,7 @@ router.post('/auth/verify-otp', async (ctx) => {
     user.lastUsedPlatform = platform;
     user.lastLoginAt = now;
     user.lastActiveAt = now;
-    if (trimmedName && trimmedName.length >= 2 && user.displayName !== trimmedName) {
+    if (trimmedName && trimmedName.length >= 2 && trimmedName.length <= 30 && user.displayName !== trimmedName) {
       user.displayName = trimmedName;
     }
     await user.save();
@@ -442,11 +447,11 @@ router.post('/auth/request-password-reset', async (ctx) => {
 
   const normalizedEmail = email.trim().toLowerCase();
   const user = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
-  if (!user || user.authProvider !== 'email_password' || !user.passwordHash) {
+  if (!user) {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: 'Password reset is only available for email and password accounts.'
+      message: 'Password reset is not available for this account.'
     };
     return;
   }
@@ -547,15 +552,15 @@ router.post('/auth/reset-password', async (ctx) => {
   }
 
   const user = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
-  if (!user || user.authProvider !== 'email_password' || !user.passwordHash) {
+  if (!user) {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: 'Password reset is only available for email and password accounts.'
+      message: 'Password reset is not available for this account.'
     };
     return;
   }
-  if (await bcrypt.compare(newPassword, user.passwordHash)) {
+  if (user.passwordHash && (await bcrypt.compare(newPassword, user.passwordHash))) {
     ctx.status = 400;
     ctx.body = { status: 'error', message: 'New password must be different from your current password.' };
     return;
