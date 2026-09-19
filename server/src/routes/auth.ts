@@ -7,6 +7,7 @@ import User from '../models/User';
 import Otp from '../models/Otp';
 import { resolveClientPlatform } from '../middleware/logger';
 import { getJwtSecret } from '../middleware/auth';
+import { configuredFirebaseApp } from '../services/pushNotification';
 
 const router = new Router();
 
@@ -119,6 +120,7 @@ router.post('/auth/register', async (ctx) => {
     displayName,
     role,
     trustScore: 100,
+    kiwiGold: 100,
     isVerified: false,
     authProvider: 'email_password',
     registrationPlatform: platform,
@@ -141,7 +143,7 @@ router.post('/auth/register', async (ctx) => {
       role: newUser.role,
       trustScore: newUser.trustScore,
       isVerified: newUser.isVerified,
-      kiwiGold: newUser.kiwiGold ?? 10,
+      kiwiGold: newUser.kiwiGold ?? 100,
       registrationPlatform: newUser.registrationPlatform,
       lastUsedPlatform: newUser.lastUsedPlatform
     }
@@ -188,7 +190,7 @@ router.post('/auth/login', async (ctx) => {
       role: user.role,
       trustScore: user.trustScore,
       isVerified: user.isVerified,
-      kiwiGold: user.kiwiGold ?? 10,
+      kiwiGold: user.kiwiGold ?? 100,
       registrationPlatform: user.registrationPlatform,
       lastUsedPlatform: user.lastUsedPlatform
     }
@@ -391,6 +393,7 @@ router.post('/auth/verify-otp', async (ctx) => {
       displayName: trimmedName || normalizedEmail.split('@')[0],
       avatarUrl: null,
       trustScore: 100,
+      kiwiGold: 100,
       isVerified: false,
       authProvider: 'email_otp',
       registrationPlatform: platform,
@@ -421,7 +424,7 @@ router.post('/auth/verify-otp', async (ctx) => {
       avatarUrl: user.avatarUrl,
       trustScore: user.trustScore,
       isVerified: user.isVerified,
-      kiwiGold: user.kiwiGold ?? 10,
+      kiwiGold: user.kiwiGold ?? 100,
       registrationPlatform: user.registrationPlatform,
       lastUsedPlatform: user.lastUsedPlatform
     }
@@ -580,7 +583,7 @@ router.post('/auth/google', async (ctx) => {
   let googleName = '';
   let googlePicture = '';
 
-  // Handle Mock verification for local testing
+  // Handle Mock verification for local testing and automated tests
   if (idToken.startsWith('mock_google_token')) {
     const suffix = idToken.split('_')[3] || 'sam';
     googleUid = `google_uid_${suffix}`;
@@ -588,24 +591,41 @@ router.post('/auth/google', async (ctx) => {
     googleName = suffix.charAt(0).toUpperCase() + suffix.slice(1);
     googlePicture = `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde`;
   } else {
-    // Perform standard HTTP request to Google Tokeninfo endpoint to verify token
+    // 1. Attempt verification via Firebase Admin if configured
     try {
-      const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-      if (!response.ok) {
-        throw new Error('Google token validation endpoint returned an error.');
+      const app = await configuredFirebaseApp();
+      if (app) {
+        const { getAuth } = await import('firebase-admin/auth');
+        const decoded = await getAuth(app).verifyIdToken(idToken);
+        googleUid = decoded.uid;
+        googleEmail = (decoded.email || '').trim().toLowerCase();
+        googleName = decoded.name || '';
+        googlePicture = decoded.picture || '';
       }
-      const data = await response.json() as any;
-      if (data.error_description) {
-        throw new Error(data.error_description);
+    } catch {
+      // If Firebase verification fails, continue to Google OAuth tokeninfo
+    }
+
+    // 2. Fall back to standard Google OAuth Tokeninfo endpoint
+    if (!googleUid) {
+      try {
+        const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+        if (!response.ok) {
+          throw new Error('Google token validation endpoint returned an error.');
+        }
+        const data = await response.json() as any;
+        if (data.error_description) {
+          throw new Error(data.error_description);
+        }
+        googleUid = data.sub;
+        googleEmail = (data.email || '').trim().toLowerCase();
+        googleName = data.name || '';
+        googlePicture = data.picture || '';
+      } catch (e: any) {
+        ctx.status = 401;
+        ctx.body = { status: 'error', message: `Google authentication failed: ${e.message}` };
+        return;
       }
-      googleUid = data.sub;
-      googleEmail = data.email || '';
-      googleName = data.name || '';
-      googlePicture = data.picture || '';
-    } catch (e: any) {
-      ctx.status = 401;
-      ctx.body = { status: 'error', message: `Google authentication failed: ${e.message}` };
-      return;
     }
   }
 
@@ -614,28 +634,44 @@ router.post('/auth/google', async (ctx) => {
   let user = await User.findOne({ $or: [{ googleId: googleUid }, { email: googleEmail }] });
 
   if (user) {
-    // Update user details if Google provides new info
+    if (!user.googleId) {
+      user.googleId = googleUid;
+    }
     user.avatarUrl = user.avatarUrl || googlePicture || null;
     user.displayName = user.displayName || googleName || googleEmail.split('@')[0];
-    user.authProvider = 'google';
+    user.authProvider = user.authProvider || 'google';
+    user.isVerified = true;
+    if (user.kiwiGold === undefined || user.kiwiGold === null) {
+      user.kiwiGold = 100;
+    }
     user.lastUsedPlatform = platform;
     user.lastLoginAt = now;
     user.lastActiveAt = now;
     await user.save();
   } else {
-    // Create new user profile matching schema using Google UID as googleId
+    const role = googleEmail.toLowerCase() === 'admin@kiwishare.online' ? 'admin' : 'user';
+    const isStudent = googleEmail.toLowerCase().endsWith('.ac.nz') || googleEmail.toLowerCase().endsWith('.edu');
+
     user = await User.create({
       googleId: googleUid,
       email: googleEmail,
       displayName: googleName || googleEmail.split('@')[0],
       avatarUrl: googlePicture || null,
+      role,
       trustScore: 100,
-      isVerified: true, // Pre-verified via Google
+      kiwiGold: 100,
+      isVerified: true,
+      isStudentVerified: isStudent,
+      studentInstitution: 'University of Auckland',
+      studentEmail: isStudent ? googleEmail : undefined,
       authProvider: 'google',
       registrationPlatform: platform,
       lastUsedPlatform: platform,
       lastActiveAt: now,
-      lastLoginAt: now
+      lastLoginAt: now,
+      notificationPreferences: {
+        watchlistPriceDrop: true
+      }
     });
   }
 
@@ -650,9 +686,13 @@ router.post('/auth/google', async (ctx) => {
       email: user.email,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      role: user.role,
       trustScore: user.trustScore,
       isVerified: user.isVerified,
-      kiwiGold: user.kiwiGold ?? 10,
+      isStudentVerified: Boolean(user.isStudentVerified),
+      studentInstitution: user.studentInstitution,
+      kiwiGold: user.kiwiGold ?? 100,
+      isVip: Boolean(user.isVip),
       registrationPlatform: user.registrationPlatform,
       lastUsedPlatform: user.lastUsedPlatform
     }

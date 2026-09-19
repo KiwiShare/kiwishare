@@ -1005,7 +1005,7 @@ async function promoteUsedItemHandler(ctx: any) {
   const isVip = Boolean(user.isVip && (!user.vipExpiresAt || new Date(user.vipExpiresAt) > new Date()));
 
   if (!isVip) {
-    const currentGold = user.kiwiGold ?? 10;
+    const currentGold = user.kiwiGold ?? 100;
     if (currentGold < 5) {
       ctx.status = 400;
       ctx.body = {

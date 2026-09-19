@@ -17,7 +17,11 @@ import 'package:kiwishare/services/chat_voice_service.dart';
 import 'package:kiwishare/services/listing_image_picker.dart';
 import 'package:kiwishare/services/notification_permission_coordinator.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
+import 'package:provider/provider.dart';
+import 'package:kiwishare/providers/auth_provider.dart';
+import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/views/messages/chat_conversation_screen.dart';
+import 'package:kiwishare/views/profile/public_profile_screen.dart';
 import 'package:kiwishare/views/profile/report_screen.dart';
 import 'package:kiwishare/widgets/notification_permission_dialog.dart';
 
@@ -1314,6 +1318,33 @@ void main() {
 
     expect(find.text('New incoming message'), findsOneWidget);
   });
+
+  testWidgets(
+    'tapping participant header navigates to counterpart public profile',
+    (tester) async {
+      final repository = FakeChatRepository();
+      final mockUserRepo = MockUserRepository();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            Provider<UserRepository>.value(value: mockUserRepo),
+            ChangeNotifierProvider<AuthProvider>(
+              create: (_) => AuthProvider(userRepository: mockUserRepo),
+            ),
+          ],
+          child: _buildSubject(repository: repository),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final header = find.byKey(const Key('conversation_participant_header'));
+      expect(header, findsOneWidget);
+      await tester.tap(header);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PublicProfileScreen), findsOneWidget);
+    },
+  );
 }
 
 class _FakePermissionController implements PushPermissionController {

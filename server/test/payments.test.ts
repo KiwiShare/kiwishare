@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import mongoose from 'mongoose';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import app from '../src/app';
 import Order from '../src/models/Order';
 import Item from '../src/models/Item';
@@ -9,19 +10,26 @@ import Conversation from '../src/models/Conversation';
 import { getPlatformFeeSettings } from '../src/models/PlatformSetting';
 import { resolveOrderEffectivePriceCents } from '../src/routes/payments';
 
+jest.setTimeout(60000);
+
 function generateToken(userId: string, role = 'user', email = 'test@example.com') {
   const secret = process.env.JWT_SECRET || 'kiwishare-dev-jwt-secret-key-2026-safe-and-secure';
   return jwt.sign({ id: userId, email, role }, secret, { expiresIn: '1h' });
 }
 
 describe('Payments & Price Synchronization', () => {
+  let mongoServer: MongoMemoryReplSet;
   const buyerId = new mongoose.Types.ObjectId().toHexString();
   const sellerId = new mongoose.Types.ObjectId().toHexString();
   const adminId = new mongoose.Types.ObjectId().toHexString();
   const itemId = new mongoose.Types.ObjectId().toHexString();
 
   beforeAll(async () => {
-    // Ensure test users exist if needed
+    mongoServer = await MongoMemoryReplSet.create({
+      replSet: { count: 1, storageEngine: 'wiredTiger' }
+    });
+    await mongoose.connect(mongoServer.getUri());
+
     await User.create([
       {
         _id: buyerId,
@@ -41,7 +49,25 @@ describe('Payments & Price Synchronization', () => {
         displayName: 'Test Admin',
         role: 'admin'
       }
-    ]).catch(() => {});
+    ]);
+
+    await Item.create({
+      _id: itemId,
+      title: 'Test Vintage Lamp',
+      description: 'A nice vintage lamp',
+      price: 2000,
+      category: 'furniture',
+      condition: 'good',
+      status: 'active',
+      ownerId: sellerId,
+      sellerId: sellerId,
+      location: { city: 'Auckland', suburb: 'Auckland CBD' }
+    });
+  });
+
+  afterAll(async () => {
+    await mongoose.disconnect();
+    if (mongoServer) await mongoServer.stop();
   });
 
   describe('Fee Configuration API', () => {
@@ -83,15 +109,19 @@ describe('Payments & Price Synchronization', () => {
 
   describe('resolveOrderEffectivePriceCents', () => {
     it('uses item listing price when no special price exists', async () => {
+      const newItemId = new mongoose.Types.ObjectId();
       const item = await Item.create({
-        _id: itemId,
+        _id: newItemId,
         ownerId: sellerId,
         sellerId: sellerId,
         title: 'Desk Lamp',
+        description: 'A nice desk lamp',
+        category: 'furniture',
+        condition: 'good',
         price: 2500, // $25.00 NZD
         priceNzd: '25.00',
         status: 'active'
-      }).catch(() => Item.findById(itemId));
+      });
 
       const order = {
         itemId: item._id,
@@ -141,7 +171,8 @@ describe('Payments & Price Synchronization', () => {
         buyerFeeAmount: 0,
         sellerFeeAmount: 0,
         buyerTotalAmount: 2000,
-        sellerReceiveAmount: 2000
+        sellerReceiveAmount: 2000,
+        itemSnapshot: { title: 'Test Vintage Lamp' }
       });
 
       const buyerToken = generateToken(buyerId, 'user', 'buyer@example.com');
@@ -174,7 +205,8 @@ describe('Payments & Price Synchronization', () => {
         itemAmount: 1500,
         buyerFeeAmount: 75,
         buyerTotalAmount: 1575,
-        sellerReceiveAmount: 1500
+        sellerReceiveAmount: 1500,
+        itemSnapshot: { title: 'Test Vintage Lamp' }
       });
 
       const buyerToken = generateToken(buyerId, 'user', 'buyer@example.com');

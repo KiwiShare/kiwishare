@@ -45,6 +45,8 @@ class ItemCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final auth = Provider.of<AuthProvider?>(context, listen: true);
+    final isLoggedIn = auth == null || auth.isLoggedIn;
     final favorites = context.watch<FavoritesProvider>();
     final isFavorite = favorites.isFavorite(item.id);
 
@@ -97,7 +99,7 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // Top Left: Non-active Status Badge
+                      // Top Left: Non-active Status Badge or Promoted TOP Badge
                       if (item.status != ItemStatus.active)
                         Positioned(
                           left: 7,
@@ -123,33 +125,78 @@ class ItemCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                        )
+                      else if (item.isPromoted)
+                        Positioned(
+                          left: 7,
+                          top: 7,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2.5,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.rocket_launch_rounded,
+                                  size: 10,
+                                  color: Colors.white,
+                                ),
+                                SizedBox(width: 3),
+                                Text(
+                                  'TOP',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      // Top Right: Favorite Button
-                      Positioned(
-                        right: 5,
-                        top: 5,
-                        child: Material(
-                          color: Colors.black.withOpacity(0.35),
-                          shape: const CircleBorder(),
-                          clipBehavior: Clip.antiAlias,
-                          child: InkWell(
-                            onTap: () =>
-                                unawaited(_toggleFavorite(context, favorites)),
-                            child: Padding(
-                              padding: const EdgeInsets.all(5),
-                              child: Icon(
-                                isFavorite
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                size: 16,
-                                color: isFavorite
-                                    ? const Color(0xFFEF4444)
-                                    : Colors.white,
+                      // Top Right: Favorite Button (only shown when logged in)
+                      if (isLoggedIn)
+                        Positioned(
+                          right: 5,
+                          top: 5,
+                          child: Material(
+                            color: Colors.black.withOpacity(0.35),
+                            shape: const CircleBorder(),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: () =>
+                                  unawaited(_toggleFavorite(context, favorites)),
+                              child: Padding(
+                                padding: const EdgeInsets.all(5),
+                                child: Icon(
+                                  isFavorite
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
+                                  size: 16,
+                                  color: isFavorite
+                                      ? const Color(0xFFEF4444)
+                                      : Colors.white,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
                       // Bottom Left: Category & Condition Glass Pill
                       Positioned(
                         left: 7,

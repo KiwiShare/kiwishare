@@ -8,6 +8,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<void>;
   loginWithOtp: (email: string, code: string, displayName?: string) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -71,6 +72,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     saveAuth(res.token, res.user);
   };
 
+  const loginWithGoogle = async (idToken: string) => {
+    const res = await authApi.loginWithGoogle(idToken);
+    saveAuth(res.token, res.user);
+  };
+
   const register = async (email: string, password: string, displayName: string) => {
     const res = await authApi.register({ email, password, displayName, platform: 'web' });
     saveAuth(res.token, res.user);
@@ -89,6 +95,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isLoading,
         login,
         loginWithOtp,
+        loginWithGoogle,
         register,
         logout,
         refreshUser,

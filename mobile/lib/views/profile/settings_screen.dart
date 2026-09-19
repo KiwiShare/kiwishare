@@ -342,7 +342,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               _buildListTile(
                 icon: Icons.help_outline,
-                title: 'Help Center',
+                title: 'Help center',
                 subtitle: 'Safety tips, guidelines & FAQ',
                 trailing: const Icon(Icons.chevron_right, size: 20),
                 onTap: () => Navigator.push(

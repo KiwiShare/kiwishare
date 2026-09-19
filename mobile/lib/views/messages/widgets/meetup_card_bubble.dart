@@ -506,67 +506,77 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                         );
                       }
 
-                      // Both confirmed and paid — show QR button
-                      return SizedBox(
-                        width: double.infinity,
-                        height: 38,
-                        child: FilledButton.icon(
-                          key: Key('view_qr_button_${widget.meetup.orderId}'),
-                          onPressed: () {
-                            if (widget.isBuyer == true) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const QrScannerScreen(),
+                      // Both confirmed and paid — show Order Progress button
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            height: 38,
+                            child: FilledButton.icon(
+                              key: Key('view_qr_button_${widget.meetup.orderId}'),
+                              onPressed: () {
+                                context.push('/orders');
+                              },
+                              icon: const Icon(
+                                Icons.receipt_long_rounded,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                'View Order Progress',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF059669),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                              );
-                            } else {
-                              _openQrScreen();
-                            }
-                          },
-                          icon: Icon(
-                            widget.isBuyer == true
-                                ? Icons.qr_code_scanner_rounded
-                                : Icons.qr_code_2_rounded,
-                            size: 18,
-                          ),
-                          label: Text(
-                            widget.isBuyer == true
-                                ? 'Scan Seller\'s QR Code'
-                                : 'Show Handover QR Code',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF059669),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 6),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: () {
+                                if (widget.isBuyer == true) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const QrScannerScreen(),
+                                    ),
+                                  );
+                                } else {
+                                  _openQrScreen();
+                                }
+                              },
+                              icon: Icon(
+                                widget.isBuyer == true
+                                    ? Icons.qr_code_scanner_rounded
+                                    : Icons.verified_user_outlined,
+                                size: 15,
+                                color: colors.primary,
+                              ),
+                              label: Text(
+                                widget.isBuyer == true
+                                    ? 'Scan at handover'
+                                    : 'Handover check-in',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.primary,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                        ],
                       );
                     },
                   ),
-                  if (widget.isBuyer == true) ...[
-                    const SizedBox(height: 6),
-                    Center(
-                      child: TextButton(
-                        onPressed: _openQrScreen,
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
-                        child: Text(
-                          'View meetup schedule & details',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colors.primary,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
                 ] else if (isCancelled) ...[
                   Row(
                     children: [

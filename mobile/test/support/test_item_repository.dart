@@ -176,11 +176,12 @@ class TestItemRepository implements ItemRepository {
           item.category.toLowerCase() != query.category!.toLowerCase()) {
         return false;
       }
-      if (query.location != null &&
-          !item.location.toLowerCase().contains(
-            query.location!.toLowerCase(),
-          )) {
-        return false;
+      if (query.location != null) {
+        final qLoc = query.location!.toLowerCase();
+        final itemLoc = item.location.toLowerCase();
+        if (!itemLoc.contains(qLoc) && !qLoc.contains(itemLoc)) {
+          return false;
+        }
       }
       if (query.minimumPrice != null &&
           item.numericPrice < query.minimumPrice!) {

@@ -4,6 +4,7 @@ import Order from '../models/Order';
 import Item from '../models/Item';
 import User from '../models/User';
 import Conversation from '../models/Conversation';
+import Message from '../models/Message';
 import { authenticateToken } from '../middleware/auth';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import {
@@ -16,6 +17,7 @@ import {
   createStripePaymentMethod
 } from '../services/stripeService';
 import { ensureOrderMeetupQr } from './meetups';
+import { notifyPaymentPendingMeetup } from '../services/pushNotification';
 
 const router = new Router();
 
@@ -250,6 +252,57 @@ router.post('/payments/confirm', authenticateToken, async (ctx) => {
 
   // Immediately delist item and set to sold to prevent concurrent purchases
   await Item.findByIdAndUpdate(order.itemId, { status: 'sold' });
+
+  // If meetup is not yet agreed, remind buyer and seller to schedule handover
+  if (!isMeetupAgreed) {
+    const itemTitle = item.title || 'KiwiShare Item';
+    void notifyPaymentPendingMeetup({
+      receiverId: order.buyerId,
+      orderId: order._id.toString(),
+      itemId: order.itemId.toString(),
+      itemTitle
+    });
+    void notifyPaymentPendingMeetup({
+      receiverId: order.sellerId,
+      orderId: order._id.toString(),
+      itemId: order.itemId.toString(),
+      itemTitle
+    });
+
+    // Notify in chat conversation if active
+    try {
+      const conversation = await Conversation.findOne({
+        itemId: order.itemId,
+        $or: [
+          { buyerId: order.buyerId, sellerId: order.sellerId },
+          { buyerId: order.sellerId, sellerId: order.buyerId }
+        ]
+      });
+      if (conversation) {
+        const systemText = '💳 Payment secured! Please agree on a meetup time and location to proceed with handover.';
+        const paymentMsg = await new Message({
+          conversationId: conversation._id,
+          senderId: order.buyerId,
+          receiverId: order.sellerId,
+          type: 'text',
+          text: systemText,
+          status: 'sent'
+        }).save();
+
+        await Conversation.findByIdAndUpdate(conversation._id, {
+          $set: {
+            lastMessageText: systemText,
+            lastMessageAt: paymentMsg.createdAt,
+            lastMessageId: paymentMsg._id,
+            lastMessageSenderId: order.buyerId
+          },
+          $inc: { sellerUnreadCount: 1 }
+        });
+      }
+    } catch (msgErr) {
+      console.warn('[Payments] Could not post payment reminder message:', msgErr);
+    }
+  }
 
   // Generate dynamic QR token
   const qrToken = await ensureOrderMeetupQr(order);

@@ -947,54 +947,73 @@ class _ProductHighlightsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
     Widget buildTile({
       required IconData icon,
       required String label,
       required String value,
-      Color? iconColor,
+      required Color accentColor,
     }) {
       return Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: 12,
+        ),
         decoration: BoxDecoration(
           color: isDark
-              ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.25)
-              : theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
-          borderRadius: BorderRadius.circular(AppRadius.medium),
+              ? colors.surfaceContainerHighest.withValues(alpha: 0.28)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: theme.colorScheme.outline.withOpacity(0.15),
+            color: isDark
+                ? colors.outline.withValues(alpha: 0.18)
+                : colors.outline.withValues(alpha: 0.12),
             width: 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
-                color: (iconColor ?? theme.colorScheme.primary).withOpacity(
-                  0.12,
+                color: accentColor.withValues(alpha: isDark ? 0.22 : 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: accentColor.withValues(alpha: isDark ? 0.35 : 0.2),
+                  width: 0.8,
                 ),
-                borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: iconColor ?? theme.colorScheme.primary,
+              child: Center(
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: accentColor,
+                ),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    label,
+                    label.toUpperCase(),
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: theme.colorScheme.onSurface.withOpacity(0.55),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                      color: colors.onSurface.withValues(alpha: 0.5),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1005,7 +1024,7 @@ class _ProductHighlightsGrid extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: theme.colorScheme.onSurface,
+                      color: colors.onSurface,
                     ),
                   ),
                 ],
@@ -1022,9 +1041,10 @@ class _ProductHighlightsGrid extends StatelessWidget {
           children: [
             Expanded(
               child: buildTile(
-                icon: Icons.location_on_outlined,
+                icon: Icons.near_me_rounded,
                 label: 'Location',
                 value: product.location,
+                accentColor: const Color(0xFF0284C7),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -1033,6 +1053,7 @@ class _ProductHighlightsGrid extends StatelessWidget {
                 icon: _getCategoryIcon(product.category),
                 label: 'Category',
                 value: product.category,
+                accentColor: const Color(0xFFEA580C),
               ),
             ),
           ],
@@ -1042,28 +1063,27 @@ class _ProductHighlightsGrid extends StatelessWidget {
           children: [
             Expanded(
               child: buildTile(
-                icon: Icons.inventory_2_outlined,
-                label: 'Status',
+                icon: Icons.handshake_rounded,
+                label: 'Handover',
                 value: _statusLabel(product.status),
+                accentColor: const Color(0xFF059669),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: buildTile(
                 icon: product.isSustainable
-                    ? Icons.eco_outlined
-                    : Icons.check_circle_outline,
-                label: product.isSustainable ? 'Sustainability' : 'Condition',
+                    ? Icons.eco_rounded
+                    : Icons.auto_awesome_rounded,
+                label: product.isSustainable ? 'Eco-Choice' : 'Condition',
                 value: product.isSustainable
                     ? 'Pre-loved'
                     : (product.condition?.isNotEmpty == true
                           ? product.condition!
                           : 'Standard'),
-                iconColor: product.isSustainable
-                    ? (isDark
-                          ? const Color(0xFF6EE7B7)
-                          : const Color(0xFF15803D))
-                    : null,
+                accentColor: product.isSustainable
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFF7C3AED),
               ),
             ),
           ],
