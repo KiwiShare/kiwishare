@@ -1718,6 +1718,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       ),
       body: SafeArea(
         top: false,
+        bottom: false,
         child: ListenableBuilder(
           listenable: provider,
           builder: (context, _) => Column(
@@ -2252,103 +2253,112 @@ class _MessageComposer extends StatelessWidget {
     return Material(
       elevation: 3,
       color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.sm,
-          AppSpacing.sm,
-          AppSpacing.sm,
-          AppSpacing.sm,
-        ),
-        child: isRecording
-            ? _RecordingComposer(
-                seconds: recordingSeconds,
-                onCancel: onCancelRecording,
-                onSend: onSendRecording,
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: IconButton(
-                      key: const Key('chat_add_photo_button'),
-                      tooltip: 'Add photo',
-                      onPressed: enabled && !isSending ? onAddPhoto : null,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: IconButton(
-                      key: const Key('chat_share_location_button'),
-                      tooltip: 'Share location',
-                      onPressed: enabled && !isSending ? onShareLocation : null,
-                      icon: const Icon(Icons.place_outlined),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('chat_message_input'),
-                      controller: controller,
-                      focusNode: focusNode,
-                      enabled: enabled && !isSending,
-                      keyboardType: TextInputType.multiline,
-                      minLines: 1,
-                      maxLines: 5,
-                      maxLength: 2000,
-                      buildCounter:
-                          (
-                            context, {
-                            required currentLength,
-                            required isFocused,
-                            required maxLength,
-                          }) => null,
-                      textCapitalization: TextCapitalization.sentences,
-                      textInputAction: TextInputAction.newline,
-                      decoration: InputDecoration(
-                        labelText: enabled ? 'Message' : 'Conversation closed',
-                        hintText: enabled ? 'Write a message' : null,
+      child: SafeArea(
+        key: const Key('chat_composer_safe_area'),
+        top: false,
+        maintainBottomViewPadding: true,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.sm,
+            AppSpacing.sm,
+            AppSpacing.sm,
+            AppSpacing.sm,
+          ),
+          child: isRecording
+              ? _RecordingComposer(
+                  seconds: recordingSeconds,
+                  onCancel: onCancelRecording,
+                  onSend: onSendRecording,
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    SizedBox(
+                      width: 44,
+                      height: 48,
+                      child: IconButton(
+                        key: const Key('chat_add_photo_button'),
+                        tooltip: 'Add photo',
+                        onPressed: enabled && !isSending ? onAddPhoto : null,
+                        icon: const Icon(Icons.add_photo_alternate_outlined),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: IconButton(
-                      key: const Key('chat_record_voice_button'),
-                      tooltip: 'Record voice message',
-                      onPressed: enabled && !isSending
-                          ? onStartRecording
-                          : null,
-                      icon: const Icon(Icons.mic_none_rounded),
+                    SizedBox(
+                      width: 44,
+                      height: 48,
+                      child: IconButton(
+                        key: const Key('chat_share_location_button'),
+                        tooltip: 'Share location',
+                        onPressed: enabled && !isSending
+                            ? onShareLocation
+                            : null,
+                        icon: const Icon(Icons.place_outlined),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: IconButton.filled(
-                      key: const Key('chat_send_button'),
-                      tooltip: 'Send message',
-                      onPressed: enabled && !isSending ? onSend : null,
-                      icon: isSending
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.send_rounded),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: TextField(
+                        key: const Key('chat_message_input'),
+                        controller: controller,
+                        focusNode: focusNode,
+                        enabled: enabled && !isSending,
+                        keyboardType: TextInputType.multiline,
+                        minLines: 1,
+                        maxLines: 5,
+                        maxLength: 2000,
+                        buildCounter:
+                            (
+                              context, {
+                              required currentLength,
+                              required isFocused,
+                              required maxLength,
+                            }) => null,
+                        textCapitalization: TextCapitalization.sentences,
+                        textInputAction: TextInputAction.newline,
+                        decoration: InputDecoration(
+                          labelText: enabled
+                              ? 'Message'
+                              : 'Conversation closed',
+                          hintText: enabled ? 'Write a message' : null,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 44,
+                      height: 48,
+                      child: IconButton(
+                        key: const Key('chat_record_voice_button'),
+                        tooltip: 'Record voice message',
+                        onPressed: enabled && !isSending
+                            ? onStartRecording
+                            : null,
+                        icon: const Icon(Icons.mic_none_rounded),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: IconButton.filled(
+                        key: const Key('chat_send_button'),
+                        tooltip: 'Send message',
+                        onPressed: enabled && !isSending ? onSend : null,
+                        icon: isSending
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.send_rounded),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }
