@@ -313,7 +313,7 @@ void main() {
   });
 
   testWidgets(
-    'opens How KiwiShare Works and Help Center from Safety & support',
+    'opens How KiwiShare Works and Help center from Safety & support',
     (tester) async {
       final auth = AuthProvider(userRepository: MockUserRepository());
       final theme = ThemeProvider();
@@ -337,7 +337,7 @@ void main() {
 
       await tester.scrollUntilVisible(find.text('How KiwiShare works'), 200);
       expect(find.text('How KiwiShare works'), findsOneWidget);
-      expect(find.text('Help Center & FAQs'), findsOneWidget);
+      expect(find.text('Help center & FAQs'), findsOneWidget);
 
       await tester.tap(find.text('How KiwiShare works'));
       await tester.pumpAndSettle();

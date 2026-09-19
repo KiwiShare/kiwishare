@@ -791,7 +791,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _ModernMenuTile(
                   icon: Icons.quiz_outlined,
                   iconColor: const Color(0xFF3B82F6),
-                  title: 'Help Center & FAQs',
+                  title: 'Help center & FAQs',
                   subtitle:
                       'Answers to meetups, QR, KiwiGold, and safety questions',
                   onTap: () => Navigator.push(
