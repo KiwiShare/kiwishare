@@ -607,17 +607,24 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
   });
 
   test('Watchlist CRUD - add, list, ids, check, and delete items from watchlist', async () => {
+    const watcher = await request(app.callback()).post('/api/auth/register').send({
+      email: `watcher_${Date.now()}@kiwishare.co.nz`,
+      password: 'password123',
+      displayName: 'Watchlist User'
+    });
+    const watcherToken = watcher.body.token;
+
     // 1. Check initial watch status
     const checkBefore = await request(app.callback())
       .get(`/api/watchlist/check/${createdItemId}`)
-      .set('Authorization', `Bearer ${userToken}`);
+      .set('Authorization', `Bearer ${watcherToken}`);
     expect(checkBefore.status).toBe(200);
     expect(checkBefore.body.isWatched).toBe(false);
 
     // 2. Add item to watchlist
     const addRes = await request(app.callback())
       .post(`/api/watchlist/${createdItemId}`)
-      .set('Authorization', `Bearer ${userToken}`);
+      .set('Authorization', `Bearer ${watcherToken}`);
     expect(addRes.status).toBe(200);
     expect(addRes.body.status).toBe('success');
     expect(addRes.body.isWatched).toBe(true);
@@ -629,7 +636,7 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     // 4. Retrieve watchlist list
     const listRes = await request(app.callback())
       .get('/api/watchlist')
-      .set('Authorization', `Bearer ${userToken}`);
+      .set('Authorization', `Bearer ${watcherToken}`);
     expect(listRes.status).toBe(200);
     expect(listRes.body.status).toBe('success');
     expect(listRes.body.count).toBeGreaterThanOrEqual(1);
@@ -638,7 +645,7 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     // 5. Retrieve watchlist IDs array
     const idsRes = await request(app.callback())
       .get('/api/watchlist/ids')
-      .set('Authorization', `Bearer ${userToken}`);
+      .set('Authorization', `Bearer ${watcherToken}`);
     expect(idsRes.status).toBe(200);
     expect(idsRes.body.status).toBe('success');
     expect(idsRes.body.itemIds).toContain(createdItemId);
@@ -646,14 +653,14 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     // 6. Check watch status is now true
     const checkAfter = await request(app.callback())
       .get(`/api/watchlist/check/${createdItemId}`)
-      .set('Authorization', `Bearer ${userToken}`);
+      .set('Authorization', `Bearer ${watcherToken}`);
     expect(checkAfter.status).toBe(200);
     expect(checkAfter.body.isWatched).toBe(true);
 
     // 7. Remove item from watchlist
     const delRes = await request(app.callback())
       .delete(`/api/watchlist/${createdItemId}`)
-      .set('Authorization', `Bearer ${userToken}`);
+      .set('Authorization', `Bearer ${watcherToken}`);
     expect(delRes.status).toBe(200);
     expect(delRes.body.status).toBe('success');
     expect(delRes.body.isWatched).toBe(false);
@@ -661,7 +668,7 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     // 8. Verify status is false again
     const checkFinal = await request(app.callback())
       .get(`/api/watchlist/check/${createdItemId}`)
-      .set('Authorization', `Bearer ${userToken}`);
+      .set('Authorization', `Bearer ${watcherToken}`);
     expect(checkFinal.status).toBe(200);
     expect(checkFinal.body.isWatched).toBe(false);
   });

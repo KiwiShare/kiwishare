@@ -26,6 +26,10 @@ import {
   EXPIRED_TOKEN_CLEANUP_GRACE_SECONDS,
   getJwtSecret
 } from '../src/middleware/auth';
+import {
+  setWatchlistEmailSenderForTests,
+  WatchlistPriceEmailOptions
+} from '../src/services/watchlistNotification';
 
 jest.setTimeout(60000);
 
@@ -45,6 +49,7 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
   let sentCalls: Array<{ tokens: string[]; payload: PriceDropPushPayload }> = [];
   let invalidTokensToReturn: string[] = [];
   let simulateProviderFailure = false;
+  let sentEmails: WatchlistPriceEmailOptions[] = [];
 
   const mockGateway: PushGateway = {
     async sendPriceDrop(tokens, payload): Promise<PushDeliveryResult> {
@@ -102,7 +107,11 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
     sentCalls = [];
     invalidTokensToReturn = [];
     simulateProviderFailure = false;
+    sentEmails = [];
     setPushGatewayForTests(mockGateway);
+    setWatchlistEmailSenderForTests(async (options) => {
+      sentEmails.push(options);
+    });
     setClockForTests(null);
 
     await User.deleteMany({});
@@ -111,6 +120,10 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
     await PushDevice.deleteMany({});
     await NotificationDailyCap.deleteMany({});
     await NotificationHistory.deleteMany({});
+  });
+
+  afterEach(() => {
+    setWatchlistEmailSenderForTests(null);
   });
 
   function createAuthToken(user: any): string {
@@ -598,6 +611,7 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
         eventId: 'evt-optout-1'
       });
       expect(history?.status).toBe('opted_out');
+      expect(sentEmails).toHaveLength(0);
     });
 
     it('7. User with no active devices does not call push gateway and records no_devices', async () => {
@@ -638,6 +652,8 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
         eventId: 'evt-nodevice-1'
       });
       expect(history?.status).toBe('no_devices');
+      expect(sentEmails).toHaveLength(1);
+      expect((await NotificationDailyCap.findOne({ userId: noDeviceUser._id }))?.count).toBe(1);
     });
 
     it('8. Multiple devices for one user consume one user quota event', async () => {
@@ -863,6 +879,7 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
         eventId: 'evt-stable-1'
       });
       expect(sentCalls.length).toBe(1); // Gateway not called again
+      expect(sentEmails).toHaveLength(1);
 
       const cap = await NotificationDailyCap.findOne({ userId: watcher._id });
       expect(cap?.count).toBe(1);
@@ -907,6 +924,7 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
         })));
 
       expect(sentCalls).toHaveLength(1);
+      expect(sentEmails).toHaveLength(1);
       expect((await NotificationDailyCap.findOne({ userId: watcher._id }))?.count).toBe(1);
       expect(await NotificationHistory.countDocuments({
         userId: watcher._id,

@@ -6,6 +6,7 @@ interface WatchlistContextType {
   watchlistIds: Set<string>;
   watchlistItems: UsedItem[];
   isLoading: boolean;
+  error: string | null;
   isWatched: (itemId: string) => boolean;
   toggleWatch: (item: UsedItem) => Promise<boolean>;
   refreshWatchlist: () => Promise<void>;
@@ -18,22 +19,29 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
   const [watchlistItems, setWatchlistItems] = useState<UsedItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refreshWatchlist = React.useCallback(async () => {
     if (!isLoggedIn) {
       setWatchlistIds(new Set());
       setWatchlistItems([]);
+      setError(null);
       return;
     }
 
     try {
       setIsLoading(true);
-      const [idsRes, itemsRes] = await Promise.all([
-        watchlistApi.getWatchlistIds().catch(() => ({ itemIds: [] })),
-        watchlistApi.getWatchlist().catch(() => ({ items: [], data: [] })),
-      ]);
-
-      const rawItems: UsedItem[] = (itemsRes as any)?.items || (itemsRes as any)?.data || [];
+      setError(null);
+      const idsRes = await watchlistApi.getWatchlistIds();
+      const rawItems: UsedItem[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await watchlistApi.getWatchlist(cursor);
+        rawItems.push(...(page.items || page.data || []));
+        cursor = page.pagination?.hasMore
+          ? page.pagination.nextCursor || undefined
+          : undefined;
+      } while (cursor);
 
       if (idsRes.itemIds && Array.isArray(idsRes.itemIds)) {
         const idSet = new Set<string>(idsRes.itemIds.map(String));
@@ -55,6 +63,7 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
       setWatchlistItems(rawItems);
     } catch (err) {
       console.error('Failed to load watchlist:', err);
+      setError('Could not load your Watchlist. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -91,6 +100,7 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
         newIds.add(itemId);
         setWatchlistIds(new Set(newIds));
         refreshWatchlist();
+        throw e;
       }
       return false;
     } else {
@@ -104,6 +114,7 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
         newIds.delete(itemId);
         setWatchlistIds(new Set(newIds));
         refreshWatchlist();
+        throw e;
       }
       return true;
     }
@@ -115,6 +126,7 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
         watchlistIds,
         watchlistItems,
         isLoading,
+        error,
         isWatched,
         toggleWatch,
         refreshWatchlist,

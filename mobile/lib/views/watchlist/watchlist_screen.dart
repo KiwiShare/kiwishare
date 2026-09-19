@@ -23,7 +23,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<WatchlistProvider>().loadWatchlist();
+      if (!mounted) return;
+      final watchlist = context.read<WatchlistProvider>();
+      watchlist.loadWatchlist();
+      watchlist.loadNotificationPreference();
     });
   }
 
@@ -46,6 +49,33 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       _searchController.clear();
       _selectedStatus = null;
     });
+  }
+
+  Future<void> _removeItem(WatchlistProvider watchlist, String itemId) async {
+    try {
+      final result = await watchlist.removeFromWatchlist(itemId);
+      if (!mounted || result != WatchlistMutationResult.failed) return;
+    } catch (_) {
+      if (!mounted) return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not update Watchlist. Please try again.'),
+      ),
+    );
+  }
+
+  Future<void> _updatePriceAlerts(
+    WatchlistProvider watchlist,
+    bool enabled,
+  ) async {
+    final saved = await watchlist.updateNotificationPreference(enabled);
+    if (!mounted || saved) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not update Price alerts. Please try again.'),
+      ),
+    );
   }
 
   @override
@@ -91,6 +121,22 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   child: _WatchlistHeader(
                     itemCount: items.length,
                     filteredCount: isFiltered ? filteredItems.length : null,
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.xs,
+                  ),
+                  child: _PriceAlertsCard(
+                    value: watchlist.watchlistPriceDropEnabled,
+                    isLoading: watchlist.isLoadingPreference,
+                    isUpdating: watchlist.isUpdatingPreference,
+                    hasError: watchlist.preferenceError != null,
+                    onChanged: (value) => _updatePriceAlerts(watchlist, value),
+                    onRetry: watchlist.loadNotificationPreference,
                   ),
                 ),
               ),
@@ -245,6 +291,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     ),
                   ),
                 )
+              else if (watchlist.error != null && items.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _WatchlistErrorView(
+                    onRetry: () => watchlist.loadWatchlist(forceRefresh: true),
+                  ),
+                )
               else if (items.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -266,18 +319,36 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     vertical: AppSpacing.sm,
                   ),
                   sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final item = filteredItems[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                        child: _WatchlistCard(
-                          item: item,
-                          onTap: () => _openItem(item),
-                          onRemove: () =>
-                              watchlist.removeFromWatchlist(item.id),
-                        ),
-                      );
-                    }, childCount: filteredItems.length),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index == filteredItems.length) {
+                          return Center(
+                            child: TextButton(
+                              key: const Key('watchlist-load-more-button'),
+                              onPressed: watchlist.isLoadingMore
+                                  ? null
+                                  : watchlist.loadMore,
+                              child: Text(
+                                watchlist.isLoadingMore
+                                    ? 'Loading more...'
+                                    : 'Load more',
+                              ),
+                            ),
+                          );
+                        }
+                        final item = filteredItems[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                          child: _WatchlistCard(
+                            item: item,
+                            onTap: () => _openItem(item),
+                            onRemove: () => _removeItem(watchlist, item.id),
+                          ),
+                        );
+                      },
+                      childCount:
+                          filteredItems.length + (watchlist.hasMore ? 1 : 0),
+                    ),
                   ),
                 ),
             ],
@@ -286,6 +357,89 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       ),
     );
   }
+}
+
+class _PriceAlertsCard extends StatelessWidget {
+  const _PriceAlertsCard({
+    required this.value,
+    required this.isLoading,
+    required this.isUpdating,
+    required this.hasError,
+    required this.onChanged,
+    required this.onRetry,
+  });
+
+  final bool? value;
+  final bool isLoading;
+  final bool isUpdating;
+  final bool hasError;
+  final ValueChanged<bool> onChanged;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = value ?? false;
+    final semanticState = value == null ? 'loading' : (enabled ? 'on' : 'off');
+    return Semantics(
+      container: true,
+      label: 'Price alerts, $semanticState',
+      child: Card(
+        child: ListTile(
+          minVerticalPadding: AppSpacing.sm,
+          leading: const Icon(Icons.notifications_active_outlined),
+          title: const Text('Price alerts'),
+          subtitle: Text(
+            hasError
+                ? 'Could not load your preference.'
+                : 'Notify me when a saved item drops in price.',
+          ),
+          trailing: hasError && value == null
+              ? TextButton(
+                  key: const Key('watchlist-price-alerts-retry'),
+                  onPressed: isLoading ? null : onRetry,
+                  child: const Text('Retry'),
+                )
+              : isLoading && value == null
+              ? const SizedBox.square(
+                  dimension: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Switch(
+                  key: const Key('watchlist-price-alerts-switch'),
+                  value: enabled,
+                  onChanged: isUpdating ? null : onChanged,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WatchlistErrorView extends StatelessWidget {
+  const _WatchlistErrorView({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.xxl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off_outlined, size: 48),
+          const SizedBox(height: AppSpacing.md),
+          const Text('Could not load your Watchlist.'),
+          const SizedBox(height: AppSpacing.md),
+          FilledButton(
+            key: const Key('watchlist-retry-button'),
+            onPressed: onRetry,
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _WatchlistHeader extends StatelessWidget {

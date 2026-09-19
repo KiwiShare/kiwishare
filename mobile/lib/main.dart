@@ -28,6 +28,7 @@ import 'providers/providers.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 import 'repositories/watchlist_repository.dart';
+import 'repositories/notification_preferences_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/meetup_repository.dart';
 import 'repositories/order_repository.dart';
@@ -222,11 +223,17 @@ void main() async {
         Provider<ReportRepository>(create: (_) => RestReportRepository()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProxyProvider<AuthProvider, WatchlistProvider>(
-          create: (_) =>
-              WatchlistProvider(repository: RestWatchlistRepository()),
+          create: (_) => WatchlistProvider(
+            repository: RestWatchlistRepository(),
+            preferencesRepository: RestNotificationPreferencesRepository(),
+          ),
           update: (_, auth, watchlist) => syncWatchlistAuth(
             watchlist ??
-                WatchlistProvider(repository: RestWatchlistRepository()),
+                WatchlistProvider(
+                  repository: RestWatchlistRepository(),
+                  preferencesRepository:
+                      RestNotificationPreferencesRepository(),
+                ),
             auth.jwtToken,
           ),
         ),

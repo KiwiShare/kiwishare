@@ -438,8 +438,17 @@ export const adminApi = {
 
 // Watchlist APIs
 export const watchlistApi = {
-  getWatchlist: () =>
-    apiRequest<{ status: string; count: number; items?: UsedItem[]; data?: UsedItem[] }>('/watchlist'),
+  getWatchlist: (cursor?: string) => {
+    const params = new URLSearchParams({ limit: '50' });
+    if (cursor) params.set('cursor', cursor);
+    return apiRequest<{
+      status: string;
+      count: number;
+      items?: UsedItem[];
+      data?: UsedItem[];
+      pagination?: { hasMore: boolean; nextCursor: string | null };
+    }>(`/watchlist?${params.toString()}`);
+  },
 
   getWatchlistIds: () =>
     apiRequest<{ status: string; itemIds: string[] }>('/watchlist/ids'),
