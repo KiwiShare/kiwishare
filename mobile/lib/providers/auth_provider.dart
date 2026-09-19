@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../repositories/user_repository.dart';
 import '../services/payment_service.dart';
@@ -32,7 +34,11 @@ class AuthProvider extends ChangeNotifier {
   Future<void>? _pendingSessionClear;
   bool _googleSignOutRequested = false;
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId:
+        '353504132004-v9hv2iktcb0164pgsrp9ov41ihc7kba2.apps.googleusercontent.com',
+    scopes: ['email', 'profile'],
+  );
 
   Future<void> _loadSession() async {
     try {
@@ -217,9 +223,27 @@ class AuthProvider extends ChangeNotifier {
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-      final String? idToken = googleAuth.idToken;
+      String? idToken = googleAuth.idToken;
 
-      if (idToken == null) {
+      // Sync with FirebaseAuth if Firebase is initialized
+      try {
+        if (Firebase.apps.isNotEmpty) {
+          final credential = GoogleAuthProvider.credential(
+            accessToken: googleAuth.accessToken,
+            idToken: googleAuth.idToken,
+          );
+          final userCredential =
+              await FirebaseAuth.instance.signInWithCredential(credential);
+          final fbToken = await userCredential.user?.getIdToken();
+          if (fbToken != null && fbToken.isNotEmpty) {
+            idToken = fbToken;
+          }
+        }
+      } catch (fbError) {
+        debugPrint('[AuthProvider] Optional FirebaseAuth sync notice: $fbError');
+      }
+
+      if (idToken == null || idToken.isEmpty) {
         throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
       }
 
@@ -296,6 +320,9 @@ class AuthProvider extends ChangeNotifier {
     if (_googleSignOutRequested) {
       try {
         await _googleSignIn.signOut();
+        if (Firebase.apps.isNotEmpty) {
+          await FirebaseAuth.instance.signOut();
+        }
       } catch (_) {}
     }
   }

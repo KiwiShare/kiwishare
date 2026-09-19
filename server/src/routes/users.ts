@@ -38,7 +38,7 @@ router.get('/users/me', authenticateToken, async (ctx) => {
       isStudentVerified: Boolean(user.isStudentVerified),
       studentInstitution: user.studentInstitution || null,
       studentEmail: user.studentEmail || null,
-      kiwiGold: user.kiwiGold ?? 10,
+      kiwiGold: user.kiwiGold ?? 100,
       isVip: Boolean(user.isVip && (!user.vipExpiresAt || new Date(user.vipExpiresAt) > new Date())),
       vipExpiresAt: user.vipExpiresAt || null,
       vipAutoRenew: user.vipAutoRenew ?? true,
@@ -385,7 +385,7 @@ router.post('/users/student-verification/verify-otp', authenticateToken, async (
       isStudentVerified: true,
       studentInstitution: institution,
       studentEmail: normalizedEmail,
-      kiwiGold: user.kiwiGold ?? 10,
+      kiwiGold: user.kiwiGold ?? 100,
       authProvider: user.authProvider
     }
   };

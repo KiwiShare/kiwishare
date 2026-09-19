@@ -60,7 +60,7 @@ const UserSchema = new Schema<IUser>(
     avatarUrl: { type: String, default: null },
     status: { type: String, enum: ['active', 'suspended', 'deleted', 'banned'], default: 'active' },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
-    kiwiGold: { type: Number, default: 10 },
+    kiwiGold: { type: Number, default: 100 },
     isVip: { type: Boolean, default: false },
     vipExpiresAt: { type: Date },
     vipAutoRenew: { type: Boolean, default: true },

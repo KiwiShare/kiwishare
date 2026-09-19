@@ -1238,6 +1238,7 @@ class _LoginViewState extends State<LoginView> {
 
               // Google Sign-In Button
               OutlinedButton(
+                key: const Key('google_sign_in_button'),
                 onPressed: _isLoading ? null : _loginWithGoogle,
                 style: OutlinedButton.styleFrom(
                   backgroundColor: colors.surface,
@@ -1261,7 +1262,7 @@ class _LoginViewState extends State<LoginView> {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      'Sign in with Google',
+                      _isSignUp ? 'Sign up with Google' : 'Sign in with Google',
                       style: GoogleFonts.inter(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,

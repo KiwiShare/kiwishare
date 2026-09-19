@@ -248,6 +248,12 @@ export const authApi = {
       body: JSON.stringify(body),
     }),
 
+  loginWithGoogle: (idToken: string) =>
+    apiRequest<AuthResponse>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ idToken }),
+    }),
+
   getMe: () =>
     apiRequest<{ status: string; user: UserProfile }>('/users/me'),
 };

@@ -23,7 +23,7 @@ class UserModel {
     this.studentInstitution,
     this.studentEmail,
     this.authProvider,
-    this.kiwiGold = 10,
+    this.kiwiGold = 100,
     this.isVip = false,
     this.vipExpiresAt,
     this.vipAutoRenew = true,
@@ -97,7 +97,7 @@ class UserModel {
       authProvider: map['authProvider'] as String?,
       kiwiGold: (map['kiwiGold'] is num)
           ? (map['kiwiGold'] as num).toInt()
-          : 10,
+          : 100,
       isVip: map['isVip'] == true,
       vipExpiresAt: map['vipExpiresAt'] != null
           ? DateTime.tryParse(map['vipExpiresAt'].toString())
