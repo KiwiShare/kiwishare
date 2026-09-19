@@ -46,6 +46,7 @@ export interface IOrder extends Document {
   };
   qrScannedAt?: Date;
   buyerConfirmedAt?: Date;
+  sellerConfirmedAt?: Date;
   cancellation?: {
     cancelledBy?: mongoose.Types.ObjectId;
     reason?: string;
@@ -120,6 +121,7 @@ const OrderSchema = new Schema<IOrder>(
     },
     qrScannedAt: { type: Date },
     buyerConfirmedAt: { type: Date },
+    sellerConfirmedAt: { type: Date },
     cancellation: {
       cancelledBy: { type: Schema.Types.ObjectId, ref: 'User' },
       reason: { type: String },

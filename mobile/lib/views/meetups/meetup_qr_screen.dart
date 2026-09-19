@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +10,10 @@ import '../../providers/meetup_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_theme.dart';
 import '../profile/payment_checkout_screen.dart';
+import '../profile/payment_methods_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
+import '../shared/widgets/review_bottom_sheet.dart';
+import '../../services/payment_service.dart';
 
 class MeetupQrScreen extends StatefulWidget {
   const MeetupQrScreen({super.key, required this.orderId, this.initialMeetup});
@@ -113,6 +117,34 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
           ),
         );
         await _loadDetails();
+        if (mounted && _meetup != null) {
+          final isBuyerTarget = isBuyer;
+          final targetUserId = isBuyerTarget ? _meetup!.sellerId : _meetup!.buyerId;
+          final targetName = isBuyerTarget ? _meetup!.sellerName : _meetup!.buyerName;
+          final targetAvatar = isBuyerTarget ? _meetup!.sellerAvatarUrl : _meetup!.buyerAvatarUrl;
+          if (targetUserId.isNotEmpty) {
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            if (mounted) {
+              await ReviewBottomSheet.show(
+                context,
+                targetUserId: targetUserId,
+                targetName: targetName,
+                targetAvatarUrl: targetAvatar,
+                orderId: widget.orderId,
+                itemId: _meetup!.itemId,
+                itemTitle: _meetup!.itemTitle,
+                itemImageUrl: _meetup!.itemImageUrl,
+                role: isBuyerTarget ? 'seller' : 'buyer',
+              );
+            }
+          }
+        }
+        if (!isBuyer && token != null) {
+          unawaited(_checkSellerPayoutNotice(
+            token: token,
+            priceNzd: _meetup?.itemPriceNzd ?? '',
+          ));
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -128,6 +160,76 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
         setState(() => _isConfirmingHandover = false);
       }
     }
+  }
+
+  Future<void> _checkSellerPayoutNotice({
+    required String token,
+    required String priceNzd,
+  }) async {
+    try {
+      final cards = await PaymentService.instance.listCards(token: token);
+      if (!mounted) return;
+      if (cards.isNotEmpty) {
+        final card = cards.first;
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (dialogCtx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Color(0xFF059669)),
+                SizedBox(width: 8),
+                Text('Payout Scheduled'),
+              ],
+            ),
+            content: Text(
+              'Your earnings of NZ\$$priceNzd will be deposited into your saved card (•••• ${card.last4}).',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (dialogCtx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF2563EB)),
+                SizedBox(width: 8),
+                Text('Bind Payout Card'),
+              ],
+            ),
+            content: Text(
+              'Sale completed! Please bind a payout card in your Wallet so your earnings of NZ\$$priceNzd can be transferred to you.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Later'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(dialogCtx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const PaymentMethodsScreen(),
+                    ),
+                  );
+                },
+                child: const Text('Go to Wallet'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   void _copyToken(String token) {
@@ -577,6 +679,46 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                         color: isDark
                             ? const Color(0xFFA7F3D0)
                             : const Color(0xFF065F46),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: FilledButton.icon(
+                        key: const Key('leave_counterpart_review_button'),
+                        onPressed: () {
+                          final isBuyer = meetup.isBuying;
+                          final targetUserId = isBuyer ? meetup.sellerId : meetup.buyerId;
+                          final targetName = isBuyer ? meetup.sellerName : meetup.buyerName;
+                          final targetAvatar = isBuyer ? meetup.sellerAvatarUrl : meetup.buyerAvatarUrl;
+                          ReviewBottomSheet.show(
+                            context,
+                            targetUserId: targetUserId,
+                            targetName: targetName,
+                            targetAvatarUrl: targetAvatar,
+                            orderId: widget.orderId,
+                            itemId: meetup.itemId,
+                            itemTitle: meetup.itemTitle,
+                            itemImageUrl: meetup.itemImageUrl,
+                            role: isBuyer ? 'seller' : 'buyer',
+                          );
+                        },
+                        icon: const Icon(Icons.star_rounded, size: 20, color: Colors.amber),
+                        label: Text(
+                          'Rate & Review ${meetup.counterpartyName}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.medium),
+                          ),
+                        ),
                       ),
                     ),
                   ],

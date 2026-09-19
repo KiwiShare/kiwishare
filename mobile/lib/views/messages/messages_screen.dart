@@ -622,13 +622,16 @@ class _ChatHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 12, 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: Text(
               'Chat',
               key: const Key('chat_title'),
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                fontSize: 22,
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.6,
                 color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
@@ -637,23 +640,23 @@ class _ChatHeader extends StatelessWidget {
             key: const Key('chat_search_button'),
             onPressed: onSearchPressed,
             tooltip: 'Search chats',
-            icon: const Icon(Icons.search_rounded),
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            icon: const Icon(Icons.search_rounded, size: 24),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
           if (onComposePressed != null)
             IconButton(
               key: const Key('chat_compose_button'),
               onPressed: onComposePressed,
               tooltip: 'Start a new chat',
-              icon: const Icon(Icons.open_in_new_rounded),
+              icon: const Icon(Icons.open_in_new_rounded, size: 24),
               color: Theme.of(context).colorScheme.primary,
             ),
           IconButton(
             key: const Key('chat_settings_button'),
             onPressed: onSettingsPressed,
             tooltip: 'Chat settings',
-            icon: const Icon(Icons.settings_outlined),
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            icon: const Icon(Icons.settings_outlined, size: 24),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ],
       ),

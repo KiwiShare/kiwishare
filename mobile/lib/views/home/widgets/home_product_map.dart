@@ -74,7 +74,7 @@ class _HomeProductMapState extends State<HomeProductMap> {
   void _updateVisibleCount(MapCamera camera) {
     final count = _mappedProducts.where((item) {
       return camera.visibleBounds.contains(
-        LatLng(item.latitude!, item.longitude!),
+        LatLng(item.effectiveLatitude!, item.effectiveLongitude!),
       );
     }).length;
     if (count != _visibleCount && mounted) {
@@ -155,7 +155,10 @@ class _HomeProductMapState extends State<HomeProductMap> {
                     markers: [
                       for (final product in _mappedProducts)
                         Marker(
-                          point: LatLng(product.latitude!, product.longitude!),
+                          point: LatLng(
+                            product.effectiveLatitude!,
+                            product.effectiveLongitude!,
+                          ),
                           width: 76,
                           height: 48,
                           child: Semantics(

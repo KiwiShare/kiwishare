@@ -227,7 +227,7 @@ void main() {
     expect(chairTop, lessThan(plantTop));
   });
 
-  testWidgets('Price alerts loads, updates, and exposes accessible state', (
+  testWidgets('Price alerts setting is not rendered on WatchlistScreen (moved to Profile Settings)', (
     tester,
   ) async {
     final preferences = _PreferenceRepository(true);
@@ -240,30 +240,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsLabel('Price alerts, on'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('watchlist-price-alerts-switch')));
-    await tester.pumpAndSettle();
-    expect(preferences.saved, isFalse);
-    expect(find.bySemanticsLabel('Price alerts, off'), findsOneWidget);
-  });
-
-  testWidgets('Price alerts remains usable with large text', (tester) async {
-    final preferences = _PreferenceRepository(true);
-    await tester.pumpWidget(
-      _watchlistApp(
-        repository: TestWatchlistRepository(),
-        token: 'account-token',
-        preferencesRepository: preferences,
-        textScaler: const TextScaler.linear(2),
-      ),
-    );
-    await tester.pumpAndSettle();
-
     expect(
       find.byKey(const Key('watchlist-price-alerts-switch')),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(tester.takeException(), isNull);
   });
 }
 

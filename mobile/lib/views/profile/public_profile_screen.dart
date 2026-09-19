@@ -11,6 +11,7 @@ import '../../repositories/user_repository.dart';
 import '../products/product_detail_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../../widgets/vip_crown_icon.dart';
+import '../../utils/trust_score.dart';
 
 class PublicProfileScreen extends StatefulWidget {
   final String userId;
@@ -49,13 +50,37 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
   }
 
   Future<void> _loadAll() async {
+    if (widget.userId.trim().isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'User profile not found.';
+        _isLoading = false;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    final repo = context.read<UserRepository>();
-    final token = context.read<AuthProvider>().jwtToken;
+    UserRepository? repo;
+    try {
+      repo = context.read<UserRepository>();
+    } catch (_) {
+      repo = context.read<AuthProvider?>()?.userRepository;
+    }
+
+    if (repo == null) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Could not load user profile service.';
+        _isLoading = false;
+      });
+      return;
+    }
+
+    final token = context.read<AuthProvider?>()?.jwtToken;
 
     try {
       final results = await Future.wait([
@@ -804,81 +829,95 @@ class _ZhimaTrustScoreCard extends StatelessWidget {
     required this.isVerified,
   });
 
-  String get _trustLabel {
-    if (trustScore >= 110) return 'Exceptional Trust';
-    if (trustScore >= 90) return 'Outstanding Trust';
-    if (trustScore >= 80) return 'Good Standing';
-    return 'Building Trust';
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final info = getTrustScoreInfo(trustScore);
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF15221C) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF059669).withOpacity(0.2),
-          width: 1.2,
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => showKiwiTrustScoreSheet(context, trustScore),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF15221C) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF059669).withOpacity(0.2),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF059669).withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.verified_user_rounded,
-                  color: Color(0xFF059669),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Kiwi Trust Score',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF059669).withOpacity(0.12),
+                    shape: BoxShape.circle,
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF059669),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '$trustScore • $_trustLabel',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+                  child: const Icon(
+                    Icons.verified_user_rounded,
+                    color: Color(0xFF059669),
+                    size: 20,
                   ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Kiwi Trust Score',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.info_outline,
+                        size: 14,
+                        color: isDark ? Colors.white54 : Colors.black45,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isDark ? info.darkBg : info.lightBg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: (isDark ? info.darkColor : info.lightColor)
+                          .withOpacity(0.4),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Text(
+                    '${formatPublicTrustScore(trustScore)} • ${info.label}',
+                    style: TextStyle(
+                      color: isDark ? info.darkColor : info.lightColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           const SizedBox(height: 10),
           Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[200]),
           const SizedBox(height: 10),
@@ -900,14 +939,15 @@ class _ZhimaTrustScoreCard extends StatelessWidget {
                 label: '$rating Rating',
                 isHighlight: rating >= 4.5,
               ),
-              const _PerkItem(
-                icon: Icons.handshake_outlined,
-                label: 'Safe Handover',
-                isHighlight: true,
-              ),
-            ],
-          ),
-        ],
+                const _PerkItem(
+                  icon: Icons.handshake_outlined,
+                  label: 'Safe Handover',
+                  isHighlight: true,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -20,6 +20,7 @@ import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
 import '../messages/widgets/schedule_meetup_sheet.dart';
 import '../profile/payment_checkout_screen.dart';
+import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/edit_item_sheet.dart';
 import '../shared/widgets/share_bottom_sheet.dart';
@@ -1078,9 +1079,7 @@ class _ProductHighlightsGrid extends StatelessWidget {
                 label: product.isSustainable ? 'Eco-Choice' : 'Condition',
                 value: product.isSustainable
                     ? 'Pre-loved'
-                    : (product.condition?.isNotEmpty == true
-                          ? product.condition!
-                          : 'Standard'),
+                    : _formatConditionLabel(product.condition),
                 accentColor: product.isSustainable
                     ? const Color(0xFF10B981)
                     : const Color(0xFF7C3AED),
@@ -1090,6 +1089,16 @@ class _ProductHighlightsGrid extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  static String _formatConditionLabel(String? condition) {
+    if (condition == null || condition.trim().isEmpty) return 'Standard';
+    return condition
+        .trim()
+        .split(RegExp(r'[_\s]+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .join(' ');
   }
 }
 
@@ -1122,15 +1131,30 @@ class _SellerProfileCard extends StatelessWidget {
         ? const Color(0xFF1E3A8A).withOpacity(0.5)
         : const Color(0xFFDBEAFE);
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: cardBg,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const Key('seller-profile-card-tap'),
         borderRadius: BorderRadius.circular(AppRadius.medium),
-        border: Border.all(color: borderColor, width: 1.2),
-      ),
-      child: Row(
-        children: [
+        onTap: () {
+          if (seller.id.isNotEmpty) {
+            Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => PublicProfileScreen(userId: seller.id),
+              ),
+            );
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            border: Border.all(color: borderColor, width: 1.2),
+          ),
+          child: Row(
+            children: [
           Stack(
             children: [
               CircleAvatar(
@@ -1284,7 +1308,9 @@ class _SellerProfileCard extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 }
 
