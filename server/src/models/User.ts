@@ -7,6 +7,7 @@ export interface IUser extends Document {
   username?: string;
   displayName: string;
   avatarUrl: string | null;
+  bio?: string;
   status: 'active' | 'suspended' | 'deleted';
   location?: {
     city?: string;
@@ -58,9 +59,10 @@ const UserSchema = new Schema<IUser>(
     username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     displayName: { type: String, required: true },
     avatarUrl: { type: String, default: null },
+    bio: { type: String, default: '', maxlength: 200 },
     status: { type: String, enum: ['active', 'suspended', 'deleted', 'banned'], default: 'active' },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
-    kiwiGold: { type: Number, default: 10 },
+    kiwiGold: { type: Number, default: 100 },
     isVip: { type: Boolean, default: false },
     vipExpiresAt: { type: Date },
     vipAutoRenew: { type: Boolean, default: true },

@@ -118,4 +118,95 @@ describe('Profile database integration', () => {
       .send({ email: 'reset@example.com', password: 'new-password' })
       .expect(200);
   });
+
+  test('public profile, public items, and public reviews return correct details and bio update works', async () => {
+    // 1. Update bio
+    const bioRes = await request(app.callback())
+      .patch('/api/users/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ bio: 'Computer Science student @ UoA • Moving sale' });
+    expect(bioRes.status).toBe(200);
+    expect(bioRes.body.user.bio).toBe('Computer Science student @ UoA • Moving sale');
+
+    // 2. Add an active item and a sold item
+    await Item.create({
+      sellerId: new mongoose.Types.ObjectId(userId),
+      title: 'Ergonomic Desk Chair',
+      description: 'Used for 1 semester',
+      category: 'Furniture',
+      condition: 'like_new',
+      price: 15000,
+      priceNzd: '150.00',
+      currency: 'NZD',
+      status: 'active',
+      images: [{ url: 'https://example.com/chair.jpg' }],
+      location: { city: 'Auckland', suburb: 'Grafton' }
+    });
+
+    await Item.create({
+      sellerId: new mongoose.Types.ObjectId(userId),
+      title: 'Scientific Calculator',
+      description: 'Casio fx-82AU',
+      category: 'Electronics',
+      condition: 'good',
+      price: 2500,
+      priceNzd: '25.00',
+      currency: 'NZD',
+      status: 'sold',
+      images: [{ url: 'https://example.com/calc.jpg' }],
+      location: { city: 'Auckland', suburb: 'CBD' }
+    });
+
+    // 3. Query public profile
+    const pubProfile = await request(app.callback()).get(`/api/users/${userId}/public-profile`);
+    expect(pubProfile.status).toBe(200);
+    expect(pubProfile.body.status).toBe('success');
+    expect(pubProfile.body.user).toMatchObject({
+      id: userId,
+      displayName: 'Jenny',
+      bio: 'Computer Science student @ UoA • Moving sale',
+      trustScore: 87,
+      activeItemsCount: 1,
+      soldItemsCount: 1
+    });
+
+    // 4. Query public active items
+    const pubItems = await request(app.callback()).get(`/api/users/${userId}/public-items?status=active`);
+    expect(pubItems.status).toBe(200);
+    expect(pubItems.body.items).toHaveLength(1);
+    expect(pubItems.body.items[0].title).toBe('Ergonomic Desk Chair');
+
+    // 5. Query public sold items
+    const pubSoldItems = await request(app.callback()).get(`/api/users/${userId}/public-items?status=sold`);
+    expect(pubSoldItems.status).toBe(200);
+    expect(pubSoldItems.body.items).toHaveLength(1);
+    expect(pubSoldItems.body.items[0].title).toBe('Scientific Calculator');
+
+    // 6. Post a review
+    const reviewer = await User.create({ email: 'buyer@example.com', displayName: 'Liam', trustScore: 90 });
+    const reviewerToken = jwt.sign({ id: reviewer.id }, process.env.JWT_SECRET!);
+
+    const reviewRes = await request(app.callback())
+      .post(`/api/users/${userId}/reviews`)
+      .set('Authorization', `Bearer ${reviewerToken}`)
+      .send({
+        rating: 5,
+        comment: 'Great seller! Desk chair was in perfect shape.',
+        tags: ['Punctual', 'Item as described'],
+        role: 'buyer',
+        itemTitle: 'Ergonomic Desk Chair'
+      });
+    expect(reviewRes.status).toBe(201);
+
+    // 7. Query reviews
+    const pubReviews = await request(app.callback()).get(`/api/users/${userId}/public-reviews`);
+    expect(pubReviews.status).toBe(200);
+    expect(pubReviews.body.reviews).toHaveLength(1);
+    expect(pubReviews.body.reviews[0]).toMatchObject({
+      reviewerName: 'Liam',
+      rating: 5,
+      comment: 'Great seller! Desk chair was in perfect shape.',
+      role: 'buyer'
+    });
+  });
 });

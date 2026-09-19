@@ -1,8 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../repositories/user_repository.dart';
 import '../services/payment_service.dart';
@@ -32,7 +35,14 @@ class AuthProvider extends ChangeNotifier {
   Future<void>? _pendingSessionClear;
   bool _googleSignOutRequested = false;
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+        ? '353504132004-ljdbt8oa154268k63uk73gkeviacpfr1.apps.googleusercontent.com'
+        : null,
+    serverClientId:
+        '353504132004-v9hv2iktcb0164pgsrp9ov41ihc7kba2.apps.googleusercontent.com',
+    scopes: ['email', 'profile'],
+  );
 
   Future<void> _loadSession() async {
     try {
@@ -208,7 +218,42 @@ class AuthProvider extends ChangeNotifier {
     _isLoggingIn = true;
     notifyListeners();
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      GoogleSignInAccount? googleUser;
+      try {
+        googleUser = await _googleSignIn.signIn();
+      } on PlatformException catch (pe) {
+        debugPrint('[AuthProvider] Google Sign-in PlatformException: ${pe.code} - ${pe.message}');
+        if (pe.code == 'sign_in_canceled' || pe.code == 'popup_closed_by_user') {
+          _isLoggingIn = false;
+          notifyListeners();
+          return;
+        }
+        // In local development / iOS simulator when Google account/browser flow is unavailable:
+        if (kDebugMode &&
+            (pe.code == 'network_error' ||
+             pe.code == 'sign_in_failed' ||
+             pe.message?.contains('keychain') == true ||
+             pe.message?.contains('Safari') == true)) {
+          debugPrint('[AuthProvider] Using dev mock token fallback on Simulator.');
+          final result = await userRepository.loginWithGoogle('mock_google_token_sam');
+          final token = result['token'] as String;
+          final user = result['user'] as UserModel;
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('jwt_token', token);
+          await prefs.setString('current_user', jsonEncode(user.toJson()));
+
+          _jwtToken = token;
+          _currentUser = user;
+          _isLoggedIn = true;
+          unawaited(
+            pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
+          );
+          return;
+        }
+        rethrow;
+      }
+
       if (googleUser == null) {
         _isLoggingIn = false;
         notifyListeners();
@@ -217,10 +262,33 @@ class AuthProvider extends ChangeNotifier {
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-      final String? idToken = googleAuth.idToken;
+      String? idToken = googleAuth.idToken;
 
-      if (idToken == null) {
-        throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
+      // Sync with FirebaseAuth if Firebase is initialized
+      try {
+        if (Firebase.apps.isNotEmpty) {
+          final credential = GoogleAuthProvider.credential(
+            accessToken: googleAuth.accessToken,
+            idToken: googleAuth.idToken,
+          );
+          final userCredential =
+              await FirebaseAuth.instance.signInWithCredential(credential);
+          final fbToken = await userCredential.user?.getIdToken();
+          if (fbToken != null && fbToken.isNotEmpty) {
+            idToken = fbToken;
+          }
+        }
+      } catch (fbError) {
+        debugPrint('[AuthProvider] Optional FirebaseAuth sync notice: $fbError');
+      }
+
+      if (idToken == null || idToken.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('[AuthProvider] No idToken received in debug mode, using mock token.');
+          idToken = 'mock_google_token_sam';
+        } else {
+          throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
+        }
       }
 
       final result = await userRepository.loginWithGoogle(idToken);
@@ -296,6 +364,9 @@ class AuthProvider extends ChangeNotifier {
     if (_googleSignOutRequested) {
       try {
         await _googleSignIn.signOut();
+        if (Firebase.apps.isNotEmpty) {
+          await FirebaseAuth.instance.signOut();
+        }
       } catch (_) {}
     }
   }
@@ -334,6 +405,22 @@ class AuthProvider extends ChangeNotifier {
     final updated = await userRepository.updateProfile(
       token: token,
       avatarUrl: url,
+    );
+    await _storeProfile(token, updated);
+  }
+
+  Future<void> updateBio(String value) async {
+    final bioText = value.trim();
+    if (bioText.length > 200) {
+      throw ArgumentError('Bio cannot exceed 200 characters.');
+    }
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to edit your profile.');
+    }
+    final updated = await userRepository.updateBio(
+      bioText,
+      token: token,
     );
     await _storeProfile(token, updated);
   }

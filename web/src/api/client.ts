@@ -6,6 +6,7 @@ export interface UserProfile {
   avatarUrl?: string | null;
   role?: 'admin' | 'user';
   trustScore: number;
+  kiwiGold?: number;
   isVerified: boolean;
   isStudentVerified?: boolean;
   studentInstitution?: string;
@@ -248,6 +249,12 @@ export const authApi = {
       body: JSON.stringify(body),
     }),
 
+  loginWithGoogle: (idToken: string) =>
+    apiRequest<AuthResponse>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ idToken }),
+    }),
+
   getMe: () =>
     apiRequest<{ status: string; user: UserProfile }>('/users/me'),
 };
@@ -403,7 +410,18 @@ export const adminApi = {
     return apiRequest<{ status: string; count: number; users: UserProfile[] }>(`/admin/users${qStr ? `?${qStr}` : ''}`);
   },
 
-  updateUserTrustScore: (id: string, body: { trustScore?: number; isStudentVerified?: boolean; studentInstitution?: string }) =>
+  updateUserTrustScore: (
+    id: string,
+    body: {
+      trustScore?: number;
+      kiwiGold?: number;
+      role?: 'user' | 'admin';
+      isVerified?: boolean;
+      displayName?: string;
+      isStudentVerified?: boolean;
+      studentInstitution?: string;
+    }
+  ) =>
     apiRequest<{ status: string; message: string; user: any }>(`/admin/users/${id}/trust-score`, {
       method: 'PATCH',
       body: JSON.stringify(body),

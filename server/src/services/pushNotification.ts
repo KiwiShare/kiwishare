@@ -503,6 +503,121 @@ export async function notifyMeetupConfirmed(request: MeetupPushRequest): Promise
   }
 }
 
+export interface OrderReminderPushRequest {
+  receiverId: mongoose.Types.ObjectId;
+  orderId: string;
+  itemId: string;
+  itemTitle: string;
+  locationName?: string;
+}
+
+export async function notifyPaymentPendingMeetup(
+  request: OrderReminderPushRequest
+): Promise<void> {
+  try {
+    const registrations = await PushDevice.find({
+      userId: request.receiverId,
+      active: true
+    })
+      .select('+token')
+      .sort({ lastSeenAt: -1 })
+      .limit(20)
+      .lean();
+    const tokens = registrations
+      .map((registration: any) => registration.token)
+      .filter((token: unknown): token is string => typeof token === 'string');
+    if (tokens.length === 0) return;
+
+    const app = await configuredFirebaseApp();
+    if (!app) return;
+
+    const { getMessaging } = await import('firebase-admin/messaging');
+    await getMessaging(app).sendEachForMulticast({
+      tokens,
+      notification: {
+        title: 'Payment Received — Schedule Handover',
+        body: `Payment is secured for "${request.itemTitle}". Please schedule a meetup location and time.`
+      },
+      data: {
+        type: 'order_payment_pending_meetup',
+        orderId: request.orderId,
+        itemId: request.itemId,
+        itemTitle: request.itemTitle
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          icon: ANDROID_NOTIFICATION_ICON,
+          color: ANDROID_NOTIFICATION_COLOR
+        }
+      },
+      apns: {
+        payload: { aps: { sound: 'default', contentAvailable: true } }
+      }
+    });
+  } catch (error) {
+    console.warn(
+      '[Push Notification] Payment pending meetup notification delivery failed.',
+      error instanceof Error ? error.message : 'Unknown delivery error.'
+    );
+  }
+}
+
+export async function notifyMeetupPendingPayment(
+  request: OrderReminderPushRequest
+): Promise<void> {
+  try {
+    const registrations = await PushDevice.find({
+      userId: request.receiverId,
+      active: true
+    })
+      .select('+token')
+      .sort({ lastSeenAt: -1 })
+      .limit(20)
+      .lean();
+    const tokens = registrations
+      .map((registration: any) => registration.token)
+      .filter((token: unknown): token is string => typeof token === 'string');
+    if (tokens.length === 0) return;
+
+    const app = await configuredFirebaseApp();
+    if (!app) return;
+
+    const locInfo = request.locationName ? ` at ${request.locationName}` : '';
+    const { getMessaging } = await import('firebase-admin/messaging');
+    await getMessaging(app).sendEachForMulticast({
+      tokens,
+      notification: {
+        title: 'Meetup Scheduled — Payment Pending',
+        body: `Meetup scheduled for "${request.itemTitle}"${locInfo}. Please complete payment to unlock handover.`
+      },
+      data: {
+        type: 'order_meetup_pending_payment',
+        orderId: request.orderId,
+        itemId: request.itemId,
+        itemTitle: request.itemTitle
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          icon: ANDROID_NOTIFICATION_ICON,
+          color: ANDROID_NOTIFICATION_COLOR
+        }
+      },
+      apns: {
+        payload: { aps: { sound: 'default', contentAvailable: true } }
+      }
+    });
+  } catch (error) {
+    console.warn(
+      '[Push Notification] Meetup pending payment notification delivery failed.',
+      error instanceof Error ? error.message : 'Unknown delivery error.'
+    );
+  }
+}
+
 export interface PriceDropNotificationRequest {
   item: {
     _id: mongoose.Types.ObjectId | string;

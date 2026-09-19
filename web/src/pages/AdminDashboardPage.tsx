@@ -10,7 +10,7 @@ import {
   UserProfile 
 } from '../api/client';
 import { PostItemModal } from '../components/PostItemModal';
-import { parseNonNegativeSafeInteger } from '../utils/trustScore';
+import { parseSafeInteger } from '../utils/trustScore';
 import { 
   ShieldCheck, 
   LayoutDashboard, 
@@ -40,7 +40,10 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  X
+  X,
+  Coins,
+  Edit2,
+  Shield
 } from 'lucide-react';
 
 export const AdminDashboardPage: React.FC = () => {
@@ -237,7 +240,7 @@ export const AdminDashboardPage: React.FC = () => {
   const handleAdjustScore = async (u: UserProfile, delta: number) => {
     const userId = u.id || u._id;
     if (!userId) return;
-    const newScore = Math.max(0, (u.trustScore ?? 100) + delta);
+    const newScore = (u.trustScore ?? 100) + delta;
 
     try {
       await adminApi.updateUserTrustScore(userId, { trustScore: newScore });
@@ -252,11 +255,11 @@ export const AdminDashboardPage: React.FC = () => {
     const userId = u.id || u._id;
     if (!userId) return;
     const current = u.trustScore ?? 100;
-    const input = window.prompt(`Enter a non-negative trust score for ${u.displayName || u.email}:`, current.toString());
+    const input = window.prompt(`Enter trust score for ${u.displayName || u.email} (any integer):`, current.toString());
     if (input === null) return;
-    const parsed = parseNonNegativeSafeInteger(input);
+    const parsed = parseSafeInteger(input);
     if (parsed === null) {
-      alert('Please enter a valid non-negative integer.');
+      alert('Please enter a valid integer.');
       return;
     }
 
@@ -266,6 +269,86 @@ export const AdminDashboardPage: React.FC = () => {
       if (res.users) setUsersList(res.users);
     } catch (err: any) {
       alert(err.message || 'Failed to update trust score.');
+    }
+  };
+
+  const handleAdjustKiwiGold = async (u: UserProfile, delta: number) => {
+    const userId = u.id || u._id;
+    if (!userId) return;
+    const newGold = Math.max(0, (u.kiwiGold ?? 100) + delta);
+
+    try {
+      await adminApi.updateUserTrustScore(userId, { kiwiGold: newGold });
+      const res = await adminApi.getUsers({ status: userStatusFilter, search: userSearch });
+      if (res.users) setUsersList(res.users);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update KiwiGold balance.');
+    }
+  };
+
+  const handleSetExactKiwiGold = async (u: UserProfile) => {
+    const userId = u.id || u._id;
+    if (!userId) return;
+    const current = u.kiwiGold ?? 100;
+    const input = window.prompt(`Enter KiwiGold balance for ${u.displayName || u.email}:`, current.toString());
+    if (input === null) return;
+    const parsed = parseSafeInteger(input);
+    if (parsed === null || parsed < 0) {
+      alert('Please enter a valid non-negative integer.');
+      return;
+    }
+
+    try {
+      await adminApi.updateUserTrustScore(userId, { kiwiGold: parsed });
+      const res = await adminApi.getUsers({ status: userStatusFilter, search: userSearch });
+      if (res.users) setUsersList(res.users);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update KiwiGold balance.');
+    }
+  };
+
+  const handleToggleRole = async (u: UserProfile) => {
+    const userId = u.id || u._id;
+    if (!userId) return;
+    const currentRole = u.role || 'user';
+    const targetRole = currentRole === 'admin' ? 'user' : 'admin';
+    if (!window.confirm(`Change role of ${u.displayName || u.email} to "${targetRole}"?`)) return;
+
+    try {
+      await adminApi.updateUserTrustScore(userId, { role: targetRole });
+      const res = await adminApi.getUsers({ status: userStatusFilter, search: userSearch });
+      if (res.users) setUsersList(res.users);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update user role.');
+    }
+  };
+
+  const handleToggleVerified = async (u: UserProfile) => {
+    const userId = u.id || u._id;
+    if (!userId) return;
+    const newStatus = !u.isVerified;
+
+    try {
+      await adminApi.updateUserTrustScore(userId, { isVerified: newStatus });
+      const res = await adminApi.getUsers({ status: userStatusFilter, search: userSearch });
+      if (res.users) setUsersList(res.users);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update email verification.');
+    }
+  };
+
+  const handleEditDisplayName = async (u: UserProfile) => {
+    const userId = u.id || u._id;
+    if (!userId) return;
+    const input = window.prompt(`Edit nickname for ${u.email}:`, u.displayName || '');
+    if (input === null || !input.trim()) return;
+
+    try {
+      await adminApi.updateUserTrustScore(userId, { displayName: input.trim() });
+      const res = await adminApi.getUsers({ status: userStatusFilter, search: userSearch });
+      if (res.users) setUsersList(res.users);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update nickname.');
     }
   };
 
@@ -845,8 +928,9 @@ export const AdminDashboardPage: React.FC = () => {
                 <tr>
                   <th style={{ padding: '16px' }}>User</th>
                   <th style={{ padding: '16px' }}>Role</th>
-                  <th style={{ padding: '16px' }}>Student Status</th>
+                  <th style={{ padding: '16px' }}>KiwiGold</th>
                   <th style={{ padding: '16px' }}>Trust Score</th>
+                  <th style={{ padding: '16px' }}>Verification</th>
                   <th style={{ padding: '16px' }}>Status</th>
                   <th style={{ padding: '16px' }}>Items</th>
                   <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
@@ -863,10 +947,10 @@ export const AdminDashboardPage: React.FC = () => {
                       <tr key={userId} style={{ borderBottom: '1px solid var(--border-subtle)', backgroundColor: isBanned ? '#fff5f5' : 'transparent' }}>
                         <td style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
                           {u.avatarUrl ? (
-                            <img
-                              src={u.avatarUrl}
-                              alt=""
-                              style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                            <img 
+                              src={u.avatarUrl} 
+                              alt="" 
+                              style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} 
                             />
                           ) : (
                             <div
@@ -886,39 +970,76 @@ export const AdminDashboardPage: React.FC = () => {
                             </div>
                           )}
                           <div>
-                            <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>
-                              {u.displayName || 'Kiwi User'}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--text-main)' }}>
+                              <span>{u.displayName || 'Kiwi User'}</span>
+                              <button
+                                onClick={() => handleEditDisplayName(u)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px', color: 'var(--text-muted)' }}
+                                title="Edit nickname"
+                              >
+                                <Edit2 size={12} />
+                              </button>
                             </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{u.email}</div>
                           </div>
                         </td>
 
                         <td style={{ padding: '14px 16px' }}>
-                          <span
+                          <button
+                            onClick={() => handleToggleRole(u)}
                             className="badge"
                             style={{
                               backgroundColor: u.role === 'admin' ? '#fef3c7' : '#f1f5f9',
                               color: u.role === 'admin' ? '#b45309' : '#475569',
+                              border: '1px solid transparent',
+                              cursor: 'pointer',
                               textTransform: 'capitalize'
                             }}
+                            title="Click to toggle Role (admin / user)"
                           >
                             {u.role || 'user'}
-                          </span>
+                          </button>
                         </td>
 
                         <td style={{ padding: '14px 16px' }}>
-                          {isStudent ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span
-                                className="badge"
-                                style={{ backgroundColor: '#dbeafe', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              onClick={() => handleSetExactKiwiGold(u)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: 0,
+                                textAlign: 'left',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                textDecoration: 'underline dotted',
+                                color: '#b45309',
+                                fontWeight: 700
+                              }}
+                              title="Click to edit KiwiGold balance"
+                            >
+                              <Coins size={14} color="#d97706" />
+                              <span>{u.kiwiGold ?? 100}</span>
+                            </button>
+                            <div style={{ display: 'inline-flex', gap: '2px' }}>
+                              <button
+                                onClick={() => handleAdjustKiwiGold(u, 50)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706', padding: '2px' }}
+                                title="Add 50 KiwiGold"
                               >
-                                <GraduationCap size={12} /> Verified Student
-                              </span>
+                                <PlusCircle size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleAdjustKiwiGold(u, -50)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '2px' }}
+                                title="Deduct 50 KiwiGold"
+                              >
+                                <MinusCircle size={14} />
+                              </button>
                             </div>
-                          ) : (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Standard</span>
-                          )}
+                          </div>
                         </td>
 
                         <td style={{ padding: '14px 16px' }}>
@@ -933,7 +1054,7 @@ export const AdminDashboardPage: React.FC = () => {
                                 textAlign: 'left',
                                 textDecoration: 'underline dotted'
                               }}
-                              title="Click to enter exact credit score"
+                              title="Click to enter exact credit score (no 0-100 restriction)"
                             >
                               <strong style={{ color: (u.trustScore ?? 100) < 50 ? '#dc2626' : 'var(--primary-700)', fontSize: '1rem' }}>
                                 {u.trustScore ?? 100}
@@ -955,6 +1076,39 @@ export const AdminDashboardPage: React.FC = () => {
                                 <MinusCircle size={15} />
                               </button>
                             </div>
+                          </div>
+                        </td>
+
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                            {isStudent ? (
+                              <span
+                                className="badge"
+                                style={{ backgroundColor: '#dbeafe', color: '#1e40af', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <GraduationCap size={11} /> Student
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Standard</span>
+                            )}
+                            <button
+                              onClick={() => handleToggleVerified(u)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: 0,
+                                fontSize: '0.75rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                color: u.isVerified ? '#059669' : '#94a3b8'
+                              }}
+                              title="Click to toggle email verification status"
+                            >
+                              <Shield size={11} />
+                              <span>{u.isVerified ? 'Email Verified' : 'Unverified'}</span>
+                            </button>
                           </div>
                         </td>
 
@@ -1009,7 +1163,7 @@ export const AdminDashboardPage: React.FC = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                       No registered users found matching the filter.
                     </td>
                   </tr>

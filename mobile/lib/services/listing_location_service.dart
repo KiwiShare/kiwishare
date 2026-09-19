@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -76,7 +77,7 @@ class DeviceListingLocationService implements ListingLocationService {
       // 2. If no cached position, get current position with low accuracy (fast cell/wifi fix, no satellite wait)
       position ??= await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.low,
-        timeLimit: const Duration(seconds: 3),
+        timeLimit: const Duration(seconds: 8),
       );
 
       final label = await _locationLabel(position);
@@ -86,6 +87,24 @@ class DeviceListingLocationService implements ListingLocationService {
         longitude: position.longitude,
       );
     } on TimeoutException {
+      // 1. Check if last known position became available after timeout
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        final label = await _locationLabel(lastKnown);
+        return ListingLocation(
+          label: label,
+          latitude: lastKnown.latitude,
+          longitude: lastKnown.longitude,
+        );
+      }
+      // 2. In debug / simulator environment, fallback to Auckland CBD default rather than blocking user
+      if (kDebugMode) {
+        return const ListingLocation(
+          label: 'Auckland CBD, Auckland',
+          latitude: -36.8485,
+          longitude: 174.7633,
+        );
+      }
       throw const ListingLocationException(ListingLocationErrorCode.timedOut);
     } on ListingLocationException {
       rethrow;

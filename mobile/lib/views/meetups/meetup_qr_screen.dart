@@ -969,7 +969,7 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                       ),
                     ),
 
-                    // Direct Confirmation Buttons (确认收货 / 确认交货)
+                    // Direct Confirmation Buttons
                     const SizedBox(height: 16),
                     const Divider(),
                     const SizedBox(height: 12),
@@ -999,7 +999,7 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                           label: Text(
                             _isConfirmingHandover
                                 ? 'Confirming...'
-                                : 'Confirm Receipt (确认收货)',
+                                : 'Confirm Receipt',
                             style: const TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 15,
@@ -1040,7 +1040,7 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                           label: Text(
                             _isConfirmingHandover
                                 ? 'Confirming...'
-                                : 'Confirm Handover (确认交货)',
+                                : 'Confirm Handover',
                             style: const TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 15,
