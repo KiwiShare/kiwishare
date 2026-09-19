@@ -455,6 +455,8 @@ void main() {
       isTrue,
     );
 
+    await tester.tap(find.byKey(const Key('chat_action_panel_toggle_button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('chat_add_photo_button')));
     await tester.pumpAndSettle();
     expect(find.text('Send a photo'), findsOneWidget);
@@ -790,6 +792,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('chat_action_panel_toggle_button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('chat_share_location_button')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('UoA General Library (5 Alfred St)'));
@@ -820,6 +824,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('chat_action_panel_toggle_button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('chat_add_photo_button')));
     await tester.pumpAndSettle();
     expect(find.text('Send a photo'), findsOneWidget);
@@ -909,6 +915,34 @@ void main() {
     expect(permissionController.statusCalls, 1);
   });
 
+  testWidgets('holding the microphone and releasing sends the recording', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final uploader = FakeChatVoiceUploader();
+    final recorder = FakeChatVoiceRecorder();
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        voiceUploader: uploader,
+        voiceRecorder: recorder,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_record_voice_button'))),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(recorder.startCalls, 1);
+    expect(recorder.stopCalls, 1);
+    expect(uploader.uploadCalls, 1);
+    expect(repository.sentAudioUrls, [uploader.url]);
+  });
+
   testWidgets('cancels a recording without uploading a message', (
     tester,
   ) async {
@@ -979,10 +1013,10 @@ void main() {
     await tester.tap(find.byKey(const Key('chat_send_voice_button')));
     await tester.pump();
 
-    final microphone = tester.widget<IconButton>(
+    final microphone = tester.widget<Listener>(
       find.byKey(const Key('chat_record_voice_button')),
     );
-    expect(microphone.onPressed, isNull);
+    expect(microphone.onPointerDown, isNull);
     stopGate.complete();
     await tester.pumpAndSettle();
     expect(recorder.startCalls, 1);
@@ -1007,10 +1041,10 @@ void main() {
     await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
     await tester.pump();
 
-    final microphone = tester.widget<IconButton>(
+    final microphone = tester.widget<Listener>(
       find.byKey(const Key('chat_record_voice_button')),
     );
-    expect(microphone.onPressed, isNull);
+    expect(microphone.onPointerDown, isNull);
     cancelGate.complete();
     await tester.pumpAndSettle();
     expect(recorder.startCalls, 1);
@@ -1028,10 +1062,10 @@ void main() {
 
     await tester.tap(find.byKey(const Key('chat_record_voice_button')));
     await tester.pump();
-    final microphone = tester.widget<IconButton>(
+    final microphone = tester.widget<Listener>(
       find.byKey(const Key('chat_record_voice_button')),
     );
-    expect(microphone.onPressed, isNull);
+    expect(microphone.onPointerDown, isNull);
     expect(recorder.startCalls, 1);
 
     startGate.complete();
@@ -1040,6 +1074,37 @@ void main() {
 
     await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('releasing a hold during recorder startup still sends', (
+    tester,
+  ) async {
+    final startGate = Completer<void>();
+    final repository = FakeChatRepository();
+    final uploader = FakeChatVoiceUploader();
+    final recorder = FakeChatVoiceRecorder(startGate: startGate);
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        voiceUploader: uploader,
+        voiceRecorder: recorder,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_record_voice_button'))),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await gesture.up();
+    await tester.pump();
+    expect(recorder.stopCalls, 0);
+
+    startGate.complete();
+    await tester.pumpAndSettle();
+    expect(recorder.stopCalls, 1);
+    expect(uploader.uploadCalls, 1);
+    expect(repository.sentAudioUrls, [uploader.url]);
   });
 
   testWidgets('sequences cancellation before recorder disposal', (

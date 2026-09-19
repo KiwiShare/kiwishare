@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../models/item_model.dart';
 import '../../../providers/providers.dart';
 import '../../../services/notification_permission_coordinator.dart';
+import '../../../widgets/resilient_network_image.dart';
 
 class ItemCard extends StatelessWidget {
   final ItemModel item;
@@ -89,8 +90,9 @@ class ItemCard extends StatelessWidget {
                     children: [
                       ColoredBox(
                         color: colors.surfaceContainerHighest,
-                        child: Image.network(
-                          item.imageUrl,
+                        child: ResilientNetworkImage(
+                          url: item.imageUrl,
+                          logicalCacheWidth: 220,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) => Icon(
                             Icons.image_not_supported_outlined,
@@ -180,8 +182,9 @@ class ItemCard extends StatelessWidget {
                             shape: const CircleBorder(),
                             clipBehavior: Clip.antiAlias,
                             child: InkWell(
-                              onTap: () =>
-                                  unawaited(_toggleFavorite(context, favorites)),
+                              onTap: () => unawaited(
+                                _toggleFavorite(context, favorites),
+                              ),
                               child: Padding(
                                 padding: const EdgeInsets.all(5),
                                 child: Icon(

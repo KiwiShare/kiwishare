@@ -10,6 +10,7 @@ import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/product_location_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/resilient_network_image.dart';
 import '../../widgets/kiwishare_logo.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
@@ -683,8 +684,9 @@ class _HomeJumboCard extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 item.imageUrl.isNotEmpty
-                    ? Image.network(
-                        item.imageUrl,
+                    ? ResilientNetworkImage(
+                        url: item.imageUrl,
+                        logicalCacheWidth: 290,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
                           color: AppColors.brandPrimaryAlt,
@@ -1051,8 +1053,9 @@ class _RecommendedProductCard extends StatelessWidget {
                     fit: StackFit.expand,
                     children: [
                       item.imageUrl.isNotEmpty
-                          ? Image.network(
-                              item.imageUrl,
+                          ? ResilientNetworkImage(
+                              url: item.imageUrl,
+                              logicalCacheWidth: cardWidth,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
                                   Container(
@@ -1615,8 +1618,9 @@ class _NzCascadingLocationSheetState extends State<_NzCascadingLocationSheet> {
     final isDark = theme.brightness == Brightness.dark;
     final activeSuburbs = NzLocations.getSuburbsForRegion(_selectedRegion);
     final isSearching = _searchQuery.trim().isNotEmpty;
-    final searchResults =
-        isSearching ? NzLocations.searchLocations(_searchQuery) : const [];
+    final searchResults = isSearching
+        ? NzLocations.searchLocations(_searchQuery)
+        : const [];
 
     return Material(
       color: AppColors.surface,
@@ -1626,391 +1630,401 @@ class _NzCascadingLocationSheetState extends State<_NzCascadingLocationSheet> {
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.78,
         child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 38,
-                    height: 4.5,
-                    decoration: BoxDecoration(
-                      color: colors.outline.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(3),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 4.5,
+                      decoration: BoxDecoration(
+                        color: colors.outline.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Select Location',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Explore listings across New Zealand regions',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _searchCtrl,
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  decoration: InputDecoration(
-                    hintText:
-                        'Search region or suburb (e.g. CBD, Newmarket, Dunedin)...',
-                    hintStyle: TextStyle(
-                      fontSize: 13,
-                      color: colors.onSurfaceVariant.withValues(alpha: 0.6),
-                    ),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, size: 18),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: isDark
-                        ? colors.surfaceContainerHighest.withValues(alpha: 0.3)
-                        : colors.surfaceContainerHighest.withValues(alpha: 0.5),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 8,
-                      horizontal: 12,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        key: const Key('home-near-you-option'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          widget.onUseCurrentLocation();
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF0C2B1D)
-                                : const Color(0xFFECFDF5),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.my_location_rounded,
-                                size: 16,
-                                color: Color(0xFF059669),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'Current Location',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark
-                                        ? const Color(0xFF6EE7B7)
-                                        : const Color(0xFF047857),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: InkWell(
-                        key: const Key('home-location-All NZ'),
-                        onTap: () => _selectLocation(
-                          HomeDiscoveryProvider.allLocationsLabel,
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? colors.surfaceContainerHighest.withValues(
-                                    alpha: 0.4,
-                                  )
-                                : colors.surfaceContainerHighest.withValues(
-                                    alpha: 0.6,
-                                  ),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: widget.filters.selectedLocation ==
-                                          HomeDiscoveryProvider
-                                              .allLocationsLabel &&
-                                      !widget.filters.isNearYou
-                                  ? AppColors.brandPrimary
-                                  : colors.outline.withValues(alpha: 0.15),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.public_rounded,
-                                size: 16,
-                                color: AppColors.brandPrimary,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'All New Zealand',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.brandPrimary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: isSearching
-                ? searchResults.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No locations match "$_searchQuery"',
-                          style: TextStyle(color: colors.onSurfaceVariant),
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: searchResults.length,
-                        separatorBuilder: (ctx, i) => const Divider(height: 1),
-                        itemBuilder: (ctx, i) {
-                          final res = searchResults[i];
-                          final target = res['suburb']!.isNotEmpty
-                              ? res['suburb']!
-                              : res['region']!;
-                          final isSelected = widget.filters.selectedLocation
-                                      .toLowerCase() ==
-                                  target.toLowerCase() &&
-                              !widget.filters.isNearYou;
-                          final count = _getItemCount(target);
-                          return ListTile(
-                            key: Key('home-location-$target'),
-                            dense: true,
-                            leading: Icon(
-                              res['type'] == 'Region'
-                                  ? Icons.map_outlined
-                                  : Icons.location_on_outlined,
-                              size: 18,
-                              color: isSelected
-                                  ? AppColors.brandPrimary
-                                  : colors.onSurfaceVariant,
-                            ),
-                            title: Text(res['display']!),
-                            subtitle: Text(
-                              count != null
-                                  ? '${res['type']!} • $count ${count == 1 ? 'item' : 'items'}'
-                                  : res['type']!,
-                            ),
-                            trailing: isSelected
-                                ? const Icon(
-                                    Icons.check,
-                                    color: AppColors.brandPrimary,
-                                    size: 18,
-                                  )
-                                : null,
-                            onTap: () => _selectLocation(target),
-                          );
-                        },
-                      )
-                : Row(
+                  const SizedBox(height: 12),
+                  Row(
                     children: [
-                      SizedBox(
-                        width: 135,
-                        child: Container(
-                          color: isDark
-                              ? colors.surfaceContainerHighest.withValues(
-                                  alpha: 0.2,
-                                )
-                              : colors.surfaceContainerHighest.withValues(
-                                  alpha: 0.3,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Select Location',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Explore listings across New Zealand regions',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    decoration: InputDecoration(
+                      hintText:
+                          'Search region or suburb (e.g. CBD, Newmarket, Dunedin)...',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: colors.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: isDark
+                          ? colors.surfaceContainerHighest.withValues(
+                              alpha: 0.3,
+                            )
+                          : colors.surfaceContainerHighest.withValues(
+                              alpha: 0.5,
+                            ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          key: const Key('home-near-you-option'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            widget.onUseCurrentLocation();
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF0C2B1D)
+                                  : const Color(0xFFECFDF5),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFF10B981,
+                                ).withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.my_location_rounded,
+                                  size: 16,
+                                  color: Color(0xFF059669),
                                 ),
-                          child: ListView.builder(
-                            itemCount: NzLocations.regions.length,
-                            itemBuilder: (ctx, i) {
-                              final reg = NzLocations.regions[i];
-                              final isCurrent = reg.name == _selectedRegion;
-                              return InkWell(
-                                onTap: () => setState(
-                                  () => _selectedRegion = reg.name,
-                                ),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 13,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isCurrent
-                                        ? (isDark
-                                            ? colors.surface
-                                            : Colors.white)
-                                        : Colors.transparent,
-                                    border: Border(
-                                      left: BorderSide(
-                                        color: isCurrent
-                                            ? AppColors.brandPrimary
-                                            : Colors.transparent,
-                                        width: 3.5,
-                                      ),
-                                    ),
-                                  ),
+                                const SizedBox(width: 6),
+                                Expanded(
                                   child: Text(
-                                    reg.name,
+                                    'Current Location',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: isCurrent
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      color: isCurrent
-                                          ? AppColors.brandPrimary
-                                          : colors.onSurface.withValues(
-                                              alpha: 0.85,
-                                            ),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark
+                                          ? const Color(0xFF6EE7B7)
+                                          : const Color(0xFF047857),
                                     ),
                                   ),
                                 ),
-                              );
-                            },
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      const VerticalDivider(width: 1),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: ListView(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          children: [
-                            ListTile(
-                              key: Key('home-location-$_selectedRegion'),
-                              dense: true,
-                              leading: const Icon(
-                                Icons.travel_explore_rounded,
-                                size: 18,
-                                color: AppColors.brandPrimary,
-                              ),
-                              title: Text(
-                                'All $_selectedRegion',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              trailing: widget.filters.selectedLocation
-                                              .toLowerCase() ==
-                                          _selectedRegion.toLowerCase() &&
-                                      !widget.filters.isNearYou
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: AppColors.brandPrimary,
-                                      size: 18,
-                                    )
-                                  : null,
-                              onTap: () => _selectLocation(_selectedRegion),
+                        child: InkWell(
+                          key: const Key('home-location-All NZ'),
+                          onTap: () => _selectLocation(
+                            HomeDiscoveryProvider.allLocationsLabel,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
                             ),
-                            const Divider(height: 1),
-                            for (final suburb in activeSuburbs)
-                              Builder(
-                                builder: (ctx) {
-                                  final count = _getItemCount(suburb);
-                                  final isSelected = widget
-                                              .filters.selectedLocation
-                                              .toLowerCase() ==
-                                          suburb.toLowerCase() &&
-                                      !widget.filters.isNearYou;
-                                  return ListTile(
-                                    key: Key('home-location-$suburb'),
-                                    dense: true,
-                                    leading: const Icon(
-                                      Icons.place_outlined,
-                                      size: 17,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? colors.surfaceContainerHighest.withValues(
+                                      alpha: 0.4,
+                                    )
+                                  : colors.surfaceContainerHighest.withValues(
+                                      alpha: 0.6,
                                     ),
-                                    title: Text(suburb),
-                                    subtitle: count != null
-                                        ? Text(
-                                            '$count ${count == 1 ? 'item' : 'items'}',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: colors.onSurfaceVariant,
-                                            ),
-                                          )
-                                        : null,
-                                    trailing: isSelected
-                                        ? const Icon(
-                                            Icons.check,
-                                            color: AppColors.brandPrimary,
-                                            size: 18,
-                                          )
-                                        : null,
-                                    onTap: () => _selectLocation(suburb),
-                                  );
-                                },
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color:
+                                    widget.filters.selectedLocation ==
+                                            HomeDiscoveryProvider
+                                                .allLocationsLabel &&
+                                        !widget.filters.isNearYou
+                                    ? AppColors.brandPrimary
+                                    : colors.outline.withValues(alpha: 0.15),
                               ),
-                          ],
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.public_rounded,
+                                  size: 16,
+                                  color: AppColors.brandPrimary,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'All New Zealand',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.brandPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
-          ),
-        ],
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: isSearching
+                  ? searchResults.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No locations match "$_searchQuery"',
+                              style: TextStyle(color: colors.onSurfaceVariant),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: searchResults.length,
+                            separatorBuilder: (ctx, i) =>
+                                const Divider(height: 1),
+                            itemBuilder: (ctx, i) {
+                              final res = searchResults[i];
+                              final target = res['suburb']!.isNotEmpty
+                                  ? res['suburb']!
+                                  : res['region']!;
+                              final isSelected =
+                                  widget.filters.selectedLocation
+                                          .toLowerCase() ==
+                                      target.toLowerCase() &&
+                                  !widget.filters.isNearYou;
+                              final count = _getItemCount(target);
+                              return ListTile(
+                                key: Key('home-location-$target'),
+                                dense: true,
+                                leading: Icon(
+                                  res['type'] == 'Region'
+                                      ? Icons.map_outlined
+                                      : Icons.location_on_outlined,
+                                  size: 18,
+                                  color: isSelected
+                                      ? AppColors.brandPrimary
+                                      : colors.onSurfaceVariant,
+                                ),
+                                title: Text(res['display']!),
+                                subtitle: Text(
+                                  count != null
+                                      ? '${res['type']!} • $count ${count == 1 ? 'item' : 'items'}'
+                                      : res['type']!,
+                                ),
+                                trailing: isSelected
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: AppColors.brandPrimary,
+                                        size: 18,
+                                      )
+                                    : null,
+                                onTap: () => _selectLocation(target),
+                              );
+                            },
+                          )
+                  : Row(
+                      children: [
+                        SizedBox(
+                          width: 135,
+                          child: Container(
+                            color: isDark
+                                ? colors.surfaceContainerHighest.withValues(
+                                    alpha: 0.2,
+                                  )
+                                : colors.surfaceContainerHighest.withValues(
+                                    alpha: 0.3,
+                                  ),
+                            child: ListView.builder(
+                              itemCount: NzLocations.regions.length,
+                              itemBuilder: (ctx, i) {
+                                final reg = NzLocations.regions[i];
+                                final isCurrent = reg.name == _selectedRegion;
+                                return InkWell(
+                                  onTap: () => setState(
+                                    () => _selectedRegion = reg.name,
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 13,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isCurrent
+                                          ? (isDark
+                                                ? colors.surface
+                                                : Colors.white)
+                                          : Colors.transparent,
+                                      border: Border(
+                                        left: BorderSide(
+                                          color: isCurrent
+                                              ? AppColors.brandPrimary
+                                              : Colors.transparent,
+                                          width: 3.5,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      reg.name,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: isCurrent
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: isCurrent
+                                            ? AppColors.brandPrimary
+                                            : colors.onSurface.withValues(
+                                                alpha: 0.85,
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(
+                          child: ListView(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            children: [
+                              ListTile(
+                                key: Key('home-location-$_selectedRegion'),
+                                dense: true,
+                                leading: const Icon(
+                                  Icons.travel_explore_rounded,
+                                  size: 18,
+                                  color: AppColors.brandPrimary,
+                                ),
+                                title: Text(
+                                  'All $_selectedRegion',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                trailing:
+                                    widget.filters.selectedLocation
+                                                .toLowerCase() ==
+                                            _selectedRegion.toLowerCase() &&
+                                        !widget.filters.isNearYou
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: AppColors.brandPrimary,
+                                        size: 18,
+                                      )
+                                    : null,
+                                onTap: () => _selectLocation(_selectedRegion),
+                              ),
+                              const Divider(height: 1),
+                              for (final suburb in activeSuburbs)
+                                Builder(
+                                  builder: (ctx) {
+                                    final count = _getItemCount(suburb);
+                                    final isSelected =
+                                        widget.filters.selectedLocation
+                                                .toLowerCase() ==
+                                            suburb.toLowerCase() &&
+                                        !widget.filters.isNearYou;
+                                    return ListTile(
+                                      key: Key('home-location-$suburb'),
+                                      dense: true,
+                                      leading: const Icon(
+                                        Icons.place_outlined,
+                                        size: 17,
+                                      ),
+                                      title: Text(suburb),
+                                      subtitle: count != null
+                                          ? Text(
+                                              '$count ${count == 1 ? 'item' : 'items'}',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: colors.onSurfaceVariant,
+                                              ),
+                                            )
+                                          : null,
+                                      trailing: isSelected
+                                          ? const Icon(
+                                              Icons.check,
+                                              color: AppColors.brandPrimary,
+                                              size: 18,
+                                            )
+                                          : null,
+                                      onTap: () => _selectLocation(suburb),
+                                    );
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
   }
 }
