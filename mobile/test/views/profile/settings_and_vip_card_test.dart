@@ -51,8 +51,25 @@ void main() {
     // Verify SettingsScreen content
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Message Push Notifications'), findsOneWidget);
+    expect(find.text('Watchlist Price Drop Alerts'), findsOneWidget);
+    expect(
+      find.byKey(const Key('settings-watchlist-price-alerts-switch')),
+      findsOneWidget,
+    );
     expect(find.text('Appearance'), findsOneWidget);
-    expect(find.text('Clear Image Cache'), findsOneWidget);
+    expect(find.text('Student Verification'), findsOneWidget);
+
+    // Tap Student Verification -> opens student verification sheet directly
+    await tester.tap(find.text('Student Verification'));
+    await tester.pumpAndSettle();
+    expect(find.text('NZ Student Verification'), findsOneWidget);
+    expect(find.text('Send Verification Code'), findsOneWidget);
+
+    // Dismiss sheet
+    Navigator.of(tester.element(find.text('NZ Student Verification'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Sign Out'), 100);
     expect(find.text('Sign Out'), findsOneWidget);
 
     // Go back to profile

@@ -5,9 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../providers/watchlist_provider.dart';
 import '../../services/notification_permission_coordinator.dart';
 import 'help_center_screen.dart';
 import 'notification_settings_screen.dart';
+import 'student_verification_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -25,6 +27,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadNotificationPreferences();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        try {
+          context.read<WatchlistProvider?>()?.loadNotificationPreference();
+        } catch (_) {}
+      }
+    });
   }
 
   Future<void> _loadNotificationPreferences() async {
@@ -246,7 +255,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           size: 20,
                         )
                       : const Icon(Icons.chevron_right, size: 20),
-                  onTap: () => Navigator.pop(context),
+                  onTap: () => showStudentVerificationSheet(context),
                 ),
                 if (user.authProvider == null ||
                     user.authProvider == 'email_password') ...[
@@ -295,6 +304,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 value: _soundEnabled,
                 activeColor: const Color(0xFF059669),
                 onChanged: _isLoadingPrefs ? null : _setSoundEnabled,
+              ),
+              Builder(
+                builder: (context) {
+                  WatchlistProvider? watchlist;
+                  try {
+                    watchlist = Provider.of<WatchlistProvider>(context);
+                  } catch (_) {
+                    watchlist = null;
+                  }
+                  final isEnabled =
+                      watchlist?.watchlistPriceDropEnabled ?? false;
+                  final isUpdating =
+                      watchlist?.isUpdatingPreference ?? false;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildDivider(),
+                      SwitchListTile.adaptive(
+                        key: const Key('settings-watchlist-price-alerts-switch'),
+                        secondary: const Icon(Icons.trending_down_rounded),
+                        title: const Text(
+                          'Watchlist Price Drop Alerts',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                        ),
+                        subtitle: const Text(
+                          'Get notified when items in your watchlist drop in price',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        value: isEnabled,
+                        activeColor: const Color(0xFF059669),
+                        onChanged: isUpdating || watchlist == null
+                            ? null
+                            : (val) async {
+                                final success =
+                                    await watchlist!.updateNotificationPreference(val);
+                                if (!context.mounted) return;
+                                if (!success) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Could not update Price alerts. Please try again.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                      ),
+                    ],
+                  );
+                },
               ),
               _buildDivider(),
               _buildListTile(

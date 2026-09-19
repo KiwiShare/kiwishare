@@ -1,3 +1,5 @@
+import '../constants/nz_locations.dart';
+
 enum ItemStatus { active, reserved, sold, delisted }
 
 class SellerInfo {
@@ -95,7 +97,14 @@ class ItemModel {
 
   String get ownerName => seller?.displayName ?? 'Seller';
 
-  bool get hasMapLocation => latitude != null && longitude != null;
+  double? get effectiveLatitude =>
+      latitude ?? NzLocations.getApproximateCoordinates(location)?.latitude;
+
+  double? get effectiveLongitude =>
+      longitude ?? NzLocations.getApproximateCoordinates(location)?.longitude;
+
+  bool get hasMapLocation =>
+      effectiveLatitude != null && effectiveLongitude != null;
 
   bool get isDelisted => status == ItemStatus.delisted;
 

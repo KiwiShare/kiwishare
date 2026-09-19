@@ -14,7 +14,30 @@ import 'package:kiwishare/views/home/widgets/home_product_map.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
 import 'package:provider/provider.dart';
 
+import 'package:kiwishare/repositories/watchlist_repository.dart';
+
 import '../../support/test_item_repository.dart';
+
+class _TestWatchlistRepository implements WatchlistRepository {
+  final Set<String> _ids = {};
+  @override
+  Future<bool> addToWatchlist(String itemId, {String? token}) async {
+    _ids.add(itemId);
+    return true;
+  }
+  @override
+  Future<bool> removeFromWatchlist(String itemId, {String? token}) async {
+    _ids.remove(itemId);
+    return true;
+  }
+  @override
+  Future<Set<String>> fetchWatchedItemIds({String? token}) async => _ids;
+  @override
+  Future<List<ItemModel>> fetchWatchlist({String? token}) async => [];
+  @override
+  Future<bool> isWatched(String itemId, {String? token}) async =>
+      _ids.contains(itemId);
+}
 
 class _AucklandLocationService implements ProductLocationService {
   @override
@@ -43,7 +66,7 @@ Widget _homeApp({
 }) => MultiProvider(
   providers: [
     ChangeNotifierProvider.value(value: discovery ?? HomeDiscoveryProvider()),
-    ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+    ChangeNotifierProvider(create: (_) => FavoritesProvider(repository: _TestWatchlistRepository())),
     ChangeNotifierProvider(
       create: (_) => ListingProvider(itemRepository: TestItemRepository()),
     ),
@@ -103,8 +126,14 @@ void main() {
     await tester.pump();
 
     expect(find.text('1 items'), findsOneWidget);
-    expect(find.text('Monstera Plant'), findsOneWidget);
-    expect(find.text('Armchair'), findsNothing);
+    expect(find.text('Monstera Plant'), findsWidgets);
+    expect(
+      find.descendant(
+        of: find.byType(GridView),
+        matching: find.text('Armchair'),
+      ),
+      findsNothing,
+    );
     expect(find.text('KiwiShare'), findsOneWidget);
     expect(find.text('Search'), findsNothing);
   });

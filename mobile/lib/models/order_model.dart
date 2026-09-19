@@ -151,13 +151,25 @@ class OrderModel {
       return 'Cancelled';
     }
     if (isPaid) {
-      if (status == 'meeting_scheduled' || status == 'meeting_in_progress') {
+      if (status == 'meeting_scheduled' ||
+          status == 'meetup_scheduled' ||
+          status == 'meeting_in_progress') {
         return 'Paid · Meetup Arranged';
       }
       return 'Paid · Awaiting Handover';
     }
     if (status == 'pending_payment') return 'Pending Payment';
-    return status;
+    if (status == 'meetup_scheduled' || status == 'meeting_scheduled') {
+      return 'Meetup Scheduled';
+    }
+    if (status == 'meeting_in_progress') return 'Meetup in Progress';
+    if (status == 'qr_scanned') return 'Handover Confirmed';
+    if (status == 'seller_paid') return 'Completed · Paid';
+    return status
+        .split('_')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase() + part.substring(1).toLowerCase())
+        .join(' ');
   }
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {

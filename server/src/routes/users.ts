@@ -377,7 +377,7 @@ router.post('/users/student-verification/verify-otp', authenticateToken, async (
   user.isStudentVerified = true;
   user.studentInstitution = institution;
   user.studentEmail = normalizedEmail;
-  user.trustScore = Math.min(100, Math.max(80, (user.trustScore || 80) + 15));
+  user.trustScore = Math.min(200, Math.max(0, (user.trustScore || 100) + 15));
   await user.save();
 
   ctx.status = 200;
@@ -441,7 +441,7 @@ router.get('/users/:id/public-profile', async (ctx) => {
         city: user.location?.city || 'Auckland',
         suburb: user.location?.suburb || 'CBD'
       },
-      trustScore: user.trustScore ?? 80,
+      trustScore: user.trustScore ?? 100,
       isVip,
       isVerified: Boolean(user.isVerified),
       isStudentVerified: Boolean(user.isStudentVerified),

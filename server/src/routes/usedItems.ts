@@ -731,7 +731,12 @@ async function updateUsedItemHandler(ctx: any) {
   if (updates.title != null) updateFields.title = updates.title;
   if (updates.description != null) updateFields.description = updates.description;
   if (updates.category != null) updateFields.category = updates.category;
-  if (updates.condition != null) updateFields.condition = updates.condition;
+  if (updates.condition != null) {
+    const cond = String(updates.condition).trim().toLowerCase().replaceAll(' ', '_');
+    if (VALID_CONDITIONS.has(cond)) {
+      updateFields.condition = cond;
+    }
+  }
   if (updates.status != null) {
     const statusVal = String(updates.status).trim();
     if (statusVal === 'delisted' || statusVal === 'draft') {
@@ -913,9 +918,9 @@ async function deleteUsedItemHandler(ctx: any) {
   };
 }
 
-// 1b. GET /usedItems/recommended - Get recommended used items
+// 1b. GET /usedItems/recommended - Get recommended used items (watchlist similarity + location proximity)
 async function getRecommendedItemsHandler(ctx: any) {
-  const { limit = '10', category, excludeId } = ctx.query;
+  const { limit = '10', category, excludeId, userId, latitude, longitude } = ctx.query;
   const maxItems = Math.min(Math.max(1, parseInt(queryText(limit) || '10', 10) || 10), 50);
 
   const filter: any = { status: 'active' };
@@ -932,28 +937,83 @@ async function getRecommendedItemsHandler(ctx: any) {
     }
   }
 
+  // 1. Fetch user's watchlist items to identify preferred categories and interests
+  const targetUserId = queryText(userId) || ctx.state?.user?.id;
+  const preferredCategories = new Set<string>();
+  const preferredKeywords: string[] = [];
+
+  if (targetUserId && mongoose.Types.ObjectId.isValid(targetUserId)) {
+    try {
+      const userWatchlist = await Watchlist.find({ userId: targetUserId }).populate('itemId', 'category title').limit(30);
+      for (const entry of userWatchlist) {
+        const watchedItem = entry.itemId as any;
+        if (watchedItem?.category) {
+          preferredCategories.add(String(watchedItem.category).toLowerCase());
+        }
+        if (watchedItem?.title) {
+          const words = String(watchedItem.title).toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+          preferredKeywords.push(...words);
+        }
+      }
+    } catch (_) {
+      // Graceful fallback
+    }
+  }
+
+  const userLat = latitude ? parseFloat(queryText(latitude) || '') : null;
+  const userLng = longitude ? parseFloat(queryText(longitude) || '') : null;
+  const hasUserCoords = userLat != null && !isNaN(userLat) && userLng != null && !isNaN(userLng);
+
   const items = await Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
   const now = Date.now();
 
-  // Multi-factor Recommendation Scoring Algorithm:
-  // 1. Popularity score: favouriteCount * 3 + viewCount * 1
-  // 2. Freshness decay: 20 * exp(-ageInDays / 14)
-  // 3. Sustainability boost: +10 points
-  // 4. Condition quality boost: new (+6), like_new (+4), good (+2)
   const scoredItems = items.map((item) => {
-    const favScore = (item.favouriteCount || 0) * 3;
+    // Watchlist similarity boost
+    let watchlistBoost = 0;
+    if (item.category && preferredCategories.has(String(item.category).toLowerCase())) {
+      watchlistBoost += 25;
+    }
+    if (item.title && preferredKeywords.length > 0) {
+      const lowerTitle = String(item.title).toLowerCase();
+      for (const kw of preferredKeywords) {
+        if (lowerTitle.includes(kw)) {
+          watchlistBoost += 6;
+          break;
+        }
+      }
+    }
+
+    // Location proximity boost
+    let proximityBoost = 0;
+    if (hasUserCoords && item.latitude != null && item.longitude != null) {
+      const dLat = (item.latitude - userLat!) * Math.PI / 180;
+      const dLon = (item.longitude - userLng!) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(userLat! * Math.PI / 180) * Math.cos(item.latitude * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distKm = 6371 * c; // Earth radius in km
+
+      if (distKm < 5) proximityBoost = 30;
+      else if (distKm < 15) proximityBoost = 20;
+      else if (distKm < 30) proximityBoost = 10;
+      else if (distKm < 60) proximityBoost = 5;
+    }
+
+    const favScore = (item.favouriteCount || 0) * 2;
     const viewScore = (item.viewCount || 0) * 1;
     const createdAtTime = item.createdAt ? new Date(item.createdAt).getTime() : now;
     const ageInDays = Math.max(0, (now - createdAtTime) / (1000 * 60 * 60 * 24));
-    const freshnessScore = 20 * Math.exp(-ageInDays / 14);
-    const sustainabilityScore = item.isSustainable ? 10 : 0;
+    const freshnessScore = 15 * Math.exp(-ageInDays / 14);
+    const sustainabilityScore = item.isSustainable ? 8 : 0;
 
     let conditionScore = 0;
     if (item.condition === 'new') conditionScore = 6;
     else if (item.condition === 'like_new') conditionScore = 4;
     else if (item.condition === 'good') conditionScore = 2;
 
-    const totalScore = favScore + viewScore + freshnessScore + sustainabilityScore + conditionScore;
+    const totalScore = watchlistBoost + proximityBoost + favScore + viewScore + freshnessScore + sustainabilityScore + conditionScore;
     return { item, score: totalScore };
   });
 
@@ -962,6 +1022,35 @@ async function getRecommendedItemsHandler(ctx: any) {
 
   ctx.status = 200;
   ctx.body = recommended;
+}
+
+// 1c. GET /usedItems/featured - Featured Highlights (promoted listings, high favorites, high views)
+async function getFeaturedItemsHandler(ctx: any) {
+  const { limit = '10' } = ctx.query;
+  const maxItems = Math.min(Math.max(1, parseInt(queryText(limit) || '10', 10) || 10), 50);
+
+  const filter: any = { status: 'active' };
+  const items = await Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+  const now = Date.now();
+
+  const scoredItems = items.map((item) => {
+    const isCurrentlyPromoted = item.isPromoted && (!item.promotedUntil || new Date(item.promotedUntil).getTime() > now);
+    const promoteScore = isCurrentlyPromoted ? 60 : 0;
+    const favScore = (item.favouriteCount || 0) * 4;
+    const viewScore = (item.viewCount || 0) * 2;
+    const createdAtTime = item.createdAt ? new Date(item.createdAt).getTime() : now;
+    const ageInDays = Math.max(0, (now - createdAtTime) / (1000 * 60 * 60 * 24));
+    const freshnessScore = 15 * Math.exp(-ageInDays / 21);
+
+    const totalScore = promoteScore + favScore + viewScore + freshnessScore;
+    return { item, score: totalScore };
+  });
+
+  scoredItems.sort((a, b) => b.score - a.score);
+  const featured = scoredItems.slice(0, maxItems).map((entry) => formatItem(entry.item));
+
+  ctx.status = 200;
+  ctx.body = featured;
 }
 
 // POST /usedItems/:id/promote - Promote an item using 5 KiwiGold
@@ -1114,6 +1203,7 @@ async function relistUsedItemHandler(ctx: any) {
 router.get('/usedItems', getUsedItemsHandler);
 router.get('/usedItems/discovery-options', getDiscoveryOptionsHandler);
 router.get('/usedItems/recommended', getRecommendedItemsHandler);
+router.get('/usedItems/featured', getFeaturedItemsHandler);
 router.get('/usedItems/:id', getUsedItemByIdHandler);
 router.post('/usedItems', authenticateToken, createUsedItemHandler);
 router.post('/usedItems/:id/promote', authenticateToken, promoteUsedItemHandler);
