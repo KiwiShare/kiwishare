@@ -29,6 +29,7 @@ describe('KiwiShare report persistence API', () => {
   beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
     await mongoose.connect(mongoServer.getUri());
+    await Report.init();
 
     const [reporter, reportedUser, outsider] = await Promise.all([
       request(app.callback()).post('/api/auth/register').send({
@@ -317,7 +318,69 @@ describe('KiwiShare report persistence API', () => {
     expect(await Report.countDocuments()).toBe(0);
   });
 
-  test('rejects a rapid duplicate without writing a second report', async () => {
+  async function expectSecondReportRejected(
+    firstPayload: Record<string, unknown>,
+    secondPayload: Record<string, unknown>,
+    targetLabel: 'listing' | 'user'
+  ) {
+    const first = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`)
+      .send(firstPayload);
+    const second = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`)
+      .send(secondPayload);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(409);
+    expect(second.body.message).toContain(`already reported this ${targetLabel}`);
+    expect(await Report.countDocuments()).toBe(1);
+    expect(mockedSendReportConfirmationEmail).toHaveBeenCalledTimes(1);
+  }
+
+  test('allows one report per reporter and user across reasons and contexts', async () => {
+    await expectSecondReportRejected(
+      {
+        targetType: 'user',
+        targetId: reportedUserId,
+        contextType: 'profile',
+        reason: 'fake_identity_or_impersonation',
+        details: 'This profile appears to be impersonating another student.'
+      },
+      {
+        targetType: 'user',
+        targetId: reportedUserId,
+        contextType: 'chat',
+        contextId: conversationId,
+        reason: 'harassment_or_abusive_behaviour',
+        details: 'The same user later sent an abusive message in our chat.'
+      },
+      'user'
+    );
+  });
+
+  test('allows one report per reporter and listing across reasons', async () => {
+    await expectSecondReportRejected(
+      {
+        targetType: 'listing',
+        targetId: listingId,
+        contextType: 'listing',
+        reason: 'misleading_information',
+        details: 'The description does not match the item in the photos.'
+      },
+      {
+        targetType: 'listing',
+        targetId: listingId,
+        contextType: 'listing',
+        reason: 'suspected_stolen_item',
+        details: 'Changing the reason must not create a second report.'
+      },
+      'listing'
+    );
+  });
+
+  test('allows different reporters to report the same user once each', async () => {
     const payload = {
       targetType: 'user',
       targetId: reportedUserId,
@@ -326,22 +389,97 @@ describe('KiwiShare report persistence API', () => {
       details: 'This profile appears to be impersonating another student.'
     };
 
-    const first = await request(app.callback())
-      .post('/api/reports')
-      .set('Authorization', `Bearer ${reporterToken}`)
-      .send(payload);
-    const duplicate = await request(app.callback())
-      .post('/api/reports')
-      .set('Authorization', `Bearer ${reporterToken}`)
-      .send({ ...payload, contextId: reportedUserId });
+    const responses = await Promise.all([
+      request(app.callback())
+        .post('/api/reports')
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send(payload),
+      request(app.callback())
+        .post('/api/reports')
+        .set('Authorization', `Bearer ${outsiderToken}`)
+        .send(payload)
+    ]);
 
-    expect(first.status).toBe(201);
-    expect(duplicate.status).toBe(409);
-    expect(duplicate.body.message).toContain('already submitted');
+    expect(responses.map((response) => response.status)).toEqual([201, 201]);
+    expect(await Report.countDocuments()).toBe(2);
+    expect(mockedSendReportConfirmationEmail).toHaveBeenCalledTimes(2);
+  });
+
+  test('stores only one report when identical requests arrive concurrently', async () => {
+    const payload = {
+      targetType: 'listing',
+      targetId: listingId,
+      contextType: 'listing',
+      reason: 'misleading_information',
+      details: 'The description does not match the item in the photos.'
+    };
+
+    const responses = await Promise.all([
+      request(app.callback())
+        .post('/api/reports')
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send(payload),
+      request(app.callback())
+        .post('/api/reports')
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send(payload)
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
     expect(await Report.countDocuments()).toBe(1);
     expect(mockedSendReportConfirmationEmail).toHaveBeenCalledTimes(1);
-    const stored = await Report.findOne();
-    expect(stored!.contextId!.toString()).toBe(reportedUserId);
+  });
+
+  test('rejects a target that already exists in legacy report data', async () => {
+    await Report.create({
+      reporterId: new mongoose.Types.ObjectId(reporterId),
+      targetType: 'listing',
+      targetId: new mongoose.Types.ObjectId(listingId),
+      contextType: 'listing',
+      contextId: new mongoose.Types.ObjectId(listingId),
+      reason: 'misleading_information',
+      details: 'A legacy report created before database deduplication was introduced.',
+      status: 'pending'
+    });
+
+    const response = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`)
+      .send({
+        targetType: 'listing',
+        targetId: listingId,
+        contextType: 'listing',
+        reason: 'suspected_stolen_item',
+        details: 'This must reuse the existing moderation record.'
+      });
+
+    expect(response.status).toBe(409);
+    expect(await Report.countDocuments()).toBe(1);
+    expect(mockedSendReportConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  test('keeps general safety reports outside target deduplication', async () => {
+    const payload = {
+      targetType: 'general',
+      contextType: 'general',
+      reason: 'other',
+      details: 'A general safety concern without a specific user or listing.'
+    };
+
+    const responses = await Promise.all([
+      request(app.callback())
+        .post('/api/reports')
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send(payload),
+      request(app.callback())
+        .post('/api/reports')
+        .set('Authorization', `Bearer ${reporterToken}`)
+        .send(payload)
+    ]);
+
+    expect(responses.map((response) => response.status)).toEqual([201, 201]);
+    expect(await Report.countDocuments()).toBe(2);
+    expect(mockedSendReportConfirmationEmail).toHaveBeenCalledTimes(2);
   });
 
   test('keeps the saved report when Resend delivery fails', async () => {

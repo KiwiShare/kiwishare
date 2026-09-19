@@ -126,9 +126,9 @@ void main() {
     },
   );
 
-  test('preserves the safe duplicate-report response', () async {
+  test('preserves the one-report-per-target response', () async {
     const message =
-        'You have already submitted this report. We will review it shortly.';
+        'You have already reported this listing. We will review your existing report.';
     final repository = RestReportRepository(
       client: MockClient(
         (_) async => http.Response(

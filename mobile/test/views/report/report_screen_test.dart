@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/models/report_draft.dart';
@@ -125,6 +127,46 @@ void main() {
       findsOneWidget,
     );
     expect(find.text(details), findsOneWidget);
+  });
+
+  testWidgets('prevents repeated taps only while a submission is pending', (
+    tester,
+  ) async {
+    final pending = Completer<void>();
+    var submissions = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildKiwiShareTheme(),
+        home: ReportScreen(
+          onSubmit: (_) {
+            submissions++;
+            return pending.future;
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('report_reason_field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Something else').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('report_details_field')),
+      'The account repeatedly asked for an unsafe meetup.',
+    );
+    final submit = find.byKey(const Key('submit_report_button'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(submissions, 1);
+    expect(find.text('Submitting…'), findsOneWidget);
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+
+    pending.complete();
+    await tester.pumpAndSettle();
+    expect(submissions, 1);
+    expect(find.text('Report submitted'), findsOneWidget);
   });
 
   testWidgets('report form remains usable at 200 percent text scaling', (

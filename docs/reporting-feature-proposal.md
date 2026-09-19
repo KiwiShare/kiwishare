@@ -157,8 +157,9 @@ Example request:
 ```
 
 The API validates allowed enum values and the 10–1000 character text limit,
-requires authentication, rejects self-reporting where inappropriate, and
-rejects the same reporter/target/context/reason combination for 10 minutes.
+requires authentication, and rejects self-reporting where inappropriate. A
+member can report a particular user or listing only once, even if the reason,
+context, or submission time changes. Other members can still report that target.
 
 ## 9. Safety, privacy, and moderation considerations
 
@@ -166,7 +167,8 @@ rejects the same reporter/target/context/reason combination for 10 minutes.
 - Collect only information needed to assess the report.
 - Do not let the mobile client choose the reporter ID or moderation status.
 - Protect report data with stricter access rules than normal marketplace content.
-- Prevent rapid duplicate submissions.
+- Disable repeated taps while a request is pending and enforce one report per
+  reporter and target in the backend database.
 - Preserve enough context for review without exposing private chat content unnecessarily.
 - AI may help prioritise reports, but should not automatically ban or penalise users.
 - For immediate danger, physical safety, theft, or serious fraud, advise users to contact New Zealand Police or emergency services; KiwiShare reporting is not an emergency service.
@@ -188,7 +190,7 @@ rejects the same reporter/target/context/reason combination for 10 minutes.
 4. Is a report-history screen required before final submission?
 5. Who will review reports during the course demo, and is an admin view needed?
 6. Should `did_not_show_up` be a report reason, a transaction rating, or both?
-7. What text-length limits and duplicate-report rules should the backend enforce?
+7. Should general safety reports have a separate per-account rate limit?
 8. Does the team want optional evidence uploads, or should they remain out of scope?
 9. What retention period and Firestore access rules will apply to report data?
 10. Should the current #93 title be rewritten with explicit acceptance criteria after the meeting?
