@@ -45,8 +45,8 @@ class ItemCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final auth = context.watch<AuthProvider>();
-    final isLoggedIn = auth.isLoggedIn;
+    final auth = Provider.of<AuthProvider?>(context, listen: true);
+    final isLoggedIn = auth == null || auth.isLoggedIn;
     final favorites = context.watch<FavoritesProvider>();
     final isFavorite = favorites.isFavorite(item.id);
 

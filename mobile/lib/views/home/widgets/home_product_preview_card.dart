@@ -46,8 +46,8 @@ class HomeProductPreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final isLoggedIn = auth.isLoggedIn;
+    final auth = Provider.of<AuthProvider?>(context, listen: true);
+    final isLoggedIn = auth == null || auth.isLoggedIn;
     final favorites = context.watch<FavoritesProvider>();
     final isFavorite = favorites.isFavorite(item.id);
     return Material(

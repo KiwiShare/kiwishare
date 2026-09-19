@@ -9,7 +9,7 @@ import User from '../models/User';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import QrCode from '../models/QrCode';
-import { notifyMeetupConfirmed } from '../services/pushNotification';
+import { notifyMeetupConfirmed, notifyMeetupPendingPayment } from '../services/pushNotification';
 import { runMongoTransaction } from '../services/mongoTransaction';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 
@@ -314,6 +314,17 @@ router.post('/propose', async (ctx: Context) => {
     );
   });
 
+  const isOrderPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
+  if (!isOrderPaid) {
+    void notifyMeetupPendingPayment({
+      receiverId: new mongoose.Types.ObjectId(order.buyerId),
+      orderId: order._id.toString(),
+      itemId: objectId(order.itemId),
+      itemTitle: order.itemSnapshot?.title ?? 'KiwiShare Item',
+      locationName: locationName.trim()
+    });
+  }
+
   const populatedOrder = await Order.findById(order._id)
     .populate('buyerId', 'displayName avatarUrl')
     .populate('sellerId', 'displayName avatarUrl');
@@ -510,6 +521,17 @@ router.post('/:orderId/accept', async (ctx: Context) => {
 
   void notifyMeetupConfirmed({ ...pushRequest, receiverId: new mongoose.Types.ObjectId(buyerId) });
   void notifyMeetupConfirmed({ ...pushRequest, receiverId: new mongoose.Types.ObjectId(sellerId) });
+
+  const isConfirmedPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
+  if (!isConfirmedPaid) {
+    void notifyMeetupPendingPayment({
+      receiverId: new mongoose.Types.ObjectId(buyerId),
+      orderId: order._id.toString(),
+      itemId: objectId(order.itemId),
+      itemTitle: order.itemSnapshot?.title ?? 'KiwiShare Item',
+      locationName: order.meeting?.locationName
+    });
+  }
 
   ctx.status = 200;
   ctx.body = {

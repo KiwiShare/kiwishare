@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
@@ -9,11 +10,13 @@ import 'package:provider/provider.dart';
 import '../../models/chat_conversation_model.dart';
 import '../../models/chat_message_model.dart';
 import '../../models/item_model.dart';
+import '../../models/meetup_model.dart';
 import '../../models/report_draft.dart';
 import '../../config/api_config.dart';
 import '../../navigation/app_route_observer.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/meetup_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../repositories/item_repository.dart';
 import '../../services/listing_image_picker.dart';
@@ -81,6 +84,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   ItemModel? _activeItem;
   String? _specialOfferPrice;
   bool _itemPaid = false;
+  bool _showActionPanel = false;
 
   @override
   void initState() {
@@ -100,10 +104,23 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   void _handleFocusChange() {
     if (_messageFocusNode.hasFocus) {
+      if (_showActionPanel) {
+        setState(() => _showActionPanel = false);
+      }
       _focusScrollTimer?.cancel();
       _focusScrollTimer = Timer(const Duration(milliseconds: 150), () {
         if (mounted) _scrollToEnd();
       });
+    }
+  }
+
+  void _toggleActionPanel() {
+    if (_showActionPanel) {
+      setState(() => _showActionPanel = false);
+    } else {
+      _messageFocusNode.unfocus();
+      setState(() => _showActionPanel = true);
+      _scrollToEnd();
     }
   }
 
@@ -1217,6 +1234,327 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     );
   }
 
+  Widget _buildOrderFlowCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final orders = _getOrderProvider(listen: true)?.orders ?? const [];
+    final order = orders
+        .where((o) => o.itemId == widget.conversation.itemId)
+        .firstOrNull;
+
+    final messages = _chatProvider.messagesFor(widget.conversation.id);
+    final latestMeetupMsg =
+        messages.reversed.where((m) => m.meetup != null).firstOrNull;
+    final meetup = latestMeetupMsg?.meetup;
+
+    MeetupModel? cachedMeetup;
+    if (order != null) {
+      try {
+        cachedMeetup = context.watch<MeetupProvider>().meetupById(order.id);
+      } catch (_) {}
+    }
+
+    final isPaid =
+        _itemPaid ||
+        (order != null && (order.isPaid || order.isCompleted)) ||
+        (cachedMeetup != null && cachedMeetup.isPaid);
+
+    final hasMeetup =
+        meetup != null && !meetup.isCancelled && !meetup.isDeclined;
+    final isMeetupConfirmed =
+        hasMeetup && (meetup.isConfirmed || cachedMeetup?.isConfirmed == true);
+    final isBuyer = widget.conversation.direction == ChatDirection.buying;
+
+    // If no order exists and no meetup exists, don't show order card
+    if (order == null && !hasMeetup && !_itemPaid) {
+      return const SizedBox.shrink();
+    }
+
+    // State 1: Paid, but meetup is not scheduled yet
+    if (isPaid && !hasMeetup) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2A1C0B) : const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? const Color(0xFF854D0E) : const Color(0xFFFDE68A),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.schedule_send_rounded,
+                  size: 18,
+                  color: Color(0xFFD97706),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Payment Complete — Schedule Handover',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark
+                          ? const Color(0xFFFCD34D)
+                          : const Color(0xFF92400E),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.push('/orders'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: Text(
+                    'View Order',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: colors.primary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Payment is held securely in KiwiShare escrow. Please agree on a meetup time and location for physical handover.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: isDark
+                    ? const Color(0xFFFDE68A)
+                    : const Color(0xFF78350F),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 34,
+              child: FilledButton.icon(
+                key: const Key('chat_order_schedule_meetup_btn'),
+                onPressed: _scheduleMeetup,
+                icon: const Icon(Icons.handshake_rounded, size: 16),
+                label: const Text(
+                  'Schedule Meetup',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFD97706),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // State 2: Meetup scheduled, but payment is NOT yet completed
+    if (!isPaid && hasMeetup) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF261D3B) : const Color(0xFFF5F3FF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? const Color(0xFF6D28D9) : const Color(0xFFDDD6FE),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.payment_rounded,
+                  size: 18,
+                  color: Color(0xFF7C3AED),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isBuyer
+                        ? 'Meetup Scheduled — Payment Needed'
+                        : 'Meetup Scheduled — Awaiting Payment',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark
+                          ? const Color(0xFFC4B5FD)
+                          : const Color(0xFF5B21B6),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.push('/orders'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: Text(
+                    'Order Info',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: colors.primary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isBuyer
+                  ? 'Meetup set for ${meetup.locationName}. Please complete payment via KiwiShare to secure the deal.'
+                  : 'Meetup set for ${meetup.locationName}. Waiting for the buyer to complete payment before handover.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: isDark
+                    ? const Color(0xFFDDD6FE)
+                    : const Color(0xFF4C1D95),
+              ),
+            ),
+            if (isBuyer) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 34,
+                child: FilledButton.icon(
+                  key: const Key('chat_order_pay_now_btn'),
+                  onPressed: _buyerBuyNow,
+                  icon: const Icon(Icons.lock_outline_rounded, size: 16),
+                  label: const Text(
+                    'Pay Now with Safe Pay',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF7C3AED),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // State 3: Both Paid and Meetup Scheduled/Confirmed
+    return InkWell(
+      onTap: () => context.push('/orders'),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF064E3B).withValues(alpha: 0.35)
+              : const Color(0xFFECFDF5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark
+                ? const Color(0xFF059669)
+                : const Color(0xFF10B981).withValues(alpha: 0.4),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF059669).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                size: 18,
+                color: Color(0xFF059669),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isMeetupConfirmed
+                        ? 'Meetup Confirmed & Paid'
+                        : 'Order in Progress',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark
+                          ? const Color(0xFF6EE7B7)
+                          : const Color(0xFF065F46),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hasMeetup
+                        ? 'Handover at ${meetup.locationName}. Tap to track order progress.'
+                        : 'Order is active. Tap to view progress.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? const Color(0xFFA7F3D0)
+                          : const Color(0xFF047857),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: Color(0xFF059669),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildXianyuActionStrip(BuildContext context) {
     final isBuyer = widget.conversation.direction == ChatDirection.buying;
     final theme = Theme.of(context);
@@ -1798,6 +2136,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           builder: (context, _) => Column(
             children: [
               _buildXianyuProductHeader(context),
+              _buildOrderFlowCard(context),
               Expanded(child: _buildHistory(provider)),
               if (provider.messageReadErrorFor(widget.conversation.id) != null)
                 _InlineChatError(
@@ -1836,6 +2175,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 onStartRecording: _startVoiceRecording,
                 onCancelRecording: () => _finishVoiceRecording(send: false),
                 onSendRecording: () => _finishVoiceRecording(send: true),
+                showActionPanel: _showActionPanel,
+                onToggleActionPanel: _toggleActionPanel,
+                onOpenOrders: () => context.push('/orders'),
+                onScheduleMeetup: _scheduleMeetup,
+                onPay: _buyerBuyNow,
               ),
             ],
           ),
@@ -2307,6 +2651,11 @@ class _MessageComposer extends StatelessWidget {
     required this.onStartRecording,
     required this.onCancelRecording,
     required this.onSendRecording,
+    this.showActionPanel = false,
+    this.onToggleActionPanel,
+    this.onOpenOrders,
+    this.onScheduleMeetup,
+    this.onPay,
   });
 
   final TextEditingController controller;
@@ -2321,118 +2670,259 @@ class _MessageComposer extends StatelessWidget {
   final VoidCallback onStartRecording;
   final VoidCallback onCancelRecording;
   final VoidCallback onSendRecording;
+  final bool showActionPanel;
+  final VoidCallback? onToggleActionPanel;
+  final VoidCallback? onOpenOrders;
+  final VoidCallback? onScheduleMeetup;
+  final VoidCallback? onPay;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       elevation: 3,
       color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.sm,
-          AppSpacing.sm,
-          AppSpacing.sm,
-          AppSpacing.sm,
-        ),
-        child: isRecording
-            ? _RecordingComposer(
-                seconds: recordingSeconds,
-                onCancel: onCancelRecording,
-                onSend: onSendRecording,
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.sm,
+              AppSpacing.sm,
+              AppSpacing.sm,
+              AppSpacing.sm,
+            ),
+            child: isRecording
+                ? _RecordingComposer(
+                    seconds: recordingSeconds,
+                    onCancel: onCancelRecording,
+                    onSend: onSendRecording,
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      SizedBox(
+                        width: 44,
+                        height: 48,
+                        child: IconButton(
+                          key: const Key('chat_action_panel_toggle_button'),
+                          tooltip: showActionPanel ? 'Close actions' : 'More actions',
+                          onPressed: enabled && !isSending ? onToggleActionPanel : null,
+                          icon: Icon(
+                            showActionPanel
+                                ? Icons.cancel_outlined
+                                : Icons.add_circle_outline_rounded,
+                            size: 24,
+                            color: showActionPanel
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 44,
+                        height: 48,
+                        child: IconButton(
+                          key: const Key('chat_add_photo_button'),
+                          tooltip: 'Add photo',
+                          onPressed: enabled && !isSending ? onAddPhoto : null,
+                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 44,
+                        height: 48,
+                        child: IconButton(
+                          key: const Key('chat_share_location_button'),
+                          tooltip: 'Share location',
+                          onPressed: enabled && !isSending ? onShareLocation : null,
+                          icon: const Icon(Icons.place_outlined),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Expanded(
+                        child: TextField(
+                          key: const Key('chat_message_input'),
+                          controller: controller,
+                          focusNode: focusNode,
+                          enabled: enabled && !isSending,
+                          keyboardType: TextInputType.multiline,
+                          minLines: 1,
+                          maxLines: 5,
+                          maxLength: 2000,
+                          buildCounter:
+                              (
+                                context, {
+                                required currentLength,
+                                required isFocused,
+                                required maxLength,
+                              }) => null,
+                          textCapitalization: TextCapitalization.sentences,
+                          textInputAction: TextInputAction.newline,
+                          decoration: InputDecoration(
+                            labelText: enabled ? 'Message' : 'Conversation closed',
+                            hintText: enabled ? 'Write a message' : null,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(
+                        width: 44,
+                        height: 48,
+                        child: IconButton(
+                          key: const Key('chat_record_voice_button'),
+                          tooltip: 'Record voice message',
+                          onPressed: enabled && !isSending
+                              ? onStartRecording
+                              : null,
+                          icon: const Icon(Icons.mic_none_rounded),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: IconButton.filled(
+                          key: const Key('chat_send_button'),
+                          tooltip: 'Send message',
+                          style: IconButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: enabled && !isSending ? onSend : null,
+                          icon: isSending
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Center(
+                                  child: Transform.translate(
+                                    offset: const Offset(1.5, 0),
+                                    child: const Icon(Icons.send_rounded, size: 22),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+          if (!isRecording && showActionPanel) ...[
+            const Divider(height: 1),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: IconButton(
-                      key: const Key('chat_add_photo_button'),
-                      tooltip: 'Add photo',
-                      onPressed: enabled && !isSending ? onAddPhoto : null,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                    ),
+                  _ActionPanelItem(
+                    key: const Key('chat_action_panel_photos'),
+                    icon: Icons.image_rounded,
+                    label: 'Photos',
+                    color: const Color(0xFF0284C7),
+                    onTap: onAddPhoto,
                   ),
-                  SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: IconButton(
-                      key: const Key('chat_share_location_button'),
-                      tooltip: 'Share location',
-                      onPressed: enabled && !isSending ? onShareLocation : null,
-                      icon: const Icon(Icons.place_outlined),
-                    ),
+                  _ActionPanelItem(
+                    key: const Key('chat_action_panel_orders'),
+                    icon: Icons.receipt_long_rounded,
+                    label: 'Orders',
+                    color: const Color(0xFF6366F1),
+                    onTap: () {
+                      onOpenOrders?.call();
+                    },
                   ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('chat_message_input'),
-                      controller: controller,
-                      focusNode: focusNode,
-                      enabled: enabled && !isSending,
-                      keyboardType: TextInputType.multiline,
-                      minLines: 1,
-                      maxLines: 5,
-                      maxLength: 2000,
-                      buildCounter:
-                          (
-                            context, {
-                            required currentLength,
-                            required isFocused,
-                            required maxLength,
-                          }) => null,
-                      textCapitalization: TextCapitalization.sentences,
-                      textInputAction: TextInputAction.newline,
-                      decoration: InputDecoration(
-                        labelText: enabled ? 'Message' : 'Conversation closed',
-                        hintText: enabled ? 'Write a message' : null,
-                      ),
-                    ),
+                  _ActionPanelItem(
+                    key: const Key('chat_action_panel_pay'),
+                    icon: Icons.payment_rounded,
+                    label: 'Pay',
+                    color: const Color(0xFFD97706),
+                    onTap: () {
+                      onPay?.call();
+                    },
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: IconButton(
-                      key: const Key('chat_record_voice_button'),
-                      tooltip: 'Record voice message',
-                      onPressed: enabled && !isSending
-                          ? onStartRecording
-                          : null,
-                      icon: const Icon(Icons.mic_none_rounded),
-                    ),
+                  _ActionPanelItem(
+                    key: const Key('chat_action_panel_meetup'),
+                    icon: Icons.handshake_rounded,
+                    label: 'Meetup',
+                    color: const Color(0xFF059669),
+                    onTap: () {
+                      onScheduleMeetup?.call();
+                    },
                   ),
-                  const SizedBox(width: AppSpacing.xs),
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: IconButton.filled(
-                      key: const Key('chat_send_button'),
-                      tooltip: 'Send message',
-                      style: IconButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(48, 48),
-                      ),
-                      onPressed: enabled && !isSending ? onSend : null,
-                      icon: isSending
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Center(
-                              child: Transform.translate(
-                                offset: const Offset(1.5, 0),
-                                child: const Icon(Icons.send_rounded, size: 22),
-                              ),
-                            ),
-                    ),
+                  _ActionPanelItem(
+                    key: const Key('chat_action_panel_location'),
+                    icon: Icons.place_rounded,
+                    label: 'Location',
+                    color: const Color(0xFFEA580C),
+                    onTap: onShareLocation,
                   ),
                 ],
               ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionPanelItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionPanelItem({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: isDark ? 0.22 : 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: color.withValues(alpha: isDark ? 0.35 : 0.2),
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: Icon(icon, size: 24, color: color),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: 0.8,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2738,19 +3228,25 @@ class _ConversationState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: AppSpacing.md),
-            Text(message, textAlign: TextAlign.center),
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: AppSpacing.md),
-              OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+      child: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.sm,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(height: AppSpacing.sm),
+              Text(message, textAlign: TextAlign.center),
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
