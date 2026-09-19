@@ -409,6 +409,22 @@ class AuthProvider extends ChangeNotifier {
     await _storeProfile(token, updated);
   }
 
+  Future<void> updateBio(String value) async {
+    final bioText = value.trim();
+    if (bioText.length > 200) {
+      throw ArgumentError('Bio cannot exceed 200 characters.');
+    }
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to edit your profile.');
+    }
+    final updated = await userRepository.updateBio(
+      bioText,
+      token: token,
+    );
+    await _storeProfile(token, updated);
+  }
+
   void updateKiwiGold(int newBalance) {
     if (_currentUser != null) {
       final updated = _currentUser!.copyWith(kiwiGold: newBalance);

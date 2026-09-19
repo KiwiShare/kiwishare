@@ -301,10 +301,11 @@ router.patch('/admin/users/:id/trust-score', authenticateToken, requireAdmin, as
     if (
       typeof trustScore !== 'number' ||
       !Number.isFinite(trustScore) ||
-      !Number.isSafeInteger(trustScore)
+      !Number.isSafeInteger(trustScore) ||
+      trustScore < 0
     ) {
       ctx.status = 400;
-      ctx.body = { status: 'error', message: 'Trust score must be a safe integer.' };
+      ctx.body = { status: 'error', message: 'Trust score must be a non-negative safe integer.' };
       return;
     }
     user.trustScore = trustScore;

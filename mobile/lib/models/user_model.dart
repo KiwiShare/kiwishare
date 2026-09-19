@@ -2,6 +2,7 @@ class UserModel {
   final String id;
   final String displayName;
   final String? avatarUrl;
+  final String? bio;
   final int trustScore;
   final bool isVerified;
   final bool isStudentVerified;
@@ -17,6 +18,7 @@ class UserModel {
     required this.id,
     required this.displayName,
     this.avatarUrl,
+    this.bio,
     required this.trustScore,
     required this.isVerified,
     this.isStudentVerified = false,
@@ -34,6 +36,7 @@ class UserModel {
     String? id,
     String? displayName,
     String? avatarUrl,
+    String? bio,
     int? trustScore,
     bool? isVerified,
     bool? isStudentVerified,
@@ -49,6 +52,7 @@ class UserModel {
       id: id ?? this.id,
       displayName: displayName ?? this.displayName,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      bio: bio ?? this.bio,
       trustScore: trustScore ?? this.trustScore,
       isVerified: isVerified ?? this.isVerified,
       isStudentVerified: isStudentVerified ?? this.isStudentVerified,
@@ -68,6 +72,7 @@ class UserModel {
       'id': id,
       'displayName': displayName,
       'avatarUrl': avatarUrl,
+      'bio': bio,
       'trustScore': trustScore,
       'isVerified': isVerified,
       'isStudentVerified': isStudentVerified,
@@ -87,6 +92,7 @@ class UserModel {
       id: (map['id'] ?? map['_id'] ?? '').toString(),
       displayName: (map['displayName'] ?? '').toString(),
       avatarUrl: map['avatarUrl'] as String?,
+      bio: map['bio'] as String?,
       trustScore: (map['trustScore'] is num)
           ? (map['trustScore'] as num).toInt()
           : 100,

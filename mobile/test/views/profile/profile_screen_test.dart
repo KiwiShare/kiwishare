@@ -8,6 +8,7 @@ import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/notification_permission_coordinator.dart';
 import 'package:kiwishare/views/profile/notification_settings_screen.dart';
 import 'package:kiwishare/views/profile/profile_screen.dart';
+import 'package:kiwishare/views/profile/public_profile_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -345,6 +346,34 @@ void main() {
       expect(find.text('Welcome to KiwiShare'), findsOneWidget);
     },
   );
+
+  testWidgets('signed-in Profile tapping avatar opens PublicProfileScreen', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":95,"isVerified":true,"isVip":true}',
+    });
+    final userRepo = MockUserRepository();
+    final auth = AuthProvider(userRepository: userRepo);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<UserRepository>.value(value: userRepo),
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final avatarButton = find.byKey(const Key('profile_header_avatar_button'));
+    expect(avatarButton, findsOneWidget);
+    await tester.tap(avatarButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PublicProfileScreen), findsOneWidget);
+  });
 }
 
 class _Storage implements NotificationPermissionStorage {

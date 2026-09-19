@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
+import '../models/item_model.dart';
+import '../models/public_profile_model.dart';
 import '../config/api_config.dart';
 
 class UserAuthenticationException implements Exception {
@@ -72,6 +74,18 @@ abstract class UserRepository {
     required String token,
     String? displayName,
     String? avatarUrl,
+    String? bio,
+  });
+  Future<UserModel> updateBio(String bio, {required String token});
+  Future<PublicProfileModel> fetchPublicProfile(String userId, {String? token});
+  Future<List<ItemModel>> fetchUserPublicItems(
+    String userId, {
+    String status = 'active',
+    String? token,
+  });
+  Future<List<PublicReviewModel>> fetchUserPublicReviews(
+    String userId, {
+    String? token,
   });
   Future<void> changePassword({
     required String token,
@@ -193,6 +207,7 @@ class RestUserRepository implements UserRepository {
     required String token,
     String? displayName,
     String? avatarUrl,
+    String? bio,
   }) async {
     late final http.Response response;
     try {
@@ -205,6 +220,7 @@ class RestUserRepository implements UserRepository {
         body: jsonEncode({
           'displayName': ?displayName,
           'avatarUrl': ?avatarUrl,
+          'bio': ?bio,
         }),
       );
     } catch (_) {
@@ -470,6 +486,93 @@ class RestUserRepository implements UserRepository {
       throw Exception(data['message'] ?? 'Failed to verify student code.');
     }
   }
+
+  @override
+  Future<UserModel> updateBio(String bio, {required String token}) {
+    return updateProfile(token: token, bio: bio);
+  }
+
+  @override
+  Future<PublicProfileModel> fetchPublicProfile(
+    String userId, {
+    String? token,
+  }) async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    late final http.Response response;
+    try {
+      response = await _client.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/users/$userId/public-profile'),
+        headers: headers,
+      );
+    } catch (_) {
+      throw const UserNetworkException();
+    }
+    if (response.statusCode != 200) {
+      throw const UserRepositoryException('Failed to load user public profile.');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return PublicProfileModel.fromJson(data['user'] as Map<String, dynamic>);
+  }
+
+  @override
+  Future<List<ItemModel>> fetchUserPublicItems(
+    String userId, {
+    String status = 'active',
+    String? token,
+  }) async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    late final http.Response response;
+    try {
+      response = await _client.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/users/$userId/public-items?status=$status'),
+        headers: headers,
+      );
+    } catch (_) {
+      throw const UserNetworkException();
+    }
+    if (response.statusCode != 200) {
+      throw const UserRepositoryException('Failed to load user items.');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final itemsJson = data['items'] as List<dynamic>? ?? [];
+    return itemsJson
+        .map((it) => ItemModel.fromJson(it as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<List<PublicReviewModel>> fetchUserPublicReviews(
+    String userId, {
+    String? token,
+  }) async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    late final http.Response response;
+    try {
+      response = await _client.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/users/$userId/public-reviews'),
+        headers: headers,
+      );
+    } catch (_) {
+      throw const UserNetworkException();
+    }
+    if (response.statusCode != 200) {
+      throw const UserRepositoryException('Failed to load user reviews.');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final reviewsJson = data['reviews'] as List<dynamic>? ?? [];
+    return reviewsJson
+        .map((r) => PublicReviewModel.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
 }
 
 class MockUserRepository implements UserRepository {
@@ -520,15 +623,84 @@ class MockUserRepository implements UserRepository {
     required String token,
     String? displayName,
     String? avatarUrl,
+    String? bio,
   }) async {
     await Future.delayed(const Duration(milliseconds: 200));
     return UserModel(
       id: 'mock_user_1',
       displayName: displayName ?? 'Mock User',
       avatarUrl: avatarUrl,
+      bio: bio,
       trustScore: 100,
       isVerified: false,
     );
+  }
+
+  @override
+  Future<UserModel> updateBio(String bio, {required String token}) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    return UserModel(
+      id: 'mock_user_1',
+      displayName: 'Mock User',
+      bio: bio,
+      trustScore: 100,
+      isVerified: false,
+    );
+  }
+
+  @override
+  Future<PublicProfileModel> fetchPublicProfile(
+    String userId, {
+    String? token,
+  }) async {
+    return PublicProfileModel(
+      id: userId,
+      displayName: 'Mock Kiwi Trader',
+      avatarUrl: null,
+      bio: 'UoA Student | Tech enthusiast | Moving sale',
+      city: 'Auckland',
+      suburb: 'CBD',
+      trustScore: 95,
+      isVip: true,
+      isVerified: true,
+      isStudentVerified: true,
+      studentInstitution: 'University of Auckland',
+      rating: 5.0,
+      reviewCount: 4,
+      activeItemsCount: 3,
+      soldItemsCount: 5,
+      memberSince: DateTime.now().subtract(const Duration(days: 120)),
+    );
+  }
+
+  @override
+  Future<List<ItemModel>> fetchUserPublicItems(
+    String userId, {
+    String status = 'active',
+    String? token,
+  }) async {
+    return [];
+  }
+
+  @override
+  Future<List<PublicReviewModel>> fetchUserPublicReviews(
+    String userId, {
+    String? token,
+  }) async {
+    return [
+      PublicReviewModel(
+        id: 'mock_rev_1',
+        reviewerId: 'rev_1',
+        reviewerName: 'Alice M.',
+        reviewerAvatarUrl: null,
+        rating: 5,
+        comment: 'Great seller! Item was exactly as described and meetup on campus was super smooth.',
+        tags: const ['Punctual', 'Item as described', 'Fast response'],
+        role: 'buyer',
+        itemTitle: 'Sony WH-1000XM4',
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+      )
+    ];
   }
 
   @override

@@ -21,6 +21,7 @@ import 'user_listings_screen.dart';
 import 'user_meetups_screen.dart';
 import 'user_orders_screen.dart';
 import 'settings_screen.dart';
+import 'public_profile_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
 import '../../utils/trust_score.dart';
 
@@ -943,58 +944,71 @@ class _ProfileHeader extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.bottomRight,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: scheme.primary.withValues(alpha: 0.15),
-                        width: 2,
-                      ),
+              GestureDetector(
+                key: const Key('profile_header_avatar_button'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => PublicProfileScreen(userId: user.id),
                     ),
-                    child: CircleAvatar(
-                      radius: 32,
-                      backgroundColor: scheme.primaryContainer,
-                      foregroundImage:
-                          user.avatarUrl == null || user.avatarUrl!.isEmpty
-                          ? null
-                          : NetworkImage(user.avatarUrl!),
-                      onForegroundImageError:
-                          user.avatarUrl == null || user.avatarUrl!.isEmpty
-                          ? null
-                          : (_, _) {},
-                      child: Text(
-                        initial,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          color: scheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w700,
+                  );
+                },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: user.isVip
+                              ? const Color(0xFFFFD700)
+                              : scheme.primary.withValues(alpha: 0.15),
+                          width: user.isVip ? 3 : 2,
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 32,
+                        backgroundColor: scheme.primaryContainer,
+                        foregroundImage:
+                            user.avatarUrl == null || user.avatarUrl!.isEmpty
+                            ? null
+                            : NetworkImage(user.avatarUrl!),
+                        onForegroundImageError:
+                            user.avatarUrl == null || user.avatarUrl!.isEmpty
+                            ? null
+                            : (_, _) {},
+                        child: Text(
+                          initial,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            color: scheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  if (user.isVerified)
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF101B17)
-                              : Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.verified_rounded,
-                          color: Color(0xFF10B981),
-                          size: 18,
+                    if (user.isVerified)
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF101B17)
+                                : Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.verified_rounded,
+                            color: Color(0xFF10B981),
+                            size: 18,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -1154,6 +1168,37 @@ class _ProfileHeader extends StatelessWidget {
                           ),
                         ],
                       ],
+                    ),
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      key: const Key('profile_view_public_page_chip'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => PublicProfileScreen(userId: user.id),
+                          ),
+                        );
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'My Public Profile',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 9,
+                            color: scheme.primary,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

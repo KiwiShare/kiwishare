@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/models/user_model.dart';
+import 'package:kiwishare/models/item_model.dart';
+import 'package:kiwishare/models/public_profile_model.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/views/auth/login_view.dart';
@@ -81,6 +83,7 @@ class FakeCooldownUserRepository implements UserRepository {
     required String token,
     String? displayName,
     String? avatarUrl,
+    String? bio,
   }) async => const UserModel(
     id: 'test_u',
     displayName: 'Test User',
@@ -88,6 +91,38 @@ class FakeCooldownUserRepository implements UserRepository {
     trustScore: 90,
     isVerified: true,
   );
+
+  @override
+  Future<UserModel> updateBio(String bio, {required String token}) async => const UserModel(
+    id: 'test_u',
+    displayName: 'Test User',
+    avatarUrl: '',
+    trustScore: 90,
+    isVerified: true,
+  );
+
+  @override
+  Future<PublicProfileModel> fetchPublicProfile(String userId, {String? token}) async => const PublicProfileModel(
+    id: 'test_u',
+    displayName: 'Test User',
+    bio: '',
+    city: 'Auckland',
+    suburb: 'CBD',
+    trustScore: 90,
+    isVip: false,
+    isVerified: true,
+    isStudentVerified: false,
+    rating: 5.0,
+    reviewCount: 0,
+    activeItemsCount: 0,
+    soldItemsCount: 0,
+  );
+
+  @override
+  Future<List<ItemModel>> fetchUserPublicItems(String userId, {String status = 'active', String? token}) async => [];
+
+  @override
+  Future<List<PublicReviewModel>> fetchUserPublicReviews(String userId, {String? token}) async => [];
 
   @override
   Future<String> sendStudentVerificationOtp({

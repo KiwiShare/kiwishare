@@ -22,6 +22,7 @@ import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../products/product_detail_screen.dart';
 import '../profile/payment_checkout_screen.dart';
+import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
 import 'widgets/location_bubble.dart';
 import 'widgets/location_picker_sheet.dart';
@@ -1666,10 +1667,84 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         titleSpacing: 0,
-        title: Text(
-          widget.conversation.participantName,
-          key: const Key('conversation_participant_name'),
-          style: Theme.of(context).textTheme.titleMedium,
+        title: InkWell(
+          key: const Key('conversation_participant_header'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => PublicProfileScreen(
+                  userId: widget.conversation.participantId,
+                ),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(
+                  radius: 17,
+                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                  backgroundImage: widget.conversation.participantAvatarUrl != null &&
+                          widget.conversation.participantAvatarUrl!.isNotEmpty
+                      ? NetworkImage(widget.conversation.participantAvatarUrl!)
+                      : null,
+                  child: widget.conversation.participantAvatarUrl == null ||
+                          widget.conversation.participantAvatarUrl!.isEmpty
+                      ? Text(
+                          widget.conversation.participantName.isNotEmpty
+                              ? widget.conversation.participantName[0].toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.conversation.participantName,
+                        key: const Key('conversation_participant_name'),
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'View profile',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 12,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         actions: [
           IconButton(
