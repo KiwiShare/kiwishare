@@ -13,12 +13,14 @@ class ItemCard extends StatelessWidget {
   final ItemModel item;
   final VoidCallback? onTap;
   final NotificationPermissionCoordinator? permissionCoordinator;
+  final bool compact;
 
   const ItemCard({
     super.key,
     required this.item,
     this.onTap,
     this.permissionCoordinator,
+    this.compact = false,
   });
 
   Future<void> _toggleFavorite(
@@ -52,6 +54,7 @@ class ItemCard extends StatelessWidget {
     final isFavorite = favorites.isFavorite(item.id);
 
     return Semantics(
+      key: compact ? const Key('compact-item-card') : null,
       button: onTap != null,
       label:
           '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.location}, category: ${item.category}',
@@ -88,7 +91,7 @@ class ItemCard extends StatelessWidget {
               children: [
                 // 1. Photo Section with Overlays
                 AspectRatio(
-                  aspectRatio: 1.20,
+                  aspectRatio: compact ? 1.32 : 1.20,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -375,7 +378,9 @@ class ItemCard extends StatelessWidget {
 
                 // 2. Info & Details Body
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+                  padding: compact
+                      ? const EdgeInsets.fromLTRB(10, 6, 10, 6)
+                      : const EdgeInsets.fromLTRB(10, 7, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -487,6 +492,29 @@ class ItemCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (compact &&
+                              item.seller?.isStudentVerified == true) ...[
+                            const SizedBox(width: 3),
+                            const Tooltip(
+                              message: 'Verified student seller',
+                              child: Icon(
+                                Icons.verified,
+                                size: 11.5,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                          ],
+                          if (compact && item.isSustainable) ...[
+                            const SizedBox(width: 3),
+                            const Tooltip(
+                              message: 'Sustainable listing',
+                              child: Icon(
+                                Icons.eco_rounded,
+                                size: 11.5,
+                                color: Color(0xFF059669),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 2.5),
@@ -505,10 +533,10 @@ class ItemCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
 
                       // Seller Row
-                      Row(
+                      if (!compact) const SizedBox(height: 4),
+                      if (!compact) Row(
                         children: [
                           CircleAvatar(
                             radius: 7.5,
@@ -579,8 +607,9 @@ class ItemCard extends StatelessWidget {
                       ),
 
                       // Badges Under the User Row
-                      if (item.isSustainable ||
-                          item.seller?.isStudentVerified == true) ...[
+                      if (!compact &&
+                          (item.isSustainable ||
+                              item.seller?.isStudentVerified == true)) ...[
                         const SizedBox(height: 4),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,

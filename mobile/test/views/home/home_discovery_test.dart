@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kiwishare/main.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/providers.dart';
+import 'package:kiwishare/repositories/item_repository.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/product_location_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
@@ -59,12 +60,27 @@ class _DeniedLocationService implements ProductLocationService {
       );
 }
 
+class _GridOnlyItemRepository extends TestItemRepository {
+  @override
+  Future<List<ItemModel>> fetchFeaturedItems({int limit = 10}) async => [];
+
+  @override
+  Future<List<ItemModel>> fetchRecommendedItems({
+    int limit = 10,
+    double? latitude,
+    double? longitude,
+    String? token,
+  }) async => [];
+}
+
 Widget _homeApp({
   ValueChanged<ItemModel>? onOpenItem,
   TextScaler textScaler = TextScaler.noScaling,
   ProductLocationService? locationService,
   HomeDiscoveryProvider? discovery,
   bool autoLocate = false,
+  ThemeMode themeMode = ThemeMode.light,
+  ItemRepository? itemRepository,
 }) => MultiProvider(
   providers: [
     ChangeNotifierProvider.value(value: discovery ?? HomeDiscoveryProvider()),
@@ -72,11 +88,15 @@ Widget _homeApp({
       create: (_) => FavoritesProvider(repository: _TestWatchlistRepository()),
     ),
     ChangeNotifierProvider(
-      create: (_) => ListingProvider(itemRepository: TestItemRepository()),
+      create: (_) => ListingProvider(
+        itemRepository: itemRepository ?? TestItemRepository(),
+      ),
     ),
   ],
   child: MaterialApp(
     theme: buildKiwiShareTheme(),
+    darkTheme: buildKiwiShareDarkTheme(),
+    themeMode: themeMode,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: textScaler),
       child: child!,
@@ -115,6 +135,26 @@ void main() {
     expect(
       tester.getRect(find.byType(KiwiShareLogo)).right,
       lessThan(tester.getRect(find.text('KiwiShare')).left),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Home header actions stay compact with 48px tap targets', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
+
+    final scan = find.byKey(const Key('home-scan-qr-button'));
+    final location = find.byKey(const Key('home-location-button'));
+    final scanRect = tester.getRect(scan);
+    final locationRect = tester.getRect(location);
+
+    expect(scanRect.size, const Size(48, 48));
+    expect(locationRect.size, const Size(48, 48));
+    expect(locationRect.right - scanRect.left, lessThanOrEqualTo(100));
+    expect(
+      tester.widget<IconButton>(location).tooltip,
+      startsWith('Location: '),
     );
     expect(tester.takeException(), isNull);
   });
@@ -199,8 +239,12 @@ void main() {
     await tester.tap(find.byKey(const Key('home-near-you-option')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Near you'), findsOneWidget);
-    expect(find.text('(Auckland)'), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('home-location-button')))
+          .tooltip,
+      'Location: Near you (Auckland)',
+    );
     expect(find.byKey(const Key('home-products-map')), findsOneWidget);
     expect(find.text('2 items'), findsOneWidget);
     expect(find.byKey(const Key('home-product-marker-item_1')), findsOneWidget);
@@ -211,8 +255,12 @@ void main() {
     await _loadHome(tester, _homeApp(autoLocate: true));
     await tester.pumpAndSettle();
 
-    expect(find.text('Near you'), findsOneWidget);
-    expect(find.text('(Auckland)'), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('home-location-button')))
+          .tooltip,
+      'Location: Near you (Auckland)',
+    );
     expect(find.text('2 items'), findsOneWidget);
   });
 
@@ -415,6 +463,30 @@ void main() {
 
     expect(find.byKey(const Key('home-search-field')), findsOneWidget);
     expect(find.byKey(const Key('home-category-Camping')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Home grid uses compact cards without dark-mode overflow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _loadHome(
+      tester,
+      _homeApp(
+        themeMode: ThemeMode.dark,
+        itemRepository: _GridOnlyItemRepository(),
+      ),
+    );
+
+    final compactCards = find.byKey(const Key('compact-item-card'));
+    expect(compactCards, findsWidgets);
+    expect(tester.getSize(compactCards.first).height, lessThan(220));
+    expect(find.byKey(const Key('home-scan-qr-button')), findsOneWidget);
+    expect(find.byKey(const Key('home-location-button')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

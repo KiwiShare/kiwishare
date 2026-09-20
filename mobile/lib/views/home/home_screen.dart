@@ -494,6 +494,18 @@ class _HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final locationDescription = nearYou
+        ? (location.isNotEmpty &&
+                  location != HomeDiscoveryProvider.allLocationsLabel
+              ? 'Near you ($location)'
+              : 'Near you')
+        : (location.isEmpty
+              ? HomeDiscoveryProvider.allLocationsLabel
+              : location);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -506,8 +518,10 @@ class _HomeHeader extends StatelessWidget {
             children: [
               Text(
                 'KiwiShare',
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  color: AppColors.textBrand,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.headlineLarge?.copyWith(
+                  color: isDark ? colors.primary : AppColors.textBrand,
                   fontWeight: FontWeight.w900,
                   fontSize: 24,
                   letterSpacing: -0.6,
@@ -515,8 +529,10 @@ class _HomeHeader extends StatelessWidget {
               ),
               Text(
                 'Share & Reuse in NZ',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.brandSecondary,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
                   fontSize: 11,
                   letterSpacing: 0.3,
@@ -527,63 +543,36 @@ class _HomeHeader extends StatelessWidget {
         ),
         IconButton(
           key: const Key('home-scan-qr-button'),
-          icon: const Icon(Icons.qr_code_scanner_rounded, size: 24),
+          icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
           tooltip: 'Scan QR Code',
           onPressed: onScanQr,
-          color: Theme.of(context).colorScheme.onSurface,
+          style: IconButton.styleFrom(
+            minimumSize: const Size.square(48),
+            backgroundColor: colors.surfaceContainerHighest,
+            foregroundColor: colors.onSurface,
+            side: BorderSide(color: colors.outlineVariant),
+          ),
         ),
-        const SizedBox(width: 4),
-        TextButton.icon(
+        const SizedBox(width: AppSpacing.xs),
+        IconButton(
           key: const Key('home-location-button'),
           onPressed: onChooseLocation,
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: AppSpacing.xs,
-            ),
-            backgroundColor: AppColors.surfaceMuted,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.full),
-              side: const BorderSide(color: AppColors.border),
+          tooltip: 'Location: $locationDescription',
+          style: IconButton.styleFrom(
+            minimumSize: const Size.square(48),
+            backgroundColor: nearYou
+                ? colors.primaryContainer
+                : colors.surfaceContainerHighest,
+            foregroundColor: nearYou
+                ? colors.onPrimaryContainer
+                : colors.onSurfaceVariant,
+            side: BorderSide(
+              color: nearYou ? colors.primary : colors.outlineVariant,
             ),
           ),
           icon: Icon(
             nearYou ? Icons.my_location : Icons.location_on_outlined,
-            size: 18,
-            color: nearYou ? AppColors.brandPrimary : AppColors.textSecondary,
-          ),
-          label: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 140),
-            child: DefaultTextStyle.merge(
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: AppColors.brandPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-              child: nearYou
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Near you'),
-                        if (location.isNotEmpty &&
-                            location !=
-                                HomeDiscoveryProvider.allLocationsLabel) ...[
-                          const SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              '($location)',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ],
-                    )
-                  : Text(
-                      location,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-            ),
+            size: 22,
           ),
         ),
       ],
@@ -1448,12 +1437,16 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.58 - (textScale - 1) * 0.20,
+        childAspectRatio: 0.75 - (textScale - 1) * 0.22,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
         final item = products[index];
-        return ItemCard(item: item, onTap: () => onOpen(item));
+        return ItemCard(
+          item: item,
+          compact: true,
+          onTap: () => onOpen(item),
+        );
       },
     );
   }
@@ -1479,10 +1472,10 @@ class _HomeLoadingState extends StatelessWidget {
             maxCrossAxisExtent: 220,
             crossAxisSpacing: AppSpacing.md,
             mainAxisSpacing: AppSpacing.md,
-            childAspectRatio: 0.60,
+            childAspectRatio: 0.75,
           ),
           itemCount: 4,
-          itemBuilder: (_, _) => const ItemCardSkeleton(),
+          itemBuilder: (_, _) => const ItemCardSkeleton(compact: true),
         ),
       ],
     );
