@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/watchlist_provider.dart';
+import 'package:kiwishare/repositories/notification_preferences_repository.dart';
 import 'package:kiwishare/repositories/watchlist_repository.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/watchlist/watchlist_screen.dart';
@@ -10,15 +11,26 @@ import 'package:provider/provider.dart';
 Widget _watchlistApp({
   required WatchlistRepository repository,
   ValueChanged<ItemModel>? onOpenItem,
+  String? token,
+  NotificationPreferencesRepository? preferencesRepository,
+  TextScaler textScaler = TextScaler.noScaling,
 }) {
   return MultiProvider(
     providers: [
       ChangeNotifierProvider(
-        create: (_) => WatchlistProvider(repository: repository),
+        create: (_) => WatchlistProvider(
+          repository: repository,
+          initialToken: token,
+          preferencesRepository: preferencesRepository,
+        ),
       ),
     ],
     child: MaterialApp(
       theme: buildKiwiShareTheme(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+        child: child!,
+      ),
       home: WatchlistScreen(onOpenItem: onOpenItem),
     ),
   );
@@ -185,4 +197,86 @@ void main() {
     expect(find.text('Vintage Oak Armchair'), findsOneWidget);
     expect(find.text('2 items'), findsOneWidget);
   });
+
+  testWidgets('load failure is distinct from empty state and Retry recovers', (
+    tester,
+  ) async {
+    final repo = _RecoveringWatchlistRepository();
+    await tester.pumpWidget(_watchlistApp(repository: repo));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load your Watchlist.'), findsOneWidget);
+    expect(find.text('Your watchlist is empty'), findsNothing);
+
+    repo.shouldFail = false;
+    await tester.tap(find.byKey(const Key('watchlist-retry-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Monstera Deliciosa'), findsOneWidget);
+  });
+
+  testWidgets('keeps repository newest-first ordering', (tester) async {
+    final repo = TestWatchlistRepository(
+      initialIds: {'item_plant_1', 'item_chair_2'},
+      initialItems: [_testItem2, _testItem1],
+    );
+    await tester.pumpWidget(_watchlistApp(repository: repo));
+    await tester.pumpAndSettle();
+
+    final chairTop = tester.getTopLeft(find.text('Vintage Oak Armchair')).dy;
+    final plantTop = tester.getTopLeft(find.text('Monstera Deliciosa')).dy;
+    expect(chairTop, lessThan(plantTop));
+  });
+
+  testWidgets('Price alerts setting is not rendered on WatchlistScreen (moved to Profile Settings)', (
+    tester,
+  ) async {
+    final preferences = _PreferenceRepository(true);
+    await tester.pumpWidget(
+      _watchlistApp(
+        repository: TestWatchlistRepository(),
+        token: 'account-token',
+        preferencesRepository: preferences,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('watchlist-price-alerts-switch')),
+      findsNothing,
+    );
+  });
+}
+
+class _RecoveringWatchlistRepository extends TestWatchlistRepository {
+  bool shouldFail = true;
+
+  @override
+  Future<List<ItemModel>> fetchWatchlist({String? token}) async {
+    if (shouldFail) throw const WatchlistRepositoryException();
+    return [_testItem1];
+  }
+
+  @override
+  Future<Set<String>> fetchWatchedItemIds({String? token}) async {
+    if (shouldFail) throw const WatchlistRepositoryException();
+    return {_testItem1.id};
+  }
+}
+
+class _PreferenceRepository implements NotificationPreferencesRepository {
+  _PreferenceRepository(this.saved);
+
+  bool saved;
+
+  @override
+  Future<bool> fetchWatchlistPriceDrop({required String token}) async => saved;
+
+  @override
+  Future<bool> updateWatchlistPriceDrop({
+    required String token,
+    required bool enabled,
+  }) async {
+    saved = enabled;
+    return true;
+  }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/main.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/watchlist_provider.dart';
+import 'package:kiwishare/repositories/notification_preferences_repository.dart';
 import 'package:kiwishare/repositories/watchlist_repository.dart';
 
 void main() {
@@ -133,6 +134,23 @@ void main() {
     },
   );
 
+  test(
+    'failed removal reports failure after restoring optimistic state',
+    () async {
+      final provider = WatchlistProvider(
+        repository: _FailedRemoveWatchlistRepository(),
+        initialToken: 'valid-token',
+        initialWatchedIds: {'existing-item'},
+      );
+
+      expect(
+        await provider.removeFromWatchlist('existing-item'),
+        WatchlistMutationResult.failed,
+      );
+      expect(provider.isWatched('existing-item'), isTrue);
+    },
+  );
+
   test('already watched add reports unchanged without another write', () async {
     final repository = _RecordingWatchlistRepository();
     final provider = WatchlistProvider(
@@ -204,6 +222,153 @@ void main() {
     await olderLoad;
     expect(provider.watchedItemIds, {'new-item'});
   });
+
+  test('failed preference update rolls back its previous value', () async {
+    final preferences = _FailingPreferencesRepository();
+    final provider = WatchlistProvider(
+      repository: TestWatchlistRepository(),
+      preferencesRepository: preferences,
+    );
+    syncWatchlistAuth(provider, 'account-one');
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.watchlistPriceDropEnabled, isTrue);
+
+    expect(await provider.updateNotificationPreference(false), isFalse);
+    expect(provider.watchlistPriceDropEnabled, isTrue);
+    expect(provider.preferenceError, isNotNull);
+  });
+
+  test('account switch clears the previous notification preference', () async {
+    final preferences = _DelayedPreferencesRepository();
+    final provider = WatchlistProvider(
+      repository: TestWatchlistRepository(),
+      preferencesRepository: preferences,
+    );
+    syncWatchlistAuth(provider, 'old-account');
+    await Future<void>.delayed(Duration.zero);
+    preferences.old.complete(true);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.watchlistPriceDropEnabled, isTrue);
+
+    syncWatchlistAuth(provider, 'new-account');
+    expect(provider.watchlistPriceDropEnabled, isNull);
+    await Future<void>.delayed(Duration.zero);
+    preferences.fresh.complete(false);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.watchlistPriceDropEnabled, isFalse);
+  });
+
+  test('pagination appends without duplicates and refresh restarts', () async {
+    final repository = _PagedWatchlistRepository();
+    final provider = WatchlistProvider(
+      repository: repository,
+      initialToken: 'valid-token',
+    );
+
+    await provider.loadWatchlist();
+    expect(provider.watchlistItems.map((item) => item.id), [
+      'newest',
+      'shared',
+    ]);
+    expect(provider.hasMore, isTrue);
+
+    await provider.loadMore();
+    expect(provider.watchlistItems.map((item) => item.id), [
+      'newest',
+      'shared',
+      'oldest',
+    ]);
+    expect(provider.hasMore, isFalse);
+
+    await provider.loadWatchlist(forceRefresh: true);
+    expect(repository.firstPageRequests, 2);
+    expect(provider.watchlistItems.map((item) => item.id), [
+      'newest',
+      'shared',
+    ]);
+  });
+}
+
+class _FailingPreferencesRepository
+    implements NotificationPreferencesRepository {
+  @override
+  Future<bool> fetchWatchlistPriceDrop({required String token}) async => true;
+
+  @override
+  Future<bool> updateWatchlistPriceDrop({
+    required String token,
+    required bool enabled,
+  }) async => false;
+}
+
+class _DelayedPreferencesRepository
+    implements NotificationPreferencesRepository {
+  final old = Completer<bool>();
+  final fresh = Completer<bool>();
+
+  @override
+  Future<bool> fetchWatchlistPriceDrop({required String token}) =>
+      token == 'old-account' ? old.future : fresh.future;
+
+  @override
+  Future<bool> updateWatchlistPriceDrop({
+    required String token,
+    required bool enabled,
+  }) async => true;
+}
+
+class _PagedWatchlistRepository
+    implements WatchlistRepository, PaginatedWatchlistRepository {
+  int firstPageRequests = 0;
+
+  ItemModel _item(String id) => ItemModel(
+    id: id,
+    title: id,
+    priceNzd: '1',
+    location: 'Auckland',
+    imageUrl: '',
+    isSustainable: false,
+    category: 'Other',
+    status: ItemStatus.active,
+    ownerId: 'seller',
+  );
+
+  @override
+  Future<WatchlistPage> fetchWatchlistPage({
+    String? token,
+    String? cursor,
+    int limit = 25,
+  }) async {
+    if (cursor == null) {
+      firstPageRequests += 1;
+      return WatchlistPage(
+        items: [_item('newest'), _item('shared')],
+        nextCursor: 'next',
+        hasMore: true,
+      );
+    }
+    return WatchlistPage(items: [_item('shared'), _item('oldest')]);
+  }
+
+  @override
+  Future<List<ItemModel>> fetchWatchlist({String? token}) async => [];
+
+  @override
+  Future<Set<String>> fetchWatchedItemIds({String? token}) async => {
+    'newest',
+    'shared',
+    'oldest',
+  };
+
+  @override
+  Future<bool> addToWatchlist(String itemId, {String? token}) async => true;
+
+  @override
+  Future<bool> removeFromWatchlist(String itemId, {String? token}) async =>
+      true;
+
+  @override
+  Future<bool> isWatched(String itemId, {String? token}) async => false;
 }
 
 class _RecordingWatchlistRepository implements WatchlistRepository {
@@ -348,6 +513,12 @@ class _ConcurrentLoadWatchlistRepository implements WatchlistRepository {
 class _FailedAddWatchlistRepository extends TestWatchlistRepository {
   @override
   Future<bool> addToWatchlist(String itemId, {String? token}) async => false;
+}
+
+class _FailedRemoveWatchlistRepository extends TestWatchlistRepository {
+  @override
+  Future<bool> removeFromWatchlist(String itemId, {String? token}) async =>
+      false;
 }
 
 class _RapidToggleWatchlistRepository extends TestWatchlistRepository {

@@ -79,6 +79,41 @@ final _detailItem = ItemModel(
 );
 
 void main() {
+  testWidgets('ProductDetailScreen caps public seller trust display at 200+', (
+    tester,
+  ) async {
+    final item = ItemModel(
+      id: _detailItem.id,
+      title: _detailItem.title,
+      priceNzd: _detailItem.priceNzd,
+      location: _detailItem.location,
+      imageUrl: '',
+      isSustainable: _detailItem.isSustainable,
+      category: _detailItem.category,
+      status: _detailItem.status,
+      description: _detailItem.description,
+      ownerId: _detailItem.ownerId,
+      seller: const SellerInfo(
+        id: 'seller_3',
+        displayName: 'High Trust Seller',
+        trustScore: 205,
+      ),
+    );
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: item,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.scrollUntilVisible(find.text('Trust Score'), 300);
+
+    expect(find.text('200+'), findsOneWidget);
+    expect(find.textContaining('/100'), findsNothing);
+  });
+
   testWidgets('ProductDetailScreen allows watching and unwatching item', (
     tester,
   ) async {
@@ -111,15 +146,15 @@ void main() {
     // 1. Initial State: not watched
     expect(find.text('Eco 4-Person Camping Tent'), findsWidgets);
     expect(find.text('\$95 NZD'), findsOneWidget);
-    expect(find.text('Watching'), findsOneWidget);
+    expect(find.text('Watchlist'), findsOneWidget);
     expect(provider.isWatched('64f000000000000000000001'), isFalse);
 
     // 2. Tap bottom "Watch Item" button
     await tester.tap(find.byKey(const Key('detail-watch-action-button')));
     await tester.pumpAndSettle();
 
-    // 3. Status changes to "Watching"
-    expect(find.text('Watching'), findsOneWidget);
+    // 3. Status changes to "Watchlisted"
+    expect(find.text('Watchlisted'), findsOneWidget);
     expect(provider.isWatched('64f000000000000000000001'), isTrue);
     expect(
       provider.watchlistItems.any((i) => i.id == '64f000000000000000000001'),
@@ -131,8 +166,8 @@ void main() {
     await tester.tap(find.byKey(const Key('detail-favorite-button')));
     await tester.pumpAndSettle();
 
-    // 5. The label stays fixed; the heart communicates the status.
-    expect(find.text('Watching'), findsOneWidget);
+    // 5. The label reverts to "Watchlist"
+    expect(find.text('Watchlist'), findsOneWidget);
     expect(provider.isWatched('64f000000000000000000001'), isFalse);
     expect(permissionController.statusCalls, 1);
   });
@@ -266,7 +301,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(provider.isWatched(_detailItem.id), isTrue);
-      expect(find.text('Watching'), findsOneWidget);
+      expect(find.text('Watchlisted'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -402,10 +437,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Your listing'), findsOneWidget);
-    final button = tester.widget<FilledButton>(
-      find.byKey(const Key('detail-message-seller-button')),
-    );
-    expect(button.onPressed, isNull);
+    expect(find.byKey(const Key('detail-message-seller-button')), findsNothing);
+    expect(find.byKey(const Key('detail-edit-listing-button')), findsOneWidget);
     expect(repository.createCalls, 0);
   });
 
@@ -461,8 +494,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Watching'), findsOneWidget);
-    expect(find.text('Message seller'), findsOneWidget);
+    expect(find.text('Watchlist'), findsOneWidget);
+    expect(
+      find.byKey(const Key('detail-message-seller-button')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -748,10 +784,31 @@ class _FailingItemRepository implements ItemRepository {
   Future<List<ItemModel>> fetchPopularItems() => throw UnimplementedError();
 
   @override
-  Future<List<ItemModel>> fetchRecommendedItems({int limit = 10}) =>
+  Future<List<ItemModel>> fetchFeaturedItems({int limit = 10}) =>
       throw UnimplementedError();
+
+  @override
+  Future<List<ItemModel>> fetchRecommendedItems({
+    int limit = 10,
+    double? latitude,
+    double? longitude,
+    String? token,
+  }) => throw UnimplementedError();
 
   @override
   Stream<List<ItemModel>> searchItems({String? query, String? category}) =>
       throw UnimplementedError();
+
+  @override
+  Future<Map<String, dynamic>> promoteItem({
+    required String id,
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<ItemModel> toggleListingStatus({
+    required String id,
+    required bool publish,
+    required String token,
+  }) => throw UnimplementedError();
 }

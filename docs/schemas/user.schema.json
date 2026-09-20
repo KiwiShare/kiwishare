@@ -20,8 +20,7 @@
     "trustScore": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 100,
-      "description": "User reputation rating based on successful transactions."
+      "description": "Cumulative trust score based on successful transaction participation and administrator adjustments."
     },
     "isVerified": {
       "type": "boolean",

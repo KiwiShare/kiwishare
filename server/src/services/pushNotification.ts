@@ -503,6 +503,121 @@ export async function notifyMeetupConfirmed(request: MeetupPushRequest): Promise
   }
 }
 
+export interface OrderReminderPushRequest {
+  receiverId: mongoose.Types.ObjectId;
+  orderId: string;
+  itemId: string;
+  itemTitle: string;
+  locationName?: string;
+}
+
+export async function notifyPaymentPendingMeetup(
+  request: OrderReminderPushRequest
+): Promise<void> {
+  try {
+    const registrations = await PushDevice.find({
+      userId: request.receiverId,
+      active: true
+    })
+      .select('+token')
+      .sort({ lastSeenAt: -1 })
+      .limit(20)
+      .lean();
+    const tokens = registrations
+      .map((registration: any) => registration.token)
+      .filter((token: unknown): token is string => typeof token === 'string');
+    if (tokens.length === 0) return;
+
+    const app = await configuredFirebaseApp();
+    if (!app) return;
+
+    const { getMessaging } = await import('firebase-admin/messaging');
+    await getMessaging(app).sendEachForMulticast({
+      tokens,
+      notification: {
+        title: 'Payment Received — Schedule Handover',
+        body: `Payment is secured for "${request.itemTitle}". Please schedule a meetup location and time.`
+      },
+      data: {
+        type: 'order_payment_pending_meetup',
+        orderId: request.orderId,
+        itemId: request.itemId,
+        itemTitle: request.itemTitle
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          icon: ANDROID_NOTIFICATION_ICON,
+          color: ANDROID_NOTIFICATION_COLOR
+        }
+      },
+      apns: {
+        payload: { aps: { sound: 'default', contentAvailable: true } }
+      }
+    });
+  } catch (error) {
+    console.warn(
+      '[Push Notification] Payment pending meetup notification delivery failed.',
+      error instanceof Error ? error.message : 'Unknown delivery error.'
+    );
+  }
+}
+
+export async function notifyMeetupPendingPayment(
+  request: OrderReminderPushRequest
+): Promise<void> {
+  try {
+    const registrations = await PushDevice.find({
+      userId: request.receiverId,
+      active: true
+    })
+      .select('+token')
+      .sort({ lastSeenAt: -1 })
+      .limit(20)
+      .lean();
+    const tokens = registrations
+      .map((registration: any) => registration.token)
+      .filter((token: unknown): token is string => typeof token === 'string');
+    if (tokens.length === 0) return;
+
+    const app = await configuredFirebaseApp();
+    if (!app) return;
+
+    const locInfo = request.locationName ? ` at ${request.locationName}` : '';
+    const { getMessaging } = await import('firebase-admin/messaging');
+    await getMessaging(app).sendEachForMulticast({
+      tokens,
+      notification: {
+        title: 'Meetup Scheduled — Payment Pending',
+        body: `Meetup scheduled for "${request.itemTitle}"${locInfo}. Please complete payment to unlock handover.`
+      },
+      data: {
+        type: 'order_meetup_pending_payment',
+        orderId: request.orderId,
+        itemId: request.itemId,
+        itemTitle: request.itemTitle
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          icon: ANDROID_NOTIFICATION_ICON,
+          color: ANDROID_NOTIFICATION_COLOR
+        }
+      },
+      apns: {
+        payload: { aps: { sound: 'default', contentAvailable: true } }
+      }
+    });
+  } catch (error) {
+    console.warn(
+      '[Push Notification] Meetup pending payment notification delivery failed.',
+      error instanceof Error ? error.message : 'Unknown delivery error.'
+    );
+  }
+}
+
 export interface PriceDropNotificationRequest {
   item: {
     _id: mongoose.Types.ObjectId | string;
@@ -592,58 +707,9 @@ export async function notifyWatchlistPriceDrop(
           continue;
         }
 
-        // Send price drop email to watcher (non-blocking)
-        if (user.email) {
-          sendWatchlistPriceEmail({
-            to: user.email,
-            recipientName: user.displayName || 'Kiwi Member',
-            itemTitle: item.title,
-            itemId: itemId.toString(),
-            oldPriceNzd,
-            newPriceNzd,
-            newPriceCents
-          }).catch((emailErr) => {
-            console.warn(
-              `[Push Notification] Watchlist price email failure for ${user.email}:`,
-              emailErr instanceof Error ? emailErr.message : emailErr
-            );
-          });
-        }
-
-        // Retrieve active device tokens
-        const devices = await PushDevice.find({ userId, active: true })
-          .select('+token')
-          .sort({ lastSeenAt: -1 })
-          .limit(20)
-          .lean();
-
-        const tokens = devices
-          .map((d: any) => d.token)
-          .filter((t: unknown): t is string => typeof t === 'string' && t.trim().length > 0);
-
-        if (tokens.length === 0) {
-          try {
-            await NotificationHistory.create({
-              userId,
-              itemId,
-              type: 'watchlist_price_drop',
-              eventId,
-              oldPriceNzd,
-              newPriceNzd,
-              oldPriceCents,
-              newPriceCents,
-              status: 'no_devices',
-              deviceCount: 0
-            });
-          } catch (err: any) {
-            if (err.code !== 11000) throw err;
-          }
-          continue;
-        }
-
-        // Reserve this user/event before quota admission. The unique history
-        // index makes concurrent replays lose here, before they can consume a
-        // second quota slot or call the provider.
+        // Reserve the user/event before either delivery channel. The unique
+        // index makes concurrent or replayed processing a no-op for email and
+        // FCM alike.
         try {
           const reservation = await NotificationHistory.create({
             userId,
@@ -655,7 +721,7 @@ export async function notifyWatchlistPriceDrop(
             oldPriceCents,
             newPriceCents,
             status: 'processing',
-            deviceCount: tokens.length
+            deviceCount: 0
           });
           reservedHistoryId = reservation._id as mongoose.Types.ObjectId;
         } catch (err: any) {
@@ -663,7 +729,8 @@ export async function notifyWatchlistPriceDrop(
           throw err;
         }
 
-        // Enforce 20 events per Auckland day atomically
+        // Enforce 20 events per Auckland day atomically. One admitted event may
+        // use email, FCM, or both channels, but consumes only one quota slot.
         let capDoc = await NotificationDailyCap.findOneAndUpdate(
           { userId, dateKey, count: { $lt: 20 } },
           { $inc: { count: 1 } },
@@ -679,7 +746,6 @@ export async function notifyWatchlistPriceDrop(
             });
           } catch (err: any) {
             if (err.code === 11000) {
-              // Upsert race: document was created concurrently, retry atomic findOneAndUpdate
               capDoc = await NotificationDailyCap.findOneAndUpdate(
                 { userId, dateKey, count: { $lt: 20 } },
                 { $inc: { count: 1 } },
@@ -691,15 +757,53 @@ export async function notifyWatchlistPriceDrop(
           }
         }
 
-        const isAdmitted = capDoc !== null && capDoc.count <= 20;
-
-        if (!isAdmitted) {
-          // Rate limited (21st and later)
+        if (capDoc === null || capDoc.count > 20) {
           await NotificationHistory.findByIdAndUpdate(reservedHistoryId, {
             $set: { status: 'rate_limited' }
           });
           continue;
         }
+
+        if (user.email) {
+          try {
+            await sendWatchlistPriceEmail({
+              to: user.email,
+              recipientName: user.displayName || 'Kiwi Member',
+              itemTitle: item.title,
+              itemId: itemId.toString(),
+              oldPriceNzd,
+              newPriceNzd,
+              newPriceCents
+            });
+          } catch (emailErr) {
+            console.warn(
+              '[Push Notification] Watchlist price email delivery failed.',
+              emailErr instanceof Error ? emailErr.message : 'Unknown delivery error.'
+            );
+          }
+        }
+
+        // Retrieve active device tokens
+        const devices = await PushDevice.find({ userId, active: true })
+          .select('+token')
+          .sort({ lastSeenAt: -1 })
+          .limit(20)
+          .lean();
+
+        const tokens = devices
+          .map((d: any) => d.token)
+          .filter((t: unknown): t is string => typeof t === 'string' && t.trim().length > 0);
+
+        if (tokens.length === 0) {
+          await NotificationHistory.findByIdAndUpdate(reservedHistoryId, {
+            $set: { status: 'no_devices', deviceCount: 0 }
+          });
+          continue;
+        }
+
+        await NotificationHistory.findByIdAndUpdate(reservedHistoryId, {
+          $set: { deviceCount: tokens.length }
+        });
 
         // Call push gateway
         const gateway = gatewayOverride ?? firebaseGateway;

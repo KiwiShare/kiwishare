@@ -46,6 +46,7 @@ export interface IOrder extends Document {
   };
   qrScannedAt?: Date;
   buyerConfirmedAt?: Date;
+  sellerConfirmedAt?: Date;
   cancellation?: {
     cancelledBy?: mongoose.Types.ObjectId;
     reason?: string;
@@ -53,6 +54,10 @@ export interface IOrder extends Document {
   };
   paidAt?: Date;
   completedAt?: Date;
+  completionCredit?: {
+    pointsPerParticipant: number;
+    awardedAt: Date;
+  };
   refundedAt?: Date;
   sellerPaidAt?: Date;
   createdAt: Date;
@@ -116,6 +121,7 @@ const OrderSchema = new Schema<IOrder>(
     },
     qrScannedAt: { type: Date },
     buyerConfirmedAt: { type: Date },
+    sellerConfirmedAt: { type: Date },
     cancellation: {
       cancelledBy: { type: Schema.Types.ObjectId, ref: 'User' },
       reason: { type: String },
@@ -123,6 +129,10 @@ const OrderSchema = new Schema<IOrder>(
     },
     paidAt: { type: Date },
     completedAt: { type: Date },
+    completionCredit: {
+      pointsPerParticipant: { type: Number, min: 0 },
+      awardedAt: { type: Date }
+    },
     refundedAt: { type: Date },
     sellerPaidAt: { type: Date }
   },

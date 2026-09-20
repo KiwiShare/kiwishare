@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../utils/trust_score.dart';
 
 import '../../models/chat_conversation_model.dart';
 import '../../models/discovery_options_model.dart';
@@ -18,9 +19,12 @@ import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
 import '../messages/widgets/schedule_meetup_sheet.dart';
+import '../profile/payment_checkout_screen.dart';
+import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/edit_item_sheet.dart';
 import '../shared/widgets/share_bottom_sheet.dart';
+import '../../providers/order_provider.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String? itemId;
@@ -79,16 +83,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _loadedItem != null) _loadSimilarItems(_loadedItem!);
+        if (mounted && _loadedItem != null) {
+          _loadSimilarItems(_loadedItem!);
+          if (id != null && _objectId.hasMatch(id)) {
+            _fetchItem(id, silent: true);
+          }
+        }
       });
     }
   }
 
-  Future<void> _fetchItem(String id) async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  Future<void> _fetchItem(String id, {bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
     try {
       final repo =
           widget.itemRepository ??
@@ -97,9 +108,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       final fetched = await repo.fetchItemById(id);
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
-        _loadedItem = fetched;
-        if (fetched == null) {
+        if (!silent) _isLoading = false;
+        if (fetched != null || _loadedItem == null) {
+          _loadedItem = fetched;
+        }
+        if (fetched == null && _loadedItem == null) {
           _errorMessage = 'Item not found or no longer available.';
         }
       });
@@ -108,11 +121,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage =
-            'Unable to load item details. Please check your connection and try again.';
-      });
+      if (!silent) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage =
+              'Unable to load item details. Please check your connection and try again.';
+        });
+      }
     }
   }
 
@@ -336,6 +351,35 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  Future<void> _buyNow(ItemModel product) async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.jwtToken;
+    if (token == null) {
+      widget.onSignInRequired?.call();
+      return;
+    }
+    // Create / retrieve the pending_payment order for this item
+    try {
+      final orderProvider = context.read<OrderProvider>();
+      final order = await orderProvider.createOrGetOrder(
+        itemId: product.id,
+        token: token,
+      );
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => PaymentCheckoutScreen(order: order),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not initiate purchase: $e')),
+      );
+    }
+  }
+
   void _shareListing(ItemModel product, [BuildContext? originContext]) {
     Rect? shareOrigin;
     if (originContext != null) {
@@ -363,6 +407,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final product = _loadedItem;
+    final auth = context.watch<AuthProvider?>();
+    final currentUser = auth?.currentUser;
+    final isOwner =
+        currentUser != null &&
+        product != null &&
+        (currentUser.id == product.ownerId ||
+            currentUser.id == product.seller?.id);
+    final effectiveSeller = isOwner
+        ? SellerInfo(
+            id: currentUser.id,
+            displayName: currentUser.displayName,
+            email: product.seller?.email,
+            avatarUrl: currentUser.avatarUrl ?? product.seller?.avatarUrl,
+            trustScore: currentUser.trustScore,
+            isVerified: currentUser.isVerified,
+            isStudentVerified: product.seller?.isStudentVerified ?? false,
+            studentInstitution: product.seller?.studentInstitution,
+          )
+        : product?.seller;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -384,18 +447,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         actions: product == null
             ? null
             : [
-                Builder(builder: (context) {
-                  final auth = context.watch<AuthProvider?>();
-                  final userId = widget.currentUserId ?? auth?.currentUser?.id;
-                  final ownsListing = userId != null &&
-                      (userId == product.ownerId || userId == product.seller?.id);
-                  if (!ownsListing) return const SizedBox.shrink();
-                  return IconButton(
-                    tooltip: 'Edit listing',
-                    onPressed: () => _editListing(product),
-                    icon: const Icon(Icons.edit_outlined, size: 22),
-                  );
-                }),
+                Builder(
+                  builder: (context) {
+                    final auth = context.watch<AuthProvider?>();
+                    final userId =
+                        widget.currentUserId ?? auth?.currentUser?.id;
+                    final ownsListing =
+                        userId != null &&
+                        (userId == product.ownerId ||
+                            userId == product.seller?.id);
+                    if (!ownsListing) return const SizedBox.shrink();
+                    return IconButton(
+                      tooltip: 'Edit listing',
+                      onPressed: () => _editListing(product),
+                      icon: const Icon(Icons.edit_outlined, size: 22),
+                    );
+                  },
+                ),
                 Builder(
                   builder: (btnContext) => IconButton(
                     tooltip: 'Share listing',
@@ -448,8 +516,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     final auth = context.watch<AuthProvider?>();
                     final userId =
                         widget.currentUserId ?? auth?.currentUser?.id;
-                    final ownsListing = userId != null &&
-                        (userId == product.ownerId || userId == product.seller?.id);
+                    final ownsListing =
+                        userId != null &&
+                        (userId == product.ownerId ||
+                            userId == product.seller?.id);
                     final canMessage =
                         product.status == ItemStatus.active && !ownsListing;
                     return _ProductActions(
@@ -470,6 +540,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onMessageSeller: canMessage
                           ? () => _messageSeller(product)
                           : null,
+                      onBuyNow: canMessage ? () => _buyNow(product) : null,
                       onScheduleMeetup: canMessage
                           ? () => _scheduleMeetupDirectly(product)
                           : null,
@@ -629,8 +700,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       const SizedBox(height: AppSpacing.xl),
 
                       // Seller Profile Card (theme-adaptive)
-                      if (product.seller != null) ...[
-                        _SellerProfileCard(seller: product.seller!),
+                      if (effectiveSeller != null) ...[
+                        _SellerProfileCard(seller: effectiveSeller),
                         const SizedBox(height: AppSpacing.xl),
                       ],
 
@@ -755,6 +826,16 @@ Widget _buildStatusBadge(BuildContext context, ItemStatus status) {
       isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
       Icons.remove_circle_outline,
     ),
+    ItemStatus.delisted => (
+      isDark
+          ? const Color(0xFF451A03).withOpacity(0.5)
+          : const Color(0xFFFFF7ED),
+      isDark
+          ? const Color(0xFFC2410C).withOpacity(0.5)
+          : const Color(0xFFFED7AA),
+      isDark ? const Color(0xFFFDBA74) : const Color(0xFFC2410C),
+      Icons.visibility_off_outlined,
+    ),
   };
 
   return Container(
@@ -867,54 +948,73 @@ class _ProductHighlightsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
     Widget buildTile({
       required IconData icon,
       required String label,
       required String value,
-      Color? iconColor,
+      required Color accentColor,
     }) {
       return Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: 12,
+        ),
         decoration: BoxDecoration(
           color: isDark
-              ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.25)
-              : theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
-          borderRadius: BorderRadius.circular(AppRadius.medium),
+              ? colors.surfaceContainerHighest.withValues(alpha: 0.28)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: theme.colorScheme.outline.withOpacity(0.15),
+            color: isDark
+                ? colors.outline.withValues(alpha: 0.18)
+                : colors.outline.withValues(alpha: 0.12),
             width: 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
-                color: (iconColor ?? theme.colorScheme.primary).withOpacity(
-                  0.12,
+                color: accentColor.withValues(alpha: isDark ? 0.22 : 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: accentColor.withValues(alpha: isDark ? 0.35 : 0.2),
+                  width: 0.8,
                 ),
-                borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: iconColor ?? theme.colorScheme.primary,
+              child: Center(
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: accentColor,
+                ),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    label,
+                    label.toUpperCase(),
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: theme.colorScheme.onSurface.withOpacity(0.55),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                      color: colors.onSurface.withValues(alpha: 0.5),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -925,7 +1025,7 @@ class _ProductHighlightsGrid extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: theme.colorScheme.onSurface,
+                      color: colors.onSurface,
                     ),
                   ),
                 ],
@@ -942,9 +1042,10 @@ class _ProductHighlightsGrid extends StatelessWidget {
           children: [
             Expanded(
               child: buildTile(
-                icon: Icons.location_on_outlined,
+                icon: Icons.near_me_rounded,
                 label: 'Location',
                 value: product.location,
+                accentColor: const Color(0xFF0284C7),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -953,6 +1054,7 @@ class _ProductHighlightsGrid extends StatelessWidget {
                 icon: _getCategoryIcon(product.category),
                 label: 'Category',
                 value: product.category,
+                accentColor: const Color(0xFFEA580C),
               ),
             ),
           ],
@@ -962,34 +1064,41 @@ class _ProductHighlightsGrid extends StatelessWidget {
           children: [
             Expanded(
               child: buildTile(
-                icon: Icons.inventory_2_outlined,
-                label: 'Status',
+                icon: Icons.handshake_rounded,
+                label: 'Handover',
                 value: _statusLabel(product.status),
+                accentColor: const Color(0xFF059669),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: buildTile(
                 icon: product.isSustainable
-                    ? Icons.eco_outlined
-                    : Icons.check_circle_outline,
-                label: product.isSustainable ? 'Sustainability' : 'Condition',
+                    ? Icons.eco_rounded
+                    : Icons.auto_awesome_rounded,
+                label: product.isSustainable ? 'Eco-Choice' : 'Condition',
                 value: product.isSustainable
                     ? 'Pre-loved'
-                    : (product.condition?.isNotEmpty == true
-                          ? product.condition!
-                          : 'Standard'),
-                iconColor: product.isSustainable
-                    ? (isDark
-                          ? const Color(0xFF6EE7B7)
-                          : const Color(0xFF15803D))
-                    : null,
+                    : _formatConditionLabel(product.condition),
+                accentColor: product.isSustainable
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFF7C3AED),
               ),
             ),
           ],
         ),
       ],
     );
+  }
+
+  static String _formatConditionLabel(String? condition) {
+    if (condition == null || condition.trim().isEmpty) return 'Standard';
+    return condition
+        .trim()
+        .split(RegExp(r'[_\s]+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .join(' ');
   }
 }
 
@@ -1022,15 +1131,30 @@ class _SellerProfileCard extends StatelessWidget {
         ? const Color(0xFF1E3A8A).withOpacity(0.5)
         : const Color(0xFFDBEAFE);
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: cardBg,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const Key('seller-profile-card-tap'),
         borderRadius: BorderRadius.circular(AppRadius.medium),
-        border: Border.all(color: borderColor, width: 1.2),
-      ),
-      child: Row(
-        children: [
+        onTap: () {
+          if (seller.id.isNotEmpty) {
+            Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => PublicProfileScreen(userId: seller.id),
+              ),
+            );
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            border: Border.all(color: borderColor, width: 1.2),
+          ),
+          child: Row(
+            children: [
           Stack(
             children: [
               CircleAvatar(
@@ -1172,7 +1296,7 @@ class _SellerProfileCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${seller.trustScore}/100',
+                  formatPublicTrustScore(seller.trustScore),
                   style: GoogleFonts.inter(
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
@@ -1184,7 +1308,9 @@ class _SellerProfileCard extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 }
 
@@ -1256,6 +1382,7 @@ class _ProductActions extends StatelessWidget {
     required this.isStartingConversation,
     required this.onMessageSeller,
     this.onScheduleMeetup,
+    this.onBuyNow,
     this.messageSellerLabel = 'Message seller',
     this.ownsListing = false,
     this.onEditListing,
@@ -1268,6 +1395,7 @@ class _ProductActions extends StatelessWidget {
   final bool isStartingConversation;
   final VoidCallback? onMessageSeller;
   final VoidCallback? onScheduleMeetup;
+  final VoidCallback? onBuyNow;
   final String messageSellerLabel;
   final bool ownsListing;
   final VoidCallback? onEditListing;
@@ -1290,9 +1418,7 @@ class _ProductActions extends StatelessWidget {
       onPressed: onEditListing,
       icon: const Icon(Icons.edit_outlined),
       label: Text(
-        product.status != ItemStatus.active
-            ? 'Re-list / Edit'
-            : 'Edit Listing',
+        product.status != ItemStatus.active ? 'Re-list / Edit' : 'Edit Listing',
         style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
       ),
     );
@@ -1321,8 +1447,8 @@ class _ProductActions extends StatelessWidget {
     final watchButton = OutlinedButton.icon(
       key: const Key('detail-watch-action-button'),
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 52),
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        minimumSize: const Size(0, 50),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.medium),
         ),
@@ -1345,18 +1471,19 @@ class _ProductActions extends StatelessWidget {
       onPressed: onToggleWatch,
       icon: Icon(
         isWatched ? Icons.favorite : Icons.favorite_border,
+        size: 18,
         color: isWatched
             ? const Color(0xFFEF4444)
             : theme.colorScheme.onSurface,
       ),
       label: Text(
-        'Watching',
+        isWatched ? 'Watchlisted' : 'Watchlist',
         maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         softWrap: false,
         style: GoogleFonts.inter(
-          fontSize: 16,
+          fontSize: 14,
           fontWeight: FontWeight.w600,
-          height: 1.25,
           color: isWatched
               ? const Color(0xFFEF4444)
               : theme.colorScheme.onSurface,
@@ -1364,12 +1491,18 @@ class _ProductActions extends StatelessWidget {
       ),
     );
 
-    final messageButton = FilledButton.icon(
+    final messageButton = IconButton.outlined(
       key: const Key('detail-message-seller-button'),
-      style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 50),
+      tooltip: isStartingConversation ? 'Opening chat...' : messageSellerLabel,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(50, 50),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+        side: BorderSide(
+          color: messageSellerEnabled
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline.withOpacity(0.3),
         ),
       ),
       onPressed: messageSellerEnabled && !isStartingConversation
@@ -1379,15 +1512,29 @@ class _ProductActions extends StatelessWidget {
           ? const SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.chat_bubble_outline),
+    );
+
+    final buyNowButton = FilledButton.icon(
+      key: const Key('detail-buy-now-button'),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 50),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        backgroundColor: const Color(0xFF059669),
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+      ),
+      onPressed: onBuyNow,
+      icon: const Icon(Icons.shopping_bag_outlined, size: 18),
       label: Text(
-        isStartingConversation ? 'Opening chat' : messageSellerLabel,
-        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
+        'Buy Now  \$${product.priceNzd}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
       ),
     );
 
@@ -1416,17 +1563,44 @@ class _ProductActions extends StatelessWidget {
                     editButton,
                     const SizedBox(height: AppSpacing.sm),
                   ],
-                  Row(
-                    children: [
-                      if (onScheduleMeetup != null) ...[
-                        meetupButton,
+                  if (!ownsListing && onBuyNow != null) ...[
+                    Row(
+                      children: [
+                        messageButton,
                         const SizedBox(width: AppSpacing.sm),
+                        Expanded(child: watchButton),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(child: buyNowButton),
                       ],
-                      Expanded(child: watchButton),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  messageButton,
+                    ),
+                  ] else ...[
+                    Row(
+                      children: [
+                        if (onScheduleMeetup != null) ...[
+                          meetupButton,
+                          const SizedBox(width: AppSpacing.sm),
+                        ],
+                        Expanded(child: watchButton),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (messageSellerEnabled)
+                      Row(
+                        children: [
+                          messageButton,
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              'or chat with seller',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
                 ],
               )
             : Row(
@@ -1449,9 +1623,54 @@ class _ProductActions extends StatelessWidget {
                     meetupButton,
                     const SizedBox(width: AppSpacing.sm),
                   ],
-                  Expanded(flex: 3, child: watchButton),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(flex: 5, child: messageButton),
+                  // For non-owner: show message icon on left + equal sized Watchlist & Buy Now buttons on right
+                  if (!ownsListing && onBuyNow != null) ...[
+                    messageButton,
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: watchButton),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: buyNowButton),
+                  ] else ...[
+                    Expanded(flex: 3, child: watchButton),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      flex: 5,
+                      child: FilledButton.icon(
+                        key: const Key('detail-message-seller-button-full'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.medium,
+                            ),
+                          ),
+                        ),
+                        onPressed:
+                            messageSellerEnabled && !isStartingConversation
+                            ? onMessageSeller
+                            : null,
+                        icon: isStartingConversation
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.chat_bubble_outline),
+                        label: Text(
+                          isStartingConversation
+                              ? 'Opening chat'
+                              : messageSellerLabel,
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
       ),
@@ -1632,6 +1851,7 @@ String _statusLabel(ItemStatus status) => switch (status) {
   ItemStatus.active => 'Available',
   ItemStatus.reserved => 'Reserved',
   ItemStatus.sold => 'Sold',
+  ItemStatus.delisted => 'Delisted',
 };
 
 IconData _getCategoryIcon(String category) {

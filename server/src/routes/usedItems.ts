@@ -5,6 +5,9 @@ import Item from '../models/Item';
 import Category from '../models/Category';
 import User from '../models/User';
 import Watchlist from '../models/Watchlist';
+import Order from '../models/Order';
+import Conversation from '../models/Conversation';
+import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import { notifyWatchlistPriceDrop } from '../services/pushNotification';
 import { sendAdminItemNotification } from '../services/adminNotification';
 
@@ -256,7 +259,9 @@ export function formatItem(itemDoc: any) {
     sellerId: ownerId,
     seller: sellerInfo,
     latitude: Number.isFinite(latitude) ? latitude : null,
-    longitude: Number.isFinite(longitude) ? longitude : null
+    longitude: Number.isFinite(longitude) ? longitude : null,
+    isPromoted: Boolean(itemObj.isPromoted),
+    promotedAt: itemObj.promotedAt || null
   };
 }
 
@@ -398,11 +403,11 @@ async function getUsedItemsHandler(ctx: any) {
   let itemQuery = Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
   const sortValue = queryText(sort);
   if (sortValue === 'price_asc') {
-    itemQuery = itemQuery.sort({ price: 1, createdAt: -1 });
+    itemQuery = itemQuery.sort({ isPromoted: -1, price: 1, createdAt: -1 });
   } else if (sortValue === 'price_desc') {
-    itemQuery = itemQuery.sort({ price: -1, createdAt: -1 });
+    itemQuery = itemQuery.sort({ isPromoted: -1, price: -1, createdAt: -1 });
   } else if (!hasNearbyFilter) {
-    itemQuery = itemQuery.sort({ favouriteCount: -1, viewCount: -1, createdAt: -1 });
+    itemQuery = itemQuery.sort({ isPromoted: -1, publishedAt: -1, favouriteCount: -1, viewCount: -1, createdAt: -1 });
   }
 
   const items = await itemQuery;
@@ -512,6 +517,19 @@ async function getUsedItemByIdHandler(ctx: any) {
     ctx.status = 404;
     ctx.body = { status: 'error', message: 'Used item not found.' };
     return;
+  }
+
+  // Ensure seller info is dynamically resolved by user ID if not already populated
+  if (!item.sellerId || !(item.sellerId as any).displayName) {
+    const rawSellerId = item.sellerId || item.ownerId;
+    if (rawSellerId && mongoose.Types.ObjectId.isValid(rawSellerId.toString())) {
+      const sellerUser = await User.findById(rawSellerId).select(
+        'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role'
+      );
+      if (sellerUser) {
+        item.sellerId = sellerUser;
+      }
+    }
   }
 
   let liveWatchlistCount = item.favouriteCount ?? 0;
@@ -713,8 +731,23 @@ async function updateUsedItemHandler(ctx: any) {
   if (updates.title != null) updateFields.title = updates.title;
   if (updates.description != null) updateFields.description = updates.description;
   if (updates.category != null) updateFields.category = updates.category;
-  if (updates.condition != null) updateFields.condition = updates.condition;
-  if (updates.status != null) updateFields.status = updates.status;
+  if (updates.condition != null) {
+    const cond = String(updates.condition).trim().toLowerCase().replaceAll(' ', '_');
+    if (VALID_CONDITIONS.has(cond)) {
+      updateFields.condition = cond;
+    }
+  }
+  if (updates.status != null) {
+    const statusVal = String(updates.status).trim();
+    if (statusVal === 'delisted' || statusVal === 'draft') {
+      updateFields.status = 'draft';
+    } else if (statusVal === 'active') {
+      updateFields.status = 'active';
+      updateFields.publishedAt = new Date();
+    } else {
+      updateFields.status = statusVal;
+    }
+  }
   if (updates.isSustainable != null) {
     updateFields.isSustainable = Boolean(updates.isSustainable);
   }
@@ -802,6 +835,42 @@ async function updateUsedItemHandler(ctx: any) {
     });
   }
 
+  // Synchronize new listing price to any open unpaid meetup orders
+  if (updateFields.price != null) {
+    try {
+      const feeSettings = await getPlatformFeeSettings();
+      const unpaidOrders = await Order.find({
+        itemId: item._id,
+        paidAt: { $exists: false },
+        status: { $in: ['pending_payment', 'meeting_scheduled', 'meeting_in_progress'] }
+      });
+
+      for (const ord of unpaidOrders) {
+        const conv = await Conversation.findOne({
+          itemId: ord.itemId,
+          $or: [
+            { buyerId: ord.buyerId, sellerId: ord.sellerId },
+            { buyerId: ord.sellerId, sellerId: ord.buyerId }
+          ]
+        });
+
+        // Only update if not overridden by special agreed price in conversation
+        if (!conv || conv.specialPrice === undefined || conv.specialPrice === null) {
+          const feeCents = newPriceCents > 0
+            ? Math.max(feeSettings.minFeeCents, Math.round(newPriceCents * (feeSettings.buyerFeePercent / 100)))
+            : 0;
+          ord.itemAmount = newPriceCents;
+          ord.buyerFeeAmount = feeCents;
+          ord.buyerTotalAmount = newPriceCents + feeCents;
+          ord.sellerReceiveAmount = newPriceCents;
+          await ord.save();
+        }
+      }
+    } catch (orderSyncErr) {
+      console.warn('[UsedItems] Failed to sync price to open orders:', orderSyncErr);
+    }
+  }
+
   const populatedItem = await Item.findById(item._id).populate(
     'sellerId',
     'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role'
@@ -849,9 +918,9 @@ async function deleteUsedItemHandler(ctx: any) {
   };
 }
 
-// 1b. GET /usedItems/recommended - Get recommended used items
+// 1b. GET /usedItems/recommended - Get recommended used items (watchlist similarity + location proximity)
 async function getRecommendedItemsHandler(ctx: any) {
-  const { limit = '10', category, excludeId } = ctx.query;
+  const { limit = '10', category, excludeId, userId, latitude, longitude } = ctx.query;
   const maxItems = Math.min(Math.max(1, parseInt(queryText(limit) || '10', 10) || 10), 50);
 
   const filter: any = { status: 'active' };
@@ -868,28 +937,83 @@ async function getRecommendedItemsHandler(ctx: any) {
     }
   }
 
+  // 1. Fetch user's watchlist items to identify preferred categories and interests
+  const targetUserId = queryText(userId) || ctx.state?.user?.id;
+  const preferredCategories = new Set<string>();
+  const preferredKeywords: string[] = [];
+
+  if (targetUserId && mongoose.Types.ObjectId.isValid(targetUserId)) {
+    try {
+      const userWatchlist = await Watchlist.find({ userId: targetUserId }).populate('itemId', 'category title').limit(30);
+      for (const entry of userWatchlist) {
+        const watchedItem = entry.itemId as any;
+        if (watchedItem?.category) {
+          preferredCategories.add(String(watchedItem.category).toLowerCase());
+        }
+        if (watchedItem?.title) {
+          const words = String(watchedItem.title).toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+          preferredKeywords.push(...words);
+        }
+      }
+    } catch (_) {
+      // Graceful fallback
+    }
+  }
+
+  const userLat = latitude ? parseFloat(queryText(latitude) || '') : null;
+  const userLng = longitude ? parseFloat(queryText(longitude) || '') : null;
+  const hasUserCoords = userLat != null && !isNaN(userLat) && userLng != null && !isNaN(userLng);
+
   const items = await Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
   const now = Date.now();
 
-  // Multi-factor Recommendation Scoring Algorithm:
-  // 1. Popularity score: favouriteCount * 3 + viewCount * 1
-  // 2. Freshness decay: 20 * exp(-ageInDays / 14)
-  // 3. Sustainability boost: +10 points
-  // 4. Condition quality boost: new (+6), like_new (+4), good (+2)
   const scoredItems = items.map((item) => {
-    const favScore = (item.favouriteCount || 0) * 3;
+    // Watchlist similarity boost
+    let watchlistBoost = 0;
+    if (item.category && preferredCategories.has(String(item.category).toLowerCase())) {
+      watchlistBoost += 25;
+    }
+    if (item.title && preferredKeywords.length > 0) {
+      const lowerTitle = String(item.title).toLowerCase();
+      for (const kw of preferredKeywords) {
+        if (lowerTitle.includes(kw)) {
+          watchlistBoost += 6;
+          break;
+        }
+      }
+    }
+
+    // Location proximity boost
+    let proximityBoost = 0;
+    if (hasUserCoords && item.latitude != null && item.longitude != null) {
+      const dLat = (item.latitude - userLat!) * Math.PI / 180;
+      const dLon = (item.longitude - userLng!) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(userLat! * Math.PI / 180) * Math.cos(item.latitude * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distKm = 6371 * c; // Earth radius in km
+
+      if (distKm < 5) proximityBoost = 30;
+      else if (distKm < 15) proximityBoost = 20;
+      else if (distKm < 30) proximityBoost = 10;
+      else if (distKm < 60) proximityBoost = 5;
+    }
+
+    const favScore = (item.favouriteCount || 0) * 2;
     const viewScore = (item.viewCount || 0) * 1;
     const createdAtTime = item.createdAt ? new Date(item.createdAt).getTime() : now;
     const ageInDays = Math.max(0, (now - createdAtTime) / (1000 * 60 * 60 * 24));
-    const freshnessScore = 20 * Math.exp(-ageInDays / 14);
-    const sustainabilityScore = item.isSustainable ? 10 : 0;
+    const freshnessScore = 15 * Math.exp(-ageInDays / 14);
+    const sustainabilityScore = item.isSustainable ? 8 : 0;
 
     let conditionScore = 0;
     if (item.condition === 'new') conditionScore = 6;
     else if (item.condition === 'like_new') conditionScore = 4;
     else if (item.condition === 'good') conditionScore = 2;
 
-    const totalScore = favScore + viewScore + freshnessScore + sustainabilityScore + conditionScore;
+    const totalScore = watchlistBoost + proximityBoost + favScore + viewScore + freshnessScore + sustainabilityScore + conditionScore;
     return { item, score: totalScore };
   });
 
@@ -900,12 +1024,191 @@ async function getRecommendedItemsHandler(ctx: any) {
   ctx.body = recommended;
 }
 
+// 1c. GET /usedItems/featured - Featured Highlights (promoted listings, high favorites, high views)
+async function getFeaturedItemsHandler(ctx: any) {
+  const { limit = '10' } = ctx.query;
+  const maxItems = Math.min(Math.max(1, parseInt(queryText(limit) || '10', 10) || 10), 50);
+
+  const filter: any = { status: 'active' };
+  const items = await Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+  const now = Date.now();
+
+  const scoredItems = items.map((item) => {
+    const isCurrentlyPromoted = item.isPromoted && (!item.promotedUntil || new Date(item.promotedUntil).getTime() > now);
+    const promoteScore = isCurrentlyPromoted ? 60 : 0;
+    const favScore = (item.favouriteCount || 0) * 4;
+    const viewScore = (item.viewCount || 0) * 2;
+    const createdAtTime = item.createdAt ? new Date(item.createdAt).getTime() : now;
+    const ageInDays = Math.max(0, (now - createdAtTime) / (1000 * 60 * 60 * 24));
+    const freshnessScore = 15 * Math.exp(-ageInDays / 21);
+
+    const totalScore = promoteScore + favScore + viewScore + freshnessScore;
+    return { item, score: totalScore };
+  });
+
+  scoredItems.sort((a, b) => b.score - a.score);
+  const featured = scoredItems.slice(0, maxItems).map((entry) => formatItem(entry.item));
+
+  ctx.status = 200;
+  ctx.body = featured;
+}
+
+// POST /usedItems/:id/promote - Promote an item using 5 KiwiGold
+async function promoteUsedItemHandler(ctx: any) {
+  const { id } = ctx.params;
+  const userId = ctx.state.user.id;
+
+  const item = mongoose.Types.ObjectId.isValid(id)
+    ? await Item.findById(id)
+    : await Item.findOne({ id });
+
+  if (!item || item.status === 'deleted') {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Used item not found.' };
+    return;
+  }
+
+  const currentOwner = item.sellerId ? item.sellerId.toString() : item.ownerId;
+  if (currentOwner !== userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Unauthorized: You can only promote your own listings.' };
+    return;
+  }
+
+  if (item.status !== 'active') {
+    ctx.status = 400;
+    ctx.body = {
+      status: 'error',
+      message: 'Only active listings can be promoted. Please relist or publish the item first.'
+    };
+    return;
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'User not found.' };
+    return;
+  }
+
+  const isVip = Boolean(user.isVip && (!user.vipExpiresAt || new Date(user.vipExpiresAt) > new Date()));
+
+  if (!isVip) {
+    const currentGold = user.kiwiGold ?? 100;
+    if (currentGold < 5) {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: `Insufficient KiwiGold. You have ${currentGold} KiwiGold, but 5 KiwiGold is required to promote a listing.`,
+        kiwiGold: currentGold
+      };
+      return;
+    }
+
+    // Deduct 5 KiwiGold for non-VIP
+    user.kiwiGold = currentGold - 5;
+    await user.save();
+  }
+
+  // Mark item as promoted and update publishedAt to bump it to top
+  item.isPromoted = true;
+  item.promotedAt = new Date();
+  item.publishedAt = new Date();
+  await item.save();
+
+  await item.populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    message: isVip
+      ? 'Item promoted successfully with VIP Unlimited Boost! (0 KiwiGold used)'
+      : 'Item promoted successfully! Your listing now has top ranking.',
+    item: formatItem(item),
+    kiwiGold: user.kiwiGold,
+    isVip
+  };
+}
+
+// POST /usedItems/:id/delist - Delist an item (take off shelf)
+async function delistUsedItemHandler(ctx: any) {
+  const { id } = ctx.params;
+  const userId = ctx.state.user.id;
+
+  const item = mongoose.Types.ObjectId.isValid(id)
+    ? await Item.findById(id)
+    : await Item.findOne({ id });
+
+  if (!item || item.status === 'deleted') {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Used item not found.' };
+    return;
+  }
+
+  const currentOwner = item.sellerId ? item.sellerId.toString() : item.ownerId;
+  if (currentOwner !== userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Unauthorized: You can only delist your own listings.' };
+    return;
+  }
+
+  item.status = 'draft';
+  await item.save();
+  await item.populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    message: 'Item delisted successfully.',
+    item: formatItem(item)
+  };
+}
+
+// POST /usedItems/:id/relist - Relist an item (put back on shelf)
+async function relistUsedItemHandler(ctx: any) {
+  const { id } = ctx.params;
+  const userId = ctx.state.user.id;
+
+  const item = mongoose.Types.ObjectId.isValid(id)
+    ? await Item.findById(id)
+    : await Item.findOne({ id });
+
+  if (!item || item.status === 'deleted') {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Used item not found.' };
+    return;
+  }
+
+  const currentOwner = item.sellerId ? item.sellerId.toString() : item.ownerId;
+  if (currentOwner !== userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Unauthorized: You can only relist your own listings.' };
+    return;
+  }
+
+  item.status = 'active';
+  item.publishedAt = new Date();
+  await item.save();
+  await item.populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+
+  ctx.status = 200;
+  ctx.body = {
+    status: 'success',
+    message: 'Item relisted successfully.',
+    item: formatItem(item)
+  };
+}
+
 // Register RESTful routes under /usedItems
 router.get('/usedItems', getUsedItemsHandler);
 router.get('/usedItems/discovery-options', getDiscoveryOptionsHandler);
 router.get('/usedItems/recommended', getRecommendedItemsHandler);
+router.get('/usedItems/featured', getFeaturedItemsHandler);
 router.get('/usedItems/:id', getUsedItemByIdHandler);
 router.post('/usedItems', authenticateToken, createUsedItemHandler);
+router.post('/usedItems/:id/promote', authenticateToken, promoteUsedItemHandler);
+router.post('/usedItems/:id/delist', authenticateToken, delistUsedItemHandler);
+router.post('/usedItems/:id/relist', authenticateToken, relistUsedItemHandler);
 router.put('/usedItems/:id', authenticateToken, updateUsedItemHandler);
 router.patch('/usedItems/:id', authenticateToken, updateUsedItemHandler);
 router.delete('/usedItems/:id', authenticateToken, deleteUsedItemHandler);

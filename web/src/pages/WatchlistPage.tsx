@@ -7,7 +7,7 @@ import { Heart, Sparkles, ArrowRight, Loader2, LogIn } from 'lucide-react';
 
 export const WatchlistPage: React.FC = () => {
   const { isLoggedIn } = useAuth();
-  const { watchlistItems, isLoading } = useWatchlist();
+  const { watchlistItems, isLoading, error, refreshWatchlist } = useWatchlist();
 
   if (!isLoggedIn) {
     return (
@@ -66,6 +66,14 @@ export const WatchlistPage: React.FC = () => {
           <Loader2 size={36} color="var(--primary-600)" style={{ animation: 'spin 1s linear infinite' }} />
           <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
           <p style={{ marginTop: '16px', color: 'var(--text-muted)' }}>Updating your saved watchlist...</p>
+        </div>
+      ) : error ? (
+        <div className="empty-state" role="alert">
+          <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Could not load your Watchlist</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>{error}</p>
+          <button className="btn btn-primary" onClick={() => void refreshWatchlist()}>
+            Retry
+          </button>
         </div>
       ) : watchlistItems.length > 0 ? (
         <div className="product-grid animate-fade-in">

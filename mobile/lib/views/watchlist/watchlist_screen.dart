@@ -23,7 +23,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<WatchlistProvider>().loadWatchlist();
+      if (!mounted) return;
+      final watchlist = context.read<WatchlistProvider>();
+      watchlist.loadWatchlist();
+      watchlist.loadNotificationPreference();
     });
   }
 
@@ -46,6 +49,20 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       _searchController.clear();
       _selectedStatus = null;
     });
+  }
+
+  Future<void> _removeItem(WatchlistProvider watchlist, String itemId) async {
+    try {
+      final result = await watchlist.removeFromWatchlist(itemId);
+      if (!mounted || result != WatchlistMutationResult.failed) return;
+    } catch (_) {
+      if (!mounted) return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not update Watchlist. Please try again.'),
+      ),
+    );
   }
 
   @override
@@ -105,49 +122,67 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Search Bar
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.medium,
-                            ),
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          child: TextField(
-                            key: const Key('watchlist-search-field'),
-                            controller: _searchController,
-                            onChanged: (_) => setState(() {}),
-                            decoration: InputDecoration(
-                              hintText: 'Search in watchlist...',
-                              hintStyle: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
+                        Builder(
+                          builder: (context) {
+                            final isDark =
+                                Theme.of(context).brightness == Brightness.dark;
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF1E2925)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.medium,
+                                ),
+                                border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFF2E403B)
+                                      : AppColors.border,
+                                ),
                               ),
-                              prefixIcon: const Icon(
-                                Icons.search,
-                                size: 20,
-                                color: AppColors.textSecondary,
+                              child: TextField(
+                                key: const Key('watchlist-search-field'),
+                                controller: _searchController,
+                                onChanged: (_) => setState(() {}),
+                                decoration: InputDecoration(
+                                  hintText: 'Search in watchlist...',
+                                  hintStyle: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark
+                                        ? const Color(0xFF94A3B8)
+                                        : AppColors.textSecondary,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.search,
+                                    size: 20,
+                                    color: isDark
+                                        ? const Color(0xFF94A3B8)
+                                        : AppColors.textSecondary,
+                                  ),
+                                  suffixIcon: query.isNotEmpty
+                                      ? IconButton(
+                                          icon: Icon(
+                                            Icons.close,
+                                            size: 18,
+                                            color: isDark
+                                                ? const Color(0xFF94A3B8)
+                                                : AppColors.textSecondary,
+                                          ),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() {});
+                                          },
+                                        )
+                                      : null,
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.md,
+                                    vertical: 12,
+                                  ),
+                                ),
                               ),
-                              suffixIcon: query.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(
-                                        Icons.close,
-                                        size: 18,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        setState(() {});
-                                      },
-                                    )
-                                  : null,
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.md,
-                                vertical: 12,
-                              ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         // Status Filter Chips
@@ -227,6 +262,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     ),
                   ),
                 )
+              else if (watchlist.error != null && items.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _WatchlistErrorView(
+                    onRetry: () => watchlist.loadWatchlist(forceRefresh: true),
+                  ),
+                )
               else if (items.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -248,18 +290,36 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     vertical: AppSpacing.sm,
                   ),
                   sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final item = filteredItems[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                        child: _WatchlistCard(
-                          item: item,
-                          onTap: () => _openItem(item),
-                          onRemove: () =>
-                              watchlist.removeFromWatchlist(item.id),
-                        ),
-                      );
-                    }, childCount: filteredItems.length),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index == filteredItems.length) {
+                          return Center(
+                            child: TextButton(
+                              key: const Key('watchlist-load-more-button'),
+                              onPressed: watchlist.isLoadingMore
+                                  ? null
+                                  : watchlist.loadMore,
+                              child: Text(
+                                watchlist.isLoadingMore
+                                    ? 'Loading more...'
+                                    : 'Load more',
+                              ),
+                            ),
+                          );
+                        }
+                        final item = filteredItems[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                          child: _WatchlistCard(
+                            item: item,
+                            onTap: () => _openItem(item),
+                            onRemove: () => _removeItem(watchlist, item.id),
+                          ),
+                        );
+                      },
+                      childCount:
+                          filteredItems.length + (watchlist.hasMore ? 1 : 0),
+                    ),
                   ),
                 ),
             ],
@@ -270,6 +330,33 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   }
 }
 
+class _WatchlistErrorView extends StatelessWidget {
+  const _WatchlistErrorView({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.xxl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off_outlined, size: 48),
+          const SizedBox(height: AppSpacing.md),
+          const Text('Could not load your Watchlist.'),
+          const SizedBox(height: AppSpacing.md),
+          FilledButton(
+            key: const Key('watchlist-retry-button'),
+            onPressed: onRetry,
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _WatchlistHeader extends StatelessWidget {
   final int itemCount;
   final int? filteredCount;
@@ -278,6 +365,22 @@ class _WatchlistHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final iconBg = isDark
+        ? const Color(0xFF163228)
+        : AppColors.brandPrimaryContainer;
+    final iconColor = isDark ? const Color(0xFF92D4B3) : AppColors.brandPrimary;
+    final countBg = isDark
+        ? const Color(0xFF1C2C26)
+        : AppColors.brandSecondaryContainer;
+    final countColor = isDark
+        ? const Color(0xFF92D4B3)
+        : AppColors.brandPrimaryAlt;
+    final subtextColor = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -286,24 +389,22 @@ class _WatchlistHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.brandPrimaryContainer,
+                    color: iconBg,
                     borderRadius: BorderRadius.circular(AppRadius.medium),
                   ),
-                  child: const Icon(
-                    Icons.bookmark,
-                    color: AppColors.brandPrimary,
-                    size: 24,
-                  ),
+                  child: Icon(Icons.bookmark, color: iconColor, size: 24),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Text(
                   'Watchlist',
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.w900,
+                    fontSize: 24,
                     letterSpacing: -0.6,
                   ),
                 ),
@@ -315,7 +416,7 @@ class _WatchlistHeader extends StatelessWidget {
                 vertical: AppSpacing.xs,
               ),
               decoration: BoxDecoration(
-                color: AppColors.brandSecondaryContainer,
+                color: countBg,
                 borderRadius: BorderRadius.circular(AppRadius.full),
               ),
               child: Text(
@@ -323,7 +424,7 @@ class _WatchlistHeader extends StatelessWidget {
                     ? '$filteredCount of $itemCount'
                     : '$itemCount items',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: AppColors.brandPrimaryAlt,
+                  color: countColor,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -335,7 +436,7 @@ class _WatchlistHeader extends StatelessWidget {
           'Keep track of pre-loved items you love and watch for updates',
           style: Theme.of(
             context,
-          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ).textTheme.bodySmall?.copyWith(color: subtextColor),
         ),
       ],
     );
@@ -355,14 +456,28 @@ class _WatchlistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF14221C) : AppColors.surface;
+    final cardBorder = isDark ? const Color(0xFF263A31) : AppColors.border;
+    final placeholderBg = isDark
+        ? const Color(0xFF1A2B23)
+        : AppColors.surfaceMuted;
+    final priceColor = isDark
+        ? const Color(0xFF86E3B5)
+        : AppColors.brandPrimary;
+    final metaColor = isDark
+        ? const Color(0xFF94A3B8)
+        : AppColors.textSecondary;
+
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: cardBg,
         borderRadius: BorderRadius.circular(AppRadius.medium),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: cardBorder),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -394,31 +509,37 @@ class _WatchlistCard extends StatelessWidget {
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
                                     Container(
-                                      color: AppColors.surfaceMuted,
-                                      child: const Icon(
+                                      color: placeholderBg,
+                                      child: Icon(
                                         Icons.image_not_supported_outlined,
-                                        color: AppColors.brandSecondary,
+                                        color: isDark
+                                            ? const Color(0xFF628477)
+                                            : AppColors.brandSecondary,
                                       ),
                                     ),
                               )
                             : Container(
-                                color: AppColors.surfaceMuted,
-                                child: const Icon(
+                                color: placeholderBg,
+                                child: Icon(
                                   Icons.eco_outlined,
-                                  color: AppColors.brandPrimary,
+                                  color: priceColor,
                                 ),
                               ),
                         if (item.isSustainable)
-                          const Positioned(
+                          Positioned(
                             top: 4,
                             left: 4,
                             child: CircleAvatar(
                               radius: 9,
-                              backgroundColor: AppColors.brandPrimaryContainer,
+                              backgroundColor: isDark
+                                  ? const Color(0xFF163228)
+                                  : AppColors.brandPrimaryContainer,
                               child: Icon(
                                 Icons.eco,
                                 size: 11,
-                                color: AppColors.brandPrimary,
+                                color: isDark
+                                    ? const Color(0xFF92D4B3)
+                                    : AppColors.brandPrimary,
                               ),
                             ),
                           ),
@@ -443,10 +564,10 @@ class _WatchlistCard extends StatelessWidget {
                       const SizedBox(height: 3),
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.location_on_outlined,
                             size: 14,
-                            color: AppColors.textSecondary,
+                            color: metaColor,
                           ),
                           const SizedBox(width: 2),
                           Expanded(
@@ -454,8 +575,9 @@ class _WatchlistCard extends StatelessWidget {
                               item.location,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: AppColors.textSecondary),
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.copyWith(color: metaColor),
                             ),
                           ),
                         ],
@@ -468,7 +590,7 @@ class _WatchlistCard extends StatelessWidget {
                             '\$${item.priceNzd} NZD',
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
-                                  color: AppColors.brandPrimary,
+                                  color: priceColor,
                                   fontWeight: FontWeight.w800,
                                 ),
                           ),
@@ -478,13 +600,13 @@ class _WatchlistCard extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: _statusBgColor(item.status),
+                              color: _statusBgColor(item.status, isDark),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               _statusText(item.status),
                               style: TextStyle(
-                                color: _statusTextColor(item.status),
+                                color: _statusTextColor(item.status, isDark),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -515,22 +637,45 @@ class _WatchlistCard extends StatelessWidget {
     );
   }
 
-  Color _statusBgColor(ItemStatus status) => switch (status) {
-    ItemStatus.active => AppColors.brandPrimaryContainer,
-    ItemStatus.reserved => Colors.amber.shade100,
-    ItemStatus.sold => Colors.grey.shade200,
-  };
+  Color _statusBgColor(ItemStatus status, bool isDark) {
+    if (isDark) {
+      return switch (status) {
+        ItemStatus.active => const Color(0xFF163A2C),
+        ItemStatus.reserved => const Color(0xFF3D2C0D),
+        ItemStatus.sold => const Color(0xFF24332D),
+        ItemStatus.delisted => const Color(0xFF3A1F18),
+      };
+    }
+    return switch (status) {
+      ItemStatus.active => AppColors.brandPrimaryContainer,
+      ItemStatus.reserved => Colors.amber.shade100,
+      ItemStatus.sold => Colors.grey.shade200,
+      ItemStatus.delisted => Colors.orange.shade100,
+    };
+  }
 
-  Color _statusTextColor(ItemStatus status) => switch (status) {
-    ItemStatus.active => AppColors.brandPrimary,
-    ItemStatus.reserved => Colors.amber.shade900,
-    ItemStatus.sold => Colors.grey.shade700,
-  };
+  Color _statusTextColor(ItemStatus status, bool isDark) {
+    if (isDark) {
+      return switch (status) {
+        ItemStatus.active => const Color(0xFF86E3B5),
+        ItemStatus.reserved => const Color(0xFFFFD580),
+        ItemStatus.sold => const Color(0xFFA0AEC0),
+        ItemStatus.delisted => const Color(0xFFFFAB91),
+      };
+    }
+    return switch (status) {
+      ItemStatus.active => AppColors.brandPrimary,
+      ItemStatus.reserved => Colors.amber.shade900,
+      ItemStatus.sold => Colors.grey.shade700,
+      ItemStatus.delisted => Colors.orange.shade900,
+    };
+  }
 
   String _statusText(ItemStatus status) => switch (status) {
     ItemStatus.active => 'Available',
     ItemStatus.reserved => 'Reserved',
     ItemStatus.sold => 'Sold',
+    ItemStatus.delisted => 'Delisted',
   };
 }
 

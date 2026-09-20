@@ -78,7 +78,11 @@ class ShareBottomSheet extends StatelessWidget {
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.close, size: 20, color: AppColors.textSecondary),
+                icon: const Icon(
+                  Icons.close,
+                  size: 20,
+                  color: AppColors.textSecondary,
+                ),
                 splashRadius: 20,
                 visualDensity: VisualDensity.compact,
                 onPressed: () => Navigator.of(context).pop(),
@@ -93,7 +97,9 @@ class ShareBottomSheet extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.surfaceMuted,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+              border: Border.all(
+                color: AppColors.border.withValues(alpha: 0.5),
+              ),
             ),
             child: Row(
               children: [
@@ -107,10 +113,11 @@ class ShareBottomSheet extends StatelessWidget {
                         ? Image.network(
                             item.images.first,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const Icon(
-                              Icons.image_not_supported_outlined,
-                              color: AppColors.textSecondary,
-                            ),
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(
+                                  Icons.image_not_supported_outlined,
+                                  color: AppColors.textSecondary,
+                                ),
                           )
                         : const Icon(
                             Icons.shopping_bag_outlined,
@@ -204,7 +211,11 @@ class ShareBottomSheet extends StatelessWidget {
                   label: 'Instagram',
                   icon: Icons.camera_alt_rounded,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF833AB4), Color(0xFFFD1D1D), Color(0xFFFCB045)],
+                    colors: [
+                      Color(0xFF833AB4),
+                      Color(0xFFFD1D1D),
+                      Color(0xFFFCB045),
+                    ],
                     begin: Alignment.bottomLeft,
                     end: Alignment.topRight,
                   ),
@@ -252,7 +263,11 @@ class ShareBottomSheet extends StatelessWidget {
                     side: const BorderSide(color: AppColors.border),
                     foregroundColor: AppColors.textPrimary,
                   ),
-                  icon: const Icon(Icons.link_rounded, size: 20, color: AppColors.brandPrimary),
+                  icon: const Icon(
+                    Icons.link_rounded,
+                    size: 20,
+                    color: AppColors.brandPrimary,
+                  ),
                   label: const Text(
                     'Copy link',
                     style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),

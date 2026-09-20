@@ -19,27 +19,28 @@ void main() {
     ownerId: 'user-2',
   );
 
-  testWidgets('ShareBottomSheet renders product snippet and all share channels', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: ShareBottomSheet(item: testItem),
+  testWidgets(
+    'ShareBottomSheet renders product snippet and all share channels',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: ShareBottomSheet(item: testItem)),
         ),
-      ),
-    );
+      );
 
-    // Verify header and product info
-    expect(find.text('Share listing'), findsOneWidget);
-    expect(find.text('Vintage Road Bike'), findsOneWidget);
-    expect(find.text('\$280 NZD'), findsOneWidget);
+      // Verify header and product info
+      expect(find.text('Share listing'), findsOneWidget);
+      expect(find.text('Vintage Road Bike'), findsOneWidget);
+      expect(find.text('\$280 NZD'), findsOneWidget);
 
-    // Verify all 5 channels and action buttons
-    expect(find.text('WhatsApp'), findsOneWidget);
-    expect(find.text('SMS'), findsOneWidget);
-    expect(find.text('WeChat'), findsOneWidget);
-    expect(find.text('Instagram'), findsOneWidget);
-    expect(find.text('Facebook'), findsOneWidget);
-    expect(find.text('Copy link'), findsOneWidget);
-    expect(find.text('System share'), findsOneWidget);
-  });
+      // Verify all 5 channels and action buttons
+      expect(find.text('WhatsApp'), findsOneWidget);
+      expect(find.text('SMS'), findsOneWidget);
+      expect(find.text('WeChat'), findsOneWidget);
+      expect(find.text('Instagram'), findsOneWidget);
+      expect(find.text('Facebook'), findsOneWidget);
+      expect(find.text('Copy link'), findsOneWidget);
+      expect(find.text('System share'), findsOneWidget);
+    },
+  );
 }

@@ -46,6 +46,7 @@ function parseInput(body: unknown): ListingSuggestionInput {
   const category = optionalText(record.category, 'Category', 50);
   const condition = optionalText(record.condition, 'Condition', 20);
   const location = optionalText(record.location, 'Location', 120);
+  const imageBase64 = optionalText(record.imageBase64, 'Image', 10_000_000);
 
   if (category && !LISTING_CATEGORIES.includes(category as ListingCategory)) {
     throw new SuggestionInputError('Category is not allowed.');
@@ -53,9 +54,9 @@ function parseInput(body: unknown): ListingSuggestionInput {
   if (condition && !LISTING_CONDITIONS.includes(condition as ListingCondition)) {
     throw new SuggestionInputError('Condition is not allowed.');
   }
-  if (!title && !description && !category && !condition) {
+  if (!title && !description && !category && !condition && !imageBase64) {
     throw new SuggestionInputError(
-      'Add a title, description, category, or condition before asking for help.'
+      'Add a title, description, category, condition, or photo before asking for help.'
     );
   }
 
@@ -64,7 +65,8 @@ function parseInput(body: unknown): ListingSuggestionInput {
     ...(description ? { description } : {}),
     ...(category ? { category: category as ListingCategory } : {}),
     ...(condition ? { condition: condition as ListingCondition } : {}),
-    ...(location ? { location } : {})
+    ...(location ? { location } : {}),
+    ...(imageBase64 ? { imageBase64 } : {})
   };
 }
 

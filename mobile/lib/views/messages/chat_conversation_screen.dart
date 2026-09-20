@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
@@ -9,18 +10,24 @@ import 'package:provider/provider.dart';
 import '../../models/chat_conversation_model.dart';
 import '../../models/chat_message_model.dart';
 import '../../models/item_model.dart';
+import '../../models/meetup_model.dart';
 import '../../models/report_draft.dart';
 import '../../config/api_config.dart';
 import '../../navigation/app_route_observer.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/meetup_provider.dart';
+import '../../providers/order_provider.dart';
 import '../../repositories/item_repository.dart';
 import '../../services/listing_image_picker.dart';
 import '../../services/chat_voice_service.dart';
 import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../products/product_detail_screen.dart';
+import '../profile/payment_checkout_screen.dart';
+import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
+import '../shared/widgets/review_bottom_sheet.dart';
 import 'widgets/location_bubble.dart';
 import 'widgets/location_picker_sheet.dart';
 import 'widgets/meetup_card_bubble.dart';
@@ -76,10 +83,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   ModalRoute<dynamic>? _subscribedRoute;
   final Object _visibilityOwner = Object();
   ItemModel? _activeItem;
+  String? _specialOfferPrice;
+  bool _itemPaid = false;
+  bool _showActionPanel = false;
 
   @override
   void initState() {
     super.initState();
+    _specialOfferPrice = widget.conversation.specialPrice;
     _messageFocusNode.addListener(_handleFocusChange);
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _voiceRecorder = widget.voiceRecorder ?? DeviceChatVoiceRecorder();
@@ -94,10 +105,23 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   void _handleFocusChange() {
     if (_messageFocusNode.hasFocus) {
+      if (_showActionPanel) {
+        setState(() => _showActionPanel = false);
+      }
       _focusScrollTimer?.cancel();
       _focusScrollTimer = Timer(const Duration(milliseconds: 150), () {
         if (mounted) _scrollToEnd();
       });
+    }
+  }
+
+  void _toggleActionPanel() {
+    if (_showActionPanel) {
+      setState(() => _showActionPanel = false);
+    } else {
+      _messageFocusNode.unfocus();
+      setState(() => _showActionPanel = true);
+      _scrollToEnd();
     }
   }
 
@@ -418,6 +442,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       builder: (context) => ScheduleMeetupSheet(
         itemId: widget.conversation.itemId,
         itemTitle: widget.conversation.itemTitle,
+        // Required for seller to resolve buyer from conversation
+        conversationId: widget.conversation.id,
         counterpartId: widget.conversation.participantId,
         counterpartName: widget.conversation.participantName,
         onProposed: (meetup) {
@@ -437,7 +463,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   Future<void> _loadItemDetails() async {
     if (widget.conversation.itemId.isEmpty) return;
     try {
-      final item = await RestItemRepository().fetchItemById(widget.conversation.itemId);
+      final item = await RestItemRepository().fetchItemById(
+        widget.conversation.itemId,
+      );
       if (mounted && item != null) {
         setState(() {
           _activeItem = item;
@@ -446,89 +474,175 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     } catch (_) {}
   }
 
+  Future<void> _autoReserveItem() async {
+    // Status available/reserved is no longer auto-mutated in chat flow.
+  }
+
+  Future<bool> _confirmCancelPreviousMeetupIfNeeded(
+    ChatMessageModel currentMessage,
+  ) async {
+    final messages = _chatProvider.messagesFor(widget.conversation.id);
+    final hasActiveConfirmed = messages.any(
+      (m) =>
+          m.id != currentMessage.id &&
+          m.isMeetup &&
+          m.meetup != null &&
+          m.meetup!.isConfirmed,
+    );
+
+    if (!hasActiveConfirmed) return true;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Cancel Previous Meetup?',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'A meetup has already been confirmed. Accepting this new proposal will cancel the previously scheduled meetup.\n\nDo you want to continue and accept this one?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep Previous'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+            ),
+            child: const Text('Cancel Previous & Accept'),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
+  }
+
+  OrderProvider? _getOrderProvider({bool listen = false}) {
+    try {
+      return Provider.of<OrderProvider>(context, listen: listen);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _buyerBuyNow() async {
     final token = _currentAuthToken;
     if (token == null || token.isEmpty) return;
+
+    final isSold = _activeItem?.status == ItemStatus.sold;
+    final orders = _getOrderProvider()?.orders ?? const [];
+    final isAlreadyPaid =
+        _itemPaid ||
+        orders.any(
+          (o) =>
+              o.itemId == widget.conversation.itemId &&
+              (o.isPaid || o.isCompleted),
+        );
+
+    if (isSold || isAlreadyPaid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isSold
+                ? 'This item has already been sold.'
+                : 'You have already completed payment for this item.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final item = _activeItem;
     final priceStr = item?.isFree == true || item?.priceNzd == '0'
         ? 'FREE'
         : '\$${item?.priceNzd ?? "0"} NZD';
 
-    final confirmed = await showModalBottomSheet<bool>(
+    // 1. Prepare order and navigate to payment checkout screen without premature chat message
+    if (!mounted) return;
+    showDialog<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        final theme = Theme.of(context);
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          elevation: 6,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16)),
           ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Confirm Purchase Intent',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text(
+                  'Preparing checkout...',
+                  style: TextStyle(fontWeight: FontWeight.w600),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Item: ${item?.title ?? widget.conversation.itemTitle}',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Price: $priceStr',
-                style: TextStyle(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'This will notify the seller that you intend to purchase and pick up this item.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                      ),
-                      onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text('Send Intent'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
 
-    if (confirmed == true && mounted) {
-      await _chatProvider.sendText(
-        conversation: widget.conversation,
-        text: '💳 I want to purchase this item ($priceStr). When would be convenient to meet or pick up?',
+    try {
+      final orderProvider = _getOrderProvider();
+      if (orderProvider == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      final order = await orderProvider.createOrGetOrder(
+        itemId: widget.conversation.itemId,
         token: token,
       );
-      _scrollToEnd();
-      _requestNotificationPermissionAfterAction();
+      if (mounted) Navigator.pop(context); // close loading dialog
+
+      if (mounted) {
+        final paymentResult = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute<bool>(
+            builder: (_) => PaymentCheckoutScreen(order: order),
+          ),
+        );
+
+        if (paymentResult == true && mounted) {
+          setState(() {
+            _itemPaid = true;
+          });
+          _loadItemDetails();
+          final token = _currentAuthToken;
+          if (token != null && token.isNotEmpty) {
+            orderProvider.loadMyOrders(token);
+          }
+          await _chatProvider.sendText(
+            conversation: widget.conversation,
+            text:
+                '💳 [Payment Confirmed] Payment of $priceStr confirmed! Order #${order.orderNumber}. I have completed the payment via KiwiShare Safe Pay.',
+            token: token ?? '',
+          );
+          _scrollToEnd();
+        }
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // close loading dialog
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not open checkout: $e')));
+      }
     }
   }
 
@@ -549,7 +663,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           return Container(
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             padding: EdgeInsets.only(
               top: 20,
@@ -573,17 +689,40 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Adjust Price',
+                  'Offer Special Price',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Update the listing price. The buyer will see the updated price.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                // Clarify this is a per-buyer offer, NOT a product price change
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'This is a private offer for this buyer only. Your listing price stays unchanged for other buyers.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -597,7 +736,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                           decimal: true,
                         ),
                         decoration: InputDecoration(
-                          labelText: isFree ? 'Free Item' : 'New Price (NZD)',
+                          labelText: isFree
+                              ? 'Free Item'
+                              : 'Special Price (NZD)',
                           prefixText: isFree ? '' : '\$ ',
                           border: const OutlineInputBorder(),
                         ),
@@ -628,7 +769,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       if (val.isEmpty) return;
                       Navigator.of(context).pop(val);
                     },
-                    child: const Text('Confirm Price Update'),
+                    child: const Text('Send Offer to Buyer'),
                   ),
                 ),
               ],
@@ -638,107 +779,112 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       ),
     );
 
+    // Only send a chat message — do NOT modify the actual listing price
     if (newPrice != null && mounted) {
+      setState(() => _specialOfferPrice = newPrice);
+      final priceLabel = newPrice == '0' ? 'FREE' : '\$$newPrice NZD';
       try {
-        final updated = await RestItemRepository().updateItem(
-          id: widget.conversation.itemId,
-          token: token,
-          updates: {'priceNzd': newPrice},
-        );
-        setState(() => _activeItem = updated);
-        final priceLabel = newPrice == '0' ? 'FREE' : '\$$newPrice NZD';
         await _chatProvider.sendText(
           conversation: widget.conversation,
-          text: '🏷️ [Seller Action] Price updated to $priceLabel',
+          text:
+              '🏷️ Special offer just for you: $priceLabel (listing price unchanged for others)',
           token: token,
         );
         _scrollToEnd();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Price updated to $priceLabel')),
+          SnackBar(content: Text('Price offer sent: $priceLabel')),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update price: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send offer: $e')));
       }
     }
   }
 
-  Future<void> _sellerChangeStatus() async {
+  Future<void> _sellerToggleDelistRelist() async {
     final token = _currentAuthToken;
     if (token == null || token.isEmpty) return;
+    final item = _activeItem;
+    if (item == null || item.status == ItemStatus.sold) return;
 
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        final theme = Theme.of(context);
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Change Item Status',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Divider(height: 24),
-              ListTile(
-                leading: const Icon(Icons.check_circle_outline, color: Colors.green),
-                title: const Text('Active (Available)'),
-                subtitle: const Text('Item is available for other buyers'),
-                onTap: () => Navigator.of(context).pop('active'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.bookmark_outline, color: Colors.amber),
-                title: const Text('Reserved'),
-                subtitle: const Text('Holding for this buyer'),
-                onTap: () => Navigator.of(context).pop('reserved'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.lock_outline, color: Colors.grey),
-                title: const Text('Sold'),
-                subtitle: const Text('Transaction completed'),
-                onTap: () => Navigator.of(context).pop('sold'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    final isDelisted = item.status == ItemStatus.delisted;
 
-    if (selected != null && mounted) {
+    if (!isDelisted) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delist Item?'),
+          content: const Text(
+            'This listing will be taken down from the marketplace. You can relist it anytime before it is sold.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Delist'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+
       try {
         final updated = await RestItemRepository().updateItem(
           id: widget.conversation.itemId,
           token: token,
-          updates: {'status': selected},
+          updates: {'status': 'draft'},
         );
         setState(() => _activeItem = updated);
-        final statusLabel = selected == 'active'
-            ? 'Active'
-            : selected == 'reserved'
-                ? 'Reserved'
-                : 'Sold';
         await _chatProvider.sendText(
           conversation: widget.conversation,
-          text: '📦 [Seller Action] Item status updated to $statusLabel',
+          text: '[Seller Action] Item has been delisted from the marketplace.',
           token: token,
         );
         _scrollToEnd();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Status updated to $statusLabel')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Item has been delisted.')),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update status: $e')),
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to delist item: $e')));
+        }
+      }
+    } else {
+      try {
+        final updated = await RestItemRepository().updateItem(
+          id: widget.conversation.itemId,
+          token: token,
+          updates: {'status': 'active'},
         );
+        setState(() => _activeItem = updated);
+        await _chatProvider.sendText(
+          conversation: widget.conversation,
+          text: '[Seller Action] Item has been relisted to the marketplace.',
+          token: token,
+        );
+        _scrollToEnd();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Item relisted successfully!')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to relist item: $e')));
+        }
       }
     }
   }
@@ -762,22 +908,34 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
     final title = _activeItem?.title ?? widget.conversation.itemTitle;
     final imageUrl = _activeItem?.imageUrl ?? widget.conversation.itemImageUrl;
-    final isFree = _activeItem?.isFree == true ||
+    final isFree =
+        _activeItem?.isFree == true ||
         _activeItem?.priceNzd == '0' ||
-        (_activeItem?.priceNzd != null && double.tryParse(_activeItem!.priceNzd) == 0);
+        (_activeItem?.priceNzd != null &&
+            double.tryParse(_activeItem!.priceNzd) == 0);
     final priceText = isFree
         ? 'FREE'
         : _activeItem != null
-            ? '\$${_activeItem!.priceNzd}'
-            : '';
+        ? '\$${_activeItem!.priceNzd}'
+        : '';
 
     final status = _activeItem?.status ?? ItemStatus.active;
+    final orders = _getOrderProvider(listen: true)?.orders ?? const [];
+    final isOrderPaid =
+        _itemPaid ||
+        orders.any(
+          (o) =>
+              o.itemId == widget.conversation.itemId &&
+              (o.isPaid || o.isCompleted),
+        );
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? colors.surfaceContainerHighest.withOpacity(0.4) : Colors.white,
+        color: isDark
+            ? colors.surfaceContainerHighest.withOpacity(0.4)
+            : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -787,125 +945,786 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           ),
         ],
         border: Border.all(
-          color: isDark ? colors.outline.withOpacity(0.2) : colors.outline.withOpacity(0.12),
+          color: isDark
+              ? colors.outline.withOpacity(0.2)
+              : colors.outline.withOpacity(0.12),
         ),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ProductDetailScreen(
-                itemId: widget.conversation.itemId,
-                item: _activeItem,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(
+                      builder: (_) => ProductDetailScreen(
+                        itemId: widget.conversation.itemId,
+                        item: _activeItem,
+                      ),
+                    ),
+                  )
+                  .then((_) => _loadItemDetails());
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      width: 54,
+                      height: 54,
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: colors.surfaceContainerHighest,
+                          child: const Icon(
+                            Icons.image_not_supported_outlined,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (_specialOfferPrice != null) ...[
+                              Text(
+                                _specialOfferPrice == '0'
+                                    ? 'FREE'
+                                    : '\$$_specialOfferPrice',
+                                style: const TextStyle(
+                                  color: Color(0xFF059669),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFD1FAE5),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'Special Offer',
+                                  style: TextStyle(
+                                    color: Color(0xFF047857),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              if (priceText.isNotEmpty &&
+                                  priceText !=
+                                      (_specialOfferPrice == '0'
+                                          ? 'FREE'
+                                          : '\$$_specialOfferPrice'))
+                                Text(
+                                  priceText,
+                                  style: TextStyle(
+                                    color: colors.onSurfaceVariant.withOpacity(
+                                      0.6,
+                                    ),
+                                    fontSize: 12,
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                                ),
+                            ] else ...[
+                              if (isFree)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF059669),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'FREE',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                )
+                              else if (priceText.isNotEmpty)
+                                Text(
+                                  priceText,
+                                  style: TextStyle(
+                                    color: colors.primary,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    margin: const EdgeInsets.only(top: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Details',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: colors.primary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ).then((_) => _loadItemDetails());
-        },
-        child: Row(
+          ),
+          // Top-right corner status badge
+          Positioned(
+            top: -2,
+            right: 0,
+            child: _buildCornerStatusBadge(
+              isPaid: isOrderPaid,
+              status: status,
+              isDark: isDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCornerStatusBadge({
+    required bool isPaid,
+    required ItemStatus status,
+    required bool isDark,
+  }) {
+    if (isPaid) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF059669),
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF059669).withOpacity(0.3),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                width: 54,
-                height: 54,
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: colors.surfaceContainerHighest,
-                    child: const Icon(Icons.image_not_supported_outlined, size: 24),
+            Icon(Icons.check_circle_rounded, size: 10, color: Colors.white),
+            SizedBox(width: 3),
+            Text(
+              'PAID',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (status == ItemStatus.sold) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF475569),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text(
+          'SOLD',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.4,
+          ),
+        ),
+      );
+    }
+
+    if (status == ItemStatus.delisted) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFFD97706),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text(
+          'DELISTED',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.4,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF132A22) : const Color(0xFFECFDF5),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: const Color(0xFF10B981).withOpacity(0.4),
+          width: 0.8,
+        ),
+      ),
+      child: const Text(
+        'AVAILABLE',
+        style: TextStyle(
+          color: Color(0xFF059669),
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderFlowCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final orders = _getOrderProvider(listen: true)?.orders ?? const [];
+    final order = orders
+        .where((o) => o.itemId == widget.conversation.itemId)
+        .firstOrNull;
+
+    final messages = _chatProvider.messagesFor(widget.conversation.id);
+    final latestMeetupMsg = messages.reversed
+        .where((m) => m.meetup != null)
+        .firstOrNull;
+    final meetup = latestMeetupMsg?.meetup;
+
+    MeetupModel? cachedMeetup;
+    if (order != null) {
+      try {
+        cachedMeetup = context.watch<MeetupProvider>().meetupById(order.id);
+      } catch (_) {}
+    }
+
+    final isBuyer = widget.conversation.direction == ChatDirection.buying;
+
+    final isPaid =
+        _itemPaid ||
+        (order != null && (order.isPaid || order.isCompleted)) ||
+        (cachedMeetup != null && cachedMeetup.isPaid);
+
+    final hasMeetup =
+        meetup != null && !meetup.isCancelled && !meetup.isDeclined;
+    final isMeetupConfirmed =
+        hasMeetup && (meetup.isConfirmed || cachedMeetup?.isConfirmed == true);
+    final isCompleted =
+        (order != null &&
+            (order.isCompleted ||
+                order.status == 'completed' ||
+                order.status == 'seller_paid')) ||
+        (cachedMeetup != null && cachedMeetup.isCompleted) ||
+        messages.any(
+          (m) =>
+              m.text.contains('Transaction successfully completed') ||
+              m.text.contains('[Transaction Completed]'),
+        );
+
+    // If completed, show transaction complete & review card
+    if (isCompleted) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF064E3B).withOpacity(0.35)
+              : const Color(0xFFECFDF5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFF059669),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.celebration_rounded,
+                  size: 18,
+                  color: Color(0xFF059669),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Transaction Completed & Funds Released!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark
+                          ? const Color(0xFF6EE7B7)
+                          : const Color(0xFF047857),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.push('/orders'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: Text(
+                    'Order Info',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: colors.primary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Handover is confirmed! Please take a moment to leave a review for the counterparty to help build trust.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: isDark
+                    ? const Color(0xFFA7F3D0)
+                    : const Color(0xFF065F46),
+              ),
+            ),
+            if (!isBuyer) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF3B82F6).withValues(alpha: 0.3)
+                        : const Color(0xFFBFDBFE),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      size: 16,
+                      color: Color(0xFF2563EB),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Payout: Transferring to your saved card or bind one in Wallet.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1E40AF),
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => context.push('/profile'),
+                      child: Text(
+                        'Wallet',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 34,
+              child: FilledButton.icon(
+                key: const Key('chat_order_leave_review_btn'),
+                onPressed: () {
+                  final targetUserId = _effectiveParticipantId;
+                  final targetName = widget.conversation.participantName;
+                  final targetAvatar = widget.conversation.participantAvatarUrl;
+                  ReviewBottomSheet.show(
+                    context,
+                    targetUserId: targetUserId,
+                    targetName: targetName,
+                    targetAvatarUrl: targetAvatar,
+                    orderId: order?.id,
+                    itemId: widget.conversation.itemId,
+                    itemTitle: widget.conversation.itemTitle,
+                    itemImageUrl: widget.conversation.itemImageUrl,
+                    role: isBuyer ? 'seller' : 'buyer',
+                  );
+                },
+                icon: const Icon(Icons.star_rounded, size: 16, color: Colors.amber),
+                label: Text(
+                  'Rate & Review ${widget.conversation.participantName}',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF059669),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+          ],
+        ),
+      );
+    }
+
+    // If no order exists and no meetup exists, don't show order card
+    if (order == null && !hasMeetup && !_itemPaid) {
+      return const SizedBox.shrink();
+    }
+
+    // State 1: Paid, but meetup is not scheduled yet
+    if (isPaid && !hasMeetup) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2A1C0B) : const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? const Color(0xFF854D0E) : const Color(0xFFFDE68A),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.schedule_send_rounded,
+                  size: 18,
+                  color: Color(0xFFD97706),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Payment Complete — Schedule Handover',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark
+                          ? const Color(0xFFFCD34D)
+                          : const Color(0xFF92400E),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.push('/orders'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: Text(
+                    'View Order',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: colors.primary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Payment is held securely in KiwiShare escrow. Please agree on a meetup time and location for physical handover.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: isDark
+                    ? const Color(0xFFFDE68A)
+                    : const Color(0xFF78350F),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 34,
+              child: FilledButton.icon(
+                key: const Key('chat_order_schedule_meetup_btn'),
+                onPressed: _scheduleMeetup,
+                icon: const Icon(Icons.handshake_rounded, size: 16),
+                label: const Text(
+                  'Schedule Meetup',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFD97706),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // State 2: Meetup scheduled, but payment is NOT yet completed
+    if (!isPaid && hasMeetup) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF261D3B) : const Color(0xFFF5F3FF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? const Color(0xFF6D28D9) : const Color(0xFFDDD6FE),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.payment_rounded,
+                  size: 18,
+                  color: Color(0xFF7C3AED),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isBuyer
+                        ? 'Meetup Scheduled — Payment Needed'
+                        : 'Meetup Scheduled — Awaiting Payment',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark
+                          ? const Color(0xFFC4B5FD)
+                          : const Color(0xFF5B21B6),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.push('/orders'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: Text(
+                    'Order Info',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: colors.primary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isBuyer
+                  ? 'Meetup set for ${meetup.locationName}. Please complete payment via KiwiShare to secure the deal.'
+                  : 'Meetup set for ${meetup.locationName}. Waiting for the buyer to complete payment before handover.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: isDark
+                    ? const Color(0xFFDDD6FE)
+                    : const Color(0xFF4C1D95),
+              ),
+            ),
+            if (isBuyer) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 34,
+                child: FilledButton.icon(
+                  key: const Key('chat_order_pay_now_btn'),
+                  onPressed: _buyerBuyNow,
+                  icon: const Icon(Icons.lock_outline_rounded, size: 16),
+                  label: const Text(
+                    'Pay Now with Safe Pay',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF7C3AED),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // State 3: Both Paid and Meetup Scheduled/Confirmed
+    return InkWell(
+      onTap: () => context.push('/orders'),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF064E3B).withValues(alpha: 0.35)
+              : const Color(0xFFECFDF5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark
+                ? const Color(0xFF059669)
+                : const Color(0xFF10B981).withValues(alpha: 0.4),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF059669).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                size: 18,
+                color: Color(0xFF059669),
+              ),
+            ),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+                    isMeetupConfirmed
+                        ? 'Meetup Confirmed & Paid'
+                        : 'Order in Progress',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark
+                          ? const Color(0xFF6EE7B7)
+                          : const Color(0xFF065F46),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      if (isFree)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF059669),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'FREE',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        )
-                      else if (priceText.isNotEmpty)
-                        Text(
-                          priceText,
-                          style: TextStyle(
-                            color: colors.primary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      if (status != ItemStatus.active) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: status == ItemStatus.reserved
-                                ? Colors.amber.shade800
-                                : Colors.grey.shade700,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            status == ItemStatus.reserved ? 'RESERVED' : 'SOLD',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  const SizedBox(height: 2),
+                  Text(
+                    hasMeetup
+                        ? 'Handover at ${meetup.locationName}. Tap to track order progress.'
+                        : 'Order is active. Tap to view progress.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? const Color(0xFFA7F3D0)
+                          : const Color(0xFF047857),
+                    ),
                   ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: colors.primary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Details',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colors.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Icon(Icons.chevron_right, size: 16, color: colors.primary),
-                ],
-              ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: Color(0xFF059669),
             ),
           ],
         ),
@@ -933,12 +1752,27 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             'Item in great condition',
           ];
 
+    final isItemSold = _activeItem?.status == ItemStatus.sold;
+    if (isItemSold) {
+      return const SizedBox.shrink();
+    }
+    final orders = _getOrderProvider(listen: true)?.orders ?? const [];
+    final isOrderPaid =
+        _itemPaid ||
+        orders.any(
+          (o) =>
+              o.itemId == widget.conversation.itemId &&
+              (o.isPaid || o.isCompleted),
+        );
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? colors.surface : const Color(0xFFF8FAFC),
         border: Border(
           top: BorderSide(
-            color: isDark ? colors.outline.withOpacity(0.15) : colors.outline.withOpacity(0.1),
+            color: isDark
+                ? colors.outline.withOpacity(0.15)
+                : colors.outline.withOpacity(0.1),
           ),
         ),
       ),
@@ -953,47 +1787,149 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(color: colors.primary.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: BorderSide(
+                          color: colors.primary.withOpacity(0.5),
+                        ),
                       ),
                       onPressed: _scheduleMeetup,
                       icon: const Icon(Icons.location_on_outlined, size: 16),
                       label: const Text(
                         'Meetup Location',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                      onPressed: _buyerBuyNow,
-                      icon: const Icon(Icons.shopping_bag_outlined, size: 16),
-                      label: const Text(
-                        'Buy Now',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  if (!isItemSold && !isOrderPaid) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        onPressed: _buyerBuyNow,
+                        icon: const Icon(Icons.shopping_bag_outlined, size: 16),
+                        label: const Text(
+                          'Buy Now',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ] else if (isOrderPaid) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1FAE5),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle_rounded,
+                            size: 14,
+                            color: Color(0xFF047857),
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Paid · Ready to Meet',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF047857),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? colors.surfaceContainerHighest.withValues(
+                                alpha: 0.4,
+                              )
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: colors.outline.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 14,
+                            color: colors.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Item Sold',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ] else ...[
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(color: colors.primary.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 6,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: BorderSide(
+                          color: colors.primary.withOpacity(0.5),
+                        ),
                       ),
                       onPressed: _sellerModifyPrice,
                       icon: const Icon(Icons.price_change_outlined, size: 16),
                       label: const Text(
                         'Edit Price',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -1001,33 +1937,69 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(color: colors.primary.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 6,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: BorderSide(
+                          color: colors.primary.withOpacity(0.5),
+                        ),
                       ),
                       onPressed: _scheduleMeetup,
                       icon: const Icon(Icons.handshake_outlined, size: 16),
                       label: const Text(
                         'Propose Meetup',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                      onPressed: _sellerChangeStatus,
-                      icon: const Icon(Icons.sell_outlined, size: 16),
-                      label: const Text(
-                        'Item Status',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  if (_activeItem?.status != ItemStatus.sold) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 6,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          side: BorderSide(
+                            color: (_activeItem?.status == ItemStatus.delisted)
+                                ? const Color(0xFF059669)
+                                : Colors.orange.shade700,
+                          ),
+                          foregroundColor:
+                              (_activeItem?.status == ItemStatus.delisted)
+                              ? const Color(0xFF059669)
+                              : Colors.orange.shade900,
+                        ),
+                        onPressed: _sellerToggleDelistRelist,
+                        icon: Icon(
+                          (_activeItem?.status == ItemStatus.delisted)
+                              ? Icons.storefront_outlined
+                              : Icons.archive_outlined,
+                          size: 16,
+                        ),
+                        label: Text(
+                          (_activeItem?.status == ItemStatus.delisted)
+                              ? 'Relist Item'
+                              : 'Delist Item',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ],
             ),
@@ -1046,7 +2018,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     chipText,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark ? colors.onSurface : const Color(0xFF334155),
+                      color: isDark
+                          ? colors.onSurface
+                          : const Color(0xFF334155),
                     ),
                   ),
                   backgroundColor: isDark
@@ -1199,6 +2173,39 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     });
   }
 
+  String get _effectiveParticipantId {
+    final fromCached =
+        _chatProvider.conversationById(widget.conversation.id)?.participantId;
+    if (fromCached != null && fromCached.isNotEmpty) return fromCached;
+    if (widget.conversation.participantId.isNotEmpty) {
+      return widget.conversation.participantId;
+    }
+    final msgs = _chatProvider.messagesFor(widget.conversation.id);
+    for (final m in msgs) {
+      if (!m.isMine && m.senderId.isNotEmpty) return m.senderId;
+    }
+    return '';
+  }
+
+  void _openParticipantProfile() {
+    final pid = _effectiveParticipantId;
+    if (pid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Participant profile is loading, please try again.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => PublicProfileScreen(userId: pid),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = _chatProvider;
@@ -1208,10 +2215,81 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         titleSpacing: 0,
-        title: Text(
-          widget.conversation.participantName,
-          key: const Key('conversation_participant_name'),
-          style: Theme.of(context).textTheme.titleMedium,
+        title: InkWell(
+          key: const Key('conversation_participant_header'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: _openParticipantProfile,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(
+                  radius: 17,
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer,
+                  backgroundImage:
+                      widget.conversation.participantAvatarUrl != null &&
+                          widget.conversation.participantAvatarUrl!.isNotEmpty
+                      ? NetworkImage(widget.conversation.participantAvatarUrl!)
+                      : null,
+                  child:
+                      widget.conversation.participantAvatarUrl == null ||
+                          widget.conversation.participantAvatarUrl!.isEmpty
+                      ? Text(
+                          widget.conversation.participantName.isNotEmpty
+                              ? widget.conversation.participantName[0]
+                                    .toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onPrimaryContainer,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.conversation.participantName,
+                        key: const Key('conversation_participant_name'),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'View profile',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 12,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         actions: [
           IconButton(
@@ -1260,11 +2338,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       ),
       body: SafeArea(
         top: false,
+        bottom: false,
         child: ListenableBuilder(
           listenable: provider,
           builder: (context, _) => Column(
             children: [
               _buildXianyuProductHeader(context),
+              _buildOrderFlowCard(context),
               Expanded(child: _buildHistory(provider)),
               if (provider.messageReadErrorFor(widget.conversation.id) != null)
                 _InlineChatError(
@@ -1303,6 +2383,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 onStartRecording: _startVoiceRecording,
                 onCancelRecording: () => _finishVoiceRecording(send: false),
                 onSendRecording: () => _finishVoiceRecording(send: true),
+                showActionPanel: _showActionPanel,
+                onToggleActionPanel: _toggleActionPanel,
+                onOpenOrders: () => context.push('/orders'),
+                onScheduleMeetup: _scheduleMeetup,
+                onPay: _buyerBuyNow,
               ),
             ],
           ),
@@ -1329,6 +2414,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
     final error = provider.messageLoadErrorFor(widget.conversation.id);
     final messages = provider.messagesFor(widget.conversation.id);
+    if (_specialOfferPrice == null) {
+      for (final m in messages.reversed) {
+        if (m.text.contains('Special offer just for you:')) {
+          final match = RegExp(
+            r'Special offer just for you:\s*(FREE|\$[0-9.]+)',
+          ).firstMatch(m.text);
+          if (match != null) {
+            final val = match.group(1)!;
+            _specialOfferPrice = val == 'FREE' ? '0' : val.replaceAll('\$', '');
+            break;
+          }
+        }
+      }
+    }
     if (error != null && messages.isEmpty) {
       return _ConversationState(
         key: const Key('conversation_error_state'),
@@ -1348,6 +2447,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final latestSentIndex = messages.lastIndexWhere(
       (message) => message.isMine,
     );
+    final auth = context.watch<AuthProvider?>();
+    final myAvatarUrl = auth?.currentUser?.avatarUrl;
+    final myDisplayName = auth?.currentUser?.displayName ?? 'You';
+    final otherAvatarUrl = widget.conversation.participantAvatarUrl;
+    final otherDisplayName = widget.conversation.participantName;
+
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => _messageFocusNode.unfocus(),
@@ -1364,6 +2469,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             isBuyer: widget.conversation.direction == ChatDirection.buying,
             showReadReceipt:
                 index == latestSentIndex && message.status == 'read',
+            onBeforeAccept: () => _confirmCancelPreviousMeetupIfNeeded(message),
+            myAvatarUrl: myAvatarUrl,
+            myDisplayName: myDisplayName,
+            otherAvatarUrl: otherAvatarUrl,
+            otherDisplayName: otherDisplayName,
+            onOtherAvatarTap: _openParticipantProfile,
             onMeetupStatusChanged: () {
               final token = _currentAuthToken;
               if (token != null && token.isNotEmpty) {
@@ -1372,6 +2483,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   token: token,
                   shouldMarkRead: () => _isCurrentRoute,
                 );
+              }
+              if (_activeItem?.status == ItemStatus.active &&
+                  widget.conversation.direction == ChatDirection.selling) {
+                _autoReserveItem();
               }
             },
           );
@@ -1387,12 +2502,24 @@ class _MessageBubble extends StatelessWidget {
     required this.showReadReceipt,
     this.isBuyer = false,
     this.onMeetupStatusChanged,
+    this.onBeforeAccept,
+    this.myAvatarUrl,
+    this.myDisplayName,
+    this.otherAvatarUrl,
+    this.otherDisplayName,
+    this.onOtherAvatarTap,
   });
 
   final ChatMessageModel message;
   final bool showReadReceipt;
   final bool isBuyer;
   final VoidCallback? onMeetupStatusChanged;
+  final Future<bool> Function()? onBeforeAccept;
+  final String? myAvatarUrl;
+  final String? myDisplayName;
+  final String? otherAvatarUrl;
+  final String? otherDisplayName;
+  final VoidCallback? onOtherAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1411,10 +2538,12 @@ class _MessageBubble extends StatelessWidget {
               MeetupCardBubble(
                 key: Key('chat_meetup_card_${message.id}'),
                 meetup: message.meetup!,
+                messageId: message.id,
                 isMine: message.isMine,
                 isBuyer: isBuyer,
                 createdAt: message.createdAt,
                 onStatusChanged: onMeetupStatusChanged,
+                onBeforeAccept: onBeforeAccept,
               ),
               if (showReadReceipt) _ReadReceipt(messageId: message.id),
             ],
@@ -1454,101 +2583,295 @@ class _MessageBubble extends StatelessWidget {
         : message.isVoice
         ? 'a voice message'
         : message.text;
+
+    final bubbleWidget = Container(
+      key: Key('chat_message_${message.id}'),
+      constraints: const BoxConstraints(maxWidth: 270),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: mine
+            ? Theme.of(context).colorScheme.primary
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(AppRadius.medium),
+          topRight: const Radius.circular(AppRadius.medium),
+          bottomLeft: Radius.circular(mine ? AppRadius.medium : 4),
+          bottomRight: Radius.circular(mine ? 4 : AppRadius.medium),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: mine
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          if (message.isImage)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              child: Image.network(
+                _resolvedChatImageUrl(message.imageUrl!),
+                key: Key('chat_message_image_${message.id}'),
+                width: 220,
+                height: 180,
+                fit: BoxFit.cover,
+                errorBuilder: (context, _, _) => SizedBox(
+                  width: 220,
+                  height: 120,
+                  child: Center(
+                    child: Icon(
+                      Icons.broken_image_outlined,
+                      color: mine
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else if (message.isVoice)
+            _VoiceMessageBubble(
+              messageId: message.id,
+              audioUrl: _resolvedChatAssetUrl(message.audioUrl!),
+              durationMs: message.durationMs!,
+              mine: mine,
+            )
+          else
+            _ActionOrTextMessage(text: message.text, mine: mine),
+          const SizedBox(height: 2),
+          Text(
+            _messageTime(message.createdAt),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: mine
+                  ? Theme.of(
+                      context,
+                    ).colorScheme.onPrimary.withValues(alpha: 0.78)
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (showReadReceipt)
+            Text(
+              'Read',
+              key: Key('chat_read_receipt_${message.id}'),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onPrimary.withValues(alpha: 0.78),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    final counterpartAvatar = GestureDetector(
+      onTap: onOtherAvatarTap,
+      child: CircleAvatar(
+        radius: 14,
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        backgroundImage:
+            otherAvatarUrl != null && otherAvatarUrl!.isNotEmpty
+                ? NetworkImage(otherAvatarUrl!)
+                : null,
+        child: otherAvatarUrl == null || otherAvatarUrl!.isEmpty
+            ? Text(
+                otherDisplayName != null && otherDisplayName!.isNotEmpty
+                    ? otherDisplayName![0].toUpperCase()
+                    : '?',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              )
+            : null,
+      ),
+    );
+
+    final myAvatar = CircleAvatar(
+      radius: 14,
+      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+      backgroundImage: myAvatarUrl != null && myAvatarUrl!.isNotEmpty
+          ? NetworkImage(myAvatarUrl!)
+          : null,
+      child: myAvatarUrl == null || myAvatarUrl!.isEmpty
+          ? Text(
+              myDisplayName != null && myDisplayName!.isNotEmpty
+                  ? myDisplayName![0].toUpperCase()
+                  : 'ME',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSecondaryContainer,
+              ),
+            )
+          : null,
+    );
+
     return Semantics(
       excludeSemantics: !message.isVoice,
       label: mine
           ? 'You sent $semanticContent${showReadReceipt ? ', read' : ''}'
           : 'They sent $semanticContent',
-      child: Align(
-        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          key: Key('chat_message_${message.id}'),
-          constraints: const BoxConstraints(maxWidth: 300),
-          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: Row(
+          mainAxisAlignment:
+              mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!mine) ...[
+              counterpartAvatar,
+              const SizedBox(width: 8),
+            ],
+            Flexible(child: bubbleWidget),
+            if (mine) ...[
+              const SizedBox(width: 8),
+              myAvatar,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionOrTextMessage extends StatelessWidget {
+  const _ActionOrTextMessage({required this.text, required this.mine});
+
+  final String text;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isSellerAction = text.contains('[Seller Action]');
+    final isBuyerAction = text.contains('[Buyer Action]');
+    final isPaymentConfirmed =
+        text.contains('[Payment Successful]') ||
+        text.contains('[Payment Confirmed]');
+    final isPaymentRequest = text.contains('[Payment Request]');
+    final isHandoverCompleted = text.contains('[Handover Completed]');
+
+    if (!isSellerAction &&
+        !isBuyerAction &&
+        !isPaymentConfirmed &&
+        !isPaymentRequest &&
+        !isHandoverCompleted) {
+      return Text(
+        text,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: mine
+              ? theme.colorScheme.onPrimary
+              : theme.colorScheme.onSurface,
+        ),
+      );
+    }
+
+    final IconData icon;
+    final String badgeTitle;
+    final Color badgeColor;
+    final Color badgeTextColor;
+    String cleanBody = text;
+
+    if (isSellerAction) {
+      icon = Icons.inventory_2_rounded;
+      badgeTitle = 'Seller Action';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.22)
+          : const Color(0xFF2563EB).withValues(alpha: 0.12);
+      badgeTextColor = mine ? Colors.white : const Color(0xFF1D4ED8);
+      cleanBody = text
+          .replaceAll('📦', '')
+          .replaceAll('[Seller Action]', '')
+          .trim();
+    } else if (isBuyerAction) {
+      icon = Icons.shopping_bag_rounded;
+      badgeTitle = 'Buyer Action';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.22)
+          : const Color(0xFF059669).withValues(alpha: 0.12);
+      badgeTextColor = mine ? Colors.white : const Color(0xFF047857);
+      cleanBody = text
+          .replaceAll('💳', '')
+          .replaceAll('[Buyer Action]', '')
+          .trim();
+    } else if (isPaymentRequest) {
+      icon = Icons.payment_rounded;
+      badgeTitle = 'Payment Request';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.25)
+          : const Color(0xFFD97706).withValues(alpha: 0.15);
+      badgeTextColor = mine ? Colors.white : const Color(0xFFB45309);
+      cleanBody = text
+          .replaceAll('💳', '')
+          .replaceAll('[Payment Request]', '')
+          .trim();
+    } else if (isHandoverCompleted) {
+      icon = Icons.handshake_rounded;
+      badgeTitle = 'Handover Completed';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.25)
+          : const Color(0xFF10B981).withValues(alpha: 0.15);
+      badgeTextColor = mine ? Colors.white : const Color(0xFF065F46);
+      cleanBody = text
+          .replaceAll('🤝', '')
+          .replaceAll('[Handover Completed]', '')
+          .trim();
+    } else {
+      icon = Icons.verified_rounded;
+      badgeTitle = 'Payment Confirmed';
+      badgeColor = mine
+          ? Colors.white.withValues(alpha: 0.25)
+          : const Color(0xFF10B981).withValues(alpha: 0.15);
+      badgeTextColor = mine ? Colors.white : const Color(0xFF065F46);
+      cleanBody = text
+          .replaceAll('✅', '')
+          .replaceAll('💳', '')
+          .replaceAll('[Payment Confirmed]', '')
+          .replaceAll('[Payment Successful]', '')
+          .trim();
+    }
+
+    return Column(
+      crossAxisAlignment: mine
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: mine
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(AppRadius.medium),
-              topRight: const Radius.circular(AppRadius.medium),
-              bottomLeft: Radius.circular(mine ? AppRadius.medium : 4),
-              bottomRight: Radius.circular(mine ? 4 : AppRadius.medium),
-            ),
+            color: badgeColor,
+            borderRadius: BorderRadius.circular(6),
           ),
-          child: Column(
-            crossAxisAlignment: mine
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              if (message.isImage)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.small),
-                  child: Image.network(
-                    _resolvedChatImageUrl(message.imageUrl!),
-                    key: Key('chat_message_image_${message.id}'),
-                    width: 220,
-                    height: 180,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, _, _) => SizedBox(
-                      width: 220,
-                      height: 120,
-                      child: Center(
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          color: mine
-                              ? Theme.of(context).colorScheme.onPrimary
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              else if (message.isVoice)
-                _VoiceMessageBubble(
-                  messageId: message.id,
-                  audioUrl: _resolvedChatAssetUrl(message.audioUrl!),
-                  durationMs: message.durationMs!,
-                  mine: mine,
-                )
-              else
-                Text(
-                  message.text,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: mine
-                        ? Theme.of(context).colorScheme.onPrimary
-                        : Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              const SizedBox(height: 2),
+              Icon(icon, size: 13, color: badgeTextColor),
+              const SizedBox(width: 4),
               Text(
-                _messageTime(message.createdAt),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: mine
-                      ? Theme.of(
-                          context,
-                        ).colorScheme.onPrimary.withValues(alpha: 0.78)
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                badgeTitle,
+                style: TextStyle(
+                  color: badgeTextColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  letterSpacing: 0.2,
                 ),
               ),
-              if (showReadReceipt)
-                Text(
-                  'Read',
-                  key: Key('chat_read_receipt_${message.id}'),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onPrimary.withValues(alpha: 0.78),
-                  ),
-                ),
             ],
           ),
         ),
-      ),
+        Text(
+          cleanBody,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: mine
+                ? theme.colorScheme.onPrimary
+                : theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1560,20 +2883,48 @@ class _ReadReceipt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      'Read',
-      key: Key('chat_read_receipt_$messageId'),
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Read',
+          key: Key('chat_read_receipt_$messageId'),
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: const Color(0xFF60AEFF)),
+        ),
+        const SizedBox(width: 3),
+        const Icon(Icons.done_all, size: 12, color: Color(0xFF60AEFF)),
+      ],
     );
   }
 }
 
+/// Returns a relative or absolute time label for a chat message.
 String _messageTime(DateTime value) {
   final local = value.toLocal();
-  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
-  return '$hour:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
+  final now = DateTime.now();
+  final diff = now.difference(local);
+
+  if (diff.inSeconds < 60) {
+    return 'Just now';
+  } else if (diff.inMinutes < 60) {
+    final m = diff.inMinutes;
+    return '$m min${m == 1 ? '' : 's'} ago';
+  } else if (diff.inHours < 6) {
+    final h = diff.inHours;
+    return '$h hr${h == 1 ? '' : 's'} ago';
+  } else if (local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day) {
+    // Same day — show time
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    return '$hour:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
+  } else {
+    // Different day — show date + time
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    return '${local.day}/${local.month} $hour:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
+  }
 }
 
 class _MessageComposer extends StatelessWidget {
@@ -1590,6 +2941,11 @@ class _MessageComposer extends StatelessWidget {
     required this.onStartRecording,
     required this.onCancelRecording,
     required this.onSendRecording,
+    this.showActionPanel = false,
+    this.onToggleActionPanel,
+    this.onOpenOrders,
+    this.onScheduleMeetup,
+    this.onPay,
   });
 
   final TextEditingController controller;
@@ -1604,109 +2960,280 @@ class _MessageComposer extends StatelessWidget {
   final VoidCallback onStartRecording;
   final VoidCallback onCancelRecording;
   final VoidCallback onSendRecording;
+  final bool showActionPanel;
+  final VoidCallback? onToggleActionPanel;
+  final VoidCallback? onOpenOrders;
+  final VoidCallback? onScheduleMeetup;
+  final VoidCallback? onPay;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       elevation: 3,
       color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.sm,
-          AppSpacing.sm,
-          AppSpacing.sm,
-          AppSpacing.sm,
-        ),
-        child: isRecording
-            ? _RecordingComposer(
-                seconds: recordingSeconds,
-                onCancel: onCancelRecording,
-                onSend: onSendRecording,
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: IconButton(
-                      key: const Key('chat_add_photo_button'),
-                      tooltip: 'Add photo',
-                      onPressed: enabled && !isSending ? onAddPhoto : null,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: IconButton(
-                      key: const Key('chat_share_location_button'),
-                      tooltip: 'Share location',
-                      onPressed: enabled && !isSending ? onShareLocation : null,
-                      icon: const Icon(Icons.place_outlined),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('chat_message_input'),
-                      controller: controller,
-                      focusNode: focusNode,
-                      enabled: enabled && !isSending,
-                      keyboardType: TextInputType.multiline,
-                      minLines: 1,
-                      maxLines: 5,
-                      maxLength: 2000,
-                      buildCounter:
-                          (
-                            context, {
-                            required currentLength,
-                            required isFocused,
-                            required maxLength,
-                          }) => null,
-                      textCapitalization: TextCapitalization.sentences,
-                      textInputAction: TextInputAction.newline,
-                      decoration: InputDecoration(
-                        labelText: enabled ? 'Message' : 'Conversation closed',
-                        hintText: enabled ? 'Write a message' : null,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: IconButton(
-                      key: const Key('chat_record_voice_button'),
-                      tooltip: 'Record voice message',
-                      onPressed: enabled && !isSending
-                          ? onStartRecording
-                          : null,
-                      icon: const Icon(Icons.mic_none_rounded),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: IconButton.filled(
-                      key: const Key('chat_send_button'),
-                      tooltip: 'Send message',
-                      onPressed: enabled && !isSending ? onSend : null,
-                      icon: isSending
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.send_rounded),
-                    ),
-                  ),
-                ],
+      child: SafeArea(
+        key: const Key('chat_composer_safe_area'),
+        top: false,
+        maintainBottomViewPadding: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.sm,
+                AppSpacing.sm,
+                AppSpacing.sm,
+                AppSpacing.sm,
               ),
+              child: isRecording
+                  ? _RecordingComposer(
+                      seconds: recordingSeconds,
+                      onCancel: onCancelRecording,
+                      onSend: onSendRecording,
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          height: 48,
+                          child: IconButton(
+                            key: const Key('chat_action_panel_toggle_button'),
+                            tooltip: showActionPanel
+                                ? 'Close actions'
+                                : 'More actions',
+                            onPressed: enabled && !isSending
+                                ? onToggleActionPanel
+                                : null,
+                            icon: Icon(
+                              showActionPanel
+                                  ? Icons.cancel_outlined
+                                  : Icons.add_circle_outline_rounded,
+                              size: 24,
+                              color: showActionPanel
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 44,
+                          height: 48,
+                          child: IconButton(
+                            key: const Key('chat_add_photo_button'),
+                            tooltip: 'Add photo',
+                            onPressed: enabled && !isSending
+                                ? onAddPhoto
+                                : null,
+                            icon: const Icon(
+                              Icons.add_photo_alternate_outlined,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 44,
+                          height: 48,
+                          child: IconButton(
+                            key: const Key('chat_share_location_button'),
+                            tooltip: 'Share location',
+                            onPressed: enabled && !isSending
+                                ? onShareLocation
+                                : null,
+                            icon: const Icon(Icons.place_outlined),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: TextField(
+                            key: const Key('chat_message_input'),
+                            controller: controller,
+                            focusNode: focusNode,
+                            enabled: enabled && !isSending,
+                            keyboardType: TextInputType.multiline,
+                            minLines: 1,
+                            maxLines: 5,
+                            maxLength: 2000,
+                            buildCounter:
+                                (
+                                  context, {
+                                  required currentLength,
+                                  required isFocused,
+                                  required maxLength,
+                                }) => null,
+                            textCapitalization: TextCapitalization.sentences,
+                            textInputAction: TextInputAction.newline,
+                            decoration: InputDecoration(
+                              labelText: enabled
+                                  ? 'Message'
+                                  : 'Conversation closed',
+                              hintText: enabled ? 'Write a message' : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        SizedBox(
+                          width: 44,
+                          height: 48,
+                          child: IconButton(
+                            key: const Key('chat_record_voice_button'),
+                            tooltip: 'Record voice message',
+                            onPressed: enabled && !isSending
+                                ? onStartRecording
+                                : null,
+                            icon: const Icon(Icons.mic_none_rounded),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: IconButton.filled(
+                            key: const Key('chat_send_button'),
+                            tooltip: 'Send message',
+                            style: IconButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(48, 48),
+                            ),
+                            onPressed: enabled && !isSending ? onSend : null,
+                            icon: isSending
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Center(
+                                    child: Transform.translate(
+                                      offset: const Offset(1.5, 0),
+                                      child: const Icon(
+                                        Icons.send_rounded,
+                                        size: 22,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            if (!isRecording && showActionPanel) ...[
+              const Divider(height: 1),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_photos'),
+                      icon: Icons.image_rounded,
+                      label: 'Photos',
+                      color: const Color(0xFF0284C7),
+                      onTap: onAddPhoto,
+                    ),
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_orders'),
+                      icon: Icons.receipt_long_rounded,
+                      label: 'Orders',
+                      color: const Color(0xFF6366F1),
+                      onTap: () {
+                        onOpenOrders?.call();
+                      },
+                    ),
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_pay'),
+                      icon: Icons.payment_rounded,
+                      label: 'Pay',
+                      color: const Color(0xFFD97706),
+                      onTap: () {
+                        onPay?.call();
+                      },
+                    ),
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_meetup'),
+                      icon: Icons.handshake_rounded,
+                      label: 'Meetup',
+                      color: const Color(0xFF059669),
+                      onTap: () {
+                        onScheduleMeetup?.call();
+                      },
+                    ),
+                    _ActionPanelItem(
+                      key: const Key('chat_action_panel_location'),
+                      icon: Icons.place_rounded,
+                      label: 'Location',
+                      color: const Color(0xFFEA580C),
+                      onTap: onShareLocation,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionPanelItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionPanelItem({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: isDark ? 0.22 : 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: color.withValues(alpha: isDark ? 0.35 : 0.2),
+                  width: 1,
+                ),
+              ),
+              child: Center(child: Icon(icon, size: 24, color: color)),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.8),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1743,11 +3270,24 @@ class _RecordingComposer extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
-        IconButton.filled(
-          key: const Key('chat_send_voice_button'),
-          tooltip: 'Send voice message',
-          onPressed: onSend,
-          icon: const Icon(Icons.send_rounded),
+        SizedBox(
+          width: 48,
+          height: 48,
+          child: IconButton.filled(
+            key: const Key('chat_send_voice_button'),
+            tooltip: 'Send voice message',
+            style: IconButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(48, 48),
+            ),
+            onPressed: onSend,
+            icon: Center(
+              child: Transform.translate(
+                offset: const Offset(1.5, 0),
+                child: const Icon(Icons.send_rounded, size: 22),
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -1999,19 +3539,29 @@ class _ConversationState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: AppSpacing.md),
-            Text(message, textAlign: TextAlign.center),
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: AppSpacing.md),
-              OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+      child: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.sm,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(message, textAlign: TextAlign.center),
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

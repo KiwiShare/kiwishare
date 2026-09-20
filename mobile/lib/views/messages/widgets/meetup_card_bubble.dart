@@ -3,11 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/chat_message_model.dart';
+import '../../../models/meetup_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/meetup_provider.dart';
+import '../../../providers/order_provider.dart';
 import '../../../theme/app_theme.dart';
 
 import '../../../services/map_launcher_service.dart';
+import '../../profile/payment_checkout_screen.dart';
 import '../../scanner/qr_scanner_screen.dart';
 
 class MeetupCardBubble extends StatefulWidget {
@@ -16,17 +19,21 @@ class MeetupCardBubble extends StatefulWidget {
     required this.meetup,
     required this.isMine,
     required this.createdAt,
+    this.messageId,
     this.isBuyer,
     this.onViewQrCode,
     this.onStatusChanged,
+    this.onBeforeAccept,
   });
 
   final ChatMeetupPayload meetup;
   final bool isMine;
   final DateTime createdAt;
+  final String? messageId;
   final bool? isBuyer;
   final ValueChanged<String>? onViewQrCode;
   final VoidCallback? onStatusChanged;
+  final Future<bool> Function()? onBeforeAccept;
 
   @override
   State<MeetupCardBubble> createState() => _MeetupCardBubbleState();
@@ -35,8 +42,24 @@ class MeetupCardBubble extends StatefulWidget {
 class _MeetupCardBubbleState extends State<MeetupCardBubble> {
   bool _isLoading = false;
   String? _error;
+  String? _localStatus;
+
+  String get _currentStatus => _localStatus ?? widget.meetup.proposalStatus;
+
+  @override
+  void didUpdateWidget(MeetupCardBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.meetup.proposalStatus != widget.meetup.proposalStatus) {
+      _localStatus = null;
+    }
+  }
 
   Future<void> _acceptMeetup() async {
+    if (widget.onBeforeAccept != null) {
+      final canAccept = await widget.onBeforeAccept!();
+      if (!canAccept) return;
+    }
+
     final auth = context.read<AuthProvider>();
     final token = auth.jwtToken;
     if (token == null || token.isEmpty) return;
@@ -51,7 +74,15 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
       await meetupProvider.acceptMeetup(
         orderId: widget.meetup.orderId,
         token: token,
+        messageId: widget.messageId,
+        scheduledAt: widget.meetup.scheduledAt,
+        locationName: widget.meetup.locationName,
       );
+      if (mounted) {
+        setState(() {
+          _localStatus = 'confirmed';
+        });
+      }
       widget.onStatusChanged?.call();
     } catch (e) {
       if (mounted) {
@@ -78,6 +109,11 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
         orderId: widget.meetup.orderId,
         token: token,
       );
+      if (mounted) {
+        setState(() {
+          _localStatus = 'declined';
+        });
+      }
       widget.onStatusChanged?.call();
     } catch (e) {
       if (mounted) {
@@ -102,9 +138,15 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    final isConfirmed = widget.meetup.isConfirmed;
-    final isProposed = widget.meetup.isProposed;
-    final isDeclined = widget.meetup.isDeclined || widget.meetup.isCancelled;
+    final isConfirmed =
+        _currentStatus == 'confirmed' || widget.meetup.isConfirmed;
+    final isCancelled =
+        _currentStatus == 'cancelled' ||
+        _currentStatus == 'superseded' ||
+        widget.meetup.isCancelled;
+    final isDeclined =
+        _currentStatus == 'declined' || widget.meetup.isDeclined || isCancelled;
+    final isProposed = !isConfirmed && !isDeclined;
 
     final date = widget.meetup.scheduledAt.toLocal();
     final formattedDate =
@@ -171,6 +213,8 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                 Text(
                   isConfirmed
                       ? 'Meetup Confirmed'
+                      : isCancelled
+                      ? 'Meetup Cancelled'
                       : isDeclined
                       ? 'Meetup Declined'
                       : 'Meetup Proposed',
@@ -228,11 +272,18 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                   },
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.03),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.03),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: colors.outline.withValues(alpha: 0.15)),
+                      border: Border.all(
+                        color: colors.outline.withValues(alpha: 0.15),
+                      ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,68 +334,269 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                   ),
                 ],
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
+
+                // Agreed price display
+                if (widget.meetup.agreedPriceNzd != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: colors.outline.withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.monetization_on_outlined,
+                          size: 14,
+                          color: colors.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Agreed: ',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        Text(
+                          'NZ\$${widget.meetup.agreedPriceNzd}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: colors.primary,
+                          ),
+                        ),
+                        if (widget.meetup.originalPriceNzd != null &&
+                            widget.meetup.originalPriceNzd !=
+                                widget.meetup.agreedPriceNzd) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            'NZ\$${widget.meetup.originalPriceNzd}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
 
                 // Action area
                 if (isConfirmed) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    height: 38,
-                    child: FilledButton.icon(
-                      key: Key('view_qr_button_${widget.meetup.orderId}'),
-                      onPressed: () {
-                        if (widget.isBuyer == true) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => const QrScannerScreen(),
+                  Builder(
+                    builder: (ctx) {
+                      // Check if order is paid
+                      OrderProvider? orderProvider;
+                      try {
+                        orderProvider = context.read<OrderProvider>();
+                      } catch (_) {}
+                      final order = orderProvider?.orders
+                          .where((o) => o.id == widget.meetup.orderId)
+                          .firstOrNull;
+                      MeetupModel? cachedMeetup;
+                      try {
+                        cachedMeetup = context
+                            .read<MeetupProvider>()
+                            .meetupById(widget.meetup.orderId);
+                      } catch (_) {}
+                      final isPaid =
+                          (order != null &&
+                              (order.isPaid || order.isCompleted)) ||
+                          (cachedMeetup != null && cachedMeetup.isPaid);
+                      final buyerNeedsPay = widget.isBuyer == true && !isPaid;
+                      final sellerNeedsWait = widget.isBuyer != true && !isPaid;
+
+                      if (buyerNeedsPay) {
+                        // Show Pay Now button for buyer
+                        return SizedBox(
+                          width: double.infinity,
+                          height: 38,
+                          child: FilledButton.icon(
+                            key: Key(
+                              'pay_now_meetup_btn_${widget.meetup.orderId}',
                             ),
-                          );
-                        } else {
-                          _openQrScreen();
-                        }
-                      },
-                      icon: Icon(
-                        widget.isBuyer == true
-                            ? Icons.qr_code_scanner_rounded
-                            : Icons.qr_code_2_rounded,
-                        size: 18,
-                      ),
-                      label: Text(
-                        widget.isBuyer == true
-                            ? 'Scan Seller\'s QR Code'
-                            : 'Show Handover QR Code',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
+                            onPressed: () {
+                              if (order != null) {
+                                Navigator.push(
+                                  ctx,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        PaymentCheckoutScreen(order: order),
+                                  ),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Please use Buy Now from chat to complete payment.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.lock_open_rounded, size: 18),
+                            label: const Text(
+                              'Pay to unlock QR',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFD97706),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
+                      if (sellerNeedsWait) {
+                        // Seller waiting for buyer payment
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF2A1C0B)
+                                : const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF854D0E)
+                                  : const Color(0xFFFDE68A),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.hourglass_top_rounded,
+                                size: 16,
+                                color: isDark
+                                    ? const Color(0xFFFBBF24)
+                                    : const Color(0xFFB45309),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Awaiting buyer payment to unlock handover QR',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? const Color(0xFFFBBF24)
+                                        : const Color(0xFFB45309),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      // Both confirmed and paid — show Order Progress button
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            height: 38,
+                            child: FilledButton.icon(
+                              key: Key('view_qr_button_${widget.meetup.orderId}'),
+                              onPressed: () {
+                                context.push('/orders');
+                              },
+                              icon: const Icon(
+                                Icons.receipt_long_rounded,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                'View Order Progress',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF059669),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: () {
+                                if (widget.isBuyer == true) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const QrScannerScreen(),
+                                    ),
+                                  );
+                                } else {
+                                  _openQrScreen();
+                                }
+                              },
+                              icon: Icon(
+                                widget.isBuyer == true
+                                    ? Icons.qr_code_scanner_rounded
+                                    : Icons.verified_user_outlined,
+                                size: 15,
+                                color: colors.primary,
+                              ),
+                              label: Text(
+                                widget.isBuyer == true
+                                    ? 'Scan at handover'
+                                    : 'Handover check-in',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.primary,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                  if (widget.isBuyer == true) ...[
-                    const SizedBox(height: 6),
-                    Center(
-                      child: TextButton(
-                        onPressed: _openQrScreen,
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
+                ] else if (isCancelled) ...[
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 14,
+                        color: colors.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
                         child: Text(
-                          'View meetup schedule & details',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colors.primary,
-                            decoration: TextDecoration.underline,
+                          'This proposal was superseded or cancelled.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ] else if (isProposed) ...[
                   if (widget.isMine) ...[
                     Row(

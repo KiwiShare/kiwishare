@@ -47,8 +47,12 @@ class ShareService {
     required String url,
   }) async {
     final message = '$text\n$url';
-    final appUri = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(message)}');
-    final webUri = Uri.parse('https://api.whatsapp.com/send?text=${Uri.encodeComponent(message)}');
+    final appUri = Uri.parse(
+      'whatsapp://send?text=${Uri.encodeComponent(message)}',
+    );
+    final webUri = Uri.parse(
+      'https://api.whatsapp.com/send?text=${Uri.encodeComponent(message)}',
+    );
 
     try {
       if (await canLaunchUrl(appUri)) {
@@ -74,10 +78,7 @@ class ShareService {
     required String url,
   }) async {
     final message = '$text\n$url';
-    final smsUri = Uri(
-      scheme: 'sms',
-      queryParameters: {'body': message},
-    );
+    final smsUri = Uri(scheme: 'sms', queryParameters: {'body': message});
 
     try {
       if (await canLaunchUrl(smsUri)) {

@@ -10,6 +10,8 @@ class ListingProvider extends ChangeNotifier {
 
   List<ItemModel>? _cachedPopularItems;
   List<ItemModel>? get cachedPopularItems => _cachedPopularItems;
+  List<ItemModel>? _cachedFeaturedItems;
+  List<ItemModel>? get cachedFeaturedItems => _cachedFeaturedItems;
   List<ItemModel>? _cachedRecommendedItems;
   List<ItemModel>? get cachedRecommendedItems => _cachedRecommendedItems;
   DiscoveryOptionsModel? _cachedDiscoveryOptions;
@@ -24,14 +26,34 @@ class ListingProvider extends ChangeNotifier {
     return items;
   }
 
+  Future<List<ItemModel>> getFeaturedItems({
+    bool forceRefresh = false,
+    int limit = 10,
+  }) async {
+    if (_cachedFeaturedItems != null && !forceRefresh) {
+      return _cachedFeaturedItems!;
+    }
+    final items = await itemRepository.fetchFeaturedItems(limit: limit);
+    _cachedFeaturedItems = items;
+    return items;
+  }
+
   Future<List<ItemModel>> getRecommendedItems({
     bool forceRefresh = false,
     int limit = 10,
+    double? latitude,
+    double? longitude,
+    String? token,
   }) async {
     if (_cachedRecommendedItems != null && !forceRefresh) {
       return _cachedRecommendedItems!;
     }
-    final items = await itemRepository.fetchRecommendedItems(limit: limit);
+    final items = await itemRepository.fetchRecommendedItems(
+      limit: limit,
+      latitude: latitude,
+      longitude: longitude,
+      token: token,
+    );
     _cachedRecommendedItems = items;
     return items;
   }
@@ -84,8 +106,32 @@ class ListingProvider extends ChangeNotifier {
     return updated;
   }
 
+  Future<Map<String, dynamic>> promoteItem({
+    required String id,
+    required String token,
+  }) async {
+    final result = await itemRepository.promoteItem(id: id, token: token);
+    invalidateCaches();
+    return result;
+  }
+
+  Future<ItemModel> toggleListingStatus({
+    required String id,
+    required bool publish,
+    required String token,
+  }) async {
+    final updated = await itemRepository.toggleListingStatus(
+      id: id,
+      publish: publish,
+      token: token,
+    );
+    invalidateCaches();
+    return updated;
+  }
+
   void invalidateCaches() {
     _cachedPopularItems = null;
+    _cachedFeaturedItems = null;
     _cachedRecommendedItems = null;
     _cachedDiscoveryOptions = null;
     _cachedDiscoveryItems.clear();

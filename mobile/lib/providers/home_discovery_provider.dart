@@ -36,6 +36,7 @@ extension HomePriceRangeLabel on HomePriceRange {
 class HomeDiscoveryProvider extends ChangeNotifier {
   static const allCategoriesLabel = 'All';
   static const allLocationsLabel = 'All NZ';
+  static const defaultLocation = 'Auckland CBD';
   static const nearbyRadiusKm = 50.0;
 
   List<DiscoveryCategoryOption> _categories = const [];
@@ -44,7 +45,8 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   double? _availableMaximumPrice;
   String _query = '';
   String _selectedCategory = allCategoriesLabel;
-  String _selectedLocation = allLocationsLabel;
+  String _selectedLocation = defaultLocation;
+  bool _isDefaultLocation = true;
   HomeProductSort _selectedSort = HomeProductSort.recommended;
   HomePriceRange _selectedPriceRange = HomePriceRange.any;
   bool _sustainableOnly = false;
@@ -63,6 +65,7 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   String get query => _query;
   String get selectedCategory => _selectedCategory;
   String get selectedLocation => _selectedLocation;
+  bool get isDefaultLocation => _isDefaultLocation;
   HomeProductSort get selectedSort => _selectedSort;
   HomePriceRange get selectedPriceRange => _selectedPriceRange;
   bool get sustainableOnly => _sustainableOnly;
@@ -79,7 +82,7 @@ class HomeDiscoveryProvider extends ChangeNotifier {
     category: _selectedCategory == allCategoriesLabel
         ? null
         : _selectedCategory,
-    location: _selectedLocation == allLocationsLabel || _isNearYou
+    location: _selectedLocation == allLocationsLabel || _isNearYou || _isDefaultLocation
         ? null
         : _selectedLocation,
     minimumPrice: _minimumPrice,
@@ -92,9 +95,12 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   );
 
   int get activeFilterCount => [
+    _query.isNotEmpty,
+    _selectedCategory != allCategoriesLabel,
+    _selectedLocation != allLocationsLabel && !_isDefaultLocation,
     _selectedPriceRange != HomePriceRange.any,
     _sustainableOnly,
-    _selectedSort != HomeProductSort.recommended,
+    _isNearYou,
   ].where((active) => active).length;
 
   void applyOptions(DiscoveryOptionsModel options) {
@@ -106,13 +112,6 @@ class HomeDiscoveryProvider extends ChangeNotifier {
     if (_selectedCategory != allCategoriesLabel &&
         !_categories.any((option) => option.value == _selectedCategory)) {
       _selectedCategory = allCategoriesLabel;
-    }
-    if (!_isNearYou &&
-        _selectedLocation != allLocationsLabel &&
-        !_locations.any((option) => option.value == _selectedLocation)) {
-      _selectedLocation = allLocationsLabel;
-      _userLatitude = null;
-      _userLongitude = null;
     }
     notifyListeners();
   }
@@ -154,10 +153,12 @@ class HomeDiscoveryProvider extends ChangeNotifier {
     if (_selectedLocation == location &&
         _isNearYou == nearYou &&
         _userLatitude == nextLatitude &&
-        _userLongitude == nextLongitude) {
+        _userLongitude == nextLongitude &&
+        !_isDefaultLocation) {
       return;
     }
     _selectedLocation = location;
+    _isDefaultLocation = false;
     _isNearYou = nearYou;
     _userLatitude = nextLatitude;
     _userLongitude = nextLongitude;
@@ -233,7 +234,8 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   void resetFilters() {
     _query = '';
     _selectedCategory = allCategoriesLabel;
-    _selectedLocation = allLocationsLabel;
+    _selectedLocation = defaultLocation;
+    _isDefaultLocation = true;
     _selectedSort = HomeProductSort.recommended;
     _selectedPriceRange = HomePriceRange.any;
     _sustainableOnly = false;

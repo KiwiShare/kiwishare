@@ -6,6 +6,7 @@ export interface UserProfile {
   avatarUrl?: string | null;
   role?: 'admin' | 'user';
   trustScore: number;
+  kiwiGold?: number;
   isVerified: boolean;
   isStudentVerified?: boolean;
   studentInstitution?: string;
@@ -131,6 +132,8 @@ export interface ConversationItemSummary {
   id: string;
   title: string;
   imageUrl: string;
+  status?: string;
+  priceNzd?: string;
 }
 
 export interface ConversationItem {
@@ -244,6 +247,12 @@ export const authApi = {
     apiRequest<AuthResponse>('/auth/verify-otp', {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  loginWithGoogle: (idToken: string) =>
+    apiRequest<AuthResponse>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ idToken }),
     }),
 
   getMe: () =>
@@ -401,7 +410,18 @@ export const adminApi = {
     return apiRequest<{ status: string; count: number; users: UserProfile[] }>(`/admin/users${qStr ? `?${qStr}` : ''}`);
   },
 
-  updateUserTrustScore: (id: string, body: { trustScore?: number; isStudentVerified?: boolean; studentInstitution?: string }) =>
+  updateUserTrustScore: (
+    id: string,
+    body: {
+      trustScore?: number;
+      kiwiGold?: number;
+      role?: 'user' | 'admin';
+      isVerified?: boolean;
+      displayName?: string;
+      isStudentVerified?: boolean;
+      studentInstitution?: string;
+    }
+  ) =>
     apiRequest<{ status: string; message: string; user: any }>(`/admin/users/${id}/trust-score`, {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -436,8 +456,17 @@ export const adminApi = {
 
 // Watchlist APIs
 export const watchlistApi = {
-  getWatchlist: () =>
-    apiRequest<{ status: string; count: number; items?: UsedItem[]; data?: UsedItem[] }>('/watchlist'),
+  getWatchlist: (cursor?: string) => {
+    const params = new URLSearchParams({ limit: '50' });
+    if (cursor) params.set('cursor', cursor);
+    return apiRequest<{
+      status: string;
+      count: number;
+      items?: UsedItem[];
+      data?: UsedItem[];
+      pagination?: { hasMore: boolean; nextCursor: string | null };
+    }>(`/watchlist?${params.toString()}`);
+  },
 
   getWatchlistIds: () =>
     apiRequest<{ status: string; itemIds: string[] }>('/watchlist/ids'),
@@ -543,6 +572,11 @@ export interface OrderItem {
   status: string;
   role: 'buying' | 'selling';
   itemId: string;
+  isPaid?: boolean;
+  buyerFeeAmountNzd?: string;
+  buyerTotalAmountNzd?: string;
+  refundedAt?: string | null;
+  isRefunded?: boolean;
   item: {
     id: string;
     title: string;
@@ -550,6 +584,7 @@ export interface OrderItem {
     imageUrl: string;
     condition?: string;
     category?: string;
+    status?: string;
   };
   counterparty: {
     id: string;
@@ -580,6 +615,87 @@ export const ordersApi = {
   },
   getOrderById: (orderId: string) =>
     apiRequest<{ status: string; order: OrderItem }>(`/orders/${orderId}`),
+  getOrderByItemId: (itemId: string) =>
+    apiRequest<{ status: string; order: OrderItem }>(`/orders/by-item/${itemId}`),
+  createOrder: (itemId: string) =>
+    apiRequest<{ status: string; order: OrderItem }>('/orders', {
+      method: 'POST',
+      body: JSON.stringify({ itemId }),
+    }),
+  refundOrder: (orderId: string, reason?: string) =>
+    apiRequest<{ status: string; message: string; order: OrderItem }>(`/orders/${orderId}/refund`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+};
+
+export const paymentsApi = {
+  createIntent: (orderId: string) =>
+    apiRequest<{
+      status: string;
+      clientSecret?: string;
+      paymentIntentId: string;
+      amountNzd: string;
+      itemAmountNzd: string;
+      buyerFeeNzd: string;
+    }>('/payments/create-intent', {
+      method: 'POST',
+      body: JSON.stringify({ orderId }),
+    }),
+  confirm: (orderId: string, paymentIntentId: string) =>
+    apiRequest<{ status: string; order: OrderItem; paymentStatus: string }>('/payments/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ orderId, paymentIntentId }),
+    }),
+};
+
+export const meetupsApi = {
+  getMeetup: (orderId: string) =>
+    apiRequest<{
+      status: string;
+      meetup: any;
+      qrToken?: string | null;
+      isUnlocked?: boolean;
+    }>(`/meetups/${orderId}`),
+  propose: (orderId: string, body: { scheduledAt: string; locationName: string; latitude?: number; longitude?: number; note?: string }) =>
+    apiRequest<{ status: string; meetup: any }>(`/meetups/${orderId}/propose`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  accept: (orderId: string) =>
+    apiRequest<{ status: string; meetup: any }>(`/meetups/${orderId}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  confirmHandover: (orderId: string, role: 'buyer' | 'seller') =>
+    apiRequest<{ status: string; message: string; order: any }>(`/meetups/${orderId}/confirm-handover`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    }),
+};
+
+export const aiApi = {
+  getListingSuggestion: (input: {
+    title?: string;
+    description?: string;
+    category?: string;
+    condition?: string;
+    location?: string;
+  }) =>
+    apiRequest<{
+      status: string;
+      suggestion: {
+        title: string;
+        description: string;
+        category: string;
+        condition: string;
+        priceNzd?: string;
+        tags?: string[];
+      };
+    }>('/listing-suggestions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 };
 
 

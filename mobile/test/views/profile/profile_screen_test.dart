@@ -8,6 +8,7 @@ import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/notification_permission_coordinator.dart';
 import 'package:kiwishare/views/profile/notification_settings_screen.dart';
 import 'package:kiwishare/views/profile/profile_screen.dart';
+import 'package:kiwishare/views/profile/public_profile_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -77,7 +78,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Preferences'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Notifications'), 100);
     expect(find.text('Notifications'), findsOneWidget);
     await tester.ensureVisible(find.text('Notifications'));
     await tester.pump();
@@ -115,18 +116,20 @@ void main() {
 
     // Verify user info and trust badge
     expect(find.text('Riley'), findsWidgets);
-    expect(find.text('Trust score 95/100'), findsOneWidget);
-    expect(find.byKey(const Key('profile-scan-qr-button')), findsOneWidget);
+    expect(find.text('Trust score 95'), findsOneWidget);
+    expect(find.byKey(const Key('profile-support-button')), findsOneWidget);
 
-    // Verify Xianyu 3-column marketplace action grid
+    // Verify Xianyu 3-column marketplace action grid (6 modules)
     expect(find.text('My marketplace'), findsOneWidget);
-    expect(find.text('Selling'), findsOneWidget);
-    expect(find.text('Watchlist'), findsOneWidget);
-    expect(find.text('Sold'), findsOneWidget);
+    expect(find.text('Orders'), findsOneWidget);
     expect(find.text('Meetups'), findsOneWidget);
+    expect(find.text('Watchlist'), findsOneWidget);
+    expect(find.text('Listings'), findsOneWidget);
+    expect(find.text('Sold'), findsOneWidget);
+    expect(find.text('Wallet'), findsOneWidget);
 
     // Verify preference & safety sections
-    expect(find.text('Preferences'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Appearance'), 100);
     expect(find.text('Appearance'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Report a safety issue'), 100);
     expect(find.text('Safety & support'), findsOneWidget);
@@ -149,6 +152,44 @@ void main() {
     final insets = nearestPadding.padding as EdgeInsets;
     expect(insets.left, 56.0);
     expect(insets.right, 16.0);
+  });
+
+  testWidgets('public trust badge and semantics use 200+ above the ceiling', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":205,"isVerified":true}',
+    });
+    final auth = AuthProvider(
+      userRepository: _FixedProfileRepository(trustScore: 205),
+    );
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          Provider<NotificationPermissionCoordinator>.value(
+            value: NotificationPermissionCoordinator(
+              permissionController: null,
+              storage: _Storage(),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trust score 200+'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text('Trust score 200+')).label,
+      contains('Trust score 200+'),
+    );
+    expect(find.textContaining('/100'), findsNothing);
+    semantics.dispose();
   });
 
   testWidgets('Account & security exposes photo, nickname, and password', (
@@ -178,7 +219,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Account & security'), 100);
+    await tester.scrollUntilVisible(find.text('Profile photo'), 100);
     expect(find.text('Profile photo'), findsOneWidget);
     expect(find.text('Nickname'), findsOneWidget);
     expect(find.text('Riley'), findsWidgets);
@@ -270,6 +311,69 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'opens How KiwiShare Works and Help center from Safety & support',
+    (tester) async {
+      final auth = AuthProvider(userRepository: MockUserRepository());
+      final theme = ThemeProvider();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<ThemeProvider>.value(value: theme),
+            Provider<NotificationPermissionCoordinator>.value(
+              value: NotificationPermissionCoordinator(
+                permissionController: null,
+                storage: _Storage(),
+              ),
+            ),
+          ],
+          child: const MaterialApp(home: ProfileScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(find.text('How KiwiShare works'), 200);
+      expect(find.text('How KiwiShare works'), findsOneWidget);
+      expect(find.text('Help center & FAQs'), findsOneWidget);
+
+      await tester.tap(find.text('How KiwiShare works'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Help & Guides'), findsOneWidget);
+      expect(find.text('Welcome to KiwiShare'), findsOneWidget);
+    },
+  );
+
+  testWidgets('signed-in Profile tapping avatar opens PublicProfileScreen', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":95,"isVerified":true,"isVip":true}',
+    });
+    final userRepo = MockUserRepository();
+    final auth = AuthProvider(userRepository: userRepo);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<UserRepository>.value(value: userRepo),
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final avatarButton = find.byKey(const Key('profile_header_avatar_button'));
+    expect(avatarButton, findsOneWidget);
+    await tester.tap(avatarButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PublicProfileScreen), findsOneWidget);
+  });
 }
 
 class _Storage implements NotificationPermissionStorage {
@@ -290,4 +394,18 @@ class _FailingProfileRepository extends MockUserRepository {
 
   @override
   Future<UserModel> fetchProfile(String token) => Future.error(error);
+}
+
+class _FixedProfileRepository extends MockUserRepository {
+  _FixedProfileRepository({required this.trustScore});
+
+  final int trustScore;
+
+  @override
+  Future<UserModel> fetchProfile(String token) async => UserModel(
+    id: 'user-1',
+    displayName: 'Riley',
+    trustScore: trustScore,
+    isVerified: true,
+  );
 }

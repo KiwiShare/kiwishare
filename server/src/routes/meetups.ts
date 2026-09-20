@@ -5,11 +5,13 @@ import crypto from 'crypto';
 import { authenticateToken } from '../middleware/auth';
 import Order from '../models/Order';
 import Item from '../models/Item';
+import User from '../models/User';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import QrCode from '../models/QrCode';
-import { notifyMeetupConfirmed } from '../services/pushNotification';
+import { notifyMeetupConfirmed, notifyMeetupPendingPayment } from '../services/pushNotification';
 import { runMongoTransaction } from '../services/mongoTransaction';
+import { getPlatformFeeSettings } from '../models/PlatformSetting';
 
 const router = new Router({ prefix: '/meetups' });
 router.use(authenticateToken);
@@ -25,12 +27,36 @@ function objectId(value: any): string {
   return (value?._id ?? value)?.toString() ?? '';
 }
 
-function formatOrderMeetup(order: any, userId: string, qrCodeToken?: string | null) {
+export async function ensureOrderMeetupQr(order: any): Promise<string> {
+  const existing = await QrCode.findOne({ orderId: order._id, status: 'active' });
+  if (existing) {
+    return existing.tokenHash;
+  }
+  const tokenRandom = crypto.randomBytes(8).toString('hex').toUpperCase();
+  const claimCode = `QR_HANDOVER_TOKEN_${order._id.toString()}_${tokenRandom}`;
+  await QrCode.findOneAndUpdate(
+    { orderId: order._id },
+    {
+      orderId: order._id,
+      sellerId: order.sellerId,
+      buyerId: order.buyerId,
+      tokenHash: claimCode,
+      status: 'active',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    },
+    { upsert: true, new: true }
+  );
+  return claimCode;
+}
+
+export function formatOrderMeetup(order: any, userId: string, qrCodeToken?: string | null) {
   const buyerId = objectId(order.buyerId);
   const sellerId = objectId(order.sellerId);
   const isBuyer = buyerId === userId;
   const buyerUser = order.buyerId as any;
   const sellerUser = order.sellerId as any;
+
+  const isPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
 
   return {
     id: objectId(order),
@@ -38,6 +64,9 @@ function formatOrderMeetup(order: any, userId: string, qrCodeToken?: string | nu
     itemId: objectId(order.itemId),
     itemTitle: order.itemSnapshot?.title ?? 'KiwiShare Item',
     itemPriceNzd: ((order.itemAmount ?? 0) / 100).toFixed(2),
+    buyerFeeNzd: ((order.buyerFeeAmount ?? 0) / 100).toFixed(2),
+    buyerTotalAmountNzd: ((order.buyerTotalAmount ?? order.itemAmount ?? 0) / 100).toFixed(2),
+    isPaid,
     itemImageUrl: order.itemSnapshot?.imageUrl ?? '',
     status: order.status,
     role: isBuyer ? 'buying' : 'selling',
@@ -57,6 +86,11 @@ function formatOrderMeetup(order: any, userId: string, qrCodeToken?: string | nu
     proposedBy: objectId(order.meeting?.proposedBy),
     note: order.meeting?.note ?? '',
     qrToken: qrCodeToken ?? null,
+    buyerConfirmedAt: order.buyerConfirmedAt ? new Date(order.buyerConfirmedAt).toISOString() : null,
+    sellerConfirmedAt: order.sellerConfirmedAt ? new Date(order.sellerConfirmedAt).toISOString() : null,
+    buyerConfirmed: Boolean(order.buyerConfirmedAt),
+    sellerConfirmed: Boolean(order.sellerConfirmedAt),
+    bothConfirmed: Boolean(order.status === 'completed' || (order.buyerConfirmedAt && order.sellerConfirmedAt)),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt
   };
@@ -177,7 +211,16 @@ router.post('/propose', async (ctx: Context) => {
     status: { $in: ['pending_payment', 'meeting_scheduled', 'meeting_in_progress'] }
   });
 
-  const priceCents = Math.round(Number(item.price ?? 0) * 100);
+  // Check if conversation has specialPrice or item price was modified
+  let effectivePriceCents = Math.round(Number(item.price ?? 0));
+  if (conversation && conversation.specialPrice !== undefined && conversation.specialPrice !== null) {
+    effectivePriceCents = Math.round(Number(conversation.specialPrice) * 100);
+  }
+
+  const feeSettings = await getPlatformFeeSettings();
+  const buyerFeeAmount = effectivePriceCents > 0
+    ? Math.max(feeSettings.minFeeCents, Math.round(effectivePriceCents * (feeSettings.buyerFeePercent / 100)))
+    : 0;
 
   if (order) {
     order.meeting = {
@@ -190,6 +233,12 @@ router.post('/propose', async (ctx: Context) => {
       note: typeof note === 'string' ? note.trim() : undefined
     };
     order.status = 'meeting_scheduled';
+    if (!order.paidAt) {
+      order.itemAmount = effectivePriceCents;
+      order.buyerFeeAmount = buyerFeeAmount;
+      order.buyerTotalAmount = effectivePriceCents + buyerFeeAmount;
+      order.sellerReceiveAmount = effectivePriceCents;
+    }
     await order.save();
   } else {
     const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -207,11 +256,11 @@ router.post('/propose', async (ctx: Context) => {
         imageUrl: item.imageUrl ?? (item.images?.[0]?.url ?? '')
       },
       currency: 'NZD',
-      itemAmount: priceCents,
-      buyerFeeAmount: 0,
+      itemAmount: effectivePriceCents,
+      buyerFeeAmount,
       sellerFeeAmount: 0,
-      buyerTotalAmount: priceCents,
-      sellerReceiveAmount: priceCents,
+      buyerTotalAmount: effectivePriceCents + buyerFeeAmount,
+      sellerReceiveAmount: effectivePriceCents,
       meeting: {
         scheduledAt: parsedDate,
         locationName: locationName.trim(),
@@ -270,6 +319,17 @@ router.post('/propose', async (ctx: Context) => {
     );
   });
 
+  const isOrderPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
+  if (!isOrderPaid) {
+    void notifyMeetupPendingPayment({
+      receiverId: new mongoose.Types.ObjectId(order.buyerId),
+      orderId: order._id.toString(),
+      itemId: objectId(order.itemId),
+      itemTitle: order.itemSnapshot?.title ?? 'KiwiShare Item',
+      locationName: locationName.trim()
+    });
+  }
+
   const populatedOrder = await Order.findById(order._id)
     .populate('buyerId', 'displayName avatarUrl')
     .populate('sellerId', 'displayName avatarUrl');
@@ -318,6 +378,21 @@ router.post('/:orderId/accept', async (ctx: Context) => {
     return;
   }
 
+  const reqBody = (ctx.request.body as Record<string, any>) ?? {};
+  const { messageId, scheduledAt, locationName, latitude, longitude, note } = reqBody;
+
+  if (scheduledAt) {
+    order.meeting = order.meeting ?? {};
+    order.meeting.scheduledAt = new Date(scheduledAt);
+  }
+  if (locationName) {
+    order.meeting = order.meeting ?? {};
+    order.meeting.locationName = locationName;
+  }
+  if (latitude !== undefined) order.meeting.latitude = latitude;
+  if (longitude !== undefined) order.meeting.longitude = longitude;
+  if (note !== undefined) order.meeting.note = note;
+
   // Update order meeting status
   order.meeting = order.meeting ?? {};
   order.meeting.proposalStatus = 'confirmed';
@@ -360,6 +435,30 @@ router.post('/:orderId/accept', async (ctx: Context) => {
   });
 
   if (conversation) {
+    // 1. Update the accepted proposal message, or all proposal messages for this order
+    if (messageId && mongoose.Types.ObjectId.isValid(messageId)) {
+      await Message.findByIdAndUpdate(messageId, {
+        $set: { 'meetup.proposalStatus': 'confirmed' }
+      });
+      // Cancel other proposals in the conversation so only one active proposal is accepted
+      await Message.updateMany(
+        {
+          conversationId: conversation._id,
+          _id: { $ne: new mongoose.Types.ObjectId(messageId) },
+          type: 'meetup',
+          'meetup.proposalStatus': { $in: ['proposed', 'confirmed'] }
+        },
+        {
+          $set: { 'meetup.proposalStatus': 'cancelled' }
+        }
+      );
+    } else {
+      await Message.updateMany(
+        { 'meetup.orderId': order._id, type: 'meetup' },
+        { $set: { 'meetup.proposalStatus': 'confirmed' } }
+      );
+    }
+
     await runMongoTransaction(async (session) => {
       const confirmationMessage = await new Message({
         conversationId: conversation._id,
@@ -392,6 +491,28 @@ router.post('/:orderId/accept', async (ctx: Context) => {
         session ? { session } : {}
       );
     });
+
+    const isPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
+    if (!isPaid) {
+      const priceNzd = ((order.buyerTotalAmount ?? order.itemAmount ?? 0) / 100).toFixed(2);
+      const paymentReqMsg = await new Message({
+        conversationId: conversation._id,
+        senderId: order.sellerId,
+        receiverId: order.buyerId,
+        type: 'text',
+        text: `💳 [Payment Request] Meetup location confirmed! Seller requested payment of $${priceNzd} NZD to prepare for meetup handover.`,
+        status: 'sent'
+      }).save();
+
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        $set: {
+          lastMessageText: `💳 Payment request: $${priceNzd} NZD`,
+          lastMessageAt: paymentReqMsg.createdAt,
+          lastMessageId: paymentReqMsg._id,
+          lastMessageSenderId: order.sellerId
+        }
+      });
+    }
   }
 
   // Dispatch push notifications to both parties
@@ -405,6 +526,17 @@ router.post('/:orderId/accept', async (ctx: Context) => {
 
   void notifyMeetupConfirmed({ ...pushRequest, receiverId: new mongoose.Types.ObjectId(buyerId) });
   void notifyMeetupConfirmed({ ...pushRequest, receiverId: new mongoose.Types.ObjectId(sellerId) });
+
+  const isConfirmedPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
+  if (!isConfirmedPaid) {
+    void notifyMeetupPendingPayment({
+      receiverId: new mongoose.Types.ObjectId(buyerId),
+      orderId: order._id.toString(),
+      itemId: objectId(order.itemId),
+      itemTitle: order.itemSnapshot?.title ?? 'KiwiShare Item',
+      locationName: order.meeting?.locationName
+    });
+  }
 
   ctx.status = 200;
   ctx.body = {
@@ -448,6 +580,12 @@ router.post('/:orderId/decline', async (ctx: Context) => {
   await QrCode.updateMany(
     { orderId: order._id, status: 'active' },
     { $set: { status: 'cancelled' } }
+  );
+
+  // Update messages matching this order proposal
+  await Message.updateMany(
+    { 'meetup.orderId': order._id, type: 'meetup', 'meetup.proposalStatus': 'proposed' },
+    { $set: { 'meetup.proposalStatus': 'declined' } }
   );
 
   ctx.status = 200;
@@ -541,6 +679,182 @@ router.get('/:orderId', async (ctx: Context) => {
     status: 'success',
     meetup: formatOrderMeetup(order, userStr, qrCode?.tokenHash)
   };
+});
+
+// 6. Direct confirmation of handover (by buyer as "Confirm Receipt" or seller as "Confirm Handover")
+router.post('/:orderId/confirm-handover', async (ctx: Context) => {
+  const userId = currentUserId(ctx);
+  if (!userId) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Unauthorized user.' };
+    return;
+  }
+
+  const { orderId } = ctx.params;
+  if (!mongoose.Types.ObjectId.isValid(orderId)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Invalid order ID.' };
+    return;
+  }
+
+  const order = await Order.findById(orderId)
+    .populate('buyerId', 'displayName avatarUrl')
+    .populate('sellerId', 'displayName avatarUrl');
+
+  if (!order) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Order not found.' };
+    return;
+  }
+
+  const buyerId = objectId(order.buyerId);
+  const sellerId = objectId(order.sellerId);
+  const userStr = userId.toString();
+  const isBuyer = buyerId === userStr;
+  const isSeller = sellerId === userStr;
+
+  if (!isBuyer && !isSeller) {
+    ctx.status = 403;
+    ctx.body = { status: 'error', message: 'Not authorized for this order.' };
+    return;
+  }
+
+  if (order.status === 'completed') {
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      message: 'This handover was already completed.',
+      meetup: formatOrderMeetup(order, userStr)
+    };
+    return;
+  }
+
+  // Check state machine: Order must be paid and location confirmed
+  const isPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
+  if (!isPaid && order.status === 'pending_payment') {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Order must be paid before completing handover.' };
+    return;
+  }
+
+  const proposalStatus = order.meeting?.proposalStatus;
+  if (proposalStatus !== 'confirmed' && proposalStatus !== 'accepted') {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Meetup location must be confirmed before completing handover.' };
+    return;
+  }
+
+  const now = new Date();
+  if (isBuyer) {
+    order.buyerConfirmedAt = now;
+  }
+  if (isSeller) {
+    order.sellerConfirmedAt = now;
+  }
+
+  const bothConfirmed = Boolean(order.buyerConfirmedAt && order.sellerConfirmedAt);
+  const counterpartyId = isBuyer ? sellerId : buyerId;
+
+  const conversation = await Conversation.findOne({
+    itemId: order.itemId,
+    buyerId: order.buyerId,
+    sellerId: order.sellerId
+  });
+
+  if (bothConfirmed) {
+    order.status = 'completed';
+    order.completedAt = now;
+    order.qrScannedAt = now;
+    order.sellerPaidAt = now; // Money released to seller!
+    if (!order.completionCredit?.awardedAt) {
+      order.completionCredit = {
+        pointsPerParticipant: 5,
+        awardedAt: now
+      };
+    }
+    await order.save();
+
+    // Mark active QR as consumed
+    await QrCode.updateMany(
+      { orderId: order._id, status: 'active' },
+      { $set: { status: 'consumed', scannedAt: now, consumedAt: now, scannedByUserId: userId } }
+    );
+
+    // Update item status and transfer ownership
+    await Item.findByIdAndUpdate(order.itemId, {
+      $set: { status: 'sold', sellerId: order.buyerId, ownerId: buyerId }
+    });
+
+    // Award trust score (+5 to each participant)
+    await User.updateMany(
+      { _id: { $in: [order.buyerId, order.sellerId] } },
+      { $inc: { trustScore: 5 } }
+    );
+
+    // Post in-chat notification message to conversation
+    if (conversation) {
+      await new Message({
+        conversationId: conversation._id,
+        senderId: userId,
+        receiverId: new mongoose.Types.ObjectId(counterpartyId),
+        type: 'text',
+        text: `🤝 [Transaction Completed] Both parties confirmed handover & receipt! Funds have been released to the seller. Please leave a review for each other!`,
+        status: 'sent'
+      }).save();
+
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        $set: {
+          lastMessageText: `🤝 Transaction completed! Funds released.`,
+          lastMessageAt: now,
+          lastMessageSenderId: userId
+        }
+      });
+    }
+
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      message: 'Both parties confirmed! Transaction complete and funds have been released to the seller.',
+      bothConfirmed: true,
+      meetup: formatOrderMeetup(order, userStr)
+    };
+  } else {
+    // Only one party has confirmed so far. Keep order active, funds held in escrow.
+    await order.save();
+
+    if (conversation) {
+      const notice = isBuyer
+        ? '📦 [Receipt Confirmed] Buyer confirmed receipt! Waiting for seller handover confirmation to release funds.'
+        : '📦 [Handover Confirmed] Seller confirmed handover! Waiting for buyer receipt confirmation to release funds.';
+
+      await new Message({
+        conversationId: conversation._id,
+        senderId: userId,
+        receiverId: new mongoose.Types.ObjectId(counterpartyId),
+        type: 'text',
+        text: notice,
+        status: 'sent'
+      }).save();
+
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        $set: {
+          lastMessageText: isBuyer ? '📦 Buyer confirmed receipt' : '📦 Seller confirmed handover',
+          lastMessageAt: now,
+          lastMessageSenderId: userId
+        }
+      });
+    }
+
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      message: isBuyer
+        ? 'Receipt confirmed! Waiting for seller confirmation to release funds.'
+        : 'Handover confirmed! Waiting for buyer confirmation to release funds.',
+      bothConfirmed: false,
+      meetup: formatOrderMeetup(order, userStr)
+    };
+  }
 });
 
 export default router;

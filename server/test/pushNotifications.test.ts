@@ -6,6 +6,7 @@ import app from '../src/app';
 import Conversation from '../src/models/Conversation';
 import Item from '../src/models/Item';
 import Message from '../src/models/Message';
+import NotificationDailyCap from '../src/models/NotificationDailyCap';
 import PushDevice from '../src/models/PushDevice';
 import {
   CHAT_PUSH_NOTIFICATION_BODY,
@@ -88,6 +89,7 @@ describe('KiwiShare chat push notifications', () => {
     setChatPushGatewayForTests(null);
     setChatReadReceiptPushGatewayForTests(null);
     await PushDevice.deleteMany({});
+    await NotificationDailyCap.deleteMany({});
   });
 
   afterAll(async () => {
@@ -237,6 +239,7 @@ describe('KiwiShare chat push notifications', () => {
       })
     );
     expect(JSON.stringify(deliveries[0])).not.toContain('private content');
+    expect(await NotificationDailyCap.countDocuments()).toBe(0);
   });
 
   test('cleans invalid tokens without affecting the stored message', async () => {

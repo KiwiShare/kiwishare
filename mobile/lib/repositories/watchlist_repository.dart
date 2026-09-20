@@ -14,7 +14,32 @@ abstract class WatchlistRepository {
   Future<bool> isWatched(String itemId, {String? token});
 }
 
-class RestWatchlistRepository implements WatchlistRepository {
+abstract interface class PaginatedWatchlistRepository {
+  Future<WatchlistPage> fetchWatchlistPage({
+    String? token,
+    String? cursor,
+    int limit = 25,
+  });
+}
+
+class WatchlistPage {
+  const WatchlistPage({
+    required this.items,
+    this.nextCursor,
+    this.hasMore = false,
+  });
+
+  final List<ItemModel> items;
+  final String? nextCursor;
+  final bool hasMore;
+}
+
+class WatchlistRepositoryException implements Exception {
+  const WatchlistRepositoryException();
+}
+
+class RestWatchlistRepository
+    implements WatchlistRepository, PaginatedWatchlistRepository {
   final http.Client _client;
 
   RestWatchlistRepository({http.Client? client})
@@ -28,24 +53,33 @@ class RestWatchlistRepository implements WatchlistRepository {
 
   @override
   Future<List<ItemModel>> fetchWatchlist({String? token}) async {
+    return (await fetchWatchlistPage(token: token)).items;
+  }
+
+  @override
+  Future<WatchlistPage> fetchWatchlistPage({
+    String? token,
+    String? cursor,
+    int limit = 25,
+  }) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/watchlist');
-    try {
-      final response = await _client.get(uri, headers: _headers(token));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final list = (data['data'] as List<dynamic>? ?? []);
-        return list
-            .map((raw) => ItemModel.fromJson(raw as Map<String, dynamic>))
-            .toList();
-      }
-      debugPrint(
-        'Watchlist fetch failed (${response.statusCode}): ${response.body}',
-      );
-      return [];
-    } catch (e) {
-      debugPrint('Watchlist fetch error: $e');
-      return [];
+    final requestUri = uri.replace(
+      queryParameters: {'limit': '$limit', 'cursor': ?cursor},
+    );
+    final response = await _client.get(requestUri, headers: _headers(token));
+    if (response.statusCode != 200) {
+      throw const WatchlistRepositoryException();
     }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final list = (data['data'] as List<dynamic>? ?? []);
+    final pagination = data['pagination'] as Map<String, dynamic>?;
+    return WatchlistPage(
+      items: list
+          .map((raw) => ItemModel.fromJson(raw as Map<String, dynamic>))
+          .toList(),
+      nextCursor: pagination?['nextCursor'] as String?,
+      hasMore: pagination?['hasMore'] == true,
+    );
   }
 
   @override
@@ -60,35 +94,26 @@ class RestWatchlistRepository implements WatchlistRepository {
             .toSet();
         return ids;
       }
-      return {};
-    } catch (e) {
-      debugPrint('Watchlist ids fetch error: $e');
-      return {};
+      throw const WatchlistRepositoryException();
+    } catch (error) {
+      if (error is WatchlistRepositoryException) rethrow;
+      debugPrint('Watchlist IDs request failed.');
+      throw const WatchlistRepositoryException();
     }
   }
 
   @override
   Future<bool> addToWatchlist(String itemId, {String? token}) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/watchlist/$itemId');
-    try {
-      final response = await _client.post(uri, headers: _headers(token));
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('Add to watchlist error: $e');
-      return false;
-    }
+    final response = await _client.post(uri, headers: _headers(token));
+    return response.statusCode == 200;
   }
 
   @override
   Future<bool> removeFromWatchlist(String itemId, {String? token}) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/watchlist/$itemId');
-    try {
-      final response = await _client.delete(uri, headers: _headers(token));
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('Remove from watchlist error: $e');
-      return false;
-    }
+    final response = await _client.delete(uri, headers: _headers(token));
+    return response.statusCode == 200;
   }
 
   @override
@@ -100,9 +125,11 @@ class RestWatchlistRepository implements WatchlistRepository {
         final data = jsonDecode(response.body);
         return data['isWatched'] == true;
       }
-      return false;
-    } catch (e) {
-      return false;
+      throw const WatchlistRepositoryException();
+    } catch (error) {
+      if (error is WatchlistRepositoryException) rethrow;
+      debugPrint('Watchlist status request failed.');
+      throw const WatchlistRepositoryException();
     }
   }
 }

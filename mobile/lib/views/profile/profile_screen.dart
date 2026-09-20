@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -7,14 +8,24 @@ import '../../services/r2_upload_service.dart';
 import '../../models/user_model.dart';
 import '../../providers/providers.dart';
 import '../../repositories/user_repository.dart';
+import '../../widgets/kiwigold_coin_icon.dart';
+import '../../widgets/vip_crown_icon.dart';
 import '../auth/login_view.dart';
+import 'help_center_screen.dart';
+import 'kiwigold_topup_sheet.dart';
 import 'my_reports_screen.dart';
+import 'payment_methods_screen.dart';
 import 'report_screen.dart';
 import 'notification_settings_screen.dart';
 import 'user_listings_screen.dart';
 import 'user_meetups_screen.dart';
 import 'user_orders_screen.dart';
+import 'settings_screen.dart';
+import 'public_profile_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
+import '../support/support_chat_screen.dart';
+import '../../utils/trust_score.dart';
+import 'student_verification_sheet.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -205,6 +216,320 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _showStudentVerification(BuildContext context) async {
+    await showStudentVerificationSheet(context);
+  }
+
+  Future<void> _showVipManagementSheet(
+    BuildContext context,
+    UserModel user,
+  ) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final expiresAt = user.vipExpiresAt;
+    final dateStr = expiresAt != null
+        ? _formatVipDate(expiresAt)
+        : 'Next billing cycle';
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Consumer<AuthProvider>(
+        builder: (ctx, auth, _) {
+          final currentUser = auth.currentUser ?? user;
+          final isAutoRenew = currentUser.vipAutoRenew;
+          final currentExpiresAt = currentUser.vipExpiresAt ?? expiresAt;
+          final currentDateStr = currentExpiresAt != null
+              ? _formatVipDate(currentExpiresAt)
+              : dateStr;
+
+          return Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF181715) : Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFDF73), Color(0xFFC89328)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFFC89328,
+                            ).withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: const VipCrownIcon(
+                        color: Color(0xFF382305),
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'KiwiGold VIP Membership',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isAutoRenew
+                                  ? const Color(
+                                      0xFF059669,
+                                    ).withValues(alpha: 0.15)
+                                  : const Color(
+                                      0xFFD97706,
+                                    ).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              isAutoRenew
+                                  ? 'ACTIVE · AUTO-RENEWS'
+                                  : 'VIP ACTIVE · AUTO-RENEW OFF',
+                              style: TextStyle(
+                                color: isAutoRenew
+                                    ? const Color(0xFF059669)
+                                    : const Color(0xFFD97706),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 10.5,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF24221E)
+                        : const Color(0xFFFBF8F2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFD4AF37).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      _VipInfoRow(
+                        label: 'Current Plan',
+                        value: 'VIP Monthly (\$9.00 NZD/mo)',
+                      ),
+                      const SizedBox(height: 10),
+                      _VipInfoRow(
+                        label: 'Membership Access',
+                        value: 'Valid until $currentDateStr',
+                        valueColor: const Color(0xFF059669),
+                      ),
+                      const SizedBox(height: 10),
+                      _VipInfoRow(
+                        label: 'Monthly Subscription',
+                        value: isAutoRenew
+                            ? 'Active (Auto-renews $currentDateStr)'
+                            : 'Paused (No future charges)',
+                        valueColor: isAutoRenew
+                            ? const Color(0xFF059669)
+                            : const Color(0xFFD97706),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Included Perks',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const _VipPerkItem(
+                  icon: Icons.rocket_launch_rounded,
+                  title: 'Unlimited Listing Boosts',
+                  desc:
+                      'Boost any listing to top of feeds without spending coins',
+                ),
+                const SizedBox(height: 8),
+                const _VipPerkItem(
+                  customIcon: VipCrownIcon(size: 18),
+                  title: 'KiwiGold VIP Badge',
+                  desc: 'KiwiGold badge displayed on your profile and listings',
+                ),
+                const SizedBox(height: 8),
+                const _VipPerkItem(
+                  icon: Icons.trending_up_rounded,
+                  title: 'Top Search Exposure',
+                  desc: 'Higher ranking and visibility in marketplace searches',
+                ),
+                const SizedBox(height: 24),
+                if (isAutoRenew)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red.shade700,
+                        side: BorderSide(color: Colors.red.shade300),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (dialogCtx) => AlertDialog(
+                            title: const Text('Cancel VIP Auto-Renewal?'),
+                            content: Text(
+                              'Your KiwiGold VIP benefits (unlimited boosts & golden badge) will remain fully active until $currentDateStr.\n\nYou will not be charged for next month.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(dialogCtx, false),
+                                child: const Text('Keep VIP'),
+                              ),
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.red.shade700,
+                                ),
+                                onPressed: () => Navigator.pop(dialogCtx, true),
+                                child: const Text('Confirm Cancellation'),
+                              ),
+                            ],
+                          ),
+                        );
+
+                        if (confirm == true && context.mounted) {
+                          try {
+                            await context
+                                .read<AuthProvider>()
+                                .cancelVipRenewal();
+                            if (sheetCtx.mounted) {
+                              Navigator.pop(sheetCtx);
+                            }
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'VIP auto-renewal cancelled. You will continue to enjoy VIP perks until $currentDateStr.',
+                                  ),
+                                  backgroundColor: const Color(0xFF059669),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to cancel renewal: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        }
+                      },
+                      child: const Text(
+                        'Cancel Next Month\'s Renewal',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: () async {
+                        try {
+                          await context.read<AuthProvider>().resumeVipRenewal();
+                          if (sheetCtx.mounted) {
+                            Navigator.pop(sheetCtx);
+                          }
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'VIP auto-renewal resumed successfully! Your subscription will renew on $currentDateStr.',
+                                ),
+                                backgroundColor: const Color(0xFF059669),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to resume renewal: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text(
+                        'Resume VIP Auto-Renewal',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -229,35 +554,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? colors.surfaceContainerHighest.withValues(alpha: 0.3)
-                  : colors.surface,
-              shape: BoxShape.circle,
-              boxShadow: isDark
-                  ? null
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-            ),
-            child: IconButton(
-              key: const Key('profile-scan-qr-button'),
-              icon: const Icon(Icons.qr_code_scanner_rounded),
-              tooltip: 'Scan QR Code',
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const QrScannerScreen(),
-                ),
+          IconButton(
+            key: const Key('profile-support-button'),
+            icon: const Icon(Icons.support_agent_rounded, size: 24),
+            tooltip: 'Customer Support',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => const SupportChatScreen(),
               ),
             ),
           ),
+          IconButton(
+            key: const Key('profile-settings-button'),
+            icon: const Icon(Icons.settings_outlined, size: 24),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
@@ -281,13 +598,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ? _ProfileHeader(
                     user: user,
                     onEdit: () => _editName(context, user),
+                    onStudentTap: () => _showStudentVerification(context),
                   )
                 : _GuestHeader(
                     onLogin: () => _showLogin(context),
                     onSignUp: () => _showSignUp(context),
                   ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+            if (!signedIn) ...[
+              _KiwigoldVipBannerCard(
+                user: null,
+                onTap: () => _showLogin(context),
+              ),
+              const SizedBox(height: 14),
+            ],
             if (signedIn) ...[
+              _KiwigoldVipBannerCard(
+                user: user,
+                onTap: () {
+                  if (user.isVip) {
+                    _showVipManagementSheet(context, user);
+                  } else {
+                    KiwiGoldTopUpSheet.show(
+                      context,
+                      initialPlan: TopUpPlanType.vipMonthly,
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 14),
               _MarketplaceCard(
                 onWatchlistTap: () => context.go('/watchlist'),
                 onSellingTap: () => Navigator.push(
@@ -317,8 +656,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     builder: (_) => const UserMeetupsScreen(),
                   ),
                 ),
+                onPaymentTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const PaymentMethodsScreen(),
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
             ],
             const _SectionHeader(title: 'Preferences'),
             _SoftMenuContainer(
@@ -353,8 +698,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _SoftMenuContainer(
                 children: [
                   _ModernMenuTile(
-                    icon: Icons.add_a_photo_outlined,
-                    iconColor: colors.primary,
+                    icon: Icons.portrait_rounded,
+                    iconColor: const Color(0xFFF43F5E),
                     title: _avatarBusy ? 'Saving photo...' : 'Profile photo',
                     subtitle: 'Photo and avatar',
                     onTap: _editAvatar,
@@ -391,8 +736,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _SoftMenuContainer(
               children: [
                 _ModernMenuTile(
-                  icon: Icons.history_rounded,
-                  iconColor: colors.primary,
+                  icon: Icons.explore_outlined,
+                  iconColor: const Color(0xFF059669),
+                  title: 'How KiwiShare works',
+                  subtitle:
+                      '5-step guide to trading & supporting circular economy',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          const HelpCenterScreen(initialTabIndex: 0),
+                    ),
+                  ),
+                ),
+                _ModernMenuTile(
+                  icon: Icons.quiz_outlined,
+                  iconColor: const Color(0xFF3B82F6),
+                  title: 'Help center & FAQs',
+                  subtitle:
+                      'Answers to meetups, QR, KiwiGold, and safety questions',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          const HelpCenterScreen(initialTabIndex: 1),
+                    ),
+                  ),
+                ),
+                _ModernMenuTile(
+                  icon: Icons.shield_outlined,
+                  iconColor: const Color(0xFF6366F1),
                   title: 'My reports',
                   subtitle: 'View your report history and review status',
                   onTap: signedIn
@@ -492,9 +865,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.user, required this.onEdit});
+  const _ProfileHeader({
+    required this.user,
+    required this.onEdit,
+    this.onStudentTap,
+  });
   final UserModel user;
   final VoidCallback onEdit;
+  final VoidCallback? onStudentTap;
 
   @override
   Widget build(BuildContext context) {
@@ -523,120 +901,300 @@ class _ProfileHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Top User Info Row ──
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.bottomRight,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: scheme.primary.withValues(alpha: 0.15),
-                        width: 2,
-                      ),
+              GestureDetector(
+                key: const Key('profile_header_avatar_button'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => PublicProfileScreen(userId: user.id),
                     ),
-                    child: CircleAvatar(
-                      radius: 34,
-                      backgroundColor: scheme.primaryContainer,
-                      foregroundImage:
-                          user.avatarUrl == null || user.avatarUrl!.isEmpty
-                          ? null
-                          : NetworkImage(user.avatarUrl!),
-                      onForegroundImageError:
-                          user.avatarUrl == null || user.avatarUrl!.isEmpty
-                          ? null
-                          : (_, _) {},
-                      child: Text(
-                        initial,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          color: scheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w700,
+                  );
+                },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: user.isVip
+                              ? const Color(0xFFFFD700)
+                              : scheme.primary.withValues(alpha: 0.15),
+                          width: user.isVip ? 3 : 2,
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 32,
+                        backgroundColor: scheme.primaryContainer,
+                        foregroundImage:
+                            user.avatarUrl == null || user.avatarUrl!.isEmpty
+                            ? null
+                            : NetworkImage(user.avatarUrl!),
+                        onForegroundImageError:
+                            user.avatarUrl == null || user.avatarUrl!.isEmpty
+                            ? null
+                            : (_, _) {},
+                        child: Text(
+                          initial,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            color: scheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  if (user.isVerified)
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF101B17)
-                              : Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.verified_rounded,
-                          color: Color(0xFF10B981),
-                          size: 20,
+                    if (user.isVerified)
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF101B17)
+                                : Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.verified_rounded,
+                            color: Color(0xFF10B981),
+                            size: 18,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      user.displayName,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            user.displayName,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (user.isVip) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF8B5CF6,
+                                  ).withValues(alpha: 0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                VipCrownIcon(size: 12),
+                                SizedBox(width: 3),
+                                Text(
+                                  'VIP',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 6),
-                    Semantics(
-                      label: 'Trust score ${user.trustScore} out of 100',
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: isDark
-                                ? [
-                                    const Color(0xFF0F3D31),
-                                    const Color(0xFF0A5941),
-                                  ]
-                                : [
-                                    const Color(0xFFE8F5EE),
-                                    const Color(0xFFD3EEDF),
-                                  ],
-                          ),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.verified_user_rounded,
-                              size: 13,
-                              color: isDark
-                                  ? const Color(0xFF92D4B3)
-                                  : const Color(0xFF064B3A),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Trust score ${user.trustScore}/100',
-                              style: TextStyle(
-                                color: isDark
-                                    ? const Color(0xFFD6F6E3)
-                                    : const Color(0xFF064B3A),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        GestureDetector(
+                          onTap: () => showKiwiTrustScoreSheet(context, user.trustScore),
+                          child: Semantics(
+                            label:
+                                'Trust score ${formatPublicTrustScore(user.trustScore)}',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3.5,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: isDark
+                                      ? [
+                                          const Color(0xFF0F3D31),
+                                          const Color(0xFF0A5941),
+                                        ]
+                                      : [
+                                          const Color(0xFFE8F5EE),
+                                          const Color(0xFFD3EEDF),
+                                        ],
+                                ),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.verified_user_rounded,
+                                    size: 12,
+                                    color: isDark
+                                        ? const Color(0xFF92D4B3)
+                                        : const Color(0xFF064B3A),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Trust score ${formatPublicTrustScore(user.trustScore)}',
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? const Color(0xFFD6F6E3)
+                                          : const Color(0xFF064B3A),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
+                          ),
                         ),
+                        GestureDetector(
+                          onTap: () => showKiwiTrustScoreSheet(context, user.trustScore),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? getTrustScoreInfo(user.trustScore).darkBg
+                                  : getTrustScoreInfo(user.trustScore).lightBg,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: (isDark
+                                        ? getTrustScoreInfo(user.trustScore).darkColor
+                                        : getTrustScoreInfo(user.trustScore).lightColor)
+                                    .withOpacity(0.4),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              getTrustScoreInfo(user.trustScore).label,
+                              style: TextStyle(
+                                color: isDark
+                                    ? getTrustScoreInfo(user.trustScore).darkColor
+                                    : getTrustScoreInfo(user.trustScore).lightColor,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (user.isStudentVerified)
+                          GestureDetector(
+                            onTap: onStudentTap,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(
+                                        0xFF1E3A8A,
+                                      ).withValues(alpha: 0.5)
+                                    : const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFF3B82F6)
+                                      : const Color(0xFFBFDBFE),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.school_rounded,
+                                    size: 12,
+                                    color: Color(0xFF2563EB),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Student',
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? const Color(0xFF93C5FD)
+                                          : const Color(0xFF1E40AF),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      key: const Key('profile_view_public_page_chip'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => PublicProfileScreen(userId: user.id),
+                          ),
+                        );
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'My Public Profile',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 9,
+                            color: scheme.primary,
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -654,13 +1212,80 @@ class _ProfileHeader extends StatelessWidget {
                     padding: const EdgeInsets.all(8),
                     child: Icon(
                       Icons.edit_outlined,
-                      size: 20,
+                      size: 18,
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ),
               ),
             ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // ── Bottom Wallet & Balance Shelf ──
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF221F1B) : const Color(0xFFFBF8F2),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark
+                    ? const Color(0xFFB45309).withValues(alpha: 0.25)
+                    : const Color(0xFFFDE68A),
+                width: 0.8,
+              ),
+            ),
+            child: Row(
+              children: [
+                const KiwiGoldCoinIcon(size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  '${user.kiwiGold} KiwiGold',
+                  style: TextStyle(
+                    color: isDark
+                        ? const Color(0xFFFDE68A)
+                        : const Color(0xFF92400E),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                const Spacer(),
+                InkWell(
+                  onTap: () => KiwiGoldTopUpSheet.show(context),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.add_circle,
+                          size: 14,
+                          color: isDark
+                              ? const Color(0xFFFDE68A)
+                              : const Color(0xFFB45309),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Top Up',
+                          style: TextStyle(
+                            color: isDark
+                                ? const Color(0xFFFDE68A)
+                                : const Color(0xFFB45309),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -675,6 +1300,7 @@ class _MarketplaceCard extends StatelessWidget {
     required this.onSellingTap,
     required this.onSoldTap,
     required this.onMeetupsTap,
+    required this.onPaymentTap,
   });
 
   final VoidCallback onOrdersTap;
@@ -682,6 +1308,7 @@ class _MarketplaceCard extends StatelessWidget {
   final VoidCallback onSellingTap;
   final VoidCallback onSoldTap;
   final VoidCallback onMeetupsTap;
+  final VoidCallback onPaymentTap;
 
   @override
   Widget build(BuildContext context) {
@@ -772,7 +1399,7 @@ class _MarketplaceCard extends StatelessWidget {
                   icon: Icons.sell_rounded,
                   iconBg: const Color(0xFFECFDF5),
                   iconColor: const Color(0xFF059669),
-                  label: 'Selling',
+                  label: 'Listings',
                   sublabel: 'Active listings',
                   onTap: onSellingTap,
                 ),
@@ -780,11 +1407,21 @@ class _MarketplaceCard extends StatelessWidget {
               Expanded(
                 child: _MarketplaceGridAction(
                   icon: Icons.inventory_2_rounded,
-                  iconBg: const Color(0xFFEFF6FF),
-                  iconColor: const Color(0xFF2563EB),
+                  iconBg: const Color(0xFFF3E8FF),
+                  iconColor: const Color(0xFF9333EA),
                   label: 'Sold',
                   sublabel: 'Sold history',
                   onTap: onSoldTap,
+                ),
+              ),
+              Expanded(
+                child: _MarketplaceGridAction(
+                  icon: Icons.account_balance_wallet_rounded,
+                  iconBg: const Color(0xFFEFF6FF),
+                  iconColor: const Color(0xFF2563EB),
+                  label: 'Wallet',
+                  sublabel: 'Cards & Payout',
+                  onTap: onPaymentTap,
                 ),
               ),
             ],
@@ -1375,3 +2012,356 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
     ],
   );
 }
+
+class _KiwigoldVipBannerCard extends StatelessWidget {
+  const _KiwigoldVipBannerCard({this.user, required this.onTap});
+
+  final UserModel? user;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isVip = user?.isVip ?? false;
+    final isAutoRenew = user?.vipAutoRenew ?? true;
+    final expiresAt = user?.vipExpiresAt;
+    final dateStr = expiresAt != null ? _formatVipDate(expiresAt) : null;
+
+    final String badgeText;
+    final now = DateTime.now();
+    final daysRemaining = expiresAt != null
+        ? expiresAt.difference(now).inDays
+        : 999;
+    if (!isVip) {
+      badgeText = 'MEMBER';
+    } else if (isAutoRenew) {
+      badgeText = 'ACTIVE';
+    } else if (daysRemaining <= 3 && daysRemaining >= 0) {
+      badgeText = 'EXPIRING';
+    } else {
+      badgeText = 'ACTIVE';
+    }
+
+    final String subtitleText;
+    if (!isVip) {
+      subtitleText = 'Unlimited boosts · Top exposure · \$9/mo';
+    } else if (isAutoRenew) {
+      subtitleText = dateStr != null
+          ? 'Unlimited boosts active · Renews $dateStr'
+          : 'Unlimited boosts active';
+    } else {
+      subtitleText = dateStr != null
+          ? 'Perks active until $dateStr · Auto-renew off'
+          : 'Perks active · Auto-renew off';
+    }
+
+    final String actionText = isVip ? 'Manage' : 'Get VIP';
+
+    return Container(
+      decoration: BoxDecoration(
+        // Xianyu VIP luxury aesthetic: deep charcoal & dark gold gradient
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1F1D1A), Color(0xFF2B2319), Color(0xFF382C1C)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFD4AF37).withValues(alpha: 0.4),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFC89328).withValues(alpha: 0.16),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFDF73), Color(0xFFC89328)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFC89328).withValues(alpha: 0.35),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: VipCrownIcon(color: Color(0xFF382305), size: 24),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'KiwiGold VIP',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFFDE68A),
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: (!isVip || isAutoRenew)
+                                    ? const [
+                                        Color(0xFFF59E0B),
+                                        Color(0xFFD97706),
+                                      ]
+                                    : const [
+                                        Color(0xFFDC2626),
+                                        Color(0xFFB91C1C),
+                                      ],
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              badgeText,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitleText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: const Color(
+                            0xFFF5E6C8,
+                          ).withValues(alpha: 0.85),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: isVip
+                        ? null
+                        : const LinearGradient(
+                            colors: [Color(0xFFFFE082), Color(0xFFE5A93C)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                    color: isVip
+                        ? const Color(0xFF42341F).withValues(alpha: 0.9)
+                        : null,
+                    borderRadius: BorderRadius.circular(18),
+                    border: isVip
+                        ? Border.all(
+                            color: const Color(
+                              0xFFE5A93C,
+                            ).withValues(alpha: 0.6),
+                            width: 1,
+                          )
+                        : null,
+                    boxShadow: isVip
+                        ? null
+                        : [
+                            BoxShadow(
+                              color: const Color(
+                                0xFFE5A93C,
+                              ).withValues(alpha: 0.3),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        actionText,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: isVip
+                              ? const Color(0xFFFDE68A)
+                              : const Color(0xFF382305),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 15,
+                        color: isVip
+                            ? const Color(0xFFFDE68A)
+                            : const Color(0xFF382305),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatVipDate(DateTime dt) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+}
+
+class _VipInfoRow extends StatelessWidget {
+  const _VipInfoRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: valueColor ?? Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _VipPerkItem extends StatelessWidget {
+  const _VipPerkItem({
+    this.icon,
+    this.customIcon,
+    required this.title,
+    required this.desc,
+  }) : assert(icon != null || customIcon != null);
+
+  final IconData? icon;
+  final Widget? customIcon;
+  final String title;
+  final String desc;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(
+              0xFFD4AF37,
+            ).withValues(alpha: isDark ? 0.2 : 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child:
+              customIcon ??
+              Icon(icon!, size: 18, color: const Color(0xFFD4AF37)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                desc,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+

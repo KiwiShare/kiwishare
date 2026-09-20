@@ -34,6 +34,8 @@ export interface IItem extends Document {
   imageUrl: string;
   priceNzd: string;
   isSustainable: boolean;
+  isPromoted?: boolean;
+  promotedAt?: Date;
   ownerId: string; // User ID string
   createdAt: Date;
   updatedAt: Date;
@@ -66,13 +68,15 @@ const ItemSchema = new Schema<IItem>(
     },
     status: {
       type: String,
-      enum: ['draft', 'active', 'reserved', 'sold', 'hidden', 'revoked', 'deleted'],
+      enum: ['draft', 'active', 'reserved', 'sold', 'hidden', 'revoked', 'deleted', 'delisted'],
       default: 'active',
       index: true
     },
     reservedOrderId: { type: Schema.Types.ObjectId, ref: 'Order' },
     publishedAt: { type: Date, default: Date.now },
     soldAt: { type: Date },
+    isPromoted: { type: Boolean, default: false, index: true },
+    promotedAt: { type: Date },
     viewCount: { type: Number, default: 0 },
     favouriteCount: { type: Number, default: 0 },
     deletedAt: { type: Date },

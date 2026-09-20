@@ -25,10 +25,10 @@ import 'navigation/app_route_observer.dart';
 
 // State and Repositories
 import 'providers/providers.dart';
-import 'providers/meetup_provider.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/item_repository.dart';
 import 'repositories/watchlist_repository.dart';
+import 'repositories/notification_preferences_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/meetup_repository.dart';
 import 'repositories/order_repository.dart';
@@ -41,7 +41,7 @@ import 'services/notification_permission_coordinator.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
-import 'widgets/kiwishare_notification_content.dart';
+import 'widgets/top_notification_banner.dart';
 
 // Global keys for routing
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
@@ -207,15 +207,18 @@ void main() async {
     permissionController: pushNotifications,
   );
 
+  final userRepository = RestUserRepository();
+
   runApp(
     MultiProvider(
       providers: [
+        Provider<UserRepository>.value(value: userRepository),
         Provider<NotificationPermissionCoordinator>.value(
           value: notificationCoordinator,
         ),
         ChangeNotifierProvider(
           create: (_) => AuthProvider(
-            userRepository: RestUserRepository(),
+            userRepository: userRepository,
             pushNotifications: pushNotifications,
           ),
         ),
@@ -223,11 +226,17 @@ void main() async {
         Provider<ReportRepository>(create: (_) => RestReportRepository()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProxyProvider<AuthProvider, WatchlistProvider>(
-          create: (_) =>
-              WatchlistProvider(repository: RestWatchlistRepository()),
+          create: (_) => WatchlistProvider(
+            repository: RestWatchlistRepository(),
+            preferencesRepository: RestNotificationPreferencesRepository(),
+          ),
           update: (_, auth, watchlist) => syncWatchlistAuth(
             watchlist ??
-                WatchlistProvider(repository: RestWatchlistRepository()),
+                WatchlistProvider(
+                  repository: RestWatchlistRepository(),
+                  preferencesRepository:
+                      RestNotificationPreferencesRepository(),
+                ),
             auth.jwtToken,
           ),
         ),
@@ -366,35 +375,33 @@ void navigateToNotificationRoute(
 }
 
 void _showInAppChatNotification(ChatConversationModel conversation) {
-  final messenger = _scaffoldMessengerKey.currentState;
-  if (messenger == null) return;
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: KiwiShareNotificationContent(
-          title: conversation.participantName.isNotEmpty
-              ? conversation.participantName
-              : 'New message',
-          body: conversation.lastMessage.isNotEmpty
-              ? conversation.lastMessage
-              : 'Sent you a message about ${conversation.itemTitle}',
-          icon: Icons.chat_bubble_rounded,
-        ),
-        action: SnackBarAction(
-          label: 'Reply',
-          onPressed: () {
-            navigateToNotificationRoute(
-              _router,
-              '/messages/${conversation.id}',
-              extra: conversation,
-            );
-          },
-        ),
-        duration: const Duration(seconds: 4),
-      ),
-    );
+  showTopNotification(
+    context: _rootNavigatorKey.currentContext,
+    navigatorKey: _rootNavigatorKey,
+    fallbackMessenger: _scaffoldMessengerKey.currentState,
+    title: conversation.participantName.isNotEmpty
+        ? conversation.participantName
+        : 'New message',
+    body: conversation.lastMessage.isNotEmpty
+        ? conversation.lastMessage
+        : 'Sent you a message about ${conversation.itemTitle}',
+    icon: Icons.chat_bubble_rounded,
+    actionLabel: 'Reply',
+    onTap: () {
+      navigateToNotificationRoute(
+        _router,
+        '/messages/${conversation.id}',
+        extra: conversation,
+      );
+    },
+    onAction: () {
+      navigateToNotificationRoute(
+        _router,
+        '/messages/${conversation.id}',
+        extra: conversation,
+      );
+    },
+  );
 }
 
 void _showForegroundChatNotification(
@@ -419,39 +426,39 @@ void _showForegroundChatNotification(
       ),
     );
   }
-  final messenger = _scaffoldMessengerKey.currentState;
-  if (messenger == null) return;
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: KiwiShareNotificationContent(
-          title: message.participantName.isNotEmpty
-              ? message.participantName
-              : 'New message',
-          body:
-              envelope.body ??
-              (message.itemTitle.isNotEmpty
-                  ? 'Sent you a message about ${message.itemTitle}'
-                  : 'You have a new KiwiShare message.'),
-          icon: Icons.chat_bubble_rounded,
-        ),
-        action: SnackBarAction(
-          label: 'Reply',
-          onPressed: () {
-            final activeUserId = _scaffoldMessengerKey.currentContext
-                ?.read<AuthProvider>()
-                .currentUser
-                ?.id;
-            if (shouldOpenChatNotificationForUser(message, activeUserId)) {
-              _openChatNotification(message);
-            }
-          },
-        ),
-        duration: const Duration(seconds: 4),
-      ),
-    );
+  showTopNotification(
+    context: _rootNavigatorKey.currentContext,
+    navigatorKey: _rootNavigatorKey,
+    fallbackMessenger: _scaffoldMessengerKey.currentState,
+    title: message.participantName.isNotEmpty
+        ? message.participantName
+        : 'New message',
+    body:
+        envelope.body ??
+        (message.itemTitle.isNotEmpty
+            ? 'Sent you a message about ${message.itemTitle}'
+            : 'You have a new KiwiShare message.'),
+    icon: Icons.chat_bubble_rounded,
+    actionLabel: 'Reply',
+    onTap: () {
+      final activeUserId = _scaffoldMessengerKey.currentContext
+          ?.read<AuthProvider>()
+          .currentUser
+          ?.id;
+      if (shouldOpenChatNotificationForUser(message, activeUserId)) {
+        _openChatNotification(message);
+      }
+    },
+    onAction: () {
+      final activeUserId = _scaffoldMessengerKey.currentContext
+          ?.read<AuthProvider>()
+          .currentUser
+          ?.id;
+      if (shouldOpenChatNotificationForUser(message, activeUserId)) {
+        _openChatNotification(message);
+      }
+    },
+  );
 }
 
 void _handleForegroundChatRead(ChatReadPushMessage message) {
@@ -478,19 +485,17 @@ void _showForegroundMeetupNotification(
   MeetupPushMessage message,
   PushEnvelope envelope,
 ) {
-  final messenger = _scaffoldMessengerKey.currentState;
-  if (messenger == null) return;
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(envelope.body ?? 'Meetup confirmed! View your QR code.'),
-        action: SnackBarAction(
-          label: 'View QR',
-          onPressed: () => _openMeetupQrNotification(message),
-        ),
-      ),
-    );
+  showTopNotification(
+    context: _rootNavigatorKey.currentContext,
+    navigatorKey: _rootNavigatorKey,
+    fallbackMessenger: _scaffoldMessengerKey.currentState,
+    title: 'Meetup confirmed!',
+    body: envelope.body ?? 'Meetup confirmed! View your QR code.',
+    icon: Icons.qr_code_2_rounded,
+    actionLabel: 'View QR',
+    onTap: () => _openMeetupQrNotification(message),
+    onAction: () => _openMeetupQrNotification(message),
+  );
 }
 
 @visibleForTesting
@@ -575,23 +580,17 @@ void _showForegroundPriceDrop(
   WatchlistPriceDropMessage message,
   PushEnvelope envelope,
 ) {
-  final messenger = _scaffoldMessengerKey.currentState;
-  if (messenger == null) return;
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: KiwiShareNotificationContent(
-          title: envelope.title ?? 'Price drop on a saved item',
-          body: envelope.body ?? message.notificationSummary,
-          icon: Icons.trending_down_rounded,
-        ),
-        action: SnackBarAction(
-          label: 'View',
-          onPressed: () => _openWatchlistPriceDrop(message.itemId),
-        ),
-      ),
-    );
+  showTopNotification(
+    context: _rootNavigatorKey.currentContext,
+    navigatorKey: _rootNavigatorKey,
+    fallbackMessenger: _scaffoldMessengerKey.currentState,
+    title: envelope.title ?? 'Price drop on a saved item',
+    body: envelope.body ?? message.notificationSummary,
+    icon: Icons.trending_down_rounded,
+    actionLabel: 'View',
+    onTap: () => _openWatchlistPriceDrop(message.itemId),
+    onAction: () => _openWatchlistPriceDrop(message.itemId),
+  );
 }
 
 class KiwiShareApp extends StatefulWidget {
@@ -793,16 +792,52 @@ class KiwiShareShell extends StatelessWidget {
             ),
             BottomNavigationBarItem(
               icon: Container(
-                margin: const EdgeInsets.only(top: 4.0),
-                width: 44,
-                height: 44,
+                margin: const EdgeInsets.only(bottom: 2.0),
+                width: 38,
+                height: 32,
                 decoration: BoxDecoration(
-                  color: colors.primary,
-                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF059669), Color(0xFF10B981)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF059669).withValues(alpha: 0.35),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: Icon(Icons.add, color: colors.onPrimary, size: 26),
+                child: const Icon(
+                  Icons.photo_camera_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
-              label: '',
+              activeIcon: Container(
+                margin: const EdgeInsets.only(bottom: 2.0),
+                width: 38,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF047857),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF047857).withValues(alpha: 0.4),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.photo_camera_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              label: 'Sell',
             ),
             BottomNavigationBarItem(
               icon: ChatNavigationIcon(

@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import '../models/item_model.dart';
+import '../repositories/notification_preferences_repository.dart';
 import '../repositories/watchlist_repository.dart';
 
 enum WatchlistMutationResult { added, removed, unchanged, failed, superseded }
 
 class WatchlistProvider extends ChangeNotifier {
   final WatchlistRepository _repository;
+  final NotificationPreferencesRepository? preferencesRepository;
   String? _authToken;
   int _authGeneration = 0;
   int _mutationRevision = 0;
@@ -19,9 +21,17 @@ class WatchlistProvider extends ChangeNotifier {
   List<ItemModel> _watchlistItems = <ItemModel>[];
   bool _isLoading = false;
   String? _error;
+  String? _nextCursor;
+  bool _hasMore = false;
+  bool _isLoadingMore = false;
+  bool? _watchlistPriceDropEnabled;
+  bool _isLoadingPreference = false;
+  bool _isUpdatingPreference = false;
+  String? _preferenceError;
 
   WatchlistProvider({
     WatchlistRepository? repository,
+    this.preferencesRepository,
     String? initialToken,
     Set<String>? initialWatchedIds,
   }) : _repository = repository ?? RestWatchlistRepository(),
@@ -37,6 +47,12 @@ class WatchlistProvider extends ChangeNotifier {
   List<ItemModel> get items => _watchlistItems;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get hasMore => _hasMore;
+  bool get isLoadingMore => _isLoadingMore;
+  bool? get watchlistPriceDropEnabled => _watchlistPriceDropEnabled;
+  bool get isLoadingPreference => _isLoadingPreference;
+  bool get isUpdatingPreference => _isUpdatingPreference;
+  String? get preferenceError => _preferenceError;
   int get count => _watchedItemIds.length;
 
   void updateAuthToken(String? token) {
@@ -51,11 +67,21 @@ class WatchlistProvider extends ChangeNotifier {
     _itemMutationRevisions.clear();
     _isLoading = false;
     _error = null;
+    _nextCursor = null;
+    _hasMore = false;
+    _isLoadingMore = false;
+    _watchlistPriceDropEnabled = null;
+    _isLoadingPreference = false;
+    _isUpdatingPreference = false;
+    _preferenceError = null;
 
     if (token != null && token.isNotEmpty) {
       scheduleMicrotask(() {
         if (_authToken == token) {
           unawaited(loadWatchlist(forceRefresh: true));
+          if (preferencesRepository != null) {
+            unawaited(loadNotificationPreference());
+          }
         }
       });
     } else {
@@ -73,13 +99,12 @@ class WatchlistProvider extends ChangeNotifier {
     final requestMutationRevision = _mutationRevision;
     final requestHadPendingMutation = _pendingMutationCount > 0;
     _isLoading = true;
+    _isLoadingMore = false;
     _error = null;
     notifyListeners();
 
     try {
-      final fetchedItems = await _repository.fetchWatchlist(
-        token: requestToken,
-      );
+      final page = await _fetchPage(token: requestToken);
       final fetchedIds = await _repository.fetchWatchedItemIds(
         token: requestToken,
       );
@@ -99,11 +124,13 @@ class WatchlistProvider extends ChangeNotifier {
           _pendingMutationCount > 0 ||
           requestMutationRevision != _mutationRevision;
       if (!mutationChangedWhileLoading) {
-        _watchlistItems = fetchedItems;
+        _watchlistItems = page.items;
+        _nextCursor = page.nextCursor;
+        _hasMore = page.hasMore;
         _watchedItemIds.clear();
         _watchedItemIds.addAll(fetchedIds);
         // Ensure all items in list are also in set
-        for (final item in fetchedItems) {
+        for (final item in page.items) {
           _watchedItemIds.add(item.id);
         }
       }
@@ -117,9 +144,113 @@ class WatchlistProvider extends ChangeNotifier {
       )) {
         return;
       }
-      _error = 'Failed to load watchlist: $e';
+      _error = 'Could not load your Watchlist. Please try again.';
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (_isLoadingMore || !_hasMore || _nextCursor == null) return;
+    final token = _authToken;
+    final generation = _authGeneration;
+    final loadSequence = _loadSequence;
+    final cursor = _nextCursor!;
+    _isLoadingMore = true;
+    notifyListeners();
+    try {
+      final page = await _fetchPage(token: token, cursor: cursor);
+      if (!_isCurrentLoad(token, generation, loadSequence) ||
+          _nextCursor != cursor) {
+        return;
+      }
+      final existing = _watchlistItems.map((item) => item.id).toSet();
+      _watchlistItems.addAll(page.items.where((item) => existing.add(item.id)));
+      _nextCursor = page.nextCursor;
+      _hasMore = page.hasMore;
+      _error = null;
+    } catch (_) {
+      if (_isCurrentLoad(token, generation, loadSequence)) {
+        _error = 'Could not load more saved items. Please try again.';
+      }
+    } finally {
+      if (_isCurrentLoad(token, generation, loadSequence)) {
+        _isLoadingMore = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<WatchlistPage> _fetchPage({String? token, String? cursor}) async {
+    final repository = _repository;
+    if (repository is PaginatedWatchlistRepository) {
+      return (repository as PaginatedWatchlistRepository).fetchWatchlistPage(
+        token: token,
+        cursor: cursor,
+      );
+    }
+    if (cursor != null) return const WatchlistPage(items: []);
+    return WatchlistPage(items: await repository.fetchWatchlist(token: token));
+  }
+
+  Future<void> loadNotificationPreference() async {
+    final token = _authToken;
+    final generation = _authGeneration;
+    final repository = preferencesRepository;
+    if (token == null || token.isEmpty || repository == null) return;
+    _isLoadingPreference = true;
+    _preferenceError = null;
+    notifyListeners();
+    try {
+      final value = await repository.fetchWatchlistPriceDrop(token: token);
+      if (!_isCurrentSession(token, generation)) return;
+      _watchlistPriceDropEnabled = value;
+    } catch (_) {
+      if (_isCurrentSession(token, generation)) {
+        _preferenceError = 'Could not load Price alerts.';
+      }
+    } finally {
+      if (_isCurrentSession(token, generation)) {
+        _isLoadingPreference = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> updateNotificationPreference(bool enabled) async {
+    final token = _authToken;
+    final generation = _authGeneration;
+    final repository = preferencesRepository;
+    if (token == null ||
+        token.isEmpty ||
+        repository == null ||
+        _isUpdatingPreference) {
+      return false;
+    }
+    final previous = _watchlistPriceDropEnabled;
+    _watchlistPriceDropEnabled = enabled;
+    _isUpdatingPreference = true;
+    _preferenceError = null;
+    notifyListeners();
+    try {
+      final saved = await repository.updateWatchlistPriceDrop(
+        token: token,
+        enabled: enabled,
+      );
+      if (!_isCurrentSession(token, generation)) return false;
+      if (!saved) throw const NotificationPreferencesException();
+      return true;
+    } catch (_) {
+      if (_isCurrentSession(token, generation)) {
+        _watchlistPriceDropEnabled = previous;
+        _preferenceError = 'Could not update Price alerts. Please try again.';
+      }
+      return false;
+    } finally {
+      if (_isCurrentSession(token, generation)) {
+        _isUpdatingPreference = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -166,18 +297,19 @@ class WatchlistProvider extends ChangeNotifier {
         return WatchlistMutationResult.superseded;
       }
 
-      if (!success && requestToken != null) {
-        // Revert if API failed when user is logged in
-        _watchedItemIds.remove(itemId);
-        _watchlistItems.removeWhere((i) => i.id == itemId);
-        notifyListeners();
-      }
+      if (!success) _rollbackAdd(itemId, itemRevision);
       if (!success) return WatchlistMutationResult.failed;
       if (_itemMutationRevisions[itemId] != itemRevision ||
           !_watchedItemIds.contains(itemId)) {
         return WatchlistMutationResult.superseded;
       }
       return WatchlistMutationResult.added;
+    } catch (_) {
+      if (!_isCurrentSession(requestToken, requestGeneration)) {
+        return WatchlistMutationResult.superseded;
+      }
+      _rollbackAdd(itemId, itemRevision);
+      return WatchlistMutationResult.failed;
     } finally {
       _finishMutation(requestToken, requestGeneration);
     }
@@ -210,16 +342,8 @@ class WatchlistProvider extends ChangeNotifier {
         return WatchlistMutationResult.superseded;
       }
 
-      if (!success && requestToken != null) {
-        // Revert on API failure
-        _watchedItemIds.add(itemId);
-        if (removedItem != null) {
-          _watchlistItems.insert(
-            removedIndex.clamp(0, _watchlistItems.length),
-            removedItem,
-          );
-        }
-        notifyListeners();
+      if (!success) {
+        _rollbackRemove(itemId, itemRevision, removedItem, removedIndex);
       }
       if (!success) return WatchlistMutationResult.failed;
       if (_itemMutationRevisions[itemId] != itemRevision ||
@@ -227,6 +351,12 @@ class WatchlistProvider extends ChangeNotifier {
         return WatchlistMutationResult.superseded;
       }
       return WatchlistMutationResult.removed;
+    } catch (_) {
+      if (!_isCurrentSession(requestToken, requestGeneration)) {
+        return WatchlistMutationResult.superseded;
+      }
+      _rollbackRemove(itemId, itemRevision, removedItem, removedIndex);
+      return WatchlistMutationResult.failed;
     } finally {
       _finishMutation(requestToken, requestGeneration);
     }
@@ -236,6 +366,31 @@ class WatchlistProvider extends ChangeNotifier {
     final revision = (_itemMutationRevisions[itemId] ?? 0) + 1;
     _itemMutationRevisions[itemId] = revision;
     return revision;
+  }
+
+  void _rollbackAdd(String itemId, int itemRevision) {
+    if (_itemMutationRevisions[itemId] != itemRevision) return;
+    _watchedItemIds.remove(itemId);
+    _watchlistItems.removeWhere((item) => item.id == itemId);
+    notifyListeners();
+  }
+
+  void _rollbackRemove(
+    String itemId,
+    int itemRevision,
+    ItemModel? removedItem,
+    int removedIndex,
+  ) {
+    if (_itemMutationRevisions[itemId] != itemRevision) return;
+    _watchedItemIds.add(itemId);
+    if (removedItem != null &&
+        !_watchlistItems.any((item) => item.id == itemId)) {
+      _watchlistItems.insert(
+        removedIndex.clamp(0, _watchlistItems.length),
+        removedItem,
+      );
+    }
+    notifyListeners();
   }
 
   void _beginMutation() {

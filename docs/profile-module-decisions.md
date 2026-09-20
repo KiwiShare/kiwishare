@@ -28,13 +28,13 @@ Not yet end-to-end because backend/team contracts are missing:
 - `GET /api/users/me/listings` must be implemented before Selling/Sold use real data. The mobile request already sends the JWT.
 - `POST /api/reports` must be agreed and implemented. The current form intentionally simulates submission so the UX can be reviewed without pretending moderation storage exists.
 - Picking/uploading a new avatar requires an agreed storage provider, authentication rules, upload limits, and image moderation policy.
-- Trust calculation after completed transaction ratings belongs to trusted backend transaction/rating logic and is not implemented in the Profile client.
+- Trust credit belongs to the trusted backend transaction-completion flow and is never calculated by the Profile client.
 
 ## Confirmed product decisions
 
 - The Profile tab is the signed-in user's own account page. A public profile for other users is lower priority and remains out of the MVP unless time permits.
 - The trust score is displayed on Profile but is not calculated by Flutter. It is owned by trusted backend logic.
-- Trust changes should be based on ratings submitted after a completed transaction.
+- Each eligible QR-completed transaction awards both buyer and seller five trust points exactly once. Ratings remain independent.
 - A report must be reviewed before it can affect trust or cause another penalty. A report by itself is not proof of wrongdoing.
 - The MVP does not need report history or moderation progress on Profile.
 - Profile provides a **Safety & support** entry and a general report form. Reporting a specific user, listing, or chat should ultimately start from that object's screen and reuse the same form.
@@ -95,7 +95,7 @@ See `docs/reporting-feature-proposal.md` for the full reporting proposal.
 
 1. What is a new user's starting score?
 2. Is a post-transaction rating 1–5 stars, tags, or both?
-3. Must both parties confirm completion before ratings affect trust?
+3. What future rating and review UX should be offered independently of Trust Score?
 4. How are repeated ratings, cancelled trades, and no-shows handled?
 5. How is manipulation between friends or duplicate accounts detected?
 6. What high-level explanation of the score is shown to users?

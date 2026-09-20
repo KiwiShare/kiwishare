@@ -14,6 +14,7 @@ class ChatConversationModel {
     required this.lastMessage,
     this.lastMessageAt,
     required this.unreadCount,
+    this.specialPrice,
   });
 
   final String id;
@@ -28,6 +29,7 @@ class ChatConversationModel {
   final String lastMessage;
   final DateTime? lastMessageAt;
   final int unreadCount;
+  final String? specialPrice;
 
   bool get isActive => status == 'active';
 
@@ -35,6 +37,7 @@ class ChatConversationModel {
     String? lastMessage,
     DateTime? lastMessageAt,
     int? unreadCount,
+    String? specialPrice,
   }) {
     return ChatConversationModel(
       id: id,
@@ -49,6 +52,7 @@ class ChatConversationModel {
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       unreadCount: unreadCount ?? this.unreadCount,
+      specialPrice: specialPrice ?? this.specialPrice,
     );
   }
 
@@ -70,6 +74,9 @@ class ChatConversationModel {
       lastMessage: (json['lastMessageText'] ?? '').toString(),
       lastMessageAt: DateTime.tryParse(json['lastMessageAt']?.toString() ?? ''),
       unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+      specialPrice: json['specialPrice'] != null
+          ? json['specialPrice'].toString()
+          : item['specialPrice']?.toString(),
     );
   }
 }
