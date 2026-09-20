@@ -10,12 +10,15 @@ import 'package:kiwishare/views/shared/widgets/item_card.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  Widget buildCard(ItemModel item) {
+  Widget buildCard(ItemModel item, {bool compact = false}) {
     return MaterialApp(
       home: Scaffold(
         body: ChangeNotifierProvider(
           create: (_) => FavoritesProvider(),
-          child: SizedBox(width: 200, child: ItemCard(item: item)),
+          child: SizedBox(
+            width: 200,
+            child: ItemCard(item: item, compact: compact),
+          ),
         ),
       ),
     );
@@ -97,6 +100,41 @@ void main() {
       expect(find.text('Verified Student'), findsNothing);
     },
   );
+
+  testWidgets('compact card keeps metadata while reducing overall height', (
+    tester,
+  ) async {
+    const item = ItemModel(
+      id: 'compact-item',
+      title: 'Eco Student Desk',
+      priceNzd: '40.00',
+      location: 'Auckland Central',
+      imageUrl: '',
+      isSustainable: true,
+      category: 'Furniture',
+      status: ItemStatus.active,
+      seller: SellerInfo(
+        id: 'seller-compact',
+        displayName: 'Student Seller',
+        isStudentVerified: true,
+      ),
+    );
+
+    await tester.pumpWidget(buildCard(item));
+    final standardHeight = tester.getSize(find.byType(ItemCard)).height;
+
+    await tester.pumpWidget(buildCard(item, compact: true));
+    final compactHeight = tester.getSize(find.byType(ItemCard)).height;
+
+    expect(compactHeight, lessThan(standardHeight));
+    expect(find.text('Student Seller'), findsNothing);
+    expect(find.text('Auckland Central'), findsOneWidget);
+    expect(find.byIcon(Icons.verified), findsOneWidget);
+    expect(find.byTooltip('Verified student seller'), findsOneWidget);
+    expect(find.byTooltip('Sustainable listing'), findsOneWidget);
+    expect(find.text('Verified Student'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('confirmed card add offers permission but removal does not', (
     tester,

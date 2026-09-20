@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
 class ItemCardSkeleton extends StatelessWidget {
-  const ItemCardSkeleton({super.key});
+  final bool compact;
+
+  const ItemCardSkeleton({super.key, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +22,7 @@ class ItemCardSkeleton extends StatelessWidget {
           children: [
             // Image area skeleton
             AspectRatio(
-              aspectRatio: 1.22,
+              aspectRatio: compact ? 1.32 : 1.22,
               child: Container(
                 decoration: BoxDecoration(
                   color: colors.surface,
@@ -76,28 +78,30 @@ class ItemCardSkeleton extends StatelessWidget {
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: colors.surface,
-                          shape: BoxShape.circle,
+                  if (!compact) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: colors.surface,
+                            shape: BoxShape.circle,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 5),
-                      Container(
-                        width: 60,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: colors.surface,
-                          borderRadius: BorderRadius.circular(3),
+                        const SizedBox(width: 5),
+                        Container(
+                          width: 60,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: colors.surface,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
