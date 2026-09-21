@@ -698,7 +698,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _SoftMenuContainer(
                 children: [
                   _ModernMenuTile(
-                    icon: Icons.portrait_rounded,
+                    key: const Key('profile-photo-menu-tile'),
+                    icon: Icons.account_circle_outlined,
                     iconColor: const Color(0xFFF43F5E),
                     title: _avatarBusy ? 'Saving photo...' : 'Profile photo',
                     subtitle: 'Photo and avatar',
@@ -764,7 +765,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 _ModernMenuTile(
-                  icon: Icons.shield_outlined,
+                  key: const Key('my-reports-menu-tile'),
+                  icon: Icons.assignment_outlined,
                   iconColor: const Color(0xFF6366F1),
                   title: 'My reports',
                   subtitle: 'View your report history and review status',
@@ -1703,6 +1705,7 @@ class _SoftMenuContainer extends StatelessWidget {
 
 class _ModernMenuTile extends StatelessWidget {
   const _ModernMenuTile({
+    super.key,
     required this.icon,
     required this.iconColor,
     required this.title,

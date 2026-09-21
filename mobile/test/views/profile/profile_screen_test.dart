@@ -221,9 +221,77 @@ void main() {
 
     await tester.scrollUntilVisible(find.text('Profile photo'), 100);
     expect(find.text('Profile photo'), findsOneWidget);
+    final photoTile = find.byKey(const Key('profile-photo-menu-tile'));
+    expect(
+      find.descendant(
+        of: photoTile,
+        matching: find.byIcon(Icons.account_circle_outlined),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Nickname'), findsOneWidget);
     expect(find.text('Riley'), findsWidgets);
     expect(find.text('Change password'), findsOneWidget);
+  });
+
+  testWidgets('highlighted profile actions keep the outlined icon system', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":95,"isVerified":true}',
+    });
+    final auth = AuthProvider(userRepository: MockUserRepository());
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          Provider<NotificationPermissionCoordinator>.value(
+            value: NotificationPermissionCoordinator(
+              permissionController: null,
+              storage: _Storage(),
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          theme: ThemeData.light(useMaterial3: true),
+          darkTheme: ThemeData.dark(useMaterial3: true),
+          themeMode: ThemeMode.dark,
+          home: const ProfileScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('My reports'), 200);
+    final photoTile = find.byKey(const Key('profile-photo-menu-tile'));
+    final reportsTile = find.byKey(const Key('my-reports-menu-tile'));
+
+    expect(
+      find.descendant(
+        of: photoTile,
+        matching: find.byIcon(Icons.account_circle_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: reportsTile,
+        matching: find.byIcon(Icons.assignment_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: reportsTile,
+        matching: find.byIcon(Icons.shield_outlined),
+      ),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('password dialog supports visibility toggles and success message', (
