@@ -26,6 +26,60 @@ void main() {
     ),
   );
 
+  testWidgets('target card renders a supplied API image with semantics', (
+    tester,
+  ) async {
+    const avatarUrl = 'https://cdn.example.test/avatars/sophie.jpg';
+    await tester.pumpWidget(
+      buildReportScreen(
+        reportContext: const ReportContext(
+          targetType: ReportTargetType.user,
+          targetId: 'user-1',
+          targetLabel: 'Sophie M.',
+          targetImageUrl: avatarUrl,
+          contextType: ReportContextType.chat,
+          contextId: 'chat-1',
+        ),
+      ),
+    );
+
+    final avatar = tester.widget<CircleAvatar>(
+      find.byKey(const Key('report_target_image')),
+    );
+    expect(avatar.foregroundImage, isA<NetworkImage>());
+    expect((avatar.foregroundImage! as NetworkImage).url, avatarUrl);
+    final semantics = tester.widget<Semantics>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('report_target_image')),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+    expect(semantics.properties.label, 'Avatar for Sophie M.');
+    expect(semantics.properties.image, isTrue);
+  });
+
+  testWidgets('target card keeps its semantic icon without an image URL', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      buildReportScreen(
+        reportContext: const ReportContext(
+          targetType: ReportTargetType.user,
+          targetLabel: 'Sophie M.',
+          contextType: ReportContextType.chat,
+        ),
+      ),
+    );
+
+    final avatar = tester.widget<CircleAvatar>(
+      find.byKey(const Key('report_target_image')),
+    );
+    expect(avatar.foregroundImage, isNull);
+    expect(find.byIcon(Icons.person_outline), findsOneWidget);
+  });
+
   testWidgets('default submit action waits for a persisted report receipt', (
     tester,
   ) async {

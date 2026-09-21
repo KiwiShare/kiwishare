@@ -330,6 +330,15 @@ class _ReportTargetCard extends StatelessWidget {
       ReportTargetType.user => Icons.person_outline,
       ReportTargetType.general => Icons.shield_outlined,
     };
+    final targetImageUrl = reportContext.targetImageUrl?.trim();
+    final hasTargetImage = targetImageUrl != null && targetImageUrl.isNotEmpty;
+    final imageLabel = switch (reportContext.targetType) {
+      ReportTargetType.user =>
+        'Avatar for ${reportContext.targetLabel ?? 'reported user'}',
+      ReportTargetType.listing =>
+        'Image for ${reportContext.targetLabel ?? 'reported listing'}',
+      ReportTargetType.general => 'Safety report',
+    };
     return Card(
       elevation: 1,
       margin: EdgeInsets.zero,
@@ -337,10 +346,19 @@ class _ReportTargetCard extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: colors.secondaryContainer,
-              foregroundColor: colors.onSecondaryContainer,
-              child: Icon(targetIcon),
+            Semantics(
+              label: imageLabel,
+              image: hasTargetImage,
+              child: CircleAvatar(
+                key: const Key('report_target_image'),
+                backgroundColor: colors.secondaryContainer,
+                foregroundColor: colors.onSecondaryContainer,
+                foregroundImage: hasTargetImage
+                    ? NetworkImage(targetImageUrl)
+                    : null,
+                onForegroundImageError: hasTargetImage ? (_, _) {} : null,
+                child: ExcludeSemantics(child: Icon(targetIcon)),
+              ),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
