@@ -228,29 +228,6 @@ class AuthProvider extends ChangeNotifier {
           notifyListeners();
           return;
         }
-        // In local development / iOS simulator when Google account/browser flow is unavailable:
-        if (kDebugMode &&
-            (pe.code == 'network_error' ||
-             pe.code == 'sign_in_failed' ||
-             pe.message?.contains('keychain') == true ||
-             pe.message?.contains('Safari') == true)) {
-          debugPrint('[AuthProvider] Using dev mock token fallback on Simulator.');
-          final result = await userRepository.loginWithGoogle('mock_google_token_sam');
-          final token = result['token'] as String;
-          final user = result['user'] as UserModel;
-
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('jwt_token', token);
-          await prefs.setString('current_user', jsonEncode(user.toJson()));
-
-          _jwtToken = token;
-          _currentUser = user;
-          _isLoggedIn = true;
-          unawaited(
-            pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
-          );
-          return;
-        }
         rethrow;
       }
 
@@ -283,12 +260,7 @@ class AuthProvider extends ChangeNotifier {
       }
 
       if (idToken == null || idToken.isEmpty) {
-        if (kDebugMode) {
-          debugPrint('[AuthProvider] No idToken received in debug mode, using mock token.');
-          idToken = 'mock_google_token_sam';
-        } else {
-          throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
-        }
+        throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
       }
 
       final result = await userRepository.loginWithGoogle(idToken);
@@ -369,6 +341,24 @@ class AuthProvider extends ChangeNotifier {
         }
       } catch (_) {}
     }
+  }
+
+  Future<void> updateUsername(String value) async {
+    final username = value.trim();
+    if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(username)) {
+      throw ArgumentError(
+        'Username must be 3-24 characters using only letters, numbers, or underscores.',
+      );
+    }
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to set your username.');
+    }
+    final updated = await userRepository.updateProfile(
+      token: token,
+      username: username,
+    );
+    await _storeProfile(token, updated);
   }
 
   Future<void> updateDisplayName(String value) async {
