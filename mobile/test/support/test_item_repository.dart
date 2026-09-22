@@ -222,7 +222,17 @@ class TestItemRepository implements ItemRepository {
   }
 
   @override
-  Future<List<ItemModel>> fetchRecommendedItems({int limit = 10}) async {
+  Future<List<ItemModel>> fetchFeaturedItems({int limit = 10}) async {
+    return fetchRecommendedItems(limit: limit);
+  }
+
+  @override
+  Future<List<ItemModel>> fetchRecommendedItems({
+    int limit = 10,
+    double? latitude,
+    double? longitude,
+    String? token,
+  }) async {
     final active = items
         .where((item) => item.status == ItemStatus.active)
         .toList();

@@ -87,6 +87,18 @@ abstract class UserRepository {
     String userId, {
     String? token,
   });
+  Future<void> submitReview({
+    required String targetUserId,
+    required int rating,
+    required String comment,
+    List<String>? tags,
+    String? orderId,
+    String? itemId,
+    String? role,
+    String? itemTitle,
+    String? itemImageUrl,
+    required String token,
+  });
   Future<void> changePassword({
     required String token,
     required String currentPassword,
@@ -573,6 +585,48 @@ class RestUserRepository implements UserRepository {
         .map((r) => PublicReviewModel.fromJson(r as Map<String, dynamic>))
         .toList();
   }
+
+  @override
+  Future<void> submitReview({
+    required String targetUserId,
+    required int rating,
+    required String comment,
+    List<String>? tags,
+    String? orderId,
+    String? itemId,
+    String? role,
+    String? itemTitle,
+    String? itemImageUrl,
+    required String token,
+  }) async {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+    final body = jsonEncode({
+      'rating': rating,
+      'comment': comment,
+      'tags': tags ?? [],
+      'orderId': orderId,
+      'itemId': itemId,
+      'role': role ?? 'buyer',
+      'itemTitle': itemTitle,
+      'itemImageUrl': itemImageUrl,
+    });
+    late final http.Response response;
+    try {
+      response = await _client.post(
+        Uri.parse('${ApiConfig.baseUrl}/api/users/$targetUserId/reviews'),
+        headers: headers,
+        body: body,
+      );
+    } catch (_) {
+      throw const UserNetworkException();
+    }
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw const UserRepositoryException('Failed to submit review.');
+    }
+  }
 }
 
 class MockUserRepository implements UserRepository {
@@ -702,6 +756,20 @@ class MockUserRepository implements UserRepository {
       )
     ];
   }
+
+  @override
+  Future<void> submitReview({
+    required String targetUserId,
+    required int rating,
+    required String comment,
+    List<String>? tags,
+    String? orderId,
+    String? itemId,
+    String? role,
+    String? itemTitle,
+    String? itemImageUrl,
+    required String token,
+  }) async {}
 
   @override
   Future<void> changePassword({

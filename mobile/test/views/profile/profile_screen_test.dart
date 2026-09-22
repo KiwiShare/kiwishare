@@ -117,7 +117,7 @@ void main() {
     // Verify user info and trust badge
     expect(find.text('Riley'), findsWidgets);
     expect(find.text('Trust score 95'), findsOneWidget);
-    expect(find.byKey(const Key('profile-scan-qr-button')), findsOneWidget);
+    expect(find.byKey(const Key('profile-support-button')), findsOneWidget);
 
     // Verify Xianyu 3-column marketplace action grid (6 modules)
     expect(find.text('My marketplace'), findsOneWidget);
@@ -126,7 +126,7 @@ void main() {
     expect(find.text('Watchlist'), findsOneWidget);
     expect(find.text('Listings'), findsOneWidget);
     expect(find.text('Sold'), findsOneWidget);
-    expect(find.text('Payment'), findsOneWidget);
+    expect(find.text('Wallet'), findsOneWidget);
 
     // Verify preference & safety sections
     await tester.scrollUntilVisible(find.text('Appearance'), 100);

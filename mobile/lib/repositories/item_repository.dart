@@ -9,7 +9,15 @@ import '../models/item_model.dart';
 abstract class ItemRepository {
   Future<ItemModel?> fetchItemById(String id);
   Future<List<ItemModel>> fetchPopularItems();
-  Future<List<ItemModel>> fetchRecommendedItems({int limit = 10});
+  Future<List<ItemModel>> fetchFeaturedItems({int limit = 10}) {
+    return fetchRecommendedItems(limit: limit);
+  }
+  Future<List<ItemModel>> fetchRecommendedItems({
+    int limit = 10,
+    double? latitude,
+    double? longitude,
+    String? token,
+  });
   Future<DiscoveryOptionsModel> fetchDiscoveryOptions();
   Future<List<ItemModel>> fetchDiscoveryItems(DiscoveryQuery query);
   Stream<List<ItemModel>> searchItems({String? query, String? category});
@@ -174,13 +182,40 @@ class RestItemRepository implements ItemRepository {
   }
 
   @override
-  Future<List<ItemModel>> fetchRecommendedItems({int limit = 10}) async {
+  Future<List<ItemModel>> fetchFeaturedItems({int limit = 10}) async {
     final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/api/usedItems/recommended',
+      '${ApiConfig.baseUrl}/api/usedItems/featured',
     ).replace(queryParameters: {'limit': limit.toString()});
-    final response = await http.get(
+    final response = await _client.get(
       uri,
       headers: {'Accept': 'application/json'},
+    );
+    return _parseItemsResponse(
+      response,
+      'Failed to fetch featured listings from server.',
+    );
+  }
+
+  @override
+  Future<List<ItemModel>> fetchRecommendedItems({
+    int limit = 10,
+    double? latitude,
+    double? longitude,
+    String? token,
+  }) async {
+    final params = <String, String>{'limit': limit.toString()};
+    if (latitude != null) params['latitude'] = latitude.toString();
+    if (longitude != null) params['longitude'] = longitude.toString();
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/usedItems/recommended',
+    ).replace(queryParameters: params);
+    final headers = <String, String>{'Accept': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    final response = await _client.get(
+      uri,
+      headers: headers,
     );
     return _parseItemsResponse(
       response,

@@ -86,6 +86,11 @@ export function formatOrderMeetup(order: any, userId: string, qrCodeToken?: stri
     proposedBy: objectId(order.meeting?.proposedBy),
     note: order.meeting?.note ?? '',
     qrToken: qrCodeToken ?? null,
+    buyerConfirmedAt: order.buyerConfirmedAt ? new Date(order.buyerConfirmedAt).toISOString() : null,
+    sellerConfirmedAt: order.sellerConfirmedAt ? new Date(order.sellerConfirmedAt).toISOString() : null,
+    buyerConfirmed: Boolean(order.buyerConfirmedAt),
+    sellerConfirmed: Boolean(order.sellerConfirmedAt),
+    bothConfirmed: Boolean(order.status === 'completed' || (order.buyerConfirmedAt && order.sellerConfirmedAt)),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt
   };
@@ -740,74 +745,116 @@ router.post('/:orderId/confirm-handover', async (ctx: Context) => {
   }
 
   const now = new Date();
-  order.status = 'completed';
-  order.completedAt = now;
-  order.qrScannedAt = now;
   if (isBuyer) {
     order.buyerConfirmedAt = now;
   }
-  if (!order.completionCredit?.awardedAt) {
-    order.completionCredit = {
-      pointsPerParticipant: 10,
-      awardedAt: now
-    };
+  if (isSeller) {
+    order.sellerConfirmedAt = now;
   }
-  await order.save();
 
-  // Mark active QR as consumed
-  await QrCode.updateMany(
-    { orderId: order._id, status: 'active' },
-    { $set: { status: 'consumed', scannedAt: now, consumedAt: now, scannedByUserId: userId } }
-  );
-
-  // Update item status and transfer ownership
-  await Item.findByIdAndUpdate(order.itemId, {
-    $set: { status: 'sold', sellerId: order.buyerId, ownerId: buyerId }
-  });
-
-  // Award trust score (+10)
-  await User.updateMany(
-    { _id: { $in: [order.buyerId, order.sellerId] } },
-    { $inc: { trustScore: 10 } }
-  );
-
-  // Post in-chat notification message to conversation
+  const bothConfirmed = Boolean(order.buyerConfirmedAt && order.sellerConfirmedAt);
   const counterpartyId = isBuyer ? sellerId : buyerId;
+
   const conversation = await Conversation.findOne({
     itemId: order.itemId,
     buyerId: order.buyerId,
     sellerId: order.sellerId
   });
-  if (conversation) {
-    const actionText = isBuyer
-      ? 'Buyer confirmed receipt of the item.'
-      : 'Seller confirmed handover of the item.';
-    await new Message({
-      conversationId: conversation._id,
-      senderId: userId,
-      receiverId: new mongoose.Types.ObjectId(counterpartyId),
-      type: 'text',
-      text: `🤝 [Handover Completed] ${actionText} Transaction successfully completed!`,
-      status: 'sent'
-    }).save();
 
-    await Conversation.findByIdAndUpdate(conversation._id, {
-      $set: {
-        lastMessageText: `🤝 Handover completed!`,
-        lastMessageAt: now,
-        lastMessageSenderId: userId
-      }
+  if (bothConfirmed) {
+    order.status = 'completed';
+    order.completedAt = now;
+    order.qrScannedAt = now;
+    order.sellerPaidAt = now; // Money released to seller!
+    if (!order.completionCredit?.awardedAt) {
+      order.completionCredit = {
+        pointsPerParticipant: 5,
+        awardedAt: now
+      };
+    }
+    await order.save();
+
+    // Mark active QR as consumed
+    await QrCode.updateMany(
+      { orderId: order._id, status: 'active' },
+      { $set: { status: 'consumed', scannedAt: now, consumedAt: now, scannedByUserId: userId } }
+    );
+
+    // Update item status and transfer ownership
+    await Item.findByIdAndUpdate(order.itemId, {
+      $set: { status: 'sold', sellerId: order.buyerId, ownerId: buyerId }
     });
-  }
 
-  ctx.status = 200;
-  ctx.body = {
-    status: 'success',
-    message: isBuyer
-      ? 'Receipt confirmed successfully! Transaction complete.'
-      : 'Handover confirmed successfully! Transaction complete.',
-    meetup: formatOrderMeetup(order, userStr)
-  };
+    // Award trust score (+5 to each participant)
+    await User.updateMany(
+      { _id: { $in: [order.buyerId, order.sellerId] } },
+      { $inc: { trustScore: 5 } }
+    );
+
+    // Post in-chat notification message to conversation
+    if (conversation) {
+      await new Message({
+        conversationId: conversation._id,
+        senderId: userId,
+        receiverId: new mongoose.Types.ObjectId(counterpartyId),
+        type: 'text',
+        text: `🤝 [Transaction Completed] Both parties confirmed handover & receipt! Funds have been released to the seller. Please leave a review for each other!`,
+        status: 'sent'
+      }).save();
+
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        $set: {
+          lastMessageText: `🤝 Transaction completed! Funds released.`,
+          lastMessageAt: now,
+          lastMessageSenderId: userId
+        }
+      });
+    }
+
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      message: 'Both parties confirmed! Transaction complete and funds have been released to the seller.',
+      bothConfirmed: true,
+      meetup: formatOrderMeetup(order, userStr)
+    };
+  } else {
+    // Only one party has confirmed so far. Keep order active, funds held in escrow.
+    await order.save();
+
+    if (conversation) {
+      const notice = isBuyer
+        ? '📦 [Receipt Confirmed] Buyer confirmed receipt! Waiting for seller handover confirmation to release funds.'
+        : '📦 [Handover Confirmed] Seller confirmed handover! Waiting for buyer receipt confirmation to release funds.';
+
+      await new Message({
+        conversationId: conversation._id,
+        senderId: userId,
+        receiverId: new mongoose.Types.ObjectId(counterpartyId),
+        type: 'text',
+        text: notice,
+        status: 'sent'
+      }).save();
+
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        $set: {
+          lastMessageText: isBuyer ? '📦 Buyer confirmed receipt' : '📦 Seller confirmed handover',
+          lastMessageAt: now,
+          lastMessageSenderId: userId
+        }
+      });
+    }
+
+    ctx.status = 200;
+    ctx.body = {
+      status: 'success',
+      message: isBuyer
+        ? 'Receipt confirmed! Waiting for seller confirmation to release funds.'
+        : 'Handover confirmed! Waiting for buyer confirmation to release funds.',
+      bothConfirmed: false,
+      meetup: formatOrderMeetup(order, userStr)
+    };
+  }
 });
 
 export default router;

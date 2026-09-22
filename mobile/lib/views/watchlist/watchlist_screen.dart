@@ -65,19 +65,6 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     );
   }
 
-  Future<void> _updatePriceAlerts(
-    WatchlistProvider watchlist,
-    bool enabled,
-  ) async {
-    final saved = await watchlist.updateNotificationPreference(enabled);
-    if (!mounted || saved) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Could not update Price alerts. Please try again.'),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final watchlist = context.watch<WatchlistProvider>();
@@ -121,22 +108,6 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   child: _WatchlistHeader(
                     itemCount: items.length,
                     filteredCount: isFiltered ? filteredItems.length : null,
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg,
-                    vertical: AppSpacing.xs,
-                  ),
-                  child: _PriceAlertsCard(
-                    value: watchlist.watchlistPriceDropEnabled,
-                    isLoading: watchlist.isLoadingPreference,
-                    isUpdating: watchlist.isUpdatingPreference,
-                    hasError: watchlist.preferenceError != null,
-                    onChanged: (value) => _updatePriceAlerts(watchlist, value),
-                    onRetry: watchlist.loadNotificationPreference,
                   ),
                 ),
               ),
@@ -359,62 +330,6 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   }
 }
 
-class _PriceAlertsCard extends StatelessWidget {
-  const _PriceAlertsCard({
-    required this.value,
-    required this.isLoading,
-    required this.isUpdating,
-    required this.hasError,
-    required this.onChanged,
-    required this.onRetry,
-  });
-
-  final bool? value;
-  final bool isLoading;
-  final bool isUpdating;
-  final bool hasError;
-  final ValueChanged<bool> onChanged;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = value ?? false;
-    final semanticState = value == null ? 'loading' : (enabled ? 'on' : 'off');
-    return Semantics(
-      container: true,
-      label: 'Price alerts, $semanticState',
-      child: Card(
-        child: ListTile(
-          minVerticalPadding: AppSpacing.sm,
-          leading: const Icon(Icons.notifications_active_outlined),
-          title: const Text('Price alerts'),
-          subtitle: Text(
-            hasError
-                ? 'Could not load your preference.'
-                : 'Notify me when a saved item drops in price.',
-          ),
-          trailing: hasError && value == null
-              ? TextButton(
-                  key: const Key('watchlist-price-alerts-retry'),
-                  onPressed: isLoading ? null : onRetry,
-                  child: const Text('Retry'),
-                )
-              : isLoading && value == null
-              ? const SizedBox.square(
-                  dimension: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Switch(
-                  key: const Key('watchlist-price-alerts-switch'),
-                  value: enabled,
-                  onChanged: isUpdating ? null : onChanged,
-                ),
-        ),
-      ),
-    );
-  }
-}
-
 class _WatchlistErrorView extends StatelessWidget {
   const _WatchlistErrorView({required this.onRetry});
 
@@ -474,6 +389,7 @@ class _WatchlistHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -488,6 +404,7 @@ class _WatchlistHeader extends StatelessWidget {
                   'Watchlist',
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.w900,
+                    fontSize: 24,
                     letterSpacing: -0.6,
                   ),
                 ),

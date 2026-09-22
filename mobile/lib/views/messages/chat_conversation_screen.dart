@@ -27,6 +27,7 @@ import '../products/product_detail_screen.dart';
 import '../profile/payment_checkout_screen.dart';
 import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
+import '../shared/widgets/review_bottom_sheet.dart';
 import 'widgets/location_bubble.dart';
 import 'widgets/location_picker_sheet.dart';
 import 'widgets/meetup_card_bubble.dart';
@@ -1258,6 +1259,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       } catch (_) {}
     }
 
+    final isBuyer = widget.conversation.direction == ChatDirection.buying;
+
     final isPaid =
         _itemPaid ||
         (order != null && (order.isPaid || order.isCompleted)) ||
@@ -1267,7 +1270,180 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         meetup != null && !meetup.isCancelled && !meetup.isDeclined;
     final isMeetupConfirmed =
         hasMeetup && (meetup.isConfirmed || cachedMeetup?.isConfirmed == true);
-    final isBuyer = widget.conversation.direction == ChatDirection.buying;
+    final isCompleted =
+        (order != null &&
+            (order.isCompleted ||
+                order.status == 'completed' ||
+                order.status == 'seller_paid')) ||
+        (cachedMeetup != null && cachedMeetup.isCompleted) ||
+        messages.any(
+          (m) =>
+              m.text.contains('Transaction successfully completed') ||
+              m.text.contains('[Transaction Completed]'),
+        );
+
+    // If completed, show transaction complete & review card
+    if (isCompleted) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF064E3B).withOpacity(0.35)
+              : const Color(0xFFECFDF5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFF059669),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.celebration_rounded,
+                  size: 18,
+                  color: Color(0xFF059669),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Transaction Completed & Funds Released!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark
+                          ? const Color(0xFF6EE7B7)
+                          : const Color(0xFF047857),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.push('/orders'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: Text(
+                    'Order Info',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: colors.primary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Handover is confirmed! Please take a moment to leave a review for the counterparty to help build trust.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: isDark
+                    ? const Color(0xFFA7F3D0)
+                    : const Color(0xFF065F46),
+              ),
+            ),
+            if (!isBuyer) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF3B82F6).withValues(alpha: 0.3)
+                        : const Color(0xFFBFDBFE),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      size: 16,
+                      color: Color(0xFF2563EB),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Payout: Transferring to your saved card or bind one in Wallet.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1E40AF),
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => context.push('/profile'),
+                      child: Text(
+                        'Wallet',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 34,
+              child: FilledButton.icon(
+                key: const Key('chat_order_leave_review_btn'),
+                onPressed: () {
+                  final targetUserId = _effectiveParticipantId;
+                  final targetName = widget.conversation.participantName;
+                  final targetAvatar = widget.conversation.participantAvatarUrl;
+                  ReviewBottomSheet.show(
+                    context,
+                    targetUserId: targetUserId,
+                    targetName: targetName,
+                    targetAvatarUrl: targetAvatar,
+                    orderId: order?.id,
+                    itemId: widget.conversation.itemId,
+                    itemTitle: widget.conversation.itemTitle,
+                    itemImageUrl: widget.conversation.itemImageUrl,
+                    role: isBuyer ? 'seller' : 'buyer',
+                  );
+                },
+                icon: const Icon(Icons.star_rounded, size: 16, color: Colors.amber),
+                label: Text(
+                  'Rate & Review ${widget.conversation.participantName}',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF059669),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     // If no order exists and no meetup exists, don't show order card
     if (order == null && !hasMeetup && !_itemPaid) {
@@ -2009,6 +2185,39 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     });
   }
 
+  String get _effectiveParticipantId {
+    final fromCached =
+        _chatProvider.conversationById(widget.conversation.id)?.participantId;
+    if (fromCached != null && fromCached.isNotEmpty) return fromCached;
+    if (widget.conversation.participantId.isNotEmpty) {
+      return widget.conversation.participantId;
+    }
+    final msgs = _chatProvider.messagesFor(widget.conversation.id);
+    for (final m in msgs) {
+      if (!m.isMine && m.senderId.isNotEmpty) return m.senderId;
+    }
+    return '';
+  }
+
+  void _openParticipantProfile() {
+    final pid = _effectiveParticipantId;
+    if (pid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Participant profile is loading, please try again.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => PublicProfileScreen(userId: pid),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = _chatProvider;
@@ -2021,16 +2230,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         title: InkWell(
           key: const Key('conversation_participant_header'),
           borderRadius: BorderRadius.circular(8),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => PublicProfileScreen(
-                  userId: widget.conversation.participantId,
-                ),
-              ),
-            );
-          },
+          onTap: _openParticipantProfile,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: Row(
@@ -2259,6 +2459,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final latestSentIndex = messages.lastIndexWhere(
       (message) => message.isMine,
     );
+    final auth = context.watch<AuthProvider?>();
+    final myAvatarUrl = auth?.currentUser?.avatarUrl;
+    final myDisplayName = auth?.currentUser?.displayName ?? 'You';
+    final otherAvatarUrl = widget.conversation.participantAvatarUrl;
+    final otherDisplayName = widget.conversation.participantName;
+
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => _messageFocusNode.unfocus(),
@@ -2276,6 +2482,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             showReadReceipt:
                 index == latestSentIndex && message.status == 'read',
             onBeforeAccept: () => _confirmCancelPreviousMeetupIfNeeded(message),
+            myAvatarUrl: myAvatarUrl,
+            myDisplayName: myDisplayName,
+            otherAvatarUrl: otherAvatarUrl,
+            otherDisplayName: otherDisplayName,
+            onOtherAvatarTap: _openParticipantProfile,
             onMeetupStatusChanged: () {
               final token = _currentAuthToken;
               if (token != null && token.isNotEmpty) {
@@ -2304,6 +2515,11 @@ class _MessageBubble extends StatelessWidget {
     this.isBuyer = false,
     this.onMeetupStatusChanged,
     this.onBeforeAccept,
+    this.myAvatarUrl,
+    this.myDisplayName,
+    this.otherAvatarUrl,
+    this.otherDisplayName,
+    this.onOtherAvatarTap,
   });
 
   final ChatMessageModel message;
@@ -2311,6 +2527,11 @@ class _MessageBubble extends StatelessWidget {
   final bool isBuyer;
   final VoidCallback? onMeetupStatusChanged;
   final Future<bool> Function()? onBeforeAccept;
+  final String? myAvatarUrl;
+  final String? myDisplayName;
+  final String? otherAvatarUrl;
+  final String? otherDisplayName;
+  final VoidCallback? onOtherAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2374,92 +2595,153 @@ class _MessageBubble extends StatelessWidget {
         : message.isVoice
         ? 'a voice message'
         : message.text;
+
+    final bubbleWidget = Container(
+      key: Key('chat_message_${message.id}'),
+      constraints: const BoxConstraints(maxWidth: 270),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: mine
+            ? Theme.of(context).colorScheme.primary
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(AppRadius.medium),
+          topRight: const Radius.circular(AppRadius.medium),
+          bottomLeft: Radius.circular(mine ? AppRadius.medium : 4),
+          bottomRight: Radius.circular(mine ? 4 : AppRadius.medium),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: mine
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          if (message.isImage)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              child: Image.network(
+                _resolvedChatImageUrl(message.imageUrl!),
+                key: Key('chat_message_image_${message.id}'),
+                width: 220,
+                height: 180,
+                fit: BoxFit.cover,
+                errorBuilder: (context, _, _) => SizedBox(
+                  width: 220,
+                  height: 120,
+                  child: Center(
+                    child: Icon(
+                      Icons.broken_image_outlined,
+                      color: mine
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else if (message.isVoice)
+            _VoiceMessageBubble(
+              messageId: message.id,
+              audioUrl: _resolvedChatAssetUrl(message.audioUrl!),
+              durationMs: message.durationMs!,
+              mine: mine,
+            )
+          else
+            _ActionOrTextMessage(text: message.text, mine: mine),
+          const SizedBox(height: 2),
+          Text(
+            _messageTime(message.createdAt),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: mine
+                  ? Theme.of(
+                      context,
+                    ).colorScheme.onPrimary.withValues(alpha: 0.78)
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (showReadReceipt)
+            Text(
+              'Read',
+              key: Key('chat_read_receipt_${message.id}'),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onPrimary.withValues(alpha: 0.78),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    final counterpartAvatar = GestureDetector(
+      onTap: onOtherAvatarTap,
+      child: CircleAvatar(
+        radius: 14,
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        backgroundImage:
+            otherAvatarUrl != null && otherAvatarUrl!.isNotEmpty
+                ? NetworkImage(otherAvatarUrl!)
+                : null,
+        child: otherAvatarUrl == null || otherAvatarUrl!.isEmpty
+            ? Text(
+                otherDisplayName != null && otherDisplayName!.isNotEmpty
+                    ? otherDisplayName![0].toUpperCase()
+                    : '?',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              )
+            : null,
+      ),
+    );
+
+    final myAvatar = CircleAvatar(
+      radius: 14,
+      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+      backgroundImage: myAvatarUrl != null && myAvatarUrl!.isNotEmpty
+          ? NetworkImage(myAvatarUrl!)
+          : null,
+      child: myAvatarUrl == null || myAvatarUrl!.isEmpty
+          ? Text(
+              myDisplayName != null && myDisplayName!.isNotEmpty
+                  ? myDisplayName![0].toUpperCase()
+                  : 'ME',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSecondaryContainer,
+              ),
+            )
+          : null,
+    );
+
     return Semantics(
       excludeSemantics: !message.isVoice,
       label: mine
           ? 'You sent $semanticContent${showReadReceipt ? ', read' : ''}'
           : 'They sent $semanticContent',
-      child: Align(
-        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          key: Key('chat_message_${message.id}'),
-          constraints: const BoxConstraints(maxWidth: 300),
-          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
-          decoration: BoxDecoration(
-            color: mine
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(AppRadius.medium),
-              topRight: const Radius.circular(AppRadius.medium),
-              bottomLeft: Radius.circular(mine ? AppRadius.medium : 4),
-              bottomRight: Radius.circular(mine ? 4 : AppRadius.medium),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: mine
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
-            children: [
-              if (message.isImage)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.small),
-                  child: Image.network(
-                    _resolvedChatImageUrl(message.imageUrl!),
-                    key: Key('chat_message_image_${message.id}'),
-                    width: 220,
-                    height: 180,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, _, _) => SizedBox(
-                      width: 220,
-                      height: 120,
-                      child: Center(
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          color: mine
-                              ? Theme.of(context).colorScheme.onPrimary
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              else if (message.isVoice)
-                _VoiceMessageBubble(
-                  messageId: message.id,
-                  audioUrl: _resolvedChatAssetUrl(message.audioUrl!),
-                  durationMs: message.durationMs!,
-                  mine: mine,
-                )
-              else
-                _ActionOrTextMessage(text: message.text, mine: mine),
-              const SizedBox(height: 2),
-              Text(
-                _messageTime(message.createdAt),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: mine
-                      ? Theme.of(
-                          context,
-                        ).colorScheme.onPrimary.withValues(alpha: 0.78)
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              if (showReadReceipt)
-                Text(
-                  'Read',
-                  key: Key('chat_read_receipt_${message.id}'),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onPrimary.withValues(alpha: 0.78),
-                  ),
-                ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: Row(
+          mainAxisAlignment:
+              mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!mine) ...[
+              counterpartAvatar,
+              const SizedBox(width: 8),
             ],
-          ),
+            Flexible(child: bubbleWidget),
+            if (mine) ...[
+              const SizedBox(width: 8),
+              myAvatar,
+            ],
+          ],
         ),
       ),
     );

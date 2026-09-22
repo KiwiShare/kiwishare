@@ -207,15 +207,18 @@ void main() async {
     permissionController: pushNotifications,
   );
 
+  final userRepository = RestUserRepository();
+
   runApp(
     MultiProvider(
       providers: [
+        Provider<UserRepository>.value(value: userRepository),
         Provider<NotificationPermissionCoordinator>.value(
           value: notificationCoordinator,
         ),
         ChangeNotifierProvider(
           create: (_) => AuthProvider(
-            userRepository: RestUserRepository(),
+            userRepository: userRepository,
             pushNotifications: pushNotifications,
           ),
         ),

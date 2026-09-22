@@ -12,6 +12,7 @@ import '../../services/product_location_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/resilient_network_image.dart';
 import '../../widgets/kiwishare_logo.dart';
+import '../scanner/qr_scanner_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import 'widgets/home_filter_sheet.dart';
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final ProductLocationService _locationService;
   late HomeDiscoveryProvider _discovery;
   Future<List<ItemModel>>? _itemsFuture;
+  Future<List<ItemModel>>? _featuredFuture;
   Future<List<ItemModel>>? _recommendedFuture;
   Timer? _filterDebounce;
   Object? _optionsError;
@@ -61,10 +63,17 @@ class _HomeScreenState extends State<HomeScreen> {
     _discovery = context.read<HomeDiscoveryProvider>();
     _searchController.text = _discovery.query;
     _lastRequestedQuery = _discovery.discoveryQuery;
+    final token = context.read<AuthProvider?>()?.jwtToken;
     _itemsFuture = listingProvider.getDiscoveryItems(
       query: _discovery.discoveryQuery,
     );
-    _recommendedFuture = listingProvider.getRecommendedItems(limit: 10);
+    _featuredFuture = listingProvider.getFeaturedItems(limit: 10);
+    _recommendedFuture = listingProvider.getRecommendedItems(
+      limit: 10,
+      latitude: _discovery.userLatitude,
+      longitude: _discovery.userLongitude,
+      token: token,
+    );
     _discovery.addListener(_onDiscoveryChanged);
     _initialized = true;
     unawaited(_loadDiscoveryOptions());
@@ -140,18 +149,27 @@ class _HomeScreenState extends State<HomeScreen> {
     final query = _discovery.discoveryQuery;
     final listingProvider = context.read<ListingProvider>();
     _lastRequestedQuery = query;
+    final token = context.read<AuthProvider?>()?.jwtToken;
     setState(() {
       _itemsFuture = listingProvider.getDiscoveryItems(
         query: query,
         forceRefresh: true,
       );
+      _featuredFuture = listingProvider.getFeaturedItems(
+        limit: 10,
+        forceRefresh: true,
+      );
       _recommendedFuture = listingProvider.getRecommendedItems(
         limit: 10,
+        latitude: _discovery.userLatitude,
+        longitude: _discovery.userLongitude,
+        token: token,
         forceRefresh: true,
       );
     });
     await Future.wait([
       _itemsFuture!,
+      if (_featuredFuture != null) _featuredFuture!,
       _recommendedFuture!,
       _loadDiscoveryOptions(forceRefresh: true),
     ]);
@@ -181,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(AppRadius.large),
@@ -230,10 +248,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final filters = context.watch<HomeDiscoveryProvider>();
-    final isDefaultHome =
-        filters.selectedCategory == HomeDiscoveryProvider.allCategoriesLabel &&
-        filters.query.isEmpty &&
-        filters.activeFilterCount == 0;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -255,6 +269,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   location: filters.selectedLocation,
                   nearYou: filters.isNearYou,
                   onChooseLocation: _showLocationPicker,
+                  onScanQr: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const QrScannerScreen(),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
@@ -322,29 +342,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 const SizedBox(height: AppSpacing.lg),
-                if (isDefaultHome)
-                  FutureBuilder<List<ItemModel>>(
-                    future: _recommendedFuture,
-                    builder: (context, snapshot) {
-                      final recommended = snapshot.data ?? const <ItemModel>[];
-                      if (recommended.isEmpty) return const SizedBox.shrink();
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _HomeJumboCarousel(
-                            items: recommended,
-                            onOpen: _openProduct,
-                          ),
-                          const SizedBox(height: AppSpacing.xl),
-                          _HomeRecommendedSection(
-                            items: recommended,
-                            onOpen: _openProduct,
-                          ),
-                          const SizedBox(height: AppSpacing.xl),
-                        ],
-                      );
-                    },
-                  ),
+                FutureBuilder<List<ItemModel>>(
+                  future: _featuredFuture,
+                  builder: (context, snapshot) {
+                    final featured = snapshot.data ?? const <ItemModel>[];
+                    if (featured.isEmpty) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                      child: _HomeJumboCarousel(
+                        items: featured,
+                        onOpen: _openProduct,
+                      ),
+                    );
+                  },
+                ),
+                FutureBuilder<List<ItemModel>>(
+                  future: _recommendedFuture,
+                  builder: (context, snapshot) {
+                    final recommended = snapshot.data ?? const <ItemModel>[];
+                    if (recommended.isEmpty) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                      child: _HomeRecommendedSection(
+                        items: recommended,
+                        onOpen: _openProduct,
+                      ),
+                    );
+                  },
+                ),
                 FutureBuilder<List<ItemModel>>(
                   future: _itemsFuture,
                   builder: (context, snapshot) {
@@ -458,11 +483,13 @@ class _HomeHeader extends StatelessWidget {
   final String location;
   final bool nearYou;
   final VoidCallback onChooseLocation;
+  final VoidCallback onScanQr;
 
   const _HomeHeader({
     required this.location,
     required this.nearYou,
     required this.onChooseLocation,
+    required this.onScanQr,
   });
 
   @override
@@ -498,6 +525,14 @@ class _HomeHeader extends StatelessWidget {
             ],
           ),
         ),
+        IconButton(
+          key: const Key('home-scan-qr-button'),
+          icon: const Icon(Icons.qr_code_scanner_rounded, size: 24),
+          tooltip: 'Scan QR Code',
+          onPressed: onScanQr,
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+        const SizedBox(width: 4),
         TextButton.icon(
           key: const Key('home-location-button'),
           onPressed: onChooseLocation,
@@ -1596,8 +1631,13 @@ class _NzCascadingLocationSheetState extends State<_NzCascadingLocationSheet> {
   }
 
   void _selectLocation(String location) {
+    final coords = NzLocations.getApproximateCoordinates(location);
     widget.filters
-      ..setLocation(location)
+      ..setLocation(
+        location,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
+      )
       ..setView(HomeProductView.map);
     Navigator.pop(context);
   }
@@ -1623,7 +1663,7 @@ class _NzCascadingLocationSheetState extends State<_NzCascadingLocationSheet> {
         : const [];
 
     return Material(
-      color: AppColors.surface,
+      color: colors.surface,
       borderRadius: const BorderRadius.vertical(
         top: Radius.circular(AppRadius.large),
       ),
