@@ -73,6 +73,17 @@ class _GridOnlyItemRepository extends TestItemRepository {
   }) async => [];
 }
 
+class _PhotoItemRepository extends TestItemRepository {
+  _PhotoItemRepository()
+    : super(
+        items: [
+          testCatalogItems.first.copyWith(
+            imageUrl: 'https://example.com/monstera.jpg',
+          ),
+        ],
+      );
+}
+
 Widget _homeApp({
   ValueChanged<ItemModel>? onOpenItem,
   TextScaler textScaler = TextScaler.noScaling,
@@ -139,23 +150,73 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Home header actions stay compact with 48px tap targets', (
+  testWidgets('Home header has 38px borderless visuals and 48px tap targets', (
     tester,
   ) async {
-    await _loadHome(tester, _homeApp());
+    for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+      await _loadHome(tester, _homeApp(themeMode: mode));
 
-    final scan = find.byKey(const Key('home-scan-qr-button'));
-    final location = find.byKey(const Key('home-location-button'));
-    final scanRect = tester.getRect(scan);
-    final locationRect = tester.getRect(location);
+      final scan = find.byKey(const Key('home-scan-qr-button'));
+      final location = find.byKey(const Key('home-location-button'));
+      final scanVisual = find.byKey(const Key('home-scan-qr-visual'));
+      final locationVisual = find.byKey(const Key('home-location-visual'));
+      final scanRect = tester.getRect(scan);
+      final locationRect = tester.getRect(location);
 
-    expect(scanRect.size, const Size(48, 48));
-    expect(locationRect.size, const Size(48, 48));
-    expect(locationRect.right - scanRect.left, lessThanOrEqualTo(100));
-    expect(
-      tester.widget<IconButton>(location).tooltip,
-      startsWith('Location: '),
+      expect(scanRect.size, const Size(48, 48));
+      expect(locationRect.size, const Size(48, 48));
+      expect(tester.getSize(scanVisual), const Size(38, 38));
+      expect(tester.getSize(locationVisual), const Size(38, 38));
+      expect(locationRect.right - scanRect.left, lessThanOrEqualTo(100));
+      expect(
+        (tester.widget<Container>(scanVisual).decoration! as BoxDecoration)
+            .border,
+        isNull,
+      );
+      expect(
+        (tester.widget<Container>(locationVisual).decoration! as BoxDecoration)
+            .border,
+        isNull,
+      );
+      expect(
+        tester.widget<IconButton>(location).tooltip,
+        startsWith('Location: '),
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('dark Home cards show a loading state for network photos', (
+    tester,
+  ) async {
+    await _loadHome(
+      tester,
+      _homeApp(themeMode: ThemeMode.dark, itemRepository: _PhotoItemRepository()),
     );
+
+    final networkPhotos = find.byWidgetPredicate(
+      (widget) => widget is Image && widget.image is NetworkImage,
+    );
+    expect(networkPhotos, findsWidgets);
+    for (final image in tester.widgetList<Image>(networkPhotos)) {
+      expect(image.loadingBuilder, isNotNull);
+      expect(image.frameBuilder, isNotNull);
+    }
+
+    final image = tester.widget<Image>(networkPhotos.first);
+    final placeholder = image.frameBuilder!(
+      tester.element(networkPhotos.first),
+      const SizedBox(),
+      null,
+      false,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildKiwiShareDarkTheme(),
+        home: Scaffold(body: SizedBox(width: 200, height: 100, child: placeholder)),
+      ),
+    );
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

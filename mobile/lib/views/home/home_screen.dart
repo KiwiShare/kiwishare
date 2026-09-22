@@ -542,14 +542,27 @@ class _HomeHeader extends StatelessWidget {
         ),
         IconButton(
           key: const Key('home-scan-qr-button'),
-          icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
           tooltip: 'Scan QR Code',
           onPressed: onScanQr,
           style: IconButton.styleFrom(
             minimumSize: const Size.square(48),
-            backgroundColor: colors.surfaceContainerHighest,
-            foregroundColor: colors.onSurface,
-            side: BorderSide(color: colors.outlineVariant),
+            padding: EdgeInsets.zero,
+            backgroundColor: Colors.transparent,
+          ),
+          icon: Container(
+            key: const Key('home-scan-qr-visual'),
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.qr_code_scanner_rounded,
+              size: 19,
+              color: colors.onSurfaceVariant,
+            ),
           ),
         ),
         const SizedBox(width: AppSpacing.xs),
@@ -559,19 +572,27 @@ class _HomeHeader extends StatelessWidget {
           tooltip: 'Location: $locationDescription',
           style: IconButton.styleFrom(
             minimumSize: const Size.square(48),
-            backgroundColor: nearYou
-                ? colors.primaryContainer
-                : colors.surfaceContainerHighest,
-            foregroundColor: nearYou
-                ? colors.onPrimaryContainer
-                : colors.onSurfaceVariant,
-            side: BorderSide(
-              color: nearYou ? colors.primary : colors.outlineVariant,
-            ),
+            padding: EdgeInsets.zero,
+            backgroundColor: Colors.transparent,
           ),
-          icon: Icon(
-            nearYou ? Icons.my_location : Icons.location_on_outlined,
-            size: 22,
+          icon: Container(
+            key: const Key('home-location-visual'),
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: nearYou
+                  ? colors.primaryContainer
+                  : colors.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              nearYou ? Icons.my_location : Icons.location_on_outlined,
+              size: 19,
+              color: nearYou
+                  ? colors.onPrimaryContainer
+                  : colors.onSurfaceVariant,
+            ),
           ),
         ),
       ],
@@ -677,6 +698,36 @@ class _HomeJumboCarousel extends StatelessWidget {
   }
 }
 
+class _HomeImagePlaceholder extends StatelessWidget {
+  final bool loading;
+  final IconData icon;
+
+  const _HomeImagePlaceholder({
+    this.loading = false,
+    this.icon = Icons.image_outlined,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ColoredBox(
+      color: colors.surfaceContainerHighest,
+      child: Center(
+        child: loading
+            ? SizedBox.square(
+                dimension: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: colors.primary,
+                  semanticsLabel: 'Loading product photo',
+                ),
+              )
+            : Icon(icon, size: 30, color: colors.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
 class _HomeJumboCard extends StatelessWidget {
   final ItemModel item;
   final VoidCallback onTap;
@@ -710,22 +761,21 @@ class _HomeJumboCard extends StatelessWidget {
                     ? Image.network(
                         item.imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: AppColors.brandPrimaryAlt,
-                          child: const Icon(
-                            Icons.image_not_supported_outlined,
-                            color: Colors.white70,
-                            size: 40,
-                          ),
-                        ),
+                        frameBuilder: (context, child, frame, wasSync) =>
+                            frame == null && !wasSync
+                            ? const _HomeImagePlaceholder(loading: true)
+                            : child,
+                        loadingBuilder: (context, child, progress) =>
+                            progress == null
+                            ? child
+                            : const _HomeImagePlaceholder(loading: true),
+                        errorBuilder: (context, error, stackTrace) =>
+                            const _HomeImagePlaceholder(
+                              icon: Icons.image_not_supported_outlined,
+                            ),
                       )
-                    : Container(
-                        color: AppColors.brandPrimaryAlt,
-                        child: const Icon(
-                          Icons.local_florist_rounded,
-                          color: Colors.white70,
-                          size: 40,
-                        ),
+                    : const _HomeImagePlaceholder(
+                        icon: Icons.local_florist_rounded,
                       ),
                 DecoratedBox(
                   decoration: BoxDecoration(
@@ -1078,21 +1128,21 @@ class _RecommendedProductCard extends StatelessWidget {
                           ? Image.network(
                               item.imageUrl,
                               fit: BoxFit.cover,
+                              frameBuilder: (context, child, frame, wasSync) =>
+                                  frame == null && !wasSync
+                                  ? const _HomeImagePlaceholder(loading: true)
+                                  : child,
+                              loadingBuilder: (context, child, progress) =>
+                                  progress == null
+                                  ? child
+                                  : const _HomeImagePlaceholder(loading: true),
                               errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                    color: AppColors.surfaceMuted,
-                                    child: const Icon(
-                                      Icons.image_not_supported_outlined,
-                                      color: AppColors.brandSecondary,
-                                    ),
+                                  const _HomeImagePlaceholder(
+                                    icon: Icons.image_not_supported_outlined,
                                   ),
                             )
-                          : Container(
-                              color: AppColors.surfaceMuted,
-                              child: const Icon(
-                                Icons.eco_outlined,
-                                color: AppColors.brandPrimary,
-                              ),
+                          : const _HomeImagePlaceholder(
+                              icon: Icons.eco_outlined,
                             ),
                       Positioned(
                         top: 6,

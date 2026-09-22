@@ -109,6 +109,32 @@ class ItemCard extends StatelessWidget {
                             ? Image.network(
                                 item.imageUrl,
                                 fit: BoxFit.cover,
+                                frameBuilder: (context, child, frame, wasSync) =>
+                                    frame == null && !wasSync
+                                    ? Center(
+                                        child: SizedBox.square(
+                                          dimension: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: colors.primary,
+                                            semanticsLabel: 'Loading product photo',
+                                          ),
+                                        ),
+                                      )
+                                    : child,
+                                loadingBuilder: (context, child, progress) =>
+                                    progress == null
+                                    ? child
+                                    : Center(
+                                        child: SizedBox.square(
+                                          dimension: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: colors.primary,
+                                            semanticsLabel: 'Loading product photo',
+                                          ),
+                                        ),
+                                      ),
                                 errorBuilder: (context, error, stackTrace) =>
                                     Center(
                                   child: Icon(
