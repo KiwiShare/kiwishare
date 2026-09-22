@@ -1260,7 +1260,6 @@ class _RecommendedProductCard extends StatelessWidget {
                           ),
                         ),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               '\$${item.priceNzd}',
@@ -1270,6 +1269,7 @@ class _RecommendedProductCard extends StatelessWidget {
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
+                            const Spacer(),
                             if (item.seller?.isStudentVerified == true)
                               const Tooltip(
                                 message: 'Student Verified Item',
@@ -1279,6 +1279,12 @@ class _RecommendedProductCard extends StatelessWidget {
                                   color: Color(0xFF2563EB),
                                 ),
                               ),
+                            if (item.seller?.isStudentVerified == true)
+                              const SizedBox(width: 4),
+                            WatchlistBookmarkButton(
+                              key: Key('recommended-watchlist-${item.id}'),
+                              itemId: item.id,
+                            ),
                           ],
                         ),
                       ],

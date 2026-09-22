@@ -10,6 +10,7 @@ import '../../../services/notification_permission_coordinator.dart';
 
 class ItemCard extends StatelessWidget {
   static const compactImageAspectRatio = 1.32;
+  static const compactWatchlistButtonSize = 34.0;
 
   static double compactHeightForWidth(double width, double textScale) =>
       width / compactImageAspectRatio +
@@ -563,7 +564,7 @@ class ItemCard extends StatelessWidget {
                       // Title (up to 2 lines)
                       if (compact && isLoggedIn)
                         Padding(
-                          padding: const EdgeInsets.only(right: 64),
+                          padding: const EdgeInsets.only(right: 44),
                           child: title,
                         )
                       else title,
@@ -740,64 +741,10 @@ class ItemCard extends StatelessWidget {
                         Positioned(
                           right: 0,
                           bottom: 0,
-                          child: Tooltip(
-                            message: isFavorite
-                                ? 'Remove from Watchlist'
-                                : 'Add to Watchlist',
-                            child: Material(
-                              color: isFavorite
-                                  ? colors.primaryContainer
-                                  : colors.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(10),
-                              child: InkWell(
-                                key: Key('compact-watchlist-${item.id}'),
-                                onTap: () => unawaited(
-                                  _toggleFavorite(context, favorites),
-                                ),
-                                borderRadius: BorderRadius.circular(10),
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    minWidth: 40,
-                                    minHeight: 40,
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 7,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          isFavorite
-                                              ? Icons.bookmark
-                                              : Icons.bookmark_outline,
-                                          size: 19,
-                                          color: isFavorite
-                                              ? colors.onPrimaryContainer
-                                              : colors.onSurfaceVariant,
-                                        ),
-                                        if (item.watchlistCount > 0) ...[
-                                          const SizedBox(width: 3),
-                                          Text(
-                                            item.watchlistCount > 99
-                                                ? '99+'
-                                                : '${item.watchlistCount}',
-                                            style: GoogleFonts.inter(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              color: isFavorite
-                                                  ? colors.onPrimaryContainer
-                                                  : colors.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
+                          child: WatchlistBookmarkButton(
+                            key: Key('compact-watchlist-${item.id}'),
+                            itemId: item.id,
+                            permissionCoordinator: permissionCoordinator,
                           ),
                         ),
                     ],
@@ -834,3 +781,77 @@ class ItemCard extends StatelessWidget {
 
 Widget _compactInfoBody(bool compact, Widget body) =>
     compact ? Expanded(child: body) : body;
+
+class WatchlistBookmarkButton extends StatelessWidget {
+  final String itemId;
+  final double size;
+  final NotificationPermissionCoordinator? permissionCoordinator;
+
+  const WatchlistBookmarkButton({
+    super.key,
+    required this.itemId,
+    this.size = ItemCard.compactWatchlistButtonSize,
+    this.permissionCoordinator,
+  });
+
+  Future<void> _toggle(
+    BuildContext context,
+    FavoritesProvider favorites,
+  ) async {
+    WatchlistMutationResult result;
+    try {
+      result = await favorites.toggleFavorite(itemId);
+    } catch (error) {
+      debugPrint('Watchlist update failed: $error');
+      return;
+    }
+    if (!context.mounted || result != WatchlistMutationResult.added) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) return;
+    await offerContextualNotificationPermission(
+      context,
+      coordinator: permissionCoordinator,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = Provider.of<AuthProvider?>(context, listen: true);
+    if (auth != null && !auth.isLoggedIn) return const SizedBox.shrink();
+
+    final colors = Theme.of(context).colorScheme;
+    final favorites = context.watch<FavoritesProvider>();
+    final isFavorite = favorites.isFavorite(itemId);
+
+    return Semantics(
+      button: true,
+      toggled: isFavorite,
+      label: isFavorite ? 'Remove from Watchlist' : 'Add to Watchlist',
+      child: Tooltip(
+        message: isFavorite ? 'Remove from Watchlist' : 'Add to Watchlist',
+        child: SizedBox.square(
+          dimension: size,
+          child: Material(
+            color: isFavorite
+                ? colors.primaryContainer
+                : colors.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(9),
+            child: InkWell(
+              onTap: () => unawaited(_toggle(context, favorites)),
+              borderRadius: BorderRadius.circular(9),
+              child: Center(
+                child: Icon(
+                  isFavorite ? Icons.bookmark : Icons.bookmark_outline,
+                  size: 17,
+                  color: isFavorite
+                      ? colors.onPrimaryContainer
+                      : colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -84,6 +84,15 @@ class _PhotoItemRepository extends TestItemRepository {
       );
 }
 
+class _WatchlistCountItemRepository extends TestItemRepository {
+  _WatchlistCountItemRepository()
+    : super(
+        items: testCatalogItems
+            .map((item) => item.copyWith(watchlistCount: 7))
+            .toList(),
+      );
+}
+
 Widget _homeApp({
   ValueChanged<ItemModel>? onOpenItem,
   TextScaler textScaler = TextScaler.noScaling,
@@ -569,6 +578,87 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Home Watchlist buttons match across sections in light and dark modes',
+    (tester) async {
+      for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+        ItemModel? openedItem;
+        await _loadHome(
+          tester,
+          _homeApp(
+            themeMode: mode,
+            itemRepository: _WatchlistCountItemRepository(),
+            onOpenItem: (item) => openedItem = item,
+          ),
+        );
+
+        final compactButton = find.byKey(
+          const Key('compact-watchlist-item_1'),
+        );
+        final recommendedButton = find.byKey(
+          const Key('recommended-watchlist-item_1'),
+        );
+        expect(compactButton, findsOneWidget);
+        expect(recommendedButton, findsOneWidget);
+        expect(tester.getSize(compactButton), const Size(34, 34));
+        expect(tester.getSize(recommendedButton), const Size(34, 34));
+        expect(
+          find.descendant(of: compactButton, matching: find.text('7')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: recommendedButton, matching: find.text('7')),
+          findsNothing,
+        );
+
+        final bookmarkIcon = find.byWidgetPredicate(
+          (widget) =>
+              widget is Icon &&
+              (widget.icon == Icons.bookmark_outline ||
+                  widget.icon == Icons.bookmark),
+        );
+        final compactIcon = tester.widget<Icon>(
+          find.descendant(of: compactButton, matching: bookmarkIcon),
+        );
+        final recommendedIcon = tester.widget<Icon>(
+          find.descendant(of: recommendedButton, matching: bookmarkIcon),
+        );
+        expect(compactIcon.size, 17);
+        expect(recommendedIcon.size, 17);
+
+        final favorites = tester
+            .element(recommendedButton)
+            .read<FavoritesProvider>();
+        final wasFavorite = favorites.isFavorite('item_1');
+        final colors = Theme.of(
+          tester.element(recommendedButton),
+        ).colorScheme;
+        final expectedBackground = wasFavorite
+            ? colors.primaryContainer
+            : colors.surfaceContainerHighest;
+        for (final button in [compactButton, recommendedButton]) {
+          final material = tester.widget<Material>(
+            find.descendant(of: button, matching: find.byType(Material)),
+          );
+          expect(material.color, expectedBackground);
+        }
+        await tester.ensureVisible(recommendedButton);
+        tester
+            .widget<InkWell>(
+              find.descendant(
+                of: recommendedButton,
+                matching: find.byType(InkWell),
+              ),
+            )
+            .onTap!();
+        await tester.pumpAndSettle();
+        expect(openedItem, isNull);
+        expect(favorites.isFavorite('item_1'), isNot(wasFavorite));
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
 
   testWidgets(
     'Home displays bold KiwiShare header, category icons, jumbo carousel, and recommendations',

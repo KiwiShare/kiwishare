@@ -138,7 +138,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('compact card uses a bottom-right Watchlist action and count', (
+  testWidgets('compact card uses a small bottom-right Watchlist action', (
     tester,
   ) async {
     const item = ItemModel(
@@ -172,7 +172,8 @@ void main() {
 
     final button = find.byKey(const Key('compact-watchlist-compact-watch-item'));
     expect(find.byIcon(Icons.bookmark_outline), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
+    expect(tester.getSize(button), const Size(34, 34));
+    expect(find.descendant(of: button, matching: find.text('3')), findsNothing);
     expect(find.byIcon(Icons.favorite), findsNothing);
     expect(tester.getRect(button).bottom,
         lessThanOrEqualTo(tester.getRect(find.byType(ItemCard)).bottom - 5));
