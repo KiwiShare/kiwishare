@@ -76,6 +76,7 @@ void main() {
   testWidgets('renders the participant profile photo in each chat row', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     const avatarUrl = 'https://images.example.com/sophie-avatar.jpg';
     final repository = FakeChatRepository(
       conversations: [testConversation(participantAvatarUrl: avatarUrl)],
@@ -93,6 +94,13 @@ void main() {
     );
     expect(avatar.url, avatarUrl);
     expect(avatar.fit, BoxFit.cover);
+    expect(avatar.semanticLabel, isNull);
+    final avatarSemantics = tester.getSemantics(
+      find.byKey(const Key('chat_participant_avatar')),
+    );
+    expect(avatarSemantics.label, contains('Sophie M. profile avatar'));
+    expect(avatarSemantics.label, isNot(contains('Sophie M. profile photo')));
+    semantics.dispose();
   });
 
   testWidgets('filters server conversations by unread, buying, and selling', (

@@ -182,10 +182,11 @@ class _ChatAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final resolvedAvatarUrl = avatarUrl?.trim() ?? '';
     return Semantics(
+      key: const Key('chat_participant_avatar'),
+      excludeSemantics: true,
       image: true,
       label: '$name profile avatar',
       child: SizedBox(
-        key: const Key('chat_participant_avatar'),
         width: 46,
         height: 46,
         child: ClipOval(
@@ -197,7 +198,6 @@ class _ChatAvatar extends StatelessWidget {
                     key: const Key('chat_participant_avatar_image'),
                     url: resolvedAvatarUrl,
                     logicalCacheWidth: 46,
-                    semanticLabel: '$name profile photo',
                     maximumRetries: 1,
                     errorBuilder: (context, error, stackTrace) =>
                         _fallbackAvatar(),
