@@ -384,12 +384,6 @@ router.post('/auth/verify-otp', async (ctx) => {
   // Find or create user
   let user = await User.findOne({ email: normalizedEmail });
   const trimmedName = displayName?.toString().trim();
-  if (!googleUid || !googleEmail || !googleEmail.includes('@')) {
-    ctx.status = 401;
-    ctx.body = { status: 'error', message: 'Google authentication did not return a verified email address.' };
-    return;
-  }
-
   const platform = ctx.state.clientPlatform || resolveClientPlatform(ctx);
   const now = new Date();
 
