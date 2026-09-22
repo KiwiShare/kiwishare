@@ -638,6 +638,12 @@ router.post('/auth/google', async (ctx) => {
     }
   }
 
+  if (!googleUid || !googleEmail || !googleEmail.includes('@')) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Google authentication did not return a verified email address.' };
+    return;
+  }
+
   const platform = ctx.state.clientPlatform || resolveClientPlatform(ctx);
   const now = new Date();
   let user = await User.findOne({ $or: [{ googleId: googleUid }, { email: googleEmail }] });
@@ -664,7 +670,7 @@ router.post('/auth/google', async (ctx) => {
     user = await User.create({
       googleId: googleUid,
       email: googleEmail,
-      displayName: '',
+      displayName: googleName || googleEmail.split('@')[0],
       avatarUrl: googlePicture || null,
       role,
       trustScore: 100,
@@ -693,6 +699,8 @@ router.post('/auth/google', async (ctx) => {
     user: {
       id: user._id.toString(),
       email: user.email,
+      username: user.username,
+      needsUsername: !user.username || !user.username.trim(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       role: user.role,
