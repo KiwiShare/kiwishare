@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../../config/api_config.dart';
-import '../../theme/app_theme.dart';
 import '../profile/my_reports_screen.dart';
 
 class SupportChatMessage {
@@ -324,7 +324,7 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         scrollDirection: Axis.horizontal,
         itemCount: _quickPrompts.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final prompt = _quickPrompts[index];
           return ActionChip(
@@ -398,31 +398,51 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    message.text,
-                    style: TextStyle(
-                      color: isUser ? Colors.white : colors.onSurface,
-                      fontSize: 14,
-                      height: 1.45,
-                    ),
+                  _MarkdownMessageText(
+                    text: message.text,
+                    isUser: isUser,
+                    colors: colors,
                   ),
                   if (message.links != null && message.links!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
+                      runSpacing: 6,
                       children: message.links!.map((link) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: colors.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            link,
-                            style: TextStyle(
-                              color: colors.primary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () async {
+                            final uri = link.contains('@')
+                                ? Uri.parse('mailto:$link')
+                                : Uri.parse(link.startsWith('http') ? link : 'https://$link');
+                            try {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            } catch (_) {
+                              // Ignore launch error
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: colors.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (link.contains('@')) ...[
+                                  Icon(Icons.email_outlined, size: 14, color: colors.primary),
+                                  const SizedBox(width: 4),
+                                ],
+                                Text(
+                                  link,
+                                  style: TextStyle(
+                                    color: colors.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );
@@ -484,6 +504,167 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MarkdownMessageText extends StatelessWidget {
+  final String text;
+  final bool isUser;
+  final ColorScheme colors;
+
+  const _MarkdownMessageText({
+    required this.text,
+    required this.isUser,
+    required this.colors,
+  });
+
+  static final _inlinePattern = RegExp(
+    r'(\[([^\]]+)\]\(([^)]+)\))|'
+    r'(\*\*(.+?)\*\*)|'
+    r'(__([^_]+)__)|'
+    r'(?<!\*)\*([^*]+)\*(?!\*)|'
+    r'(`([^`]+)`)|'
+    r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+  );
+
+  List<InlineSpan> _parseInline(
+    String line,
+    TextStyle baseStyle,
+    Color boldColor,
+    Color linkColor,
+  ) {
+    final spans = <InlineSpan>[];
+    int lastIndex = 0;
+
+    for (final match in _inlinePattern.allMatches(line)) {
+      if (match.start > lastIndex) {
+        spans.add(TextSpan(
+          text: line.substring(lastIndex, match.start),
+          style: baseStyle,
+        ));
+      }
+
+      if (match.group(2) != null) {
+        // [link text](url)
+        spans.add(TextSpan(
+          text: match.group(2),
+          style: baseStyle.copyWith(
+            color: linkColor,
+            fontWeight: FontWeight.w600,
+            decoration: TextDecoration.underline,
+          ),
+        ));
+      } else if (match.group(5) != null) {
+        // **bold**
+        final content = match.group(5)!;
+        final isEmail = RegExp(
+          r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+        ).hasMatch(content);
+        spans.add(TextSpan(
+          text: content,
+          style: baseStyle.copyWith(
+            fontWeight: FontWeight.bold,
+            color: isEmail ? linkColor : boldColor,
+            decoration: isEmail ? TextDecoration.underline : null,
+          ),
+        ));
+      } else if (match.group(7) != null) {
+        // __bold__
+        spans.add(TextSpan(
+          text: match.group(7),
+          style: baseStyle.copyWith(
+            fontWeight: FontWeight.bold,
+            color: boldColor,
+          ),
+        ));
+      } else if (match.group(8) != null) {
+        // *italic*
+        spans.add(TextSpan(
+          text: match.group(8),
+          style: baseStyle.copyWith(
+            fontStyle: FontStyle.italic,
+          ),
+        ));
+      } else if (match.group(10) != null) {
+        // `code`
+        spans.add(TextSpan(
+          text: match.group(10),
+          style: baseStyle.copyWith(
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w600,
+          ),
+        ));
+      } else if (match.group(11) != null) {
+        // email
+        spans.add(TextSpan(
+          text: match.group(11),
+          style: baseStyle.copyWith(
+            color: linkColor,
+            fontWeight: FontWeight.w600,
+            decoration: TextDecoration.underline,
+          ),
+        ));
+      }
+
+      lastIndex = match.end;
+    }
+
+    if (lastIndex < line.length) {
+      spans.add(TextSpan(
+        text: line.substring(lastIndex),
+        style: baseStyle,
+      ));
+    }
+
+    return spans;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColor = isUser ? Colors.white : colors.onSurface;
+    final isDark = colors.brightness == Brightness.dark;
+    final boldColor = isUser ? Colors.white : (isDark ? Colors.white : const Color(0xFF111827));
+    final linkColor = isUser ? Colors.white : colors.primary;
+    final baseStyle = TextStyle(
+      color: baseColor,
+      fontSize: 14,
+      height: 1.45,
+    );
+
+    final lines = text.split('\n');
+    final allSpans = <InlineSpan>[];
+
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (i > 0) {
+        allSpans.add(const TextSpan(text: '\n'));
+      }
+
+      final headerMatch = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(line);
+      if (headerMatch != null) {
+        final level = headerMatch.group(1)!.length;
+        final content = headerMatch.group(2)!;
+        final headerSize = level <= 2 ? 16.0 : 15.0;
+        final headerSpans = _parseInline(
+          content,
+          baseStyle.copyWith(
+            fontSize: headerSize,
+            fontWeight: FontWeight.bold,
+            color: boldColor,
+          ),
+          boldColor,
+          linkColor,
+        );
+        allSpans.addAll(headerSpans);
+        continue;
+      }
+
+      allSpans.addAll(_parseInline(line, baseStyle, boldColor, linkColor));
+    }
+
+    return Text.rich(
+      TextSpan(children: allSpans, style: baseStyle),
     );
   }
 }
