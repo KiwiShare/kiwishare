@@ -163,7 +163,10 @@ describe('KiwiShare report persistence API', () => {
       email: 'reporter@example.com',
       displayName: 'Careful Buyer',
       reportId: response.body.report.id,
-      submittedAt: expect.any(Date)
+      submittedAt: expect.any(Date),
+      reason: 'scam_or_fraud',
+      details: 'A seller asked for gift cards before meeting.',
+      listingTitle: undefined
     });
   });
 
@@ -191,6 +194,15 @@ describe('KiwiShare report persistence API', () => {
         contextId: new mongoose.Types.ObjectId(listingId),
         reason: 'misleading_information',
         status: 'pending'
+      })
+    );
+    expect(mockedSendReportConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'reporter@example.com',
+        displayName: 'Careful Buyer',
+        listingTitle: 'Reported test listing',
+        reason: 'misleading_information',
+        details: 'The description does not match the item shown in the photos.'
       })
     );
   });

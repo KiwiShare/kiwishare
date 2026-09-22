@@ -215,6 +215,7 @@ router.post('/reports', authenticateToken, async (ctx: Context) => {
 
   let targetId: mongoose.Types.ObjectId | undefined;
   let contextId: mongoose.Types.ObjectId | undefined;
+  let listingTitle: string | undefined;
   if (targetIdValue !== undefined) {
     if (!mongoose.Types.ObjectId.isValid(targetIdValue)) {
       error(ctx, 400, 'Invalid report target ID.');
@@ -272,7 +273,7 @@ router.post('/reports', authenticateToken, async (ctx: Context) => {
       return;
     }
     const item = await Item.findById(targetId)
-      .select('sellerId ownerId')
+      .select('title sellerId ownerId')
       .exec() as IItem | null;
     if (!item) {
       error(ctx, 404, 'Reported listing not found.');
@@ -283,6 +284,7 @@ router.post('/reports', authenticateToken, async (ctx: Context) => {
       error(ctx, 400, 'You cannot report your own listing.');
       return;
     }
+    listingTitle = item.title;
     contextId = targetId;
   }
 
@@ -316,7 +318,10 @@ router.post('/reports', authenticateToken, async (ctx: Context) => {
       email: reporter.email,
       displayName: reporter.displayName,
       reportId: report._id.toString(),
-      submittedAt: report.createdAt
+      submittedAt: report.createdAt,
+      reason: report.reason,
+      details: report.details,
+      listingTitle
     });
   } catch (emailError) {
     const message = emailError instanceof Error ? emailError.message : 'Unknown error';
