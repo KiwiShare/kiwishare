@@ -196,7 +196,7 @@ void main() {
     expect(find.text(details), findsOneWidget);
   });
 
-  testWidgets('waits for a receipt and prevents repeated submission', (
+  testWidgets('waits for a receipt and prevents repeated taps while pending', (
     tester,
   ) async {
     final pending = Completer<void>();

@@ -56,6 +56,7 @@ export interface IReport extends Document {
   reporterId: mongoose.Types.ObjectId;
   targetType: ReportTargetType;
   targetId?: mongoose.Types.ObjectId;
+  dedupeKey?: string;
   contextType: ReportContextType;
   contextId?: mongoose.Types.ObjectId;
   reason: ReportReasonCode;
@@ -85,6 +86,11 @@ const ReportSchema = new Schema<IReport>(
       required: function (this: IReport) {
         return this.targetType !== 'general';
       }
+    },
+    dedupeKey: {
+      type: String,
+      immutable: true,
+      select: false
     },
     contextType: {
       type: String,
@@ -125,13 +131,11 @@ ReportSchema.index({ reporterId: 1, createdAt: -1 });
 ReportSchema.index({ targetType: 1, targetId: 1, createdAt: -1 });
 ReportSchema.index({ status: 1, createdAt: 1 });
 ReportSchema.index({
-  reporterId: 1,
-  targetType: 1,
-  targetId: 1,
-  contextType: 1,
-  contextId: 1,
-  reason: 1,
-  createdAt: -1
+  dedupeKey: 1
+}, {
+  unique: true,
+  sparse: true,
+  name: 'unique_reporter_target'
 });
 
 export default mongoose.models.Report ||
