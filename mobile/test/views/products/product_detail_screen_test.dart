@@ -13,6 +13,7 @@ import 'package:kiwishare/services/notification_permission_coordinator.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
+import 'package:kiwishare/views/profile/report_screen.dart';
 import 'package:provider/provider.dart';
 
 import 'package:kiwishare/repositories/item_repository.dart';
@@ -341,6 +342,8 @@ void main() {
     await tester.tap(reportButton);
     await tester.pumpAndSettle();
 
+    final reportScreen = tester.widget<ReportScreen>(find.byType(ReportScreen));
+    expect(reportScreen.reportContext.targetImageUrl, _detailItem.imageUrl);
     expect(find.text('Report listing'), findsWidgets);
     expect(find.text(_detailItem.title), findsWidgets);
     expect(find.text('What happened?'), findsOneWidget);

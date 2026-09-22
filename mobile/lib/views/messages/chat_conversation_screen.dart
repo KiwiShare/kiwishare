@@ -2051,6 +2051,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             targetType: ReportTargetType.user,
             targetId: widget.conversation.participantId,
             targetLabel: widget.conversation.participantName,
+            targetImageUrl: widget.conversation.participantAvatarUrl,
             contextType: ReportContextType.chat,
             contextId: widget.conversation.id,
             contextLabel: 'Chat about ${widget.conversation.itemTitle}',

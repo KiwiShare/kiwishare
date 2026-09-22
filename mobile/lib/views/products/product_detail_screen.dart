@@ -342,6 +342,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             targetType: ReportTargetType.listing,
             targetId: product.id,
             targetLabel: product.title,
+            targetImageUrl: product.imageUrl,
             contextType: ReportContextType.listing,
             contextId: product.id,
             contextLabel: product.title,

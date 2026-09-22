@@ -8,6 +8,7 @@ void main() {
       targetType: ReportTargetType.listing,
       targetId: 'listing-id',
       targetLabel: 'Office chair',
+      targetImageUrl: 'https://cdn.example.test/listings/chair.jpg',
       contextType: ReportContextType.listing,
       contextId: 'listing-id',
       contextLabel: 'Product details',
@@ -31,6 +32,7 @@ void main() {
       'reason': 'misleading_information',
       'details': 'The item photos do not match the description.',
     });
+    expect(draft.toRequestMap(), isNot(contains('targetImageUrl')));
   });
 
   test('chat draft identifies the participant and conversation separately', () {

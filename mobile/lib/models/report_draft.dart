@@ -10,6 +10,7 @@ class ReportContext {
     required this.contextType,
     this.targetId,
     this.targetLabel,
+    this.targetImageUrl,
     this.contextId,
     this.contextLabel,
   });
@@ -19,12 +20,14 @@ class ReportContext {
       contextType = ReportContextType.general,
       targetId = null,
       targetLabel = null,
+      targetImageUrl = null,
       contextId = null,
       contextLabel = null;
 
   final ReportTargetType targetType;
   final String? targetId;
   final String? targetLabel;
+  final String? targetImageUrl;
   final ReportContextType contextType;
   final String? contextId;
   final String? contextLabel;
