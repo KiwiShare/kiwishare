@@ -58,6 +58,7 @@ class _FakePublicProfileRepository implements UserRepository {
   @override
   Future<UserModel> updateProfile({
     required String token,
+    String? username,
     String? displayName,
     String? avatarUrl,
     String? bio,

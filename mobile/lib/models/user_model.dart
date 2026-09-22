@@ -1,6 +1,8 @@
 class UserModel {
   final String id;
   final String displayName;
+  final String? email;
+  final String? username;
   final String? avatarUrl;
   final String? bio;
   final int trustScore;
@@ -17,6 +19,8 @@ class UserModel {
   const UserModel({
     required this.id,
     required this.displayName,
+    this.email,
+    this.username,
     this.avatarUrl,
     this.bio,
     required this.trustScore,
@@ -35,6 +39,8 @@ class UserModel {
   UserModel copyWith({
     String? id,
     String? displayName,
+    String? email,
+    String? username,
     String? avatarUrl,
     String? bio,
     int? trustScore,
@@ -51,6 +57,8 @@ class UserModel {
     return UserModel(
       id: id ?? this.id,
       displayName: displayName ?? this.displayName,
+      email: email ?? this.email,
+      username: username ?? this.username,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       bio: bio ?? this.bio,
       trustScore: trustScore ?? this.trustScore,
@@ -71,6 +79,8 @@ class UserModel {
     return {
       'id': id,
       'displayName': displayName,
+      'email': email,
+      'username': username,
       'avatarUrl': avatarUrl,
       'bio': bio,
       'trustScore': trustScore,
@@ -91,6 +101,8 @@ class UserModel {
     return UserModel(
       id: (map['id'] ?? map['_id'] ?? '').toString(),
       displayName: (map['displayName'] ?? '').toString(),
+      email: map['email']?.toString(),
+      username: map['username']?.toString(),
       avatarUrl: map['avatarUrl'] as String?,
       bio: map['bio'] as String?,
       trustScore: (map['trustScore'] is num)
@@ -124,6 +136,8 @@ class UserModel {
     return other is UserModel &&
         other.id == id &&
         other.displayName == displayName &&
+        other.email == email &&
+        other.username == username &&
         other.avatarUrl == avatarUrl &&
         other.trustScore == trustScore &&
         other.isVerified == isVerified &&
@@ -136,6 +150,8 @@ class UserModel {
     return Object.hash(
       id,
       displayName,
+      email,
+      username,
       avatarUrl,
       trustScore,
       isVerified,
@@ -146,6 +162,6 @@ class UserModel {
 
   @override
   String toString() {
-    return 'UserModel(id: $id, displayName: $displayName, avatarUrl: $avatarUrl, trustScore: $trustScore, isVerified: $isVerified, authProvider: $authProvider, kiwiGold: $kiwiGold)';
+    return 'UserModel(id: $id, displayName: $displayName, email: $email, username: $username, avatarUrl: $avatarUrl, trustScore: $trustScore, isVerified: $isVerified, authProvider: $authProvider, kiwiGold: $kiwiGold)';
   }
 }

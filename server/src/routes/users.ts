@@ -56,8 +56,14 @@ router.get('/users/me', authenticateToken, async (ctx) => {
 // PATCH /users/me - Update authenticated user profile
 router.patch('/users/me', authenticateToken, async (ctx) => {
   const userId = ctx.state.user.id;
-  const { displayName, avatarUrl, bio } = ctx.request.body as any;
+  const { username, displayName, avatarUrl, bio } = ctx.request.body as any;
 
+  if (username !== undefined && (typeof username !== 'string' ||
+    !/^[a-zA-Z0-9_]{3,24}$/.test(username.trim()))) {
+    ctx.status = 400;
+    ctx.body = { message: 'Username must be 3-24 characters using only letters, numbers, or underscores.' };
+    return;
+  }
   if (displayName !== undefined && (typeof displayName !== 'string' ||
     displayName.trim().length < 2 || displayName.trim().length > 30)) {
     ctx.status = 400;
@@ -94,6 +100,20 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
     return;
   }
 
+  if (username !== undefined) {
+    const normalizedUsername = username.trim().toLowerCase();
+    const existingUsername = await User.findOne({
+      username: normalizedUsername,
+      _id: { $ne: user._id }
+    });
+    if (existingUsername) {
+      ctx.status = 409;
+      ctx.body = { message: 'That username is already taken.' };
+      return;
+    }
+    user.username = normalizedUsername;
+    if (!user.displayName?.trim()) user.displayName = username.trim();
+  }
   if (displayName !== undefined) user.displayName = displayName.trim();
   if (avatarUrl !== undefined) user.avatarUrl = avatarUrl || null;
   if (bio !== undefined) user.bio = typeof bio === 'string' ? bio.trim() : '';

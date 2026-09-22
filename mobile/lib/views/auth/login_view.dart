@@ -566,6 +566,17 @@ class _LoginViewState extends State<LoginView> {
     try {
       await authProvider.loginWithGoogle();
       if (authProvider.isLoggedIn && mounted) {
+        final user = authProvider.currentUser;
+        if (user?.username == null || user!.username!.trim().isEmpty) {
+          final username = await _promptForGoogleUsername(user?.email);
+          if (username == null || !mounted) {
+            await authProvider.logout();
+            return;
+          }
+          await authProvider.updateUsername(username);
+        }
+
+        if (!mounted) return;
         final name = authProvider.currentUser?.displayName ?? 'User';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -598,6 +609,56 @@ class _LoginViewState extends State<LoginView> {
         });
       }
     }
+  }
+
+  Future<String?> _promptForGoogleUsername(String? email) async {
+    final controller = TextEditingController();
+    String? errorText;
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Choose your username'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (email != null && email.isNotEmpty) ...[
+                Text('Signed in as $email'),
+                const SizedBox(height: 16),
+              ],
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Username',
+                  hintText: 'e.g. kiwi_trader',
+                  errorText: errorText,
+                  helperText: '3-24 letters, numbers, or underscores',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(value)) {
+                  setDialogState(() => errorText =
+                      'Use 3-24 letters, numbers, or underscores.');
+                  return;
+                }
+                Navigator.of(dialogContext).pop(value);
+              },
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 
   Future<void> _showPasswordReset() async {

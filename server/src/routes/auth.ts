@@ -426,6 +426,9 @@ router.post('/auth/verify-otp', async (ctx) => {
       id: user._id.toString(),
       email: user.email,
       displayName: user.displayName,
+      email: user.email,
+      username: user.username,
+      needsUsername: !user.username || !user.username.trim(),
       avatarUrl: user.avatarUrl,
       trustScore: user.trustScore,
       isVerified: user.isVerified,
@@ -634,6 +637,12 @@ router.post('/auth/google', async (ctx) => {
     }
   }
 
+  if (!googleUid || !googleEmail || !googleEmail.includes('@')) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Google authentication did not return a verified email address.' };
+    return;
+  }
+
   const platform = ctx.state.clientPlatform || resolveClientPlatform(ctx);
   const now = new Date();
   let user = await User.findOne({ $or: [{ googleId: googleUid }, { email: googleEmail }] });
@@ -689,6 +698,8 @@ router.post('/auth/google', async (ctx) => {
     user: {
       id: user._id.toString(),
       email: user.email,
+      username: user.username,
+      needsUsername: !user.username || !user.username.trim(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       role: user.role,

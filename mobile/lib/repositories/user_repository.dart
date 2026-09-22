@@ -72,6 +72,7 @@ abstract class UserRepository {
   Future<UserModel> fetchProfile(String token);
   Future<UserModel> updateProfile({
     required String token,
+    String? username,
     String? displayName,
     String? avatarUrl,
     String? bio,
@@ -217,6 +218,7 @@ class RestUserRepository implements UserRepository {
   @override
   Future<UserModel> updateProfile({
     required String token,
+    String? username,
     String? displayName,
     String? avatarUrl,
     String? bio,
@@ -230,6 +232,7 @@ class RestUserRepository implements UserRepository {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
+          'username': ?username,
           'displayName': ?displayName,
           'avatarUrl': ?avatarUrl,
           'bio': ?bio,
@@ -675,6 +678,7 @@ class MockUserRepository implements UserRepository {
   @override
   Future<UserModel> updateProfile({
     required String token,
+    String? username,
     String? displayName,
     String? avatarUrl,
     String? bio,
