@@ -107,12 +107,42 @@ void main() {
       );
       expect(
         provider.selectedLocation,
-        HomeDiscoveryProvider.allLocationsLabel,
+        HomeDiscoveryProvider.defaultLocation,
       );
       expect(provider.selectedSort, HomeProductSort.recommended);
       expect(provider.selectedPriceRange, HomePriceRange.any);
       expect(provider.sustainableOnly, isFalse);
       expect(provider.view, HomeProductView.grid);
+      expect(provider.activeFilterCount, 0);
+    });
+
+    test('activeFilterCount only tracks sort and filter modal options', () {
+      final provider = HomeDiscoveryProvider()..applyOptions(_options);
+      expect(provider.activeFilterCount, 0);
+
+      // Auto-location or manual location does not affect filter modal count
+      provider.setLocation(
+        'Auckland',
+        nearYou: true,
+        latitude: -36.85,
+        longitude: 174.76,
+      );
+      provider.setQuery('table');
+      provider.toggleCategory('Furniture');
+      expect(provider.activeFilterCount, 0);
+
+      // Setting Sort & filter sheet options increments count
+      provider.setSort(HomeProductSort.priceLowToHigh);
+      expect(provider.activeFilterCount, 1);
+
+      provider.setPriceRange(HomePriceRange.under25);
+      expect(provider.activeFilterCount, 2);
+
+      provider.setSustainableOnly(true);
+      expect(provider.activeFilterCount, 3);
+
+      provider.resetFilters();
+      expect(provider.activeFilterCount, 0);
     });
   });
 }

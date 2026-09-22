@@ -95,12 +95,9 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   );
 
   int get activeFilterCount => [
-    _query.isNotEmpty,
-    _selectedCategory != allCategoriesLabel,
-    _selectedLocation != allLocationsLabel && !_isDefaultLocation,
     _selectedPriceRange != HomePriceRange.any,
     _sustainableOnly,
-    _isNearYou,
+    _selectedSort != HomeProductSort.recommended,
   ].where((active) => active).length;
 
   void applyOptions(DiscoveryOptionsModel options) {
