@@ -6,6 +6,7 @@ import 'package:kiwishare/models/user_model.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/views/profile/public_profile_screen.dart';
+import 'package:kiwishare/widgets/vip_crown_icon.dart';
 import 'package:provider/provider.dart';
 
 class _FakePublicProfileRepository implements UserRepository {
@@ -139,6 +140,8 @@ void main() {
     // Verify User Display Name & VIP Badge
     expect(find.text('Sarah UoA'), findsOneWidget);
     expect(find.text('VIP'), findsOneWidget);
+    // Only one VipCrownIcon next to the name, none overlaying avatar
+    expect(find.byType(VipCrownIcon), findsOneWidget);
     expect(find.text('University of Auckland'), findsOneWidget);
 
     // Verify Bio / Signature

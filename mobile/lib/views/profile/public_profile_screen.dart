@@ -343,7 +343,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           // ── App Bar & Hero Header ──
           SliverAppBar(
-            expandedHeight: 330,
+            expandedHeight: 240,
             pinned: true,
             elevation: 0,
             backgroundColor: isDark ? const Color(0xFF13221C) : const Color(0xFF059669),
@@ -605,7 +605,7 @@ class _HeroProfileHeader extends StatelessWidget {
           ],
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 80, 20, 16),
+      padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.end,
@@ -614,41 +614,29 @@ class _HeroProfileHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Avatar with VIP Golden Ring
-              Stack(
-                alignment: Alignment.center,
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 74,
-                    height: 74,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: isVip
-                          ? const LinearGradient(
-                              colors: [Color(0xFFFFDF00), Color(0xFFF59E0B), Color(0xFFFF9900)],
-                            )
-                          : null,
-                      border: isVip
-                          ? Border.all(color: const Color(0xFFFFDF00), width: 3)
-                          : Border.all(color: Colors.white, width: 2.5),
-                    ),
-                    child: ClipOval(
-                      child: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
-                          ? Image.network(
-                              profile.avatarUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => _fallbackAvatar(initial),
-                            )
-                          : _fallbackAvatar(initial),
-                    ),
-                  ),
-                  if (isVip)
-                    Positioned(
-                      top: -10,
-                      right: -6,
-                      child: VipCrownIcon(size: 24),
-                    ),
-                ],
+              Container(
+                width: 74,
+                height: 74,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: isVip
+                      ? const LinearGradient(
+                          colors: [Color(0xFFFFDF00), Color(0xFFF59E0B), Color(0xFFFF9900)],
+                        )
+                      : null,
+                  border: isVip
+                      ? Border.all(color: const Color(0xFFFFDF00), width: 3)
+                      : Border.all(color: Colors.white, width: 2.5),
+                ),
+                child: ClipOval(
+                  child: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
+                      ? Image.network(
+                          profile.avatarUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => _fallbackAvatar(initial),
+                        )
+                      : _fallbackAvatar(initial),
+                ),
               ),
               const SizedBox(width: 14),
 
