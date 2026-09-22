@@ -784,8 +784,16 @@ class _FailingItemRepository implements ItemRepository {
   Future<List<ItemModel>> fetchPopularItems() => throw UnimplementedError();
 
   @override
-  Future<List<ItemModel>> fetchRecommendedItems({int limit = 10}) =>
+  Future<List<ItemModel>> fetchFeaturedItems({int limit = 10}) =>
       throw UnimplementedError();
+
+  @override
+  Future<List<ItemModel>> fetchRecommendedItems({
+    int limit = 10,
+    double? latitude,
+    double? longitude,
+    String? token,
+  }) => throw UnimplementedError();
 
   @override
   Stream<List<ItemModel>> searchItems({String? query, String? category}) =>

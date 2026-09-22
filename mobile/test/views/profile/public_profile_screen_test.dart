@@ -33,6 +33,20 @@ class _FakePublicProfileRepository implements UserRepository {
   Future<List<PublicReviewModel>> fetchUserPublicReviews(String userId, {String? token}) async => reviews;
 
   @override
+  Future<void> submitReview({
+    required String targetUserId,
+    required int rating,
+    required String comment,
+    List<String>? tags,
+    String? orderId,
+    String? itemId,
+    String? role,
+    String? itemTitle,
+    String? itemImageUrl,
+    required String token,
+  }) async {}
+
+  @override
   Future<UserModel> updateBio(String bio, {required String token}) async => const UserModel(
     id: 'user_123',
     displayName: 'Auckland Trader',
@@ -138,7 +152,7 @@ void main() {
 
     // Verify Trust Score card (Zhima style)
     expect(find.text('Kiwi Trust Score'), findsOneWidget);
-    expect(find.text('96 • Outstanding Trust'), findsOneWidget);
+    expect(find.text('96 • Needs Improvement'), findsOneWidget);
     expect(find.text('ID Verified'), findsOneWidget);
     expect(find.text('NZ Student'), findsOneWidget);
 

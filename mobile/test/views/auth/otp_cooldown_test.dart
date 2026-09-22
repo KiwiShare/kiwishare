@@ -125,6 +125,20 @@ class FakeCooldownUserRepository implements UserRepository {
   Future<List<PublicReviewModel>> fetchUserPublicReviews(String userId, {String? token}) async => [];
 
   @override
+  Future<void> submitReview({
+    required String targetUserId,
+    required int rating,
+    required String comment,
+    List<String>? tags,
+    String? orderId,
+    String? itemId,
+    String? role,
+    String? itemTitle,
+    String? itemImageUrl,
+    required String token,
+  }) async {}
+
+  @override
   Future<String> sendStudentVerificationOtp({
     required String email,
     required String token,

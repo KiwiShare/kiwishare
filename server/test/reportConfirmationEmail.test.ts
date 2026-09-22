@@ -31,14 +31,17 @@ describe('report confirmation email', () => {
     else process.env.RESEND_FROM = originalFrom;
   });
 
-  test('sends a private receipt with the report id as its idempotency key', async () => {
+  test('sends a private listing receipt with report context and escaped HTML', async () => {
     mockSend.mockResolvedValue({ data: { id: 'email-1' }, error: null });
 
     await sendReportConfirmationEmail({
       email: 'reporter@example.com',
       displayName: 'Careful <Buyer>',
       reportId: 'report-123',
-      submittedAt: new Date('2026-09-15T01:02:03.000Z')
+      submittedAt: new Date('2026-09-15T01:02:03.000Z'),
+      reason: 'misleading_information',
+      details: 'The listing contains <script>alert("unsafe")</script>.',
+      listingTitle: 'Road Bike & Helmet'
     });
 
     expect(mockSend).toHaveBeenCalledWith(
@@ -46,11 +49,39 @@ describe('report confirmation email', () => {
         from: 'KiwiShare <reports@kiwishare.online>',
         to: 'reporter@example.com',
         subject: '[KiwiShare] We received your report',
-        text: expect.stringContaining('Report reference: report-123'),
+        text: expect.stringContaining('Reported by: Careful <Buyer> (reporter@example.com)'),
         html: expect.stringContaining('Careful &lt;Buyer&gt;')
       }),
       { idempotencyKey: 'report-confirmation/report-123' }
     );
+    const message = mockSend.mock.calls[0][0] as { text: string; html: string };
+    expect(message.text).toContain('Item: Road Bike & Helmet');
+    expect(message.text).toContain('Reason: Misleading information');
+    expect(message.text).toContain(
+      'Details:\nThe listing contains <script>alert("unsafe")</script>.'
+    );
+    expect(message.html).toContain('Road Bike &amp; Helmet');
+    expect(message.html).toContain(
+      'The listing contains &lt;script&gt;alert(&quot;unsafe&quot;)&lt;/script&gt;.'
+    );
+  });
+
+  test('omits the item row for a non-listing report', async () => {
+    mockSend.mockResolvedValue({ data: { id: 'email-2' }, error: null });
+
+    await sendReportConfirmationEmail({
+      email: 'reporter@example.com',
+      displayName: 'Careful Buyer',
+      reportId: 'report-456',
+      submittedAt: new Date('2026-09-15T01:02:03.000Z'),
+      reason: 'harassment_or_abusive_behaviour',
+      details: 'The other member repeatedly sent threatening messages.'
+    });
+
+    const message = mockSend.mock.calls[0][0] as { text: string; html: string };
+    expect(message.text).toContain('Reason: Harassment or abusive behaviour');
+    expect(message.text).not.toContain('Item:');
+    expect(message.html).not.toContain('>Item</dt>');
   });
 
   test('does nothing when Resend is not configured', async () => {
@@ -60,7 +91,9 @@ describe('report confirmation email', () => {
       email: 'reporter@example.com',
       displayName: 'Careful Buyer',
       reportId: 'report-123',
-      submittedAt: new Date()
+      submittedAt: new Date(),
+      reason: 'other',
+      details: 'A sufficiently detailed safety concern.'
     });
 
     expect(mockSend).not.toHaveBeenCalled();
@@ -73,7 +106,9 @@ describe('report confirmation email', () => {
       email: 'reporter@example.com',
       displayName: 'Careful Buyer',
       reportId: 'report-123',
-      submittedAt: new Date()
+      submittedAt: new Date(),
+      reason: 'other',
+      details: 'A sufficiently detailed safety concern.'
     })).rejects.toThrow('Email rejected');
   });
 });

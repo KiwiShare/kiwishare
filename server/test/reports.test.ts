@@ -164,7 +164,10 @@ describe('KiwiShare report persistence API', () => {
       email: 'reporter@example.com',
       displayName: 'Careful Buyer',
       reportId: response.body.report.id,
-      submittedAt: expect.any(Date)
+      submittedAt: expect.any(Date),
+      reason: 'scam_or_fraud',
+      details: 'A seller asked for gift cards before meeting.',
+      listingTitle: undefined
     });
   });
 
@@ -192,6 +195,15 @@ describe('KiwiShare report persistence API', () => {
         contextId: new mongoose.Types.ObjectId(listingId),
         reason: 'misleading_information',
         status: 'pending'
+      })
+    );
+    expect(mockedSendReportConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'reporter@example.com',
+        displayName: 'Careful Buyer',
+        listingTitle: 'Reported test listing',
+        reason: 'misleading_information',
+        details: 'The description does not match the item shown in the photos.'
       })
     );
   });
@@ -222,6 +234,92 @@ describe('KiwiShare report persistence API', () => {
         status: 'pending'
       })
     );
+  });
+
+  test('submission flows into private history with server-owned status and date', async () => {
+    const listingReport = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`)
+      .send({
+        targetType: 'listing',
+        targetId: listingId,
+        contextType: 'listing',
+        reason: 'misleading_information',
+        details: 'The listing photos show a different product.'
+      });
+    const chatReport = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`)
+      .send({
+        targetType: 'user',
+        targetId: reportedUserId,
+        contextType: 'chat',
+        contextId: conversationId,
+        reason: 'harassment_or_abusive_behaviour',
+        details: 'The other participant sent repeated threatening messages.'
+      });
+
+    expect(listingReport.status).toBe(201);
+    expect(chatReport.status).toBe(201);
+    expect(await Report.countDocuments({ reporterId })).toBe(2);
+    expect(mockedSendReportConfirmationEmail).toHaveBeenCalledTimes(2);
+
+    const ownHistory = await request(app.callback())
+      .get('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`);
+    expect(ownHistory.status).toBe(200);
+    expect(ownHistory.body.reports).toEqual([
+      {
+        id: chatReport.body.report.id,
+        targetType: 'user',
+        contextType: 'chat',
+        reason: 'harassment_or_abusive_behaviour',
+        details: 'The other participant sent repeated threatening messages.',
+        status: 'pending',
+        createdAt: chatReport.body.report.createdAt
+      },
+      {
+        id: listingReport.body.report.id,
+        targetType: 'listing',
+        contextType: 'listing',
+        reason: 'misleading_information',
+        details: 'The listing photos show a different product.',
+        status: 'pending',
+        createdAt: listingReport.body.report.createdAt
+      }
+    ]);
+
+    const otherHistory = await request(app.callback())
+      .get(`/api/reports?reporterId=${reporterId}`)
+      .set('Authorization', `Bearer ${outsiderToken}`);
+    expect(otherHistory.body).toEqual({ status: 'success', reports: [] });
+  });
+
+  test('a second submission is rejected without another receipt or history entry', async () => {
+    const payload = {
+      targetType: 'listing',
+      targetId: listingId,
+      contextType: 'listing',
+      reason: 'counterfeit_item',
+      details: 'The branding on the item does not match the manufacturer.'
+    };
+    const first = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`)
+      .send(payload);
+    const duplicate = await request(app.callback())
+      .post('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`)
+      .send({ ...payload, contextId: listingId });
+    const history = await request(app.callback())
+      .get('/api/reports')
+      .set('Authorization', `Bearer ${reporterToken}`);
+
+    expect(first.status).toBe(201);
+    expect(duplicate.status).toBe(409);
+    expect(history.body.reports).toHaveLength(1);
+    expect(history.body.reports[0].id).toBe(first.body.report.id);
+    expect(mockedSendReportConfirmationEmail).toHaveBeenCalledTimes(1);
   });
 
   test('rejects a chat report from a user outside the conversation', async () => {

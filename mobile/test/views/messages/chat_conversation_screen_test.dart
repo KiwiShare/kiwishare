@@ -23,6 +23,7 @@ import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/views/messages/chat_conversation_screen.dart';
 import 'package:kiwishare/views/profile/public_profile_screen.dart';
 import 'package:kiwishare/views/profile/report_screen.dart';
+import 'package:kiwishare/views/shared/widgets/review_bottom_sheet.dart';
 import 'package:kiwishare/widgets/notification_permission_dialog.dart';
 
 import '../../support/fake_chat_photo_uploader.dart';
@@ -1343,6 +1344,77 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(PublicProfileScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'tapping counterpart avatar on received message opens public profile',
+    (tester) async {
+      final repository = FakeChatRepository(
+        messages: {
+          'conversation-1': [
+            testMessage(id: '101', text: 'Hello', isMine: false),
+          ],
+        },
+      );
+      final mockUserRepo = MockUserRepository();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            Provider<UserRepository>.value(value: mockUserRepo),
+            ChangeNotifierProvider<AuthProvider>(
+              create: (_) => AuthProvider(userRepository: mockUserRepo),
+            ),
+          ],
+          child: _buildSubject(repository: repository),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final avatars = find.byType(CircleAvatar);
+      expect(avatars, findsWidgets);
+      // Tap counterpart avatar next to the received message
+      await tester.tap(avatars.last);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PublicProfileScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'completed transaction shows leave review card and opens ReviewBottomSheet',
+    (tester) async {
+      final repository = FakeChatRepository(
+        messages: {
+          'conversation-1': [
+            testMessage(
+              id: '102',
+              text: '🤝 [Transaction Completed] Handover complete!',
+              isMine: false,
+            ),
+          ],
+        },
+      );
+      final mockUserRepo = MockUserRepository();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            Provider<UserRepository>.value(value: mockUserRepo),
+            ChangeNotifierProvider<AuthProvider>(
+              create: (_) => AuthProvider(userRepository: mockUserRepo),
+            ),
+          ],
+          child: _buildSubject(repository: repository),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final reviewBtn = find.byKey(const Key('chat_order_leave_review_btn'));
+      expect(reviewBtn, findsOneWidget);
+      await tester.tap(reviewBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReviewBottomSheet), findsOneWidget);
     },
   );
 }

@@ -27,8 +27,8 @@ class SavedCard {
       id: (json['id'] ?? '').toString(),
       brand: (card['brand'] ?? 'unknown').toString(),
       last4: (card['last4'] ?? '••••').toString(),
-      expMonth: (card['exp_month'] as num?)?.toInt() ?? 0,
-      expYear: (card['exp_year'] as num?)?.toInt() ?? 0,
+      expMonth: ((card['expMonth'] ?? card['exp_month']) as num?)?.toInt() ?? 0,
+      expYear: ((card['expYear'] ?? card['exp_year']) as num?)?.toInt() ?? 0,
       isDefault: json['isDefault'] == true,
     );
   }
