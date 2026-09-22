@@ -1476,27 +1476,45 @@ class _HomeProductsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 220,
-        crossAxisSpacing: AppSpacing.md,
-        mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.75 - (textScale - 1) * 0.22,
+    final textScale =
+        MediaQuery.textScalerOf(context).scale(1).clamp(1, 2).toDouble();
+    return LayoutBuilder(
+      builder: (context, constraints) => GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: _compactHomeGridDelegate(
+          constraints.maxWidth,
+          textScale,
+        ),
+        itemCount: products.length,
+        itemBuilder: (context, index) {
+          final item = products[index];
+          return ItemCard(
+            item: item,
+            compact: true,
+            onTap: () => onOpen(item),
+          );
+        },
       ),
-      itemCount: products.length,
-      itemBuilder: (context, index) {
-        final item = products[index];
-        return ItemCard(
-          item: item,
-          compact: true,
-          onTap: () => onOpen(item),
-        );
-      },
     );
   }
+}
+
+SliverGridDelegateWithMaxCrossAxisExtent _compactHomeGridDelegate(
+  double availableWidth,
+  double textScale,
+) {
+  const maxCardWidth = 220.0;
+  final rawColumns = (availableWidth / (maxCardWidth + AppSpacing.md)).ceil();
+  final columns = rawColumns < 1 ? 1 : rawColumns;
+  final cardWidth =
+      (availableWidth - (columns - 1) * AppSpacing.md) / columns;
+  return SliverGridDelegateWithMaxCrossAxisExtent(
+    maxCrossAxisExtent: maxCardWidth,
+    crossAxisSpacing: AppSpacing.md,
+    mainAxisSpacing: AppSpacing.md,
+    mainAxisExtent: ItemCard.compactHeightForWidth(cardWidth, textScale),
+  );
 }
 
 class _HomeLoadingState extends StatelessWidget {
@@ -1512,17 +1530,17 @@ class _HomeLoadingState extends StatelessWidget {
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: AppSpacing.md),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 220,
-            crossAxisSpacing: AppSpacing.md,
-            mainAxisSpacing: AppSpacing.md,
-            childAspectRatio: 0.75,
+        LayoutBuilder(
+          builder: (context, constraints) => GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: _compactHomeGridDelegate(
+              constraints.maxWidth,
+              MediaQuery.textScalerOf(context).scale(1).clamp(1, 2).toDouble(),
+            ),
+            itemCount: 4,
+            itemBuilder: (_, _) => const ItemCardSkeleton(compact: true),
           ),
-          itemCount: 4,
-          itemBuilder: (_, _) => const ItemCardSkeleton(compact: true),
         ),
       ],
     );

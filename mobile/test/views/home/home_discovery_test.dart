@@ -546,8 +546,27 @@ void main() {
     final compactCards = find.byKey(const Key('compact-item-card'));
     expect(compactCards, findsWidgets);
     expect(tester.getSize(compactCards.first).height, lessThan(220));
+    final bookmark = find.descendant(
+      of: compactCards.first,
+      matching: find.byIcon(Icons.bookmark_outline),
+    );
+    expect(bookmark, findsOneWidget);
+    expect(
+      tester.getRect(compactCards.first).bottom - tester.getRect(bookmark).bottom,
+      lessThan(30),
+    );
     expect(find.byKey(const Key('home-scan-qr-button')), findsOneWidget);
     expect(find.byKey(const Key('home-location-button')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await _loadHome(
+      tester,
+      _homeApp(
+        themeMode: ThemeMode.dark,
+        textScaler: const TextScaler.linear(2),
+        itemRepository: _GridOnlyItemRepository(),
+      ),
+    );
     expect(tester.takeException(), isNull);
   });
 

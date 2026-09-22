@@ -9,6 +9,13 @@ import '../../../providers/providers.dart';
 import '../../../services/notification_permission_coordinator.dart';
 
 class ItemCard extends StatelessWidget {
+  static const compactImageAspectRatio = 1.32;
+
+  static double compactHeightForWidth(double width, double textScale) =>
+      width / compactImageAspectRatio +
+      89 +
+      (textScale.clamp(1, 2) - 1) * 70;
+
   final ItemModel item;
   final VoidCallback? onTap;
   final NotificationPermissionCoordinator? permissionCoordinator;
@@ -51,13 +58,33 @@ class ItemCard extends StatelessWidget {
     final isLoggedIn = auth == null || auth.isLoggedIn;
     final favorites = context.watch<FavoritesProvider>();
     final isFavorite = favorites.isFavorite(item.id);
+    final title = Text(
+      item.title,
+      style: GoogleFonts.inter(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+        color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+      ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
 
-    return Semantics(
+    return LayoutBuilder(
+      builder: (context, constraints) => Semantics(
       key: compact ? const Key('compact-item-card') : null,
       button: onTap != null,
       label:
           '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.location}, category: ${item.category}',
       child: Container(
+        constraints: compact
+            ? BoxConstraints(
+                maxHeight: compactHeightForWidth(
+                  constraints.maxWidth,
+                  MediaQuery.textScalerOf(context).scale(1),
+                ),
+              )
+            : null,
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E222A) : Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -90,7 +117,7 @@ class ItemCard extends StatelessWidget {
               children: [
                 // 1. Photo Section with Overlays
                 AspectRatio(
-                  aspectRatio: compact ? 1.32 : 1.20,
+                  aspectRatio: compact ? compactImageAspectRatio : 1.20,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -271,8 +298,9 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
 
-                      // Top Right: Favorite Button
-                      if (isLoggedIn)
+                      // Keep the default card action; compact Home cards place
+                      // their Watchlist action beside the title instead.
+                      if (!compact && isLoggedIn)
                         Positioned(
                           right: 8,
                           top: 8,
@@ -389,14 +417,16 @@ class ItemCard extends StatelessWidget {
                 ),
 
                 // 2. Info & Details Body
-                Padding(
+                _compactInfoBody(compact, Padding(
                   padding: compact
                       ? const EdgeInsets.fromLTRB(10, 6, 10, 6)
                       : const EdgeInsets.fromLTRB(10, 7, 10, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  child: Stack(
                     children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                       // Price Row
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -459,7 +489,7 @@ class ItemCard extends StatelessWidget {
                               ),
                             ),
                           ],
-                          if (item.watchlistCount > 0) ...[
+                          if (!compact && item.watchlistCount > 0) ...[
                             const Spacer(),
                             const Icon(
                               Icons.favorite,
@@ -473,6 +503,31 @@ class ItemCard extends StatelessWidget {
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 color: const Color(0xFFEF4444),
+                              ),
+                            ),
+                          ],
+                          if (compact &&
+                              (item.seller?.isStudentVerified == true ||
+                                  item.isSustainable))
+                            const Spacer(),
+                          if (compact &&
+                              item.seller?.isStudentVerified == true)
+                            const Tooltip(
+                              message: 'Verified student seller',
+                              child: Icon(
+                                Icons.verified,
+                                size: 11.5,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                          if (compact && item.isSustainable) ...[
+                            const SizedBox(width: 3),
+                            const Tooltip(
+                              message: 'Sustainable listing',
+                              child: Icon(
+                                Icons.eco_rounded,
+                                size: 11.5,
+                                color: Color(0xFF059669),
                               ),
                             ),
                           ],
@@ -501,47 +556,17 @@ class ItemCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (compact &&
-                              item.seller?.isStudentVerified == true) ...[
-                            const SizedBox(width: 3),
-                            const Tooltip(
-                              message: 'Verified student seller',
-                              child: Icon(
-                                Icons.verified,
-                                size: 11.5,
-                                color: Color(0xFF2563EB),
-                              ),
-                            ),
-                          ],
-                          if (compact && item.isSustainable) ...[
-                            const SizedBox(width: 3),
-                            const Tooltip(
-                              message: 'Sustainable listing',
-                              child: Icon(
-                                Icons.eco_rounded,
-                                size: 11.5,
-                                color: Color(0xFF059669),
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                       const SizedBox(height: 2.5),
 
                       // Title (up to 2 lines)
-                      Text(
-                        item.title,
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          height: 1.25,
-                          color: isDark
-                              ? const Color(0xFFF1F5F9)
-                              : const Color(0xFF1E293B),
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      if (compact && isLoggedIn)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 64),
+                          child: title,
+                        )
+                      else title,
 
                       // Seller Row
                       if (!compact) const SizedBox(height: 4),
@@ -709,13 +734,80 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       ],
+                        ],
+                      ),
+                      if (compact && isLoggedIn)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Tooltip(
+                            message: isFavorite
+                                ? 'Remove from Watchlist'
+                                : 'Add to Watchlist',
+                            child: Material(
+                              color: isFavorite
+                                  ? colors.primaryContainer
+                                  : colors.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                key: Key('compact-watchlist-${item.id}'),
+                                onTap: () => unawaited(
+                                  _toggleFavorite(context, favorites),
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minWidth: 40,
+                                    minHeight: 40,
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 7,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          isFavorite
+                                              ? Icons.bookmark
+                                              : Icons.bookmark_outline,
+                                          size: 19,
+                                          color: isFavorite
+                                              ? colors.onPrimaryContainer
+                                              : colors.onSurfaceVariant,
+                                        ),
+                                        if (item.watchlistCount > 0) ...[
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            item.watchlistCount > 99
+                                                ? '99+'
+                                                : '${item.watchlistCount}',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              color: isFavorite
+                                                  ? colors.onPrimaryContainer
+                                                  : colors.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
-                ),
+                )),
               ],
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -739,3 +831,6 @@ class ItemCard extends StatelessWidget {
         .join(' ');
   }
 }
+
+Widget _compactInfoBody(bool compact, Widget body) =>
+    compact ? Expanded(child: body) : body;

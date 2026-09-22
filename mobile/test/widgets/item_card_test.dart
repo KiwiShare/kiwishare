@@ -133,6 +133,55 @@ void main() {
     expect(find.byTooltip('Verified student seller'), findsOneWidget);
     expect(find.byTooltip('Sustainable listing'), findsOneWidget);
     expect(find.text('Verified Student'), findsNothing);
+    expect(find.byIcon(Icons.bookmark_outline), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_border), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact card uses a bottom-right Watchlist action and count', (
+    tester,
+  ) async {
+    const item = ItemModel(
+      id: 'compact-watch-item',
+      title: 'Desk lamp',
+      priceNzd: '15',
+      location: 'Auckland',
+      imageUrl: '',
+      isSustainable: false,
+      category: 'Home',
+      status: ItemStatus.active,
+      watchlistCount: 3,
+    );
+    final watchlist = WatchlistProvider(
+      repository: TestWatchlistRepository(),
+      initialToken: 'valid-token',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangeNotifierProvider<WatchlistProvider>.value(
+            value: watchlist,
+            child: const SizedBox(
+              width: 200,
+              child: ItemCard(item: item, compact: true),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final button = find.byKey(const Key('compact-watchlist-compact-watch-item'));
+    expect(find.byIcon(Icons.bookmark_outline), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(find.byIcon(Icons.favorite), findsNothing);
+    expect(tester.getRect(button).bottom,
+        lessThanOrEqualTo(tester.getRect(find.byType(ItemCard)).bottom - 5));
+
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(watchlist.isWatched(item.id), isTrue);
+    expect(find.byIcon(Icons.bookmark), findsOneWidget);
+    expect(find.byTooltip('Remove from Watchlist'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
