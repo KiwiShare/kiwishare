@@ -47,7 +47,10 @@ The backend Koa server is deployed to [Render.com](https://render.com) as a Web 
        npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter server run build
        ```
        The workspace allowlist permits the `ffmpeg-static` install lifecycle so
-       the voice-message decoder binary is provisioned during deployment.
+       the voice-message decoder binary is provisioned during deployment. The
+       server `prebuild` hook also rebuilds this package to recover safely when
+       Render restores a dependency cache created before lifecycle scripts were
+       enabled.
      - **Start Command**:
        ```bash
        node server/dist/index.js

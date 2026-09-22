@@ -159,6 +159,32 @@ void main() {
     expect(find.text('0/10'), findsOneWidget);
   });
 
+  testWidgets('camera photo is decoded and shown before publishing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final imagePicker = FakeListingImagePicker(
+      cameraPhoto: testPhoto('camera-capture.jpeg'),
+    );
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, imagePicker: imagePicker),
+    );
+
+    await tester.tap(find.byKey(const Key('post_add_photos_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('post_take_photo_option')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1/10'), findsOneWidget);
+    expect(find.byKey(const Key('post_hero_image_card')), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('restores a photo returned by Android lost-data recovery', (
     tester,
   ) async {

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../models/item_model.dart';
 import '../../../providers/providers.dart';
 import '../../../services/notification_permission_coordinator.dart';
+import '../../../widgets/resilient_network_image.dart';
 
 class ItemCard extends StatelessWidget {
   final ItemModel item;
@@ -98,27 +99,37 @@ class ItemCard extends StatelessWidget {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: isDark
-                                ? [const Color(0xFF282E39), const Color(0xFF1F242D)]
-                                : [const Color(0xFFF3F4F6), const Color(0xFFE5E7EB)],
+                                ? [
+                                    const Color(0xFF282E39),
+                                    const Color(0xFF1F242D),
+                                  ]
+                                : [
+                                    const Color(0xFFF3F4F6),
+                                    const Color(0xFFE5E7EB),
+                                  ],
                           ),
                         ),
                         child: item.imageUrl.isNotEmpty
-                            ? Image.network(
-                                item.imageUrl,
+                            ? ResilientNetworkImage(
+                                url: item.imageUrl,
+                                logicalCacheWidth: 220,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
                                     Center(
-                                  child: Icon(
-                                    Icons.image_not_supported_outlined,
-                                    color: colors.onSurfaceVariant.withOpacity(0.4),
-                                    size: 28,
-                                  ),
-                                ),
+                                      child: Icon(
+                                        Icons.image_not_supported_outlined,
+                                        color: colors.onSurfaceVariant
+                                            .withOpacity(0.4),
+                                        size: 28,
+                                      ),
+                                    ),
                               )
                             : Center(
                                 child: Icon(
                                   Icons.image_outlined,
-                                  color: colors.onSurfaceVariant.withOpacity(0.4),
+                                  color: colors.onSurfaceVariant.withOpacity(
+                                    0.4,
+                                  ),
                                   size: 28,
                                 ),
                               ),
@@ -213,7 +224,9 @@ class ItemCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFD97706).withOpacity(0.4),
+                                  color: const Color(
+                                    0xFFD97706,
+                                  ).withOpacity(0.4),
                                   blurRadius: 6,
                                   offset: const Offset(0, 2),
                                 ),
@@ -267,8 +280,9 @@ class ItemCard extends StatelessWidget {
                               ),
                               clipBehavior: Clip.antiAlias,
                               child: InkWell(
-                                onTap: () =>
-                                    unawaited(_toggleFavorite(context, favorites)),
+                                onTap: () => unawaited(
+                                  _toggleFavorite(context, favorites),
+                                ),
                                 child: Padding(
                                   padding: const EdgeInsets.all(6),
                                   child: Icon(
@@ -379,7 +393,10 @@ class ItemCard extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFF10B981), Color(0xFF059669)],
+                                  colors: [
+                                    Color(0xFF10B981),
+                                    Color(0xFF059669),
+                                  ],
                                 ),
                                 borderRadius: BorderRadius.circular(5),
                               ),
@@ -499,8 +516,8 @@ class ItemCard extends StatelessWidget {
                                 item.seller?.isStudentVerified == true
                                 ? const Color(0xFFDBEAFE)
                                 : (isDark
-                                    ? const Color(0xFF374151)
-                                    : const Color(0xFFF1F5F9)),
+                                      ? const Color(0xFF374151)
+                                      : const Color(0xFFF1F5F9)),
                             backgroundImage:
                                 item.seller?.avatarUrl != null &&
                                     item.seller!.avatarUrl!.isNotEmpty
@@ -511,7 +528,7 @@ class ItemCard extends StatelessWidget {
                                     item.seller!.avatarUrl!.isEmpty
                                 ? Text(
                                     (item.seller?.displayName.isNotEmpty ==
-                                             true)
+                                            true)
                                         ? item.seller!.displayName[0]
                                               .toUpperCase()
                                         : 'K',
@@ -522,8 +539,8 @@ class ItemCard extends StatelessWidget {
                                           item.seller?.isStudentVerified == true
                                           ? const Color(0xFF1D4ED8)
                                           : (isDark
-                                              ? Colors.white70
-                                              : const Color(0xFF475569)),
+                                                ? Colors.white70
+                                                : const Color(0xFF475569)),
                                     ),
                                   )
                                 : null,
@@ -579,12 +596,16 @@ class ItemCard extends StatelessWidget {
                                   ),
                                   decoration: BoxDecoration(
                                     color: isDark
-                                        ? const Color(0xFF064E3B).withOpacity(0.4)
+                                        ? const Color(
+                                            0xFF064E3B,
+                                          ).withOpacity(0.4)
                                         : const Color(0xFFECFDF5),
                                     borderRadius: BorderRadius.circular(5),
                                     border: Border.all(
                                       color: isDark
-                                          ? const Color(0xFF059669).withOpacity(0.4)
+                                          ? const Color(
+                                              0xFF059669,
+                                            ).withOpacity(0.4)
                                           : const Color(0xFFA7F3D0),
                                       width: 0.8,
                                     ),
@@ -620,12 +641,16 @@ class ItemCard extends StatelessWidget {
                                   ),
                                   decoration: BoxDecoration(
                                     color: isDark
-                                        ? const Color(0xFF1E3A8A).withOpacity(0.4)
+                                        ? const Color(
+                                            0xFF1E3A8A,
+                                          ).withOpacity(0.4)
                                         : const Color(0xFFEFF6FF),
                                     borderRadius: BorderRadius.circular(5),
                                     border: Border.all(
                                       color: isDark
-                                          ? const Color(0xFF2563EB).withOpacity(0.4)
+                                          ? const Color(
+                                              0xFF2563EB,
+                                            ).withOpacity(0.4)
                                           : const Color(0xFFBFDBFE),
                                       width: 0.8,
                                     ),
