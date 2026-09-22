@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
 import 'package:kiwishare/views/messages/messages_screen.dart';
+import 'package:kiwishare/widgets/resilient_network_image.dart';
 
 import '../../support/fake_chat_repository.dart';
 
@@ -70,6 +71,36 @@ void main() {
     expect(find.text('Ergonomic Office Chair'), findsOneWidget);
     expect(find.text('Is this still available?'), findsOneWidget);
     expect(find.byKey(const Key('chat_unread_badge')), findsOneWidget);
+  });
+
+  testWidgets('renders the participant profile photo in each chat row', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    const avatarUrl = 'https://images.example.com/sophie-avatar.jpg';
+    final repository = FakeChatRepository(
+      conversations: [testConversation(participantAvatarUrl: avatarUrl)],
+    );
+
+    await tester.pumpWidget(_buildSubject(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('chat_participant_avatar_image')),
+      findsOneWidget,
+    );
+    final avatar = tester.widget<ResilientNetworkImage>(
+      find.byKey(const Key('chat_participant_avatar_image')),
+    );
+    expect(avatar.url, avatarUrl);
+    expect(avatar.fit, BoxFit.cover);
+    expect(avatar.semanticLabel, isNull);
+    final avatarSemantics = tester.getSemantics(
+      find.byKey(const Key('chat_participant_avatar')),
+    );
+    expect(avatarSemantics.label, contains('Sophie M. profile avatar'));
+    expect(avatarSemantics.label, isNot(contains('Sophie M. profile photo')));
+    semantics.dispose();
   });
 
   testWidgets('filters server conversations by unread, buying, and selling', (

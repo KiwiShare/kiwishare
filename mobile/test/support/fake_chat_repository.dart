@@ -220,6 +220,7 @@ class FakeChatRepository implements ChatRepository {
 ChatConversationModel testConversation({
   String id = 'conversation-1',
   String participantName = 'Sophie M.',
+  String? participantAvatarUrl,
   String itemTitle = 'Ergonomic Office Chair',
   ChatDirection direction = ChatDirection.buying,
   String lastMessage = 'Is this still available?',
@@ -233,6 +234,7 @@ ChatConversationModel testConversation({
     itemImageUrl: '',
     participantId: 'participant-$id',
     participantName: participantName,
+    participantAvatarUrl: participantAvatarUrl,
     direction: direction,
     status: status,
     lastMessage: lastMessage,

@@ -30,7 +30,7 @@ void main() {
                 'participant': {
                   'id': 'seller-1',
                   'displayName': 'Sam Seller',
-                  'avatarUrl': null,
+                  'avatarUrl': 'https://example.com/sam-avatar.jpg',
                 },
               },
             ],
@@ -49,6 +49,10 @@ void main() {
     expect(conversations.single.id, 'conversation-1');
     expect(conversations.single.itemTitle, 'Wood Desk');
     expect(conversations.single.participantName, 'Sam Seller');
+    expect(
+      conversations.single.participantAvatarUrl,
+      'https://example.com/sam-avatar.jpg',
+    );
     expect(conversations.single.unreadCount, 2);
   });
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/resilient_network_image.dart';
+
 enum ChatAvatarStyle { personWarm, personCool, item }
 
 class ChatListTile extends StatelessWidget {
@@ -11,6 +13,7 @@ class ChatListTile extends StatelessWidget {
     required this.time,
     required this.unreadCount,
     required this.avatarStyle,
+    this.avatarUrl,
     required this.onTap,
   });
 
@@ -20,6 +23,7 @@ class ChatListTile extends StatelessWidget {
   final String time;
   final int unreadCount;
   final ChatAvatarStyle avatarStyle;
+  final String? avatarUrl;
   final VoidCallback onTap;
 
   @override
@@ -41,7 +45,11 @@ class ChatListTile extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _ChatAvatar(style: avatarStyle),
+                  _ChatAvatar(
+                    name: name,
+                    style: avatarStyle,
+                    avatarUrl: avatarUrl,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -146,33 +154,56 @@ class ChatListTile extends StatelessWidget {
 }
 
 class _ChatAvatar extends StatelessWidget {
-  const _ChatAvatar({required this.style});
+  const _ChatAvatar({
+    required this.name,
+    required this.style,
+    required this.avatarUrl,
+  });
 
+  final String name;
   final ChatAvatarStyle style;
+  final String? avatarUrl;
+
+  Widget _fallbackAvatar() {
+    return switch (style) {
+      ChatAvatarStyle.personWarm => const _PersonAvatar(
+        hairColor: Color(0xFF65402D),
+        shirtColor: Color(0xFF1E2522),
+      ),
+      ChatAvatarStyle.personCool => const _PersonAvatar(
+        hairColor: Color(0xFF49362B),
+        shirtColor: Color(0xFF405A5F),
+      ),
+      ChatAvatarStyle.item => const _ItemAvatar(),
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
+    final resolvedAvatarUrl = avatarUrl?.trim() ?? '';
     return Semantics(
+      key: const Key('chat_participant_avatar'),
+      excludeSemantics: true,
       image: true,
-      label: 'Profile avatar',
-      child: Container(
+      label: '$name profile avatar',
+      child: SizedBox(
         width: 46,
         height: 46,
-        decoration: const BoxDecoration(
-          color: Color(0xFFEDE2D3),
-          shape: BoxShape.circle,
+        child: ClipOval(
+          child: ColoredBox(
+            color: const Color(0xFFEDE2D3),
+            child: resolvedAvatarUrl.isEmpty
+                ? _fallbackAvatar()
+                : ResilientNetworkImage(
+                    key: const Key('chat_participant_avatar_image'),
+                    url: resolvedAvatarUrl,
+                    logicalCacheWidth: 46,
+                    maximumRetries: 1,
+                    errorBuilder: (context, error, stackTrace) =>
+                        _fallbackAvatar(),
+                  ),
+          ),
         ),
-        child: switch (style) {
-          ChatAvatarStyle.personWarm => const _PersonAvatar(
-            hairColor: Color(0xFF65402D),
-            shirtColor: Color(0xFF1E2522),
-          ),
-          ChatAvatarStyle.personCool => const _PersonAvatar(
-            hairColor: Color(0xFF49362B),
-            shirtColor: Color(0xFF405A5F),
-          ),
-          ChatAvatarStyle.item => const _ItemAvatar(),
-        },
       ),
     );
   }

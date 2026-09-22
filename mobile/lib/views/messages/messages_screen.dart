@@ -516,6 +516,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   : chat.lastMessage,
               time: _conversationTime(chat.lastMessageAt),
               unreadCount: chat.unreadCount,
+              avatarUrl: chat.participantAvatarUrl,
               avatarStyle: chat.direction == ChatDirection.buying
                   ? ChatAvatarStyle.personWarm
                   : ChatAvatarStyle.item,
