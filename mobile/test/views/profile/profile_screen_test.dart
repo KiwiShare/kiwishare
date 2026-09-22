@@ -221,7 +221,7 @@ void main() {
 
     await tester.scrollUntilVisible(find.text('Profile photo'), 100);
     expect(find.text('Profile photo'), findsOneWidget);
-    expect(find.text('Nickname'), findsOneWidget);
+    expect(find.text('Username'), findsOneWidget);
     expect(find.text('Riley'), findsWidgets);
     expect(find.text('Change password'), findsOneWidget);
   });

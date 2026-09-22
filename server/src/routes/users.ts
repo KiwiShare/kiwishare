@@ -135,7 +135,7 @@ router.patch('/users/me/password', authenticateToken, async (ctx) => {
     ? await User.findById(userId).select('+passwordHash')
     : await User.findOne({ id: userId }).select('+passwordHash');
 
-  if (!user || user.authProvider !== 'email_password' || !user.passwordHash) {
+  if (!user || !user.passwordHash) {
     ctx.status = 400;
     ctx.body = { message: 'Password changes are unavailable for this account.' };
     return;

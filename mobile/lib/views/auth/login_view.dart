@@ -805,6 +805,7 @@ class _LoginViewState extends State<LoginView> {
                 if (_isSignUp) ...[
                   TextFormField(
                     controller: _displayNameController,
+                    maxLength: 30,
                     textCapitalization: TextCapitalization.words,
                     style: GoogleFonts.inter(color: colors.onSurface),
                     decoration: _authInputDecoration(

@@ -22,7 +22,6 @@ import 'user_meetups_screen.dart';
 import 'user_orders_screen.dart';
 import 'settings_screen.dart';
 import 'public_profile_screen.dart';
-import '../scanner/qr_scanner_screen.dart';
 import '../support/support_chat_screen.dart';
 import '../../utils/trust_score.dart';
 import 'student_verification_sheet.dart';
@@ -201,6 +200,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (changed == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Password changed successfully.')),
+      );
+    }
+  }
+
+  Future<void> _showOtpSetPassword(BuildContext context) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _OtpSetPasswordDialog(),
+    );
+    if (changed == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Password set. You can now sign in with your email and password.',
+          ),
+        ),
       );
     }
   }
@@ -707,7 +722,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _ModernMenuTile(
                     icon: Icons.badge_outlined,
                     iconColor: const Color(0xFF14B8A6),
-                    title: 'Nickname',
+                    title: 'Username',
                     subtitle: user.displayName,
                     onTap: () => _editName(context, user),
                   ),
@@ -717,16 +732,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     title: 'Change password',
                     subtitle: canChangePassword
                         ? 'Update your password'
-                        : 'Managed by your sign-in provider',
+                        : 'Set a password using an email code',
                     onTap: canChangePassword
                         ? () => _showChangePassword(context)
-                        : () => ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Password changes are unavailable for this account. Use your sign-in provider instead.',
-                              ),
-                            ),
-                          ),
+                        : () => _showOtpSetPassword(context),
                   ),
                 ],
               ),
@@ -1835,7 +1844,7 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Edit nickname'),
+      title: const Text('Edit username'),
       content: Form(
         key: _formKey,
         child: TextFormField(
@@ -1844,7 +1853,7 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
           maxLength: 30,
           textCapitalization: TextCapitalization.words,
           decoration: InputDecoration(
-            labelText: 'Nickname',
+            labelText: 'Username',
             errorText: _failure,
           ),
           validator: (value) {
@@ -1947,6 +1956,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             validator: (v) =>
                 v == null || v.isEmpty ? 'Enter your current password.' : null,
           ),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _next,
             obscureText: !_showNext,
@@ -1967,6 +1977,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             validator: (v) =>
                 v == null || v.length < 8 ? 'Use at least 8 characters.' : null,
           ),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _confirm,
             obscureText: !_showConfirm,
@@ -2365,3 +2376,195 @@ class _VipPerkItem extends StatelessWidget {
   }
 }
 
+class _OtpSetPasswordDialog extends StatefulWidget {
+  const _OtpSetPasswordDialog();
+
+  @override
+  State<_OtpSetPasswordDialog> createState() => _OtpSetPasswordDialogState();
+}
+
+class _OtpSetPasswordDialogState extends State<_OtpSetPasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _code = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _sending = false;
+  bool _saving = false;
+  bool _showPassword = false;
+  String? _failure;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _code.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendCode() async {
+    setState(() {
+      _sending = true;
+      _failure = null;
+    });
+    try {
+      final email = _email.text.trim();
+      if (!email.contains('@')) {
+        setState(() => _failure = 'Enter a valid email address.');
+        return;
+      }
+      await context.read<AuthProvider>().requestPasswordReset(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Reset code sent. If email delivery is not configured, read the code from the server log.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _failure = error.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _saving = true;
+      _failure = null;
+    });
+    try {
+      await context.read<AuthProvider>().resetPassword(
+        email: _email.text.trim(),
+        code: _code.text.trim(),
+        newPassword: _next.text,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _failure = error.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Set a password'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'We will send a verification code to the email below.',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Account email',
+                border: OutlineInputBorder(),
+              ),
+              validator: (v) => v == null || !v.contains('@')
+                  ? 'Enter a valid email address.'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _code,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'Verification code',
+                      counterText: '',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? 'Enter the code.'
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: TextButton(
+                    onPressed: _sending ? null : _sendCode,
+                    child: Text(_sending ? 'Sending…' : 'Send code'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _next,
+              obscureText: !_showPassword,
+              decoration: InputDecoration(
+                labelText: 'New password',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  tooltip: _showPassword ? 'Hide password' : 'Show password',
+                  icon: Icon(
+                    _showPassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                  onPressed: _saving
+                      ? null
+                      : () => setState(() => _showPassword = !_showPassword),
+                ),
+              ),
+              validator: (v) => v == null || v.length < 8
+                  ? 'Use at least 8 characters.'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _confirm,
+              obscureText: !_showPassword,
+              decoration: const InputDecoration(
+                labelText: 'Confirm new password',
+                border: OutlineInputBorder(),
+              ),
+              validator: (v) =>
+                  v != _next.text ? 'Passwords do not match.' : null,
+            ),
+            if (_failure != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_failure!, style: TextStyle(color: colors.error)),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: Text(_saving ? 'Saving…' : 'Save'),
+        ),
+      ],
+    );
+  }
+}
