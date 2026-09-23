@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, Globe, Heart, ShieldCheck, Leaf } from 'lucide-react';
+import { Globe, Heart, ShieldCheck, Leaf } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
@@ -11,18 +11,19 @@ export const Footer: React.FC = () => {
           {/* Brand Col */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, var(--primary-500), var(--primary-700))',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff'
-              }}>
-                <Sparkles size={18} />
-              </div>
+              <img
+                src="/kiwi-mark.png"
+                alt=""
+                aria-hidden="true"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  objectFit: 'contain',
+                  backgroundColor: '#fff',
+                  flexShrink: 0,
+                }}
+              />
               <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary-700)' }}>
                 Kiwi<span style={{ color: 'var(--primary-500)' }}>Share</span>
               </span>

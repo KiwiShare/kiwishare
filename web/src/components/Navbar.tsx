@@ -4,13 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import { useWatchlist } from '../context/WatchlistContext';
 import { useChat } from '../context/ChatContext';
 import { PostItemModal } from './PostItemModal';
-import { 
-  Heart, 
-  Search, 
-  User as UserIcon, 
-  LogOut, 
-  PlusCircle, 
-  Sparkles,
+import {
+  Heart,
+  Search,
+  User as UserIcon,
+  LogOut,
+  PlusCircle,
   Compass,
   ShieldCheck,
   LayoutDashboard,
@@ -52,20 +51,22 @@ export const Navbar: React.FC = () => {
         <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 'var(--header-height)' }}>
           
           {/* Brand Logo */}
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
-            <div style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, var(--primary-500), var(--primary-700))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              boxShadow: 'var(--shadow-primary)'
-            }}>
-              <Sparkles size={24} />
-            </div>
+          <Link
+            to="/"
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}
+          >
+            <img
+              src="/kiwi-mark.png"
+              alt="KiwiShare kiwi bird logo"
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '50%',
+                objectFit: 'contain',
+                backgroundColor: '#fff',
+                flexShrink: 0,
+              }}
+            />
             <div>
               <span style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--primary-700)' }}>
                 Kiwi<span style={{ color: 'var(--primary-500)' }}>Share</span>
