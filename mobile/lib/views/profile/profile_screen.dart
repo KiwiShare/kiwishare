@@ -1047,7 +1047,8 @@ class _ProfileHeader extends StatelessWidget {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         GestureDetector(
-                          onTap: () => showKiwiTrustScoreSheet(context, user.trustScore),
+                          onTap: () =>
+                              showKiwiTrustScoreSheet(context, user.trustScore),
                           child: Semantics(
                             label:
                                 'Trust score ${formatPublicTrustScore(user.trustScore)}',
@@ -1097,7 +1098,8 @@ class _ProfileHeader extends StatelessWidget {
                           ),
                         ),
                         GestureDetector(
-                          onTap: () => showKiwiTrustScoreSheet(context, user.trustScore),
+                          onTap: () =>
+                              showKiwiTrustScoreSheet(context, user.trustScore),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -1109,10 +1111,15 @@ class _ProfileHeader extends StatelessWidget {
                                   : getTrustScoreInfo(user.trustScore).lightBg,
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
-                                color: (isDark
-                                        ? getTrustScoreInfo(user.trustScore).darkColor
-                                        : getTrustScoreInfo(user.trustScore).lightColor)
-                                    .withOpacity(0.4),
+                                color:
+                                    (isDark
+                                            ? getTrustScoreInfo(
+                                                user.trustScore,
+                                              ).darkColor
+                                            : getTrustScoreInfo(
+                                                user.trustScore,
+                                              ).lightColor)
+                                        .withOpacity(0.4),
                                 width: 0.8,
                               ),
                             ),
@@ -1120,8 +1127,12 @@ class _ProfileHeader extends StatelessWidget {
                               getTrustScoreInfo(user.trustScore).label,
                               style: TextStyle(
                                 color: isDark
-                                    ? getTrustScoreInfo(user.trustScore).darkColor
-                                    : getTrustScoreInfo(user.trustScore).lightColor,
+                                    ? getTrustScoreInfo(
+                                        user.trustScore,
+                                      ).darkColor
+                                    : getTrustScoreInfo(
+                                        user.trustScore,
+                                      ).lightColor,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 11,
                               ),
@@ -1182,7 +1193,8 @@ class _ProfileHeader extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute<void>(
-                            builder: (_) => PublicProfileScreen(userId: user.id),
+                            builder: (_) =>
+                                PublicProfileScreen(userId: user.id),
                           ),
                         );
                       },

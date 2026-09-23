@@ -165,7 +165,9 @@ class _ReviewBottomSheetState extends State<ReviewBottomSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Color(0xFF059669),
-          content: Text('Review submitted! It is now visible on their profile.'),
+          content: Text(
+            'Review submitted! It is now visible on their profile.',
+          ),
           duration: Duration(seconds: 3),
         ),
       );
@@ -211,11 +213,13 @@ class _ReviewBottomSheetState extends State<ReviewBottomSheet> {
                 CircleAvatar(
                   radius: 20,
                   backgroundColor: theme.colorScheme.primaryContainer,
-                  backgroundImage: widget.targetAvatarUrl != null &&
+                  backgroundImage:
+                      widget.targetAvatarUrl != null &&
                           widget.targetAvatarUrl!.isNotEmpty
                       ? NetworkImage(widget.targetAvatarUrl!)
                       : null,
-                  child: widget.targetAvatarUrl == null ||
+                  child:
+                      widget.targetAvatarUrl == null ||
                           widget.targetAvatarUrl!.isEmpty
                       ? Text(
                           widget.targetName.isNotEmpty

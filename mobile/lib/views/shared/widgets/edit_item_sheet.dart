@@ -64,7 +64,8 @@ class _EditItemSheetState extends State<EditItemSheet> {
     _category = _categories.contains(widget.item.category)
         ? widget.item.category
         : 'Other';
-    final condNormalized = widget.item.condition?.toLowerCase().replaceAll('_', ' ') ?? 'good';
+    final condNormalized =
+        widget.item.condition?.toLowerCase().replaceAll('_', ' ') ?? 'good';
     _condition = _conditions.firstWhere(
       (c) => c.toLowerCase() == condNormalized,
       orElse: () => 'Good',
@@ -102,7 +103,10 @@ class _EditItemSheetState extends State<EditItemSheet> {
         ? 'reserved'
         : 'sold';
 
-    final normalizedCondition = _condition.trim().toLowerCase().replaceAll(RegExp(r'[\s-]+'), '_');
+    final normalizedCondition = _condition.trim().toLowerCase().replaceAll(
+      RegExp(r'[\s-]+'),
+      '_',
+    );
 
     final updates = <String, dynamic>{
       'title': _titleController.text.trim(),

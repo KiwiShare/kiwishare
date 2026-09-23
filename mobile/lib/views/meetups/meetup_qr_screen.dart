@@ -321,8 +321,7 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
         meetup.isConfirmed ||
         meetup.proposalStatus == 'confirmed' ||
         meetup.proposalStatus == 'accepted';
-    final isPaid =
-        meetup.isPaid || (meetup.qrToken != null && meetup.qrToken!.isNotEmpty);
+    final isPaid = meetup.isPaid;
 
     final qrData = meetup.qrToken ?? 'QR_HANDOVER_TOKEN_${meetup.id}';
 
@@ -684,7 +683,7 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'The item handover has been verified and ownership transferred. Both parties have been awarded 10 trust score points!',
+                      'The item handover has been verified and ownership transferred. Each participant has been awarded 5 trust score points.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: isDark

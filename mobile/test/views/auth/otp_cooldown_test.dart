@@ -94,16 +94,20 @@ class FakeCooldownUserRepository implements UserRepository {
   );
 
   @override
-  Future<UserModel> updateBio(String bio, {required String token}) async => const UserModel(
-    id: 'test_u',
-    displayName: 'Test User',
-    avatarUrl: '',
-    trustScore: 90,
-    isVerified: true,
-  );
+  Future<UserModel> updateBio(String bio, {required String token}) async =>
+      const UserModel(
+        id: 'test_u',
+        displayName: 'Test User',
+        avatarUrl: '',
+        trustScore: 90,
+        isVerified: true,
+      );
 
   @override
-  Future<PublicProfileModel> fetchPublicProfile(String userId, {String? token}) async => const PublicProfileModel(
+  Future<PublicProfileModel> fetchPublicProfile(
+    String userId, {
+    String? token,
+  }) async => const PublicProfileModel(
     id: 'test_u',
     displayName: 'Test User',
     bio: '',
@@ -120,10 +124,17 @@ class FakeCooldownUserRepository implements UserRepository {
   );
 
   @override
-  Future<List<ItemModel>> fetchUserPublicItems(String userId, {String status = 'active', String? token}) async => [];
+  Future<List<ItemModel>> fetchUserPublicItems(
+    String userId, {
+    String status = 'active',
+    String? token,
+  }) async => [];
 
   @override
-  Future<List<PublicReviewModel>> fetchUserPublicReviews(String userId, {String? token}) async => [];
+  Future<List<PublicReviewModel>> fetchUserPublicReviews(
+    String userId, {
+    String? token,
+  }) async => [];
 
   @override
   Future<void> submitReview({
@@ -196,7 +207,10 @@ void main() {
       // Verify initial cooldown is active at 60s
       expect(find.text('Resend (60s)'), findsOneWidget);
       expect(find.text("Didn't receive code? "), findsOneWidget);
-      expect(find.textContaining('You can request a new code in'), findsNothing);
+      expect(
+        find.textContaining('You can request a new code in'),
+        findsNothing,
+      );
 
       // Advance 1 second -> should dynamically tick down to 59s
       await tester.pump(const Duration(seconds: 1));

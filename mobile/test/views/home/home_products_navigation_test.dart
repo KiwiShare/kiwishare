@@ -7,6 +7,7 @@ import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
+import 'package:kiwishare/views/shared/widgets/item_card.dart';
 import 'package:provider/provider.dart';
 
 import '../../support/test_item_repository.dart';
@@ -64,13 +65,23 @@ void main() {
 
     await tester.tap(find.byKey(const Key('home-category-Plants')));
     await tester.pumpAndSettle();
-    expect(find.text('Monstera Plant'), findsOneWidget);
-    expect(find.text('Armchair'), findsNothing);
+    final productCard = find.descendant(
+      of: find.byType(GridView),
+      matching: find.widgetWithText(ItemCard, 'Monstera Plant'),
+    );
+    expect(productCard, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(GridView),
+        matching: find.widgetWithText(ItemCard, 'Armchair'),
+      ),
+      findsNothing,
+    );
     expect(router.routeInformationProvider.value.uri.path, '/home');
 
-    await tester.ensureVisible(find.text('Monstera Plant'));
+    await tester.ensureVisible(productCard);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Monstera Plant'));
+    await tester.tap(productCard);
     await tester.pumpAndSettle();
 
     expect(find.byType(ProductDetailScreen), findsOneWidget);

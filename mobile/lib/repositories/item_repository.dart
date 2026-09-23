@@ -12,6 +12,7 @@ abstract class ItemRepository {
   Future<List<ItemModel>> fetchFeaturedItems({int limit = 10}) {
     return fetchRecommendedItems(limit: limit);
   }
+
   Future<List<ItemModel>> fetchRecommendedItems({
     int limit = 10,
     double? latitude,
@@ -213,10 +214,7 @@ class RestItemRepository implements ItemRepository {
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     }
-    final response = await _client.get(
-      uri,
-      headers: headers,
-    );
+    final response = await _client.get(uri, headers: headers);
     return _parseItemsResponse(
       response,
       'Failed to fetch recommended listings from server.',

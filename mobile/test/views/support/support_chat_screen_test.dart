@@ -6,11 +6,7 @@ void main() {
   testWidgets('SupportChatScreen renders markdown without raw asterisks', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: SupportChatScreen(),
-      ),
-    );
+    await tester.pumpWidget(const MaterialApp(home: SupportChatScreen()));
     await tester.pumpAndSettle();
 
     // Verify KiwiShare Support appbar title

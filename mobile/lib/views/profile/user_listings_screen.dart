@@ -594,7 +594,9 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                                   borderRadius: BorderRadius.circular(4),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFFD97706).withOpacity(0.35),
+                                      color: const Color(
+                                        0xFFD97706,
+                                      ).withOpacity(0.35),
                                       blurRadius: 4,
                                       offset: const Offset(0, 1),
                                     ),

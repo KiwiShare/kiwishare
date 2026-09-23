@@ -1292,10 +1292,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
               ? const Color(0xFF064E3B).withOpacity(0.35)
               : const Color(0xFFECFDF5),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: const Color(0xFF059669),
-            width: 1.2,
-          ),
+          border: Border.all(color: const Color(0xFF059669), width: 1.2),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
@@ -1358,7 +1355,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             if (!isBuyer) ...[
               const SizedBox(height: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: isDark
                       ? const Color(0xFF1E293B)
@@ -1384,7 +1384,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1E40AF),
+                          color: isDark
+                              ? const Color(0xFF93C5FD)
+                              : const Color(0xFF1E40AF),
                         ),
                       ),
                     ),
@@ -1395,7 +1397,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
+                          color: isDark
+                              ? const Color(0xFF60A5FA)
+                              : const Color(0xFF2563EB),
                           decoration: TextDecoration.underline,
                         ),
                       ),
@@ -1426,10 +1430,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     role: isBuyer ? 'seller' : 'buyer',
                   );
                 },
-                icon: const Icon(Icons.star_rounded, size: 16, color: Colors.amber),
+                icon: const Icon(
+                  Icons.star_rounded,
+                  size: 16,
+                  color: Colors.amber,
+                ),
                 label: Text(
                   'Rate & Review ${widget.conversation.participantName}',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF059669),
@@ -2187,8 +2198,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   }
 
   String get _effectiveParticipantId {
-    final fromCached =
-        _chatProvider.conversationById(widget.conversation.id)?.participantId;
+    final fromCached = _chatProvider
+        .conversationById(widget.conversation.id)
+        ?.participantId;
     if (fromCached != null && fromCached.isNotEmpty) return fromCached;
     if (widget.conversation.participantId.isNotEmpty) {
       return widget.conversation.participantId;
@@ -2213,9 +2225,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
     Navigator.push(
       context,
-      MaterialPageRoute<void>(
-        builder: (_) => PublicProfileScreen(userId: pid),
-      ),
+      MaterialPageRoute<void>(builder: (_) => PublicProfileScreen(userId: pid)),
     );
   }
 
@@ -2682,10 +2692,9 @@ class _MessageBubble extends StatelessWidget {
       child: CircleAvatar(
         radius: 14,
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-        backgroundImage:
-            otherAvatarUrl != null && otherAvatarUrl!.isNotEmpty
-                ? NetworkImage(otherAvatarUrl!)
-                : null,
+        backgroundImage: otherAvatarUrl != null && otherAvatarUrl!.isNotEmpty
+            ? NetworkImage(otherAvatarUrl!)
+            : null,
         child: otherAvatarUrl == null || otherAvatarUrl!.isEmpty
             ? Text(
                 otherDisplayName != null && otherDisplayName!.isNotEmpty
@@ -2729,19 +2738,14 @@ class _MessageBubble extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.sm),
         child: Row(
-          mainAxisAlignment:
-              mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          mainAxisAlignment: mine
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (!mine) ...[
-              counterpartAvatar,
-              const SizedBox(width: 8),
-            ],
+            if (!mine) ...[counterpartAvatar, const SizedBox(width: 8)],
             Flexible(child: bubbleWidget),
-            if (mine) ...[
-              const SizedBox(width: 8),
-              myAvatar,
-            ],
+            if (mine) ...[const SizedBox(width: 8), myAvatar],
           ],
         ),
       ),

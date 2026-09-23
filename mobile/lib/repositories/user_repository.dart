@@ -526,7 +526,9 @@ class RestUserRepository implements UserRepository {
       throw const UserNetworkException();
     }
     if (response.statusCode != 200) {
-      throw const UserRepositoryException('Failed to load user public profile.');
+      throw const UserRepositoryException(
+        'Failed to load user public profile.',
+      );
     }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return PublicProfileModel.fromJson(data['user'] as Map<String, dynamic>);
@@ -545,7 +547,9 @@ class RestUserRepository implements UserRepository {
     late final http.Response response;
     try {
       response = await _client.get(
-        Uri.parse('${ApiConfig.baseUrl}/api/users/$userId/public-items?status=$status'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/users/$userId/public-items?status=$status',
+        ),
         headers: headers,
       );
     } catch (_) {
@@ -752,12 +756,13 @@ class MockUserRepository implements UserRepository {
         reviewerName: 'Alice M.',
         reviewerAvatarUrl: null,
         rating: 5,
-        comment: 'Great seller! Item was exactly as described and meetup on campus was super smooth.',
+        comment:
+            'Great seller! Item was exactly as described and meetup on campus was super smooth.',
         tags: const ['Punctual', 'Item as described', 'Fast response'],
         role: 'buyer',
         itemTitle: 'Sony WH-1000XM4',
         createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      )
+      ),
     ];
   }
 

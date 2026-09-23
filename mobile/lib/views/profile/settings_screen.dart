@@ -315,18 +315,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   }
                   final isEnabled =
                       watchlist?.watchlistPriceDropEnabled ?? false;
-                  final isUpdating =
-                      watchlist?.isUpdatingPreference ?? false;
+                  final isUpdating = watchlist?.isUpdatingPreference ?? false;
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildDivider(),
                       SwitchListTile.adaptive(
-                        key: const Key('settings-watchlist-price-alerts-switch'),
+                        key: const Key(
+                          'settings-watchlist-price-alerts-switch',
+                        ),
                         secondary: const Icon(Icons.trending_down_rounded),
                         title: const Text(
                           'Watchlist Price Drop Alerts',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
                         ),
                         subtitle: const Text(
                           'Get notified when items in your watchlist drop in price',
@@ -337,8 +341,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onChanged: isUpdating || watchlist == null
                             ? null
                             : (val) async {
-                                final success =
-                                    await watchlist!.updateNotificationPreference(val);
+                                final success = await watchlist!
+                                    .updateNotificationPreference(val);
                                 if (!context.mounted) return;
                                 if (!success) {
                                   ScaffoldMessenger.of(context).showSnackBar(

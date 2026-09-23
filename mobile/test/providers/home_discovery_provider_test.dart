@@ -105,10 +105,7 @@ void main() {
         provider.selectedCategory,
         HomeDiscoveryProvider.allCategoriesLabel,
       );
-      expect(
-        provider.selectedLocation,
-        HomeDiscoveryProvider.defaultLocation,
-      );
+      expect(provider.selectedLocation, HomeDiscoveryProvider.defaultLocation);
       expect(provider.selectedSort, HomeProductSort.recommended);
       expect(provider.selectedPriceRange, HomePriceRange.any);
       expect(provider.sustainableOnly, isFalse);

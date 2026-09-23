@@ -514,7 +514,9 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                             width: double.infinity,
                             height: 38,
                             child: FilledButton.icon(
-                              key: Key('view_qr_button_${widget.meetup.orderId}'),
+                              key: Key(
+                                'view_qr_button_${widget.meetup.orderId}',
+                              ),
                               onPressed: () {
                                 context.push('/orders');
                               },

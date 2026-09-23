@@ -227,24 +227,25 @@ void main() {
     expect(chairTop, lessThan(plantTop));
   });
 
-  testWidgets('Price alerts setting is not rendered on WatchlistScreen (moved to Profile Settings)', (
-    tester,
-  ) async {
-    final preferences = _PreferenceRepository(true);
-    await tester.pumpWidget(
-      _watchlistApp(
-        repository: TestWatchlistRepository(),
-        token: 'account-token',
-        preferencesRepository: preferences,
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'Price alerts setting is not rendered on WatchlistScreen (moved to Profile Settings)',
+    (tester) async {
+      final preferences = _PreferenceRepository(true);
+      await tester.pumpWidget(
+        _watchlistApp(
+          repository: TestWatchlistRepository(),
+          token: 'account-token',
+          preferencesRepository: preferences,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const Key('watchlist-price-alerts-switch')),
-      findsNothing,
-    );
-  });
+      expect(
+        find.byKey(const Key('watchlist-price-alerts-switch')),
+        findsNothing,
+      );
+    },
+  );
 }
 
 class _RecoveringWatchlistRepository extends TestWatchlistRepository {

@@ -995,13 +995,7 @@ class _ProductHighlightsGrid extends StatelessWidget {
                   width: 0.8,
                 ),
               ),
-              child: Center(
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: accentColor,
-                ),
-              ),
+              child: Center(child: Icon(icon, size: 20, color: accentColor)),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1156,162 +1150,169 @@ class _SellerProfileCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: isDark
-                    ? theme.colorScheme.primaryContainer
-                    : (seller.isStudentVerified
-                          ? const Color(0xFFDBEAFE)
-                          : theme.colorScheme.primaryContainer),
-                backgroundImage:
-                    seller.avatarUrl != null && seller.avatarUrl!.isNotEmpty
-                    ? NetworkImage(seller.avatarUrl!)
-                    : null,
-                child: seller.avatarUrl == null || seller.avatarUrl!.isEmpty
-                    ? Text(
-                        seller.displayName.isNotEmpty
-                            ? seller.displayName[0].toUpperCase()
-                            : 'K',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 18,
-                          color: isDark
-                              ? theme.colorScheme.onPrimaryContainer
-                              : (seller.isStudentVerified
-                                    ? const Color(0xFF1D4ED8)
-                                    : theme.colorScheme.primary),
-                        ),
-                      )
-                    : null,
-              ),
-              if (seller.isStudentVerified || seller.isVerified)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      seller.isStudentVerified ? Icons.school : Icons.verified,
-                      size: 12,
-                      color: const Color(0xFF2563EB),
-                    ),
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: isDark
+                        ? theme.colorScheme.primaryContainer
+                        : (seller.isStudentVerified
+                              ? const Color(0xFFDBEAFE)
+                              : theme.colorScheme.primaryContainer),
+                    backgroundImage:
+                        seller.avatarUrl != null && seller.avatarUrl!.isNotEmpty
+                        ? NetworkImage(seller.avatarUrl!)
+                        : null,
+                    child: seller.avatarUrl == null || seller.avatarUrl!.isEmpty
+                        ? Text(
+                            seller.displayName.isNotEmpty
+                                ? seller.displayName[0].toUpperCase()
+                                : 'K',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 18,
+                              color: isDark
+                                  ? theme.colorScheme.onPrimaryContainer
+                                  : (seller.isStudentVerified
+                                        ? const Color(0xFF1D4ED8)
+                                        : theme.colorScheme.primary),
+                            ),
+                          )
+                        : null,
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        seller.displayName,
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          color: theme.colorScheme.onSurface,
+                  if (seller.isStudentVerified || seller.isVerified)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          shape: BoxShape.circle,
                         ),
-                        overflow: TextOverflow.ellipsis,
+                        child: Icon(
+                          seller.isStudentVerified
+                              ? Icons.school
+                              : Icons.verified,
+                          size: 12,
+                          color: const Color(0xFF2563EB),
+                        ),
                       ),
                     ),
-                    if (seller.isStudentVerified) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: studentBadgeBg,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'Verified Student',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: studentTextColor,
+                ],
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            seller.displayName,
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        if (seller.isStudentVerified) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: studentBadgeBg,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Verified Student',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: studentTextColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      seller.isStudentVerified
+                          ? '${seller.studentInstitution ?? "University of Auckland"} Student'
+                          : 'Community Member',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: seller.isStudentVerified
+                            ? studentTextColor
+                            : theme.colorScheme.onSurface.withOpacity(0.65),
+                        fontWeight: seller.isStudentVerified
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
-                    ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  seller.isStudentVerified
-                      ? '${seller.studentInstitution ?? "University of Auckland"} Student'
-                      : 'Community Member',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: seller.isStudentVerified
-                        ? studentTextColor
-                        : theme.colorScheme.onSurface.withOpacity(0.65),
-                    fontWeight: seller.isStudentVerified
-                        ? FontWeight.w600
-                        : FontWeight.normal,
-                  ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? theme.colorScheme.primary.withOpacity(0.12)
-                  : theme.colorScheme.primaryContainer.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? theme.colorScheme.primary.withOpacity(0.12)
+                      : theme.colorScheme.primaryContainer.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.verified_user_outlined,
-                      size: 11,
-                      color: theme.colorScheme.primary,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.verified_user_outlined,
+                          size: 11,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Trust Score',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: theme.colorScheme.onSurface.withOpacity(
+                              0.65,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 3),
+                    const SizedBox(height: 2),
                     Text(
-                      'Trust Score',
+                      formatPublicTrustScore(seller.trustScore),
                       style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: theme.colorScheme.onSurface.withOpacity(0.65),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: theme.colorScheme.primary,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  formatPublicTrustScore(seller.trustScore),
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-    ),
-  ),
-);
+    );
   }
 }
 

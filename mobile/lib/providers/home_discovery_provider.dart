@@ -82,7 +82,10 @@ class HomeDiscoveryProvider extends ChangeNotifier {
     category: _selectedCategory == allCategoriesLabel
         ? null
         : _selectedCategory,
-    location: _selectedLocation == allLocationsLabel || _isNearYou || _isDefaultLocation
+    location:
+        _selectedLocation == allLocationsLabel ||
+            _isNearYou ||
+            _isDefaultLocation
         ? null
         : _selectedLocation,
     minimumPrice: _minimumPrice,

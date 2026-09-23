@@ -151,6 +151,7 @@ void main() {
           'longitude': 174.7686,
           'proposedBy': 'user-2',
           'qrToken': 'QR_HANDOVER_TOKEN_ord-1_abc123',
+          'isPaid': false,
         };
 
         final meetup = MeetupModel.fromJson(json);
@@ -160,6 +161,7 @@ void main() {
         expect(meetup.locationName, 'UoA Student Hub');
         expect(meetup.hasCoordinates, isTrue);
         expect(meetup.qrToken, 'QR_HANDOVER_TOKEN_ord-1_abc123');
+        expect(meetup.isPaid, isFalse);
       },
     );
 
@@ -270,6 +272,7 @@ void main() {
           latitude: -36.8443,
           longitude: 174.7684,
           qrToken: 'QR_HANDOVER_TOKEN_order-456_testtoken',
+          paymentConfirmed: true,
         );
         fakeRepo.sampleMeetup = meetup;
 
@@ -313,9 +316,60 @@ void main() {
           find.byKey(const Key('buyer_confirm_receipt_button')),
           findsOneWidget,
         );
-        expect(find.text('Confirm Receipt (确认收货)'), findsOneWidget);
+        expect(find.text('Confirm Receipt'), findsOneWidget);
       },
     );
+
+    testWidgets('an unpaid meetup cannot unlock handover with a QR token', (
+      tester,
+    ) async {
+      final meetup = MeetupModel(
+        id: 'order-unpaid',
+        orderNumber: 'ORD-UNPAID',
+        itemId: 'item-unpaid',
+        itemTitle: 'Desk Lamp',
+        itemPriceNzd: '45',
+        itemImageUrl: '',
+        status: 'meeting_scheduled',
+        role: 'buying',
+        sellerId: 'seller-1',
+        sellerName: 'Seller',
+        buyerId: 'buyer-1',
+        buyerName: 'Buyer',
+        proposalStatus: 'confirmed',
+        scheduledAt: DateTime(2026, 9, 20, 10),
+        locationName: 'Student Hub',
+        qrToken: 'QR_HANDOVER_TOKEN_order-unpaid_test',
+        paymentConfirmed: false,
+      );
+      final repository = FakeMeetupRepository()..sampleMeetup = meetup;
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(
+              create: (_) => MeetupProvider(repository: repository),
+            ),
+            ChangeNotifierProvider(
+              create: (_) => AuthProvider(userRepository: MockUserRepository()),
+            ),
+          ],
+          child: MaterialApp(
+            home: MeetupQrScreen(orderId: meetup.id, initialMeetup: meetup),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('payment_required_gate_card')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('meetup_qr_image')), findsNothing);
+      expect(
+        find.byKey(const Key('buyer_confirm_receipt_button')),
+        findsNothing,
+      );
+    });
 
     testWidgets(
       'MeetupCardBubble renders distinct actions for seller and buyer when confirmed',
@@ -370,8 +424,9 @@ void main() {
           ),
         );
 
-        expect(find.text('Show Handover QR Code'), findsOneWidget);
-        expect(find.text('Scan Seller\'s QR Code'), findsNothing);
+        expect(find.text('View Order Progress'), findsOneWidget);
+        expect(find.text('Handover check-in'), findsOneWidget);
+        expect(find.text('Scan at handover'), findsNothing);
 
         // 2. Render as Buyer (isBuyer = true)
         await tester.pumpWidget(
@@ -393,8 +448,9 @@ void main() {
           ),
         );
 
-        expect(find.text('Scan Seller\'s QR Code'), findsOneWidget);
-        expect(find.text('View meetup schedule & details'), findsOneWidget);
+        expect(find.text('Scan at handover'), findsOneWidget);
+        expect(find.text('View Order Progress'), findsOneWidget);
+        expect(find.text('Handover check-in'), findsNothing);
       },
     );
 
@@ -468,7 +524,10 @@ void main() {
         expect(statusChangedCalled, isTrue);
         // Card immediately transitions to Confirmed
         expect(find.text('Meetup Confirmed'), findsOneWidget);
-        expect(find.text('Show Handover QR Code'), findsOneWidget);
+        expect(
+          find.text('Awaiting buyer payment to unlock handover QR'),
+          findsOneWidget,
+        );
       },
     );
 

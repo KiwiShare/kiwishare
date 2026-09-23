@@ -133,7 +133,8 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final replyText = data['reply'] as String? ??
+        final replyText =
+            data['reply'] as String? ??
             'Thank you for reaching out. Please contact customer@kiwishare.online for direct assistance.';
         final links = (data['helpfulLinks'] as List<dynamic>?)
             ?.map((e) => e.toString())
@@ -177,7 +178,9 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
     } else if (lower.contains('how') || lower.contains('work')) {
       fallbackReply =
           'KiwiShare works through safe local meetups: 1) Browse items, 2) Agree in chat, 3) Pay securely via Escrow, 4) Meet up & scan QR code, 5) Both confirm receipt to release funds!';
-    } else if (lower.contains('pay') || lower.contains('card') || lower.contains('wallet')) {
+    } else if (lower.contains('pay') ||
+        lower.contains('card') ||
+        lower.contains('wallet')) {
       fallbackReply =
           'Payments are held safely in escrow until meetup completion. Add debit cards or payout bank cards in your Profile > Wallet.';
     } else {
@@ -212,7 +215,11 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: colors.onSurface),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 20,
+            color: colors.onSurface,
+          ),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Row(
@@ -224,7 +231,11 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                 color: colors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.support_agent_rounded, color: colors.primary, size: 24),
+              child: Icon(
+                Icons.support_agent_rounded,
+                color: colors.primary,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 12),
             Column(
@@ -265,7 +276,11 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
         actions: [
           IconButton(
             tooltip: 'My Reports',
-            icon: Icon(Icons.shield_outlined, color: colors.onSurface, size: 22),
+            icon: Icon(
+              Icons.shield_outlined,
+              color: colors.onSurface,
+              size: 22,
+            ),
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const MyReportsScreen()),
@@ -296,7 +311,10 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                   SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: colors.primary),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.primary,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Text(
@@ -343,7 +361,9 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
               color: colors.primary.withValues(alpha: 0.25),
               width: 1,
             ),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             onPressed: () => _sendMessage(prompt),
           );
         },
@@ -360,7 +380,9 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
@@ -371,7 +393,11 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                 color: colors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.smart_toy_rounded, size: 18, color: colors.primary),
+              child: Icon(
+                Icons.smart_toy_rounded,
+                size: 18,
+                color: colors.primary,
+              ),
             ),
             const SizedBox(width: 8),
           ],
@@ -381,7 +407,9 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
               decoration: BoxDecoration(
                 color: isUser
                     ? colors.primary
-                    : (isDark ? colors.surfaceContainerHigh : const Color(0xFFF3F6F4)),
+                    : (isDark
+                          ? colors.surfaceContainerHigh
+                          : const Color(0xFFF3F6F4)),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -391,7 +419,9 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                 border: isUser
                     ? null
                     : Border.all(
-                        color: isDark ? colors.outline.withValues(alpha: 0.2) : const Color(0xFFE2ECE7),
+                        color: isDark
+                            ? colors.outline.withValues(alpha: 0.2)
+                            : const Color(0xFFE2ECE7),
                         width: 1,
                       ),
               ),
@@ -414,15 +444,25 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                           onTap: () async {
                             final uri = link.contains('@')
                                 ? Uri.parse('mailto:$link')
-                                : Uri.parse(link.startsWith('http') ? link : 'https://$link');
+                                : Uri.parse(
+                                    link.startsWith('http')
+                                        ? link
+                                        : 'https://$link',
+                                  );
                             try {
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              await launchUrl(
+                                uri,
+                                mode: LaunchMode.externalApplication,
+                              );
                             } catch (_) {
                               // Ignore launch error
                             }
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: colors.primary.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(12),
@@ -431,7 +471,11 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (link.contains('@')) ...[
-                                  Icon(Icons.email_outlined, size: 14, color: colors.primary),
+                                  Icon(
+                                    Icons.email_outlined,
+                                    size: 14,
+                                    color: colors.primary,
+                                  ),
                                   const SizedBox(width: 4),
                                 ],
                                 Text(
@@ -468,7 +512,9 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
           color: colors.surface,
           border: Border(
             top: BorderSide(
-              color: isDark ? colors.outline.withValues(alpha: 0.2) : Colors.black12,
+              color: isDark
+                  ? colors.outline.withValues(alpha: 0.2)
+                  : Colors.black12,
               width: 0.5,
             ),
           ),
@@ -479,7 +525,9 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  color: isDark ? colors.surfaceContainerHigh : const Color(0xFFF1F5F3),
+                  color: isDark
+                      ? colors.surfaceContainerHigh
+                      : const Color(0xFFF1F5F3),
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: TextField(
@@ -539,82 +587,91 @@ class _MarkdownMessageText extends StatelessWidget {
 
     for (final match in _inlinePattern.allMatches(line)) {
       if (match.start > lastIndex) {
-        spans.add(TextSpan(
-          text: line.substring(lastIndex, match.start),
-          style: baseStyle,
-        ));
+        spans.add(
+          TextSpan(
+            text: line.substring(lastIndex, match.start),
+            style: baseStyle,
+          ),
+        );
       }
 
       if (match.group(2) != null) {
         // [link text](url)
-        spans.add(TextSpan(
-          text: match.group(2),
-          style: baseStyle.copyWith(
-            color: linkColor,
-            fontWeight: FontWeight.w600,
-            decoration: TextDecoration.underline,
+        spans.add(
+          TextSpan(
+            text: match.group(2),
+            style: baseStyle.copyWith(
+              color: linkColor,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.underline,
+            ),
           ),
-        ));
+        );
       } else if (match.group(5) != null) {
         // **bold**
         final content = match.group(5)!;
         final isEmail = RegExp(
           r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
         ).hasMatch(content);
-        spans.add(TextSpan(
-          text: content,
-          style: baseStyle.copyWith(
-            fontWeight: FontWeight.bold,
-            color: isEmail ? linkColor : boldColor,
-            decoration: isEmail ? TextDecoration.underline : null,
+        spans.add(
+          TextSpan(
+            text: content,
+            style: baseStyle.copyWith(
+              fontWeight: FontWeight.bold,
+              color: isEmail ? linkColor : boldColor,
+              decoration: isEmail ? TextDecoration.underline : null,
+            ),
           ),
-        ));
+        );
       } else if (match.group(7) != null) {
         // __bold__
-        spans.add(TextSpan(
-          text: match.group(7),
-          style: baseStyle.copyWith(
-            fontWeight: FontWeight.bold,
-            color: boldColor,
+        spans.add(
+          TextSpan(
+            text: match.group(7),
+            style: baseStyle.copyWith(
+              fontWeight: FontWeight.bold,
+              color: boldColor,
+            ),
           ),
-        ));
+        );
       } else if (match.group(8) != null) {
         // *italic*
-        spans.add(TextSpan(
-          text: match.group(8),
-          style: baseStyle.copyWith(
-            fontStyle: FontStyle.italic,
+        spans.add(
+          TextSpan(
+            text: match.group(8),
+            style: baseStyle.copyWith(fontStyle: FontStyle.italic),
           ),
-        ));
+        );
       } else if (match.group(10) != null) {
         // `code`
-        spans.add(TextSpan(
-          text: match.group(10),
-          style: baseStyle.copyWith(
-            fontFamily: 'monospace',
-            fontWeight: FontWeight.w600,
+        spans.add(
+          TextSpan(
+            text: match.group(10),
+            style: baseStyle.copyWith(
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ));
+        );
       } else if (match.group(11) != null) {
         // email
-        spans.add(TextSpan(
-          text: match.group(11),
-          style: baseStyle.copyWith(
-            color: linkColor,
-            fontWeight: FontWeight.w600,
-            decoration: TextDecoration.underline,
+        spans.add(
+          TextSpan(
+            text: match.group(11),
+            style: baseStyle.copyWith(
+              color: linkColor,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.underline,
+            ),
           ),
-        ));
+        );
       }
 
       lastIndex = match.end;
     }
 
     if (lastIndex < line.length) {
-      spans.add(TextSpan(
-        text: line.substring(lastIndex),
-        style: baseStyle,
-      ));
+      spans.add(TextSpan(text: line.substring(lastIndex), style: baseStyle));
     }
 
     return spans;
@@ -624,13 +681,11 @@ class _MarkdownMessageText extends StatelessWidget {
   Widget build(BuildContext context) {
     final baseColor = isUser ? Colors.white : colors.onSurface;
     final isDark = colors.brightness == Brightness.dark;
-    final boldColor = isUser ? Colors.white : (isDark ? Colors.white : const Color(0xFF111827));
+    final boldColor = isUser
+        ? Colors.white
+        : (isDark ? Colors.white : const Color(0xFF111827));
     final linkColor = isUser ? Colors.white : colors.primary;
-    final baseStyle = TextStyle(
-      color: baseColor,
-      fontSize: 14,
-      height: 1.45,
-    );
+    final baseStyle = TextStyle(color: baseColor, fontSize: 14, height: 1.45);
 
     final lines = text.split('\n');
     final allSpans = <InlineSpan>[];
@@ -663,8 +718,6 @@ class _MarkdownMessageText extends StatelessWidget {
       allSpans.addAll(_parseInline(line, baseStyle, boldColor, linkColor));
     }
 
-    return Text.rich(
-      TextSpan(children: allSpans, style: baseStyle),
-    );
+    return Text.rich(TextSpan(children: allSpans, style: baseStyle));
   }
 }

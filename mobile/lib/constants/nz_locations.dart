@@ -190,33 +190,17 @@ class NzLocations {
     NzRegion(
       name: 'Nelson',
       code: 'NSN',
-      suburbs: [
-        'Nelson Central',
-        'Tahunanui',
-        'Stoke',
-        'Atawhai',
-      ],
+      suburbs: ['Nelson Central', 'Tahunanui', 'Stoke', 'Atawhai'],
     ),
     NzRegion(
       name: 'Tasman',
       code: 'TAS',
-      suburbs: [
-        'Richmond',
-        'Motueka',
-        'Mapua',
-        'Takaka',
-        'Golden Bay',
-      ],
+      suburbs: ['Richmond', 'Motueka', 'Mapua', 'Takaka', 'Golden Bay'],
     ),
     NzRegion(
       name: 'Marlborough',
       code: 'MBH',
-      suburbs: [
-        'Blenheim Central',
-        'Springlands',
-        'Picton',
-        'Renwick',
-      ],
+      suburbs: ['Blenheim Central', 'Springlands', 'Picton', 'Renwick'],
     ),
     NzRegion(
       name: 'Southland',
@@ -233,22 +217,12 @@ class NzLocations {
     NzRegion(
       name: 'Gisborne',
       code: 'GIS',
-      suburbs: [
-        'Gisborne Central',
-        'Kaiti',
-        'Mangapapa',
-        'Whataupoko',
-      ],
+      suburbs: ['Gisborne Central', 'Kaiti', 'Mangapapa', 'Whataupoko'],
     ),
     NzRegion(
       name: 'West Coast',
       code: 'WTC',
-      suburbs: [
-        'Greymouth',
-        'Westport',
-        'Hokitika',
-        'Runanga',
-      ],
+      suburbs: ['Greymouth', 'Westport', 'Hokitika', 'Runanga'],
     ),
   ];
 

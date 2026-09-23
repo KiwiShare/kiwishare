@@ -222,8 +222,11 @@ class AuthProvider extends ChangeNotifier {
       try {
         googleUser = await _googleSignIn.signIn();
       } on PlatformException catch (pe) {
-        debugPrint('[AuthProvider] Google Sign-in PlatformException: ${pe.code} - ${pe.message}');
-        if (pe.code == 'sign_in_canceled' || pe.code == 'popup_closed_by_user') {
+        debugPrint(
+          '[AuthProvider] Google Sign-in PlatformException: ${pe.code} - ${pe.message}',
+        );
+        if (pe.code == 'sign_in_canceled' ||
+            pe.code == 'popup_closed_by_user') {
           _isLoggingIn = false;
           notifyListeners();
           return;
@@ -248,15 +251,17 @@ class AuthProvider extends ChangeNotifier {
             accessToken: googleAuth.accessToken,
             idToken: googleAuth.idToken,
           );
-          final userCredential =
-              await FirebaseAuth.instance.signInWithCredential(credential);
+          final userCredential = await FirebaseAuth.instance
+              .signInWithCredential(credential);
           final fbToken = await userCredential.user?.getIdToken();
           if (fbToken != null && fbToken.isNotEmpty) {
             idToken = fbToken;
           }
         }
       } catch (fbError) {
-        debugPrint('[AuthProvider] Optional FirebaseAuth sync notice: $fbError');
+        debugPrint(
+          '[AuthProvider] Optional FirebaseAuth sync notice: $fbError',
+        );
       }
 
       if (idToken == null || idToken.isEmpty) {
@@ -408,10 +413,7 @@ class AuthProvider extends ChangeNotifier {
     if (!_isLoggedIn || token == null) {
       throw StateError('Please log in to edit your profile.');
     }
-    final updated = await userRepository.updateBio(
-      bioText,
-      token: token,
-    );
+    final updated = await userRepository.updateBio(bioText, token: token);
     await _storeProfile(token, updated);
   }
 

@@ -3,20 +3,19 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/models/user_model.dart';
-import 'package:kiwishare/providers/auth_provider.dart';
-import 'package:kiwishare/providers/meetup_provider.dart';
-import 'package:kiwishare/providers/theme_provider.dart';
+import 'package:kiwishare/providers/providers.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/theme/app_theme.dart';
-import 'package:kiwishare/views/profile/profile_screen.dart';
+import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/scanner/qr_scanner_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../meetups/meetup_flow_test.dart';
+import '../../support/test_item_repository.dart';
 
 void main() {
-  group('QR Scanner and Profile Screen Tests', () {
+  group('QR Scanner and Home Screen Tests', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({
         'jwt_token': 'test-jwt-token',
@@ -29,7 +28,7 @@ void main() {
       });
     });
 
-    testWidgets('ProfileScreen renders scan QR button in AppBar', (
+    testWidgets('HomeScreen opens the QR scanner from its header', (
       tester,
     ) async {
       final fakeRepo = FakeMeetupRepository();
@@ -43,18 +42,30 @@ void main() {
             ChangeNotifierProvider.value(value: meetupProvider),
             ChangeNotifierProvider.value(value: authProvider),
             ChangeNotifierProvider.value(value: themeProvider),
+            ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+            ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
+            ChangeNotifierProvider(create: (_) => SearchProvider()),
+            ChangeNotifierProvider(
+              create: (_) =>
+                  ListingProvider(itemRepository: TestItemRepository()),
+            ),
           ],
           child: MaterialApp(
             theme: buildKiwiShareTheme(),
-            home: const ProfileScreen(),
+            home: const HomeScreen(),
           ),
         ),
       );
 
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 850));
 
-      expect(find.byKey(const Key('profile-scan-qr-button')), findsOneWidget);
+      final scanButton = find.byKey(const Key('home-scan-qr-button'));
+      expect(scanButton, findsOneWidget);
+      await tester.tap(scanButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(QrScannerScreen), findsOneWidget);
     });
 
     testWidgets(

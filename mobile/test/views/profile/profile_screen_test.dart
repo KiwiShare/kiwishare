@@ -347,7 +347,9 @@ void main() {
     },
   );
 
-  testWidgets('signed-in Profile tapping avatar opens PublicProfileScreen', (tester) async {
+  testWidgets('signed-in Profile tapping avatar opens PublicProfileScreen', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({
       'jwt_token': 'restored-token',
       'current_user':

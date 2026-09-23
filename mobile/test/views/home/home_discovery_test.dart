@@ -25,11 +25,13 @@ class _TestWatchlistRepository implements WatchlistRepository {
     _ids.add(itemId);
     return true;
   }
+
   @override
   Future<bool> removeFromWatchlist(String itemId, {String? token}) async {
     _ids.remove(itemId);
     return true;
   }
+
   @override
   Future<Set<String>> fetchWatchedItemIds({String? token}) async => _ids;
   @override
@@ -66,7 +68,9 @@ Widget _homeApp({
 }) => MultiProvider(
   providers: [
     ChangeNotifierProvider.value(value: discovery ?? HomeDiscoveryProvider()),
-    ChangeNotifierProvider(create: (_) => FavoritesProvider(repository: _TestWatchlistRepository())),
+    ChangeNotifierProvider(
+      create: (_) => FavoritesProvider(repository: _TestWatchlistRepository()),
+    ),
     ChangeNotifierProvider(
       create: (_) => ListingProvider(itemRepository: TestItemRepository()),
     ),

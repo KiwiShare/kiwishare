@@ -917,29 +917,25 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
       await confirmationBlocker;
     });
     await confirmationBlockerStarted;
-    const confirmationsBefore = await Message.countDocuments({
+    const confirmationMessageFilter = {
       conversationId,
-      'meetup.proposalStatus': 'confirmed'
-    });
+      type: 'meetup',
+      text: /^✅ Meetup confirmed:/
+    };
+    const confirmationsBefore = await Message.countDocuments(confirmationMessageFilter);
     const confirmation = request(app.callback())
       .post(`/api/meetups/${meetup.body.meetup.id}/accept`)
       .set('Authorization', `Bearer ${seller.body.token}`)
       .then((response) => response);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(
-      await Message.countDocuments({
-        conversationId,
-        'meetup.proposalStatus': 'confirmed'
-      })
+      await Message.countDocuments(confirmationMessageFilter)
     ).toBe(confirmationsBefore);
     releaseConfirmationBlocker();
     expect((await confirmation).status).toBe(200);
     await blockedConfirmationWork;
     expect(
-      await Message.countDocuments({
-        conversationId,
-        'meetup.proposalStatus': 'confirmed'
-      })
+      await Message.countDocuments(confirmationMessageFilter)
     ).toBe(confirmationsBefore + 1);
 
     const sequence: string[] = [];

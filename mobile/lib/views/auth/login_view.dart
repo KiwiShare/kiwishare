@@ -645,8 +645,10 @@ class _LoginViewState extends State<LoginView> {
               onPressed: () {
                 final value = controller.text.trim();
                 if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(value)) {
-                  setDialogState(() => errorText =
-                      'Use 3-24 letters, numbers, or underscores.');
+                  setDialogState(
+                    () => errorText =
+                        'Use 3-24 letters, numbers, or underscores.',
+                  );
                   return;
                 }
                 Navigator.of(dialogContext).pop(value);
