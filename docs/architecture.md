@@ -30,7 +30,7 @@ graph TD
 
     subgraph Supporting Cloud Services
         FirebaseAuth[Firebase Auth & Google OAuth Verification]
-        FirebaseStorage[(Firebase Cloud Storage - Image Binaries)]
+        R2[(Cloudflare R2 - Object Storage)]
         FCM[Firebase Cloud Messaging - Push Notifications]
     end
 
@@ -50,7 +50,7 @@ graph TD
     MongooseODM -->|Mongoose Connection Pool| MongoDB
 
     AuthRouter -.->|Token Verification| FirebaseAuth
-    MobileApp -.->|Uploads Item Photos| FirebaseStorage
+    MobileApp -.->|Uploads through presigned S3-compatible URLs| R2
     KoaApp -.->|Trigger Push Messages| FCM
 ```
 
@@ -60,7 +60,7 @@ graph TD
 * **Koa.js Dedicated RESTful Backend (`server/`)**: Full-featured Node.js / Koa.js application server. Exposes structured RESTful API resources (`/api/usedItems`, `/api/auth`, `/api/users`, `/api/transactions`) with centralized middleware for JWT authentication, request logging, CORS, and unified error handling.
 * **MongoDB Database**: Core document database storing structured data models (Users, Used Items / Listings, Orders, OTP records, Transactions, Messages, and Audit Logs) with geospatial indexing (`2dsphere`) for location queries.
 * **Supporting Services**:
-  - **Firebase Cloud Storage**: Secure media hosting for user-uploaded product images.
+  - **Cloudflare R2**: S3-compatible object storage for listing and chat media, using backend-generated presigned upload URLs and configured public asset URLs.
   - **Google OAuth / Firebase Auth**: Identity verification tokens.
   - **Resend / SMTP**: Transactional email verification codes for passwordless login.
 
@@ -85,6 +85,8 @@ Data persistence is managed via **Mongoose** schemas defining high-integrity doc
   "updatedAt": "2026-08-19T00:00:00.000Z"
 }
 ```
+
+New users start with a Trust Score of 100. An eligible completed order awards +5 to each participant. Student verification currently adds +15, with the verification result capped at 200. Transaction rewards may take a stored score above 200; public surfaces display exact values through 200 and `200+` above 200, while administrator surfaces retain the exact stored value. Ratings and reviews do not change Trust Score.
 
 ### `items` / `usedItems` Collection
 ```json
@@ -118,7 +120,7 @@ Data persistence is managed via **Mongoose** schemas defining high-integrity doc
 }
 ```
 
-### `orders` / `transactions` Collection
+### `orders` Collection
 ```json
 {
   "_id": "ObjectId('64e1f...03')",
@@ -126,10 +128,15 @@ Data persistence is managed via **Mongoose** schemas defining high-integrity doc
   "buyerId": "ObjectId('64e1f...04')",
   "sellerId": "ObjectId('64e1f...01')",
   "status": "completed",
-  "claimCode": "QR_HANDOVER_TOKEN_ABC",
+  "completionCredit": {
+    "pointsPerParticipant": 5,
+    "awardedAt": "2026-08-19T00:00:00.000Z"
+  },
   "createdAt": "2026-08-19T00:00:00.000Z"
 }
 ```
+
+The one-time QR credential is represented separately in the `qrCodes` collection. It is associated with an Order and its buyer and seller, has an expiry and lifecycle status, and is consumed as part of the authoritative handover transaction. The QR value is not an Order field.
 
 ---
 
@@ -149,7 +156,7 @@ To deliver a premium mobile experience that stands apart from standard responsiv
 
 ---
 
-## 4. Atomic QR Code Handover Verification Flow
+## 4. Order Completion and Trust Score Flow
 
 To eliminate the common second-hand marketplace hazards of **buyer ghosting**, **unverified physical exchanges**, and **seller non-delivery**, KiwiShare implements a cryptographically hashed, atomic in-person handover protocol:
 
@@ -165,21 +172,23 @@ sequenceDiagram
     Seller->>Seller: Opens Meetup Details & displays dynamic Handover QR Code
     Buyer->>Buyer: Taps "Scan Handover QR Code" (Opens camera via mobile_scanner)
     Buyer->>Seller: Scans Seller's QR Screen
-    Buyer->>Server: POST /api/transactions/handover/claim { itemId, claimCode } (JWT Auth)
+    Buyer->>Server: POST /api/transactions/handover/claim { claimCode } (buyer JWT Auth)
 
     rect rgb(240, 248, 255)
         Note over Server,Mongo: Atomic Transaction Session (runMongoTransaction)
-        Server->>Mongo: 1. Verify claimCode matches active QrCode token hash
-        Server->>Mongo: 2. Validate item status is not already 'sold' & buyer != seller
-        Server->>Mongo: 3. Atomically transfer item.ownerId = buyerId & status = 'sold'
-        Server->>Mongo: 4. Increment Buyer and Seller trustScore by +5 points each
-        Server->>Mongo: 5. Mark QrCode status = 'consumed' with scannedAt timestamp
-        Server->>Mongo: 6. Transition Order status to 'completed'
+        Server->>Mongo: 1. Resolve active, unexpired QrCode and its Order
+        Server->>Mongo: 2. Cross-check QR, Order, buyer, seller and Item identities; require the authenticated Order buyer
+        Server->>Mongo: 3. Require an eligible confirmed meetup and reject self-transactions or unavailable Items
+        Server->>Mongo: 4. Atomically complete Order, record completion credit, consume QR, transfer Item and increment each participant's trustScore by +5
         Mongo-->>Server: Commit Transaction
     end
 
-    Server-->>Buyer: 200 OK { status: 'success', item, newOwnerId }
+    Server-->>Buyer: 200 OK { status: 'success', completion, item, newOwnerId }
     Buyer->>Buyer: UI displays celebration dialog & verified ownership
     Seller->>Server: Polls order status or receives FCM push
     Seller->>Seller: Order updates to "Completed" & Trust Score +5 confirmed
 ```
+
+The QR claim endpoint is one supported order-completion path. It requires an active, unexpired QR code and the authenticated Order buyer, cross-checks the QR → Order → Item → participant relationships, and commits Order completion, QR consumption, Item transfer, completion metadata, and both +5 Trust Score increments in one required MongoDB transaction. An authorized retry of an already-completed order does not award credit again.
+
+The application also exposes `POST /api/meetups/:orderId/confirm-handover`. The buyer and seller can each confirm through the meetup UI; after both confirmations, that handler completes the Order, consumes active QR records, transfers the Item, and increments both Trust Scores. Unlike the QR claim endpoint, this route does not require the buyer to scan a QR code, and its writes are currently sequential rather than part of one MongoDB transaction. Order reads such as `GET /api/orders/my` do not award credit. This distinction is important: both completion paths currently award credit, but their transaction and concurrency guarantees are not equivalent.

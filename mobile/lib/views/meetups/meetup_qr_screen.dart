@@ -119,9 +119,15 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
         await _loadDetails();
         if (mounted && _meetup != null) {
           final isBuyerTarget = isBuyer;
-          final targetUserId = isBuyerTarget ? _meetup!.sellerId : _meetup!.buyerId;
-          final targetName = isBuyerTarget ? _meetup!.sellerName : _meetup!.buyerName;
-          final targetAvatar = isBuyerTarget ? _meetup!.sellerAvatarUrl : _meetup!.buyerAvatarUrl;
+          final targetUserId = isBuyerTarget
+              ? _meetup!.sellerId
+              : _meetup!.buyerId;
+          final targetName = isBuyerTarget
+              ? _meetup!.sellerName
+              : _meetup!.buyerName;
+          final targetAvatar = isBuyerTarget
+              ? _meetup!.sellerAvatarUrl
+              : _meetup!.buyerAvatarUrl;
           if (targetUserId.isNotEmpty) {
             await Future<void>.delayed(const Duration(milliseconds: 300));
             if (mounted) {
@@ -139,11 +145,13 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
             }
           }
         }
-        if (!isBuyer && token != null) {
-          unawaited(_checkSellerPayoutNotice(
-            token: token,
-            priceNzd: _meetup?.itemPriceNzd ?? '',
-          ));
+        if (!isBuyer) {
+          unawaited(
+            _checkSellerPayoutNotice(
+              token: token,
+              priceNzd: _meetup?.itemPriceNzd ?? '',
+            ),
+          );
         }
       }
     } catch (e) {
@@ -200,7 +208,10 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
           builder: (dialogCtx) => AlertDialog(
             title: const Row(
               children: [
-                Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF2563EB)),
+                Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: Color(0xFF2563EB),
+                ),
                 SizedBox(width: 8),
                 Text('Bind Payout Card'),
               ],
@@ -689,9 +700,15 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                         key: const Key('leave_counterpart_review_button'),
                         onPressed: () {
                           final isBuyer = meetup.isBuying;
-                          final targetUserId = isBuyer ? meetup.sellerId : meetup.buyerId;
-                          final targetName = isBuyer ? meetup.sellerName : meetup.buyerName;
-                          final targetAvatar = isBuyer ? meetup.sellerAvatarUrl : meetup.buyerAvatarUrl;
+                          final targetUserId = isBuyer
+                              ? meetup.sellerId
+                              : meetup.buyerId;
+                          final targetName = isBuyer
+                              ? meetup.sellerName
+                              : meetup.buyerName;
+                          final targetAvatar = isBuyer
+                              ? meetup.sellerAvatarUrl
+                              : meetup.buyerAvatarUrl;
                           ReviewBottomSheet.show(
                             context,
                             targetUserId: targetUserId,
@@ -704,7 +721,11 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                             role: isBuyer ? 'seller' : 'buyer',
                           );
                         },
-                        icon: const Icon(Icons.star_rounded, size: 20, color: Colors.amber),
+                        icon: const Icon(
+                          Icons.star_rounded,
+                          size: 20,
+                          color: Colors.amber,
+                        ),
                         label: Text(
                           'Rate & Review ${meetup.counterpartyName}',
                           style: const TextStyle(
@@ -716,7 +737,9 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                           backgroundColor: const Color(0xFF059669),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.medium),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.medium,
+                            ),
                           ),
                         ),
                       ),

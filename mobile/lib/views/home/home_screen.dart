@@ -169,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     await Future.wait([
       _itemsFuture!,
-      if (_featuredFuture != null) _featuredFuture!,
+      ?_featuredFuture,
       _recommendedFuture!,
       _loadDiscoveryOptions(forceRefresh: true),
     ]);

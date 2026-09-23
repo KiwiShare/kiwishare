@@ -57,7 +57,8 @@ TrustScoreInfo getTrustScoreInfo(int score) {
     return const TrustScoreInfo(
       level: TrustScoreLevel.veryGood,
       label: 'Very Good Trust',
-      description: 'Highly reliable member with consistent successful transactions.',
+      description:
+          'Highly reliable member with consistent successful transactions.',
       lightColor: Color(0xFF059669),
       darkColor: Color(0xFF6EE7B7),
       lightBg: Color(0xFFECFDF5),
@@ -78,20 +79,21 @@ TrustScoreInfo getTrustScoreInfo(int score) {
       level: TrustScoreLevel.needsImprovement,
       label: 'Needs Improvement',
       description: 'Below baseline score. Caution advised during transactions.',
-      lightColor: const Color(0xFFD97706),
-      darkColor: const Color(0xFFFCD34D),
-      lightBg: const Color(0xFFFEF3C7),
-      darkBg: const Color(0xFF78350F),
+      lightColor: Color(0xFFD97706),
+      darkColor: Color(0xFFFCD34D),
+      lightBg: Color(0xFFFEF3C7),
+      darkBg: Color(0xFF78350F),
     );
   } else {
     return const TrustScoreInfo(
       level: TrustScoreLevel.criticalRisk,
       label: 'Critical Risk',
-      description: 'High transaction risk due to reported disputes or violations.',
-      lightColor: const Color(0xFFDC2626),
-      darkColor: const Color(0xFFF87171),
-      lightBg: const Color(0xFFFEE2E2),
-      darkBg: const Color(0xFF7F1D1D),
+      description:
+          'High transaction risk due to reported disputes or violations.',
+      lightColor: Color(0xFFDC2626),
+      darkColor: Color(0xFFF87171),
+      lightBg: Color(0xFFFEE2E2),
+      darkBg: Color(0xFF7F1D1D),
     );
   }
 }
@@ -256,7 +258,8 @@ class _KiwiTrustScoreSheet extends StatelessWidget {
               _buildTierRow(
                 range: '185 – 200+',
                 label: 'Exceptional Trust',
-                description: 'Top-tier verified member with outstanding trading history.',
+                description:
+                    'Top-tier verified member with outstanding trading history.',
                 color: const Color(0xFF047857),
                 isCurrent: score >= 185,
                 isDark: isDark,
@@ -264,7 +267,8 @@ class _KiwiTrustScoreSheet extends StatelessWidget {
               _buildTierRow(
                 range: '150 – 184',
                 label: 'Very Good Trust',
-                description: 'Consistently positive handovers and prompt response.',
+                description:
+                    'Consistently positive handovers and prompt response.',
                 color: const Color(0xFF059669),
                 isCurrent: score >= 150 && score < 185,
                 isDark: isDark,
@@ -272,7 +276,8 @@ class _KiwiTrustScoreSheet extends StatelessWidget {
               _buildTierRow(
                 range: '100 – 149',
                 label: 'Good Standing',
-                description: 'Initial starting baseline score (100) for all members.',
+                description:
+                    'Initial starting baseline score (100) for all members.',
                 color: const Color(0xFF2563EB),
                 isCurrent: score >= 100 && score < 150,
                 isDark: isDark,
@@ -288,7 +293,8 @@ class _KiwiTrustScoreSheet extends StatelessWidget {
               _buildTierRow(
                 range: '< 90',
                 label: 'Critical Risk',
-                description: 'High transaction risk due to reported disputes or violations.',
+                description:
+                    'High transaction risk due to reported disputes or violations.',
                 color: const Color(0xFFDC2626),
                 isCurrent: score < 90,
                 isDark: isDark,
@@ -306,25 +312,29 @@ class _KiwiTrustScoreSheet extends StatelessWidget {
               _buildRuleRow(
                 icon: Icons.flag_outlined,
                 title: 'Initial Starting Score: 100 pts',
-                subtitle: 'Every new account starts in Good Standing with 100 base points.',
+                subtitle:
+                    'Every new account starts in Good Standing with 100 base points.',
                 isDark: isDark,
               ),
               _buildRuleRow(
                 icon: Icons.handshake_outlined,
                 title: '+5 pts per Completed Handover',
-                subtitle: 'Both buyer and seller earn 5 points upon mutual delivery confirmation.',
+                subtitle:
+                    'Both buyer and seller earn 5 points upon mutual delivery confirmation.',
                 isDark: isDark,
               ),
               _buildRuleRow(
                 icon: Icons.school_outlined,
                 title: '+15 pts for NZ Student Verification',
-                subtitle: 'Instantly verify your .ac.nz student email to boost your trust level.',
+                subtitle:
+                    'Instantly verify your .ac.nz student email to boost your trust level.',
                 isDark: isDark,
               ),
               _buildRuleRow(
                 icon: Icons.warning_amber_rounded,
                 title: 'Penalties for Misconduct',
-                subtitle: 'Unresolved disputes, order cancellations, or policy breaches deduct points.',
+                subtitle:
+                    'Unresolved disputes, order cancellations, or policy breaches deduct points.',
                 isDark: isDark,
               ),
               const SizedBox(height: 20),
