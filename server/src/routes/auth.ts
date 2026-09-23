@@ -426,7 +426,6 @@ router.post('/auth/verify-otp', async (ctx) => {
       id: user._id.toString(),
       email: user.email,
       displayName: user.displayName,
-      email: user.email,
       username: user.username,
       needsUsername: !user.username || !user.username.trim(),
       avatarUrl: user.avatarUrl,

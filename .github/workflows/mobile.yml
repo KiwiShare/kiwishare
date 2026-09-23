@@ -47,3 +47,6 @@ jobs:
 
       - name: Run unit and widget tests
         run: flutter test
+
+      - name: Verify Android release build
+        run: flutter build apk --release

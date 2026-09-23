@@ -73,6 +73,21 @@ On every push/merge to `main`, GitHub Actions executes multi-platform builds:
 - **Android APK**: `KiwiShare-Android-vX.X.X.apk` (Directly installable on any Android device).
 - **iOS App Package**: `KiwiShare-iOS-vX.X.X.zip` (Contains the built `Runner.app` bundle).
 
+### Android Release Signing
+
+Production Android releases support a stable signing key through GitHub Actions secrets. If these secrets are absent, local/course-demo release APKs continue to use the debug signing key so development builds remain installable.
+
+Configure these repository secrets for stable production signing:
+
+- `ANDROID_KEYSTORE_BASE64`: Base64-encoded JKS/keystore file.
+- `ANDROID_KEYSTORE_PASSWORD`: Keystore password.
+- `ANDROID_KEY_ALIAS`: Signing key alias.
+- `ANDROID_KEY_PASSWORD`: Signing key password.
+
+After choosing the stable release key, add its SHA-1 and SHA-256 certificate fingerprints to the existing Firebase Android app (`com.kiwishare.andriod`) and download the refreshed `google-services.json`. This is required for reliable Google Sign-In in a release-signed Android build.
+
+The release workflow also passes the generated semantic version into Flutter as Android `versionName` and uses the GitHub Actions run number as `versionCode`, keeping the APK metadata aligned with the GitHub Release.
+
 ### GitHub Actions Secrets Configuration:
 
 To enable automated Firebase App Distribution, configure the following secrets in **GitHub Repository** -> **Settings** -> **Secrets and variables** -> **Actions**:
