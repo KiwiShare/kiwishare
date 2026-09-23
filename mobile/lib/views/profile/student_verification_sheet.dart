@@ -420,7 +420,7 @@ class _StudentVerificationSheetState extends State<StudentVerificationSheet> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
-                      '🎉 +15 Trust Score Boost Applied',
+                      'One-time Trust Score bonus (up to 200)',
                       style: TextStyle(
                         color: Color(0xFF2563EB),
                         fontWeight: FontWeight.w700,

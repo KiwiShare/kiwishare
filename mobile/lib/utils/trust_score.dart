@@ -175,7 +175,7 @@ class _KiwiTrustScoreSheet extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Decentralized peer-to-peer trust ratings',
+                          'Built through successful transactions and verified participation',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: isDark ? Colors.white60 : Colors.black54,
                           ),
@@ -320,14 +320,14 @@ class _KiwiTrustScoreSheet extends StatelessWidget {
                 icon: Icons.handshake_outlined,
                 title: '+5 pts per Completed Handover',
                 subtitle:
-                    'Both buyer and seller earn 5 points upon mutual delivery confirmation.',
+                    'Both buyer and seller earn 5 points when an eligible transaction is completed.',
                 isDark: isDark,
               ),
               _buildRuleRow(
                 icon: Icons.school_outlined,
-                title: '+15 pts for NZ Student Verification',
+                title: '+15 pts for NZ Student Verification (up to 200)',
                 subtitle:
-                    'Instantly verify your .ac.nz student email to boost your trust level.',
+                    'Awarded once after your first successful .ac.nz verification. This student bonus is capped at 200.',
                 isDark: isDark,
               ),
               _buildRuleRow(
