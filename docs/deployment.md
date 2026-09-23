@@ -84,7 +84,7 @@ Configure these repository secrets for stable production signing:
 - `ANDROID_KEY_ALIAS`: Signing key alias.
 - `ANDROID_KEY_PASSWORD`: Signing key password.
 
-After choosing the stable release key, add its SHA-1 and SHA-256 certificate fingerprints to the existing Firebase Android app (`com.kiwishare.andriod`) and download the refreshed `google-services.json`. This is required for reliable Google Sign-In in a release-signed Android build.
+After choosing the stable release key, add its SHA-1 and SHA-256 certificate fingerprints to the existing Firebase Android app (`app.kiwishare.android`) and download the refreshed `google-services.json`. This is required for reliable Google Sign-In in a release-signed Android build.
 
 The release workflow also passes the generated semantic version into Flutter as Android `versionName` and uses the GitHub Actions run number as `versionCode`, keeping the APK metadata aligned with the GitHub Release.
 
