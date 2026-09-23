@@ -1,0 +1,85 @@
+name: Manual Android APK Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build (branch, tag, or commit)"
+        required: false
+        default: "pre"
+
+permissions:
+  contents: read
+
+jobs:
+  build_android:
+    name: Build signed Android APK
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Validate Android signing secrets
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+
+      - name: Configure Android release signing
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > mobile/android/app/release-keystore.jks
+          cat > mobile/android/key.properties <<EOF
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=app/release-keystore.jks
+          EOF
+
+      - name: Install Flutter dependencies
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: mobile
+        run: |
+          flutter build apk --release \
+            --build-name "0.0.0-test" \
+            --build-number "${{ github.run_number }}"
+
+      - name: Verify APK certificate fingerprint
+        run: |
+          keytool -printcert -jarfile mobile/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p build_output
+          cp mobile/build/app/outputs/flutter-apk/app-release.apk build_output/KiwiShare-Android-pre-${{ github.run_number }}.apk
+          sha256sum build_output/KiwiShare-Android-pre-${{ github.run_number }}.apk > build_output/SHA256SUMS.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KiwiShare-Android-pre-${{ github.run_number }}
+          path: build_output/
+          retention-days: 7
