@@ -384,9 +384,44 @@ router.post('/users/student-verification/verify-otp', authenticateToken, async (
   otp.used = true;
   await otp.save();
 
-  const user = mongoose.Types.ObjectId.isValid(userId)
-    ? await User.findById(userId)
-    : await User.findOne({ id: userId });
+  const userFilter = mongoose.Types.ObjectId.isValid(userId)
+    ? { _id: new mongoose.Types.ObjectId(userId) }
+    : { id: userId };
+
+  // The conditional update makes the first verification transition the sole
+  // reward opportunity, even when two valid OTP requests race concurrently.
+  // A student bonus is capped at 200, but existing scores above 200 are never
+  // reduced; transaction rewards and administrator adjustments are separate.
+  let user = await User.findOneAndUpdate(
+    { ...userFilter, isStudentVerified: { $ne: true } },
+    [
+      {
+        $set: {
+          isStudentVerified: true,
+          studentInstitution: institution,
+          studentEmail: normalizedEmail,
+          trustScore: {
+            $let: {
+              vars: { currentScore: { $ifNull: ['$trustScore', 100] } },
+              in: {
+                $cond: [
+                  { $gte: ['$$currentScore', 200] },
+                  '$$currentScore',
+                  { $min: [200, { $add: ['$$currentScore', 15] }] }
+                ]
+              }
+            }
+          }
+        }
+      }
+    ],
+    { new: true }
+  );
+
+  const alreadyVerified = !user;
+  if (!user) {
+    user = await User.findOne(userFilter);
+  }
 
   if (!user) {
     ctx.status = 404;
@@ -394,11 +429,13 @@ router.post('/users/student-verification/verify-otp', authenticateToken, async (
     return;
   }
 
-  user.isStudentVerified = true;
-  user.studentInstitution = institution;
-  user.studentEmail = normalizedEmail;
-  user.trustScore = Math.min(200, Math.max(0, (user.trustScore || 100) + 15));
-  await user.save();
+  // Already-verified accounts may confirm/update their institution details,
+  // but cannot receive the one-time score bonus again.
+  if (alreadyVerified && user.isStudentVerified) {
+    user.studentInstitution = institution;
+    user.studentEmail = normalizedEmail;
+    await user.save();
+  }
 
   ctx.status = 200;
   ctx.body = {
