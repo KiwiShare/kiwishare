@@ -5,6 +5,7 @@ import Item from '../models/Item';
 import User from '../models/User';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
+import Payment from '../models/Payment';
 import { authenticateToken } from '../middleware/auth';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import {
@@ -318,6 +319,31 @@ router.post('/payments/confirm', authenticateToken, async (ctx) => {
   order.buyerFeeAmount = buyerFeeCents;
   order.buyerTotalAmount = expectedTotalCents;
   order.sellerReceiveAmount = effectivePriceCents;
+
+  if (expectedTotalCents > 0 && paymentIntentId) {
+    const environment = (process.env.STRIPE_PAYMENT_API_KEY || '').startsWith('sk_live_')
+      ? 'live'
+      : 'test';
+    await Payment.findOneAndUpdate(
+      { stripePaymentIntentId: paymentIntentId },
+      {
+        $set: {
+          orderId: order._id,
+          buyerId: order.buyerId,
+          provider: 'stripe',
+          environment,
+          amount: expectedTotalCents,
+          currency: 'NZD',
+          status: 'succeeded',
+          paidAt: new Date()
+        },
+        $setOnInsert: {
+          idempotencyKey: `payment_${order._id.toString()}_${paymentIntentId}`
+        }
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
+  }
 
   // Mark order as paid. Only transition to meeting_scheduled if meeting was already agreed.
   order.paidAt = new Date();
