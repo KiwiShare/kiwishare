@@ -184,6 +184,29 @@ export async function confirmStripePaymentIntent(
   };
 }
 
+export async function retrieveStripePaymentIntent(
+  paymentIntentId: string
+): Promise<{
+  id: string;
+  status: string;
+  amountCents: number;
+  metadata: Record<string, string>;
+}> {
+  const intent = await stripeRequest<{
+    id: string;
+    status: string;
+    amount: number;
+    metadata?: Record<string, string>;
+  }>(`/payment_intents/${paymentIntentId}`, 'GET');
+
+  return {
+    id: intent.id,
+    status: intent.status,
+    amountCents: intent.amount,
+    metadata: intent.metadata || {}
+  };
+}
+
 /**
  * List saved payment cards for a Stripe customer.
  */
