@@ -19,13 +19,22 @@ export const HomePage: React.FC = () => {
   const [selectedLocation, setSelectedLocation] = useState<string>('');
 
   useEffect(() => {
-    // Fetch recommended items once
-    itemsApi
-      .getRecommended(10)
-      .then((res) => {
+    const refreshRecommended = async () => {
+      try {
+        const res = await itemsApi.getRecommended(10);
         if (res.items) setRecommended(res.items);
-      })
-      .catch(() => {});
+      } catch {
+        // Keep the last successful recommendations on transient network failures.
+      }
+    };
+
+    void refreshRecommended();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshRecommended();
+      }
+    }, 10000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const refreshItems = useCallback(async (silent = false) => {
