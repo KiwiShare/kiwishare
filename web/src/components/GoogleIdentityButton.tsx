@@ -79,7 +79,12 @@ export const GoogleIdentityButton: React.FC<GoogleIdentityButtonProps> = ({
   onError,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const credentialHandlerRef = useRef(onCredential);
+  const errorHandlerRef = useRef(onError);
   const [ready, setReady] = useState(false);
+
+  credentialHandlerRef.current = onCredential;
+  errorHandlerRef.current = onError;
 
   useEffect(() => {
     let cancelled = false;
@@ -100,10 +105,10 @@ export const GoogleIdentityButton: React.FC<GoogleIdentityButtonProps> = ({
           callback: (response) => {
             const credential = response.credential?.trim();
             if (!credential) {
-              onError?.('Google did not return a valid sign-in credential.');
+              errorHandlerRef.current?.('Google did not return a valid sign-in credential.');
               return;
             }
-            void onCredential(credential);
+            void credentialHandlerRef.current(credential);
           },
         });
 
@@ -121,7 +126,7 @@ export const GoogleIdentityButton: React.FC<GoogleIdentityButtonProps> = ({
       })
       .catch((error) => {
         if (!cancelled) {
-          onError?.(
+          errorHandlerRef.current?.(
             error instanceof Error
               ? error.message
               : 'Google sign-in is currently unavailable.',
@@ -132,7 +137,7 @@ export const GoogleIdentityButton: React.FC<GoogleIdentityButtonProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [onCredential, onError, text]);
+  }, [text]);
 
   return (
     <div
