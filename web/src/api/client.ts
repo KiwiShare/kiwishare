@@ -581,6 +581,7 @@ export interface OrderItem {
   role: 'buying' | 'selling';
   itemId: string;
   isPaid?: boolean;
+  itemAmountNzd?: string;
   buyerFeeAmountNzd?: string;
   buyerTotalAmountNzd?: string;
   refundedAt?: string | null;
