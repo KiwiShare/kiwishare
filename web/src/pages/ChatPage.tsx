@@ -543,6 +543,19 @@ export const ChatPage: React.FC = () => {
     }
   }, [activeConversation?.item?.id, loadOrderAndMeetup]);
 
+  useEffect(() => {
+    const itemId = activeConversation?.item?.id;
+    if (!itemId) return;
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void loadOrderAndMeetup(itemId);
+      }
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [activeConversation?.item?.id, loadOrderAndMeetup]);
+
   // Buyer Checkout with Safe Pay
   const handleSafePayCheckout = async () => {
     if (!activeConversation?.item || isProcessingPayment) return;
@@ -1320,7 +1333,7 @@ export const ChatPage: React.FC = () => {
                       }}
                     >
                       <CreditCard size={14} />
-                      <span>Buy Now (${activeConversation.item.priceNzd} NZD)</span>
+                      <span>Buy Now (${currentOrder?.itemAmountNzd || activeConversation.item.priceNzd} NZD)</span>
                     </button>
                   )}
 
@@ -2392,7 +2405,7 @@ export const ChatPage: React.FC = () => {
                       }}
                     >
                       <CreditCard size={15} />
-                      <span>Pay Now (${activeConversation?.item?.priceNzd || '0'} NZD)</span>
+                      <span>Pay Now (${currentOrder?.itemAmountNzd || activeConversation?.item?.priceNzd || '0'} NZD)</span>
                     </button>
                   )}
                 </div>
