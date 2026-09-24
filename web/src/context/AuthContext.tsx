@@ -85,7 +85,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('Username must be 3-24 characters using letters, numbers, or underscores.');
     }
     const res = await authApi.updateMe({ username: value });
-    if (token) saveAuth(token, res.user);
+    const activeToken = localStorage.getItem('kiwishare_token') || token;
+    if (!activeToken) {
+      throw new Error('Your Google session was not established. Please sign in again.');
+    }
+    saveAuth(activeToken, res.user);
     return res.user;
   };
 
