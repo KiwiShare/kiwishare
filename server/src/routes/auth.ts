@@ -11,6 +11,36 @@ import { configuredFirebaseApp } from '../services/pushNotification';
 
 const router = new Router();
 
+const DEFAULT_GOOGLE_OAUTH_CLIENT_IDS = [
+  '353504132004-v9hv2iktcb0164pgsrp9ov41ihc7kba2.apps.googleusercontent.com', // Web/server
+  '353504132004-ljdbt8oa154268k63uk73gkeviacpfr1.apps.googleusercontent.com', // iOS
+  '353504132004-5idmotm27ntcd9187lp1dmk8ffli1flb.apps.googleusercontent.com' // Android
+];
+
+function allowedGoogleOAuthClientIds(): Set<string> {
+  const configured = process.env.GOOGLE_OAUTH_CLIENT_IDS
+    ?.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return new Set(configured?.length ? configured : DEFAULT_GOOGLE_OAUTH_CLIENT_IDS);
+}
+
+function validateGoogleOAuthClaims(data: any): void {
+  const issuer = data.iss?.toString();
+  if (issuer && issuer !== 'accounts.google.com' && issuer !== 'https://accounts.google.com') {
+    throw new Error('Google token issuer is invalid.');
+  }
+
+  const audience = data.aud?.toString();
+  if (!audience || !allowedGoogleOAuthClientIds().has(audience)) {
+    throw new Error('Google token was issued for a different application.');
+  }
+
+  if (data.email_verified !== true && data.email_verified !== 'true') {
+    throw new Error('Google account email is not verified.');
+  }
+}
+
 async function sendVerificationEmail(options: {
   to: string;
   subject: string;
@@ -590,8 +620,8 @@ router.post('/auth/google', async (ctx) => {
   let googleName = '';
   let googlePicture = '';
 
-  // Handle Mock verification for local testing and automated tests
-  if (idToken.startsWith('mock_google_token')) {
+  // Mock identities are strictly non-production test fixtures.
+  if (process.env.NODE_ENV !== 'production' && idToken.startsWith('mock_google_token')) {
     const suffix = idToken.split('_')[3] || 'sam';
     googleUid = `google_uid_${suffix}`;
     googleEmail = `${suffix}@kiwishare.co.nz`;
@@ -604,6 +634,9 @@ router.post('/auth/google', async (ctx) => {
       if (app) {
         const { getAuth } = await import('firebase-admin/auth');
         const decoded = await getAuth(app).verifyIdToken(idToken);
+        if (decoded.email_verified === false) {
+          throw new Error('Firebase identity does not have a verified email.');
+        }
         googleUid = decoded.uid;
         googleEmail = (decoded.email || '').trim().toLowerCase();
         googleName = decoded.name || '';
@@ -624,6 +657,7 @@ router.post('/auth/google', async (ctx) => {
         if (data.error_description) {
           throw new Error(data.error_description);
         }
+        validateGoogleOAuthClaims(data);
         googleUid = data.sub;
         googleEmail = (data.email || '').trim().toLowerCase();
         googleName = data.name || '';
