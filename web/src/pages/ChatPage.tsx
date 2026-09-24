@@ -291,6 +291,12 @@ export const ChatPage: React.FC = () => {
   const [isConfirmingHandover, setIsConfirmingHandover] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
 
+  // Safe Pay card details. The backend tokenises these into a Stripe PaymentMethod
+  // before the order can be confirmed as paid.
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvc, setCardCvc] = useState('');
+
   // Meetup schedule form state
   const [meetupDate, setMeetupDate] = useState(() => {
     const d = new Date();
@@ -540,6 +546,22 @@ export const ChatPage: React.FC = () => {
   // Buyer Checkout with Safe Pay
   const handleSafePayCheckout = async () => {
     if (!activeConversation?.item || isProcessingPayment) return;
+
+    const cleanCardNumber = cardNumber.replace(/\s+/g, '');
+    const expiryMatch = cardExpiry.trim().match(/^(0?[1-9]|1[0-2])\s*\/\s*(\d{2}|\d{4})$/);
+    if (!/^\d{12,19}$/.test(cleanCardNumber)) {
+      alert('Please enter a valid card number.');
+      return;
+    }
+    if (!expiryMatch) {
+      alert('Please enter card expiry as MM/YY.');
+      return;
+    }
+    if (!/^\d{3,4}$/.test(cardCvc.trim())) {
+      alert('Please enter a valid CVC.');
+      return;
+    }
+
     setIsProcessingPayment(true);
     try {
       let orderToPay = currentOrder;
@@ -549,29 +571,43 @@ export const ChatPage: React.FC = () => {
         setCurrentOrder(orderToPay);
       }
 
+      // Always create a fresh intent so the amount reflects the latest listing/special price.
       const intentRes = await paymentsApi.createIntent(orderToPay.id);
-      const confirmRes = await paymentsApi.confirm(orderToPay.id, intentRes.paymentIntentId);
-      if (confirmRes?.order) {
-        setCurrentOrder(confirmRes.order);
+
+      if (!intentRes.isFree) {
+        const expMonth = Number(expiryMatch[1]);
+        const rawYear = Number(expiryMatch[2]);
+        const expYear = rawYear < 100 ? 2000 + rawYear : rawYear;
+        const paymentMethod = await paymentsApi.createPaymentMethod({
+          cardNumber: cleanCardNumber,
+          expMonth,
+          expYear,
+          cvc: cardCvc.trim(),
+        });
+
+        await paymentsApi.confirm(
+          orderToPay.id,
+          intentRes.paymentIntentId,
+          paymentMethod.paymentMethodId,
+        );
       }
 
-      // Mark item as sold locally in conversation item
-      activeConversation.item.status = 'sold';
+      // Reload the authoritative order/item state after the server confirms payment.
+      await loadOrderAndMeetup(activeConversation.item.id);
+      await fetchConversations(true);
 
-      // Send chat confirmation message
-      const itemPriceNum = parseFloat(activeConversation.item.priceNzd || '0') || 0;
-      const totalAmount = intentRes.amountNzd || (itemPriceNum + Math.max(1, Math.round(itemPriceNum * 0.05 * 100) / 100)).toFixed(2);
       await chatApi.sendMessage(activeConversation.id, {
         type: 'text',
-        text: `[Payment Confirmed] Safe Pay payment of $${totalAmount} NZD completed. Item is now SOLD and reserved. Funds held securely in KiwiShare Escrow until meetup handover.`,
+        text: `[Payment Confirmed] Safe Pay payment of $${intentRes.amountNzd} NZD completed. Item is now SOLD and reserved. Funds held securely in KiwiShare Escrow until meetup handover.`,
       });
 
+      setCardNumber('');
+      setCardExpiry('');
+      setCardCvc('');
       setShowCheckoutModal(false);
       fetchMessages(activeConversation.id, false);
-      fetchConversations(true);
-      loadOrderAndMeetup(activeConversation.item.id);
     } catch (err: any) {
-      alert(err.message || 'Payment processing failed. Please try again.');
+      alert(err.message || 'Payment processing failed. No order status was changed.');
     } finally {
       setIsProcessingPayment(false);
     }
@@ -1858,7 +1894,7 @@ export const ChatPage: React.FC = () => {
 
       {/* 1. KiwiShare Safe Pay Checkout Modal */}
       {showCheckoutModal && activeConversation?.item && (() => {
-        const priceNum = parseFloat(activeConversation.item.priceNzd || '0') || 0;
+        const priceNum = parseFloat(currentOrder?.itemAmountNzd || activeConversation.item.priceNzd || '0') || 0;
         const feeNum = Math.max(1, Math.round(priceNum * 0.05 * 100) / 100);
         const gstNum = feeNum * (3 / 23); // 15% NZ GST included in platform fee
         const totalNum = priceNum + feeNum;
@@ -2017,6 +2053,47 @@ export const ChatPage: React.FC = () => {
                   <span style={{ color: '#059669', fontSize: '1.2rem' }}>${totalNum.toFixed(2)} NZD</span>
                 </div>
               </div>
+
+              {totalNum > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Payment card
+                  </label>
+                  <input
+                    className="form-input"
+                    inputMode="numeric"
+                    autoComplete="cc-number"
+                    placeholder="Card number"
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(e.target.value.replace(/[^\d ]/g, ''))}
+                    disabled={isProcessingPayment}
+                    style={{ width: '100%', marginBottom: '8px' }}
+                  />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <input
+                      className="form-input"
+                      inputMode="numeric"
+                      autoComplete="cc-exp"
+                      placeholder="MM/YY"
+                      value={cardExpiry}
+                      onChange={(e) => setCardExpiry(e.target.value.replace(/[^\d/ ]/g, ''))}
+                      disabled={isProcessingPayment}
+                    />
+                    <input
+                      className="form-input"
+                      inputMode="numeric"
+                      autoComplete="cc-csc"
+                      placeholder="CVC"
+                      value={cardCvc}
+                      onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                      disabled={isProcessingPayment}
+                    />
+                  </div>
+                  <div style={{ marginTop: '6px', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Payment must be accepted by Stripe before KiwiShare marks this order as paid.
+                  </div>
+                </div>
+              )}
 
               {/* NZ Tax and Escrow Note */}
               <div
