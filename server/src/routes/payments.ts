@@ -112,10 +112,12 @@ router.post('/payments/create-intent', authenticateToken, async (ctx) => {
   order.sellerReceiveAmount = effectivePriceCents;
   await order.save();
 
-  // If item is completely free, auto-mark paid
+  // If item is completely free, auto-mark paid and lock the listing from other buyers.
   if (totalCents === 0) {
     order.paidAt = new Date();
+    order.status = 'paid';
     await order.save();
+    await Item.findByIdAndUpdate(order.itemId, { status: 'sold' });
     const qrToken = await ensureOrderMeetupQr(order);
     ctx.body = {
       status: 'success',
