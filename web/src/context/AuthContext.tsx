@@ -8,7 +8,8 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<void>;
   loginWithOtp: (email: string, code: string, displayName?: string) => Promise<void>;
-  loginWithGoogle: (idToken: string) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<UserProfile>;
+  updateUsername: (username: string) => Promise<UserProfile>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -75,6 +76,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const loginWithGoogle = async (idToken: string) => {
     const res = await authApi.loginWithGoogle(idToken);
     saveAuth(res.token, res.user);
+    return res.user;
+  };
+
+  const updateUsername = async (username: string) => {
+    const value = username.trim();
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(value)) {
+      throw new Error('Username must be 3-24 characters using letters, numbers, or underscores.');
+    }
+    const res = await authApi.updateMe({ username: value });
+    if (token) saveAuth(token, res.user);
+    return res.user;
   };
 
   const register = async (email: string, password: string, displayName: string) => {
@@ -96,6 +108,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         loginWithOtp,
         loginWithGoogle,
+        updateUsername,
         register,
         logout,
         refreshUser,
