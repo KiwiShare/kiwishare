@@ -150,6 +150,11 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
     e.preventDefault();
     setError(null);
 
+    if (item.status === 'sold') {
+      setError('Sold listings are locked. Refund/cancel the transaction before editing.');
+      return;
+    }
+
     if (!title.trim()) {
       setError('Please provide a listing title.');
       return;
@@ -337,7 +342,11 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
             </div>
 
             <div style={{ display: 'flex', gap: '8px' }}>
-              {status !== 'active' ? (
+              {item.status === 'sold' ? (
+                <span style={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 700 }}>
+                  Refund/cancel transaction to unlock
+                </span>
+              ) : status !== 'active' ? (
                 <button
                   type="button"
                   onClick={() => setStatus('active')}
@@ -356,14 +365,6 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
                     style={{ padding: '6px 12px', fontSize: '0.82rem' }}
                   >
                     Mark Reserved
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStatus('sold')}
-                    className="btn btn-secondary"
-                    style={{ padding: '6px 12px', fontSize: '0.82rem', color: '#64748b' }}
-                  >
-                    Mark Sold
                   </button>
                 </>
               )}
