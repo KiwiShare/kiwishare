@@ -52,7 +52,9 @@ void main() {
     );
   });
 
-  Widget createWidgetUnderTest() {
+  Widget createWidgetUnderTest({
+    UserListingsMode mode = UserListingsMode.selling,
+  }) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthProvider>.value(value: auth),
@@ -60,9 +62,7 @@ void main() {
           create: (_) => ListingProvider(itemRepository: itemRepo),
         ),
       ],
-      child: const MaterialApp(
-        home: UserListingsScreen(mode: UserListingsMode.selling),
-      ),
+      child: MaterialApp(home: UserListingsScreen(mode: mode)),
     );
   }
 
@@ -178,4 +178,34 @@ void main() {
     expect(find.text('VIP Member'), findsOneWidget);
     expect(find.text('VIP Boost (Free)'), findsOneWidget);
   });
+
+  testWidgets('sold inventory cannot be edited or relisted by seller', (
+    tester,
+  ) async {
+    itemRepo.items.add(
+      const ItemModel(
+        id: 'item_sold',
+        title: 'Sold Camera',
+        priceNzd: '150',
+        location: 'Auckland',
+        imageUrl: '',
+        category: 'Electronics',
+        isSustainable: true,
+        status: ItemStatus.sold,
+        ownerId: 'user-1',
+      ),
+    );
+
+    await tester.pumpWidget(
+      createWidgetUnderTest(mode: UserListingsMode.sold),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sold Camera'), findsOneWidget);
+    expect(find.text('Sold'), findsOneWidget);
+    expect(find.text('Edit'), findsNothing);
+    expect(find.text('Relist'), findsNothing);
+    expect(find.text('Delist'), findsNothing);
+  });
+
 }
