@@ -8,7 +8,7 @@ export async function finishGoogleSignIn(
   let user = await loginWithGoogle(idToken);
   if (!user.needsUsername && user.username?.trim()) return user;
 
-  while (true) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
     const proposed = window.prompt(
       `Signed in as ${user.email}. Choose a KiwiShare username (3-24 letters, numbers, or underscores):`,
       '',
@@ -29,4 +29,6 @@ export async function finishGoogleSignIn(
     user = await updateUsername(username);
     return user;
   }
+
+  throw new Error('Could not complete username setup. Please try Google sign-in again.');
 }
