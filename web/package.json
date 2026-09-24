@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "pnpm run lint && tsc && vite build",
+    "test": "node --test test/*.test.mjs",
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.{ts,tsx}\" && tsc --noEmit",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix"

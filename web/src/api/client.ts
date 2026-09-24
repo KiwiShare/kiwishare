@@ -179,7 +179,7 @@ export interface ChatMessage {
  * Falls back to relative '/api' for Vite dev proxy.
  */
 export function getApiBaseUrl(): string {
-  const envUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '') as string;
+  const envUrl = (import.meta.env?.VITE_API_URL || import.meta.env?.VITE_API_BASE_URL || '') as string;
   if (envUrl && envUrl.trim() !== '') {
     const clean = envUrl.trim().replace(/\/+$/, '');
     return clean.endsWith('/api') ? clean : `${clean}/api`;

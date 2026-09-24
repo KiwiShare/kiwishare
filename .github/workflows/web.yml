@@ -42,5 +42,8 @@ jobs:
       - name: Run Web ESLint & TypeScript Check
         run: pnpm --filter web run lint
 
+      - name: Run Web Regression Tests
+        run: pnpm --filter web run test
+
       - name: Build Web Application
         run: pnpm --filter web run build
