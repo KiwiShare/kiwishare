@@ -560,21 +560,6 @@ export const ChatPage: React.FC = () => {
   const handleSafePayCheckout = async () => {
     if (!activeConversation?.item || isProcessingPayment) return;
 
-    const cleanCardNumber = cardNumber.replace(/\s+/g, '');
-    const expiryMatch = cardExpiry.trim().match(/^(0?[1-9]|1[0-2])\s*\/\s*(\d{2}|\d{4})$/);
-    if (!/^\d{12,19}$/.test(cleanCardNumber)) {
-      alert('Please enter a valid card number.');
-      return;
-    }
-    if (!expiryMatch) {
-      alert('Please enter card expiry as MM/YY.');
-      return;
-    }
-    if (!/^\d{3,4}$/.test(cardCvc.trim())) {
-      alert('Please enter a valid CVC.');
-      return;
-    }
-
     setIsProcessingPayment(true);
     try {
       let orderToPay = currentOrder;
@@ -588,6 +573,18 @@ export const ChatPage: React.FC = () => {
       const intentRes = await paymentsApi.createIntent(orderToPay.id);
 
       if (!intentRes.isFree) {
+        const cleanCardNumber = cardNumber.replace(/\s+/g, '');
+        const expiryMatch = cardExpiry.trim().match(/^(0?[1-9]|1[0-2])\s*\/\s*(\d{2}|\d{4})$/);
+        if (!/^\d{12,19}$/.test(cleanCardNumber)) {
+          throw new Error('Please enter a valid card number.');
+        }
+        if (!expiryMatch) {
+          throw new Error('Please enter card expiry as MM/YY.');
+        }
+        if (!/^\d{3,4}$/.test(cardCvc.trim())) {
+          throw new Error('Please enter a valid CVC.');
+        }
+
         const expMonth = Number(expiryMatch[1]);
         const rawYear = Number(expiryMatch[2]);
         const expYear = rawYear < 100 ? 2000 + rawYear : rawYear;
