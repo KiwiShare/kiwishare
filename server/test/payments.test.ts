@@ -194,7 +194,7 @@ describe('Payments & Price Synchronization', () => {
       await Order.findByIdAndDelete(order._id);
     });
 
-    it('confirms payment, marks order paid, and unlocks dynamic QR token', async () => {
+    it('does not mark a paid listing as paid without Stripe payment proof', async () => {
       const order = await Order.create({
         orderNumber: `ORD_CONFIRM_${Date.now()}`,
         itemId: itemId,
@@ -215,13 +215,15 @@ describe('Payments & Price Synchronization', () => {
         .set('Authorization', `Bearer ${buyerToken}`)
         .send({ orderId: order._id.toString() });
 
-      expect(res.status).toBe(200);
-      expect(res.body.status).toBe('success');
-      expect(res.body.data.paidAt).toBeDefined();
-      expect(res.body.data.qrToken).toMatch(/^QR_HANDOVER_TOKEN_/);
+      expect(res.status).toBe(400);
+      expect(res.body.status).toBe('error');
+      expect(res.body.message).toContain('PaymentIntent');
 
-      const confirmedOrder = await Order.findById(order._id);
-      expect(confirmedOrder?.paidAt).toBeDefined();
+      const unchangedOrder = await Order.findById(order._id);
+      expect(unchangedOrder?.paidAt).toBeFalsy();
+
+      const unchangedItem = await Item.findById(itemId);
+      expect(unchangedItem?.status).not.toBe('sold');
 
       await Order.findByIdAndDelete(order._id);
     });
