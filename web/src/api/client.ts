@@ -2,6 +2,8 @@ export interface UserProfile {
   id: string;
   _id?: string;
   email: string;
+  username?: string | null;
+  needsUsername?: boolean;
   displayName: string;
   avatarUrl?: string | null;
   role?: 'admin' | 'user';
@@ -257,6 +259,12 @@ export const authApi = {
 
   getMe: () =>
     apiRequest<{ status: string; user: UserProfile }>('/users/me'),
+
+  updateMe: (body: { username?: string }) =>
+    apiRequest<{ status: string; user: UserProfile }>('/users/me', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
 };
 
 // Category APIs
