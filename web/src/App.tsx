@@ -29,6 +29,8 @@ const AppContent: React.FC = () => {
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:conversationId" element={<ChatPage />} />
+          <Route path="/chats" element={<ChatPage />} />
+          <Route path="/chats/:conversationId" element={<ChatPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/profile" element={<ProfilePage />} />
