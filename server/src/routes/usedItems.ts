@@ -934,6 +934,15 @@ async function deleteUsedItemHandler(ctx: any) {
     return;
   }
 
+  if (item.status === 'sold') {
+    ctx.status = 409;
+    ctx.body = {
+      status: 'error',
+      message: 'Sold listings are locked. Refund the paid order before changing this listing.'
+    };
+    return;
+  }
+
   item.status = 'deleted';
   item.deletedAt = new Date();
   await item.save();
@@ -1179,6 +1188,15 @@ async function delistUsedItemHandler(ctx: any) {
     return;
   }
 
+  if (item.status === 'sold') {
+    ctx.status = 409;
+    ctx.body = {
+      status: 'error',
+      message: 'Sold listings are locked. Refund the paid order before changing this listing.'
+    };
+    return;
+  }
+
   item.status = 'draft';
   await item.save();
   await item.populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
@@ -1210,6 +1228,15 @@ async function relistUsedItemHandler(ctx: any) {
   if (currentOwner !== userId) {
     ctx.status = 403;
     ctx.body = { status: 'error', message: 'Unauthorized: You can only relist your own listings.' };
+    return;
+  }
+
+  if (item.status === 'sold') {
+    ctx.status = 409;
+    ctx.body = {
+      status: 'error',
+      message: 'Sold listings are locked. Refund the paid order before changing this listing.'
+    };
     return;
   }
 
