@@ -556,6 +556,25 @@ export const ChatPage: React.FC = () => {
     return () => window.clearInterval(interval);
   }, [activeConversation?.item?.id, loadOrderAndMeetup]);
 
+  const handleOpenCheckout = async () => {
+    if (!activeConversation?.item) return;
+    try {
+      let order = currentOrder;
+      if (!order || ['pending', 'pending_payment', 'refunded'].includes(order.status)) {
+        const orderRes = await ordersApi.createOrder(activeConversation.item.id);
+        order = orderRes.order;
+        setCurrentOrder(order);
+      } else {
+        const orderRes = await ordersApi.getOrderById(order.id);
+        order = orderRes.order;
+        setCurrentOrder(order);
+      }
+      setShowCheckoutModal(true);
+    } catch (err: any) {
+      alert(err.message || 'Could not prepare checkout with the latest price.');
+    }
+  };
+
   // Buyer Checkout with Safe Pay
   const handleSafePayCheckout = async () => {
     if (!activeConversation?.item || isProcessingPayment) return;
@@ -563,7 +582,7 @@ export const ChatPage: React.FC = () => {
     setIsProcessingPayment(true);
     try {
       let orderToPay = currentOrder;
-      if (!orderToPay || orderToPay.status === 'pending' || orderToPay.status === 'refunded') {
+      if (!orderToPay || ['pending', 'pending_payment', 'refunded'].includes(orderToPay.status)) {
         const orderRes = await ordersApi.createOrder(activeConversation.item.id);
         orderToPay = orderRes.order;
         setCurrentOrder(orderToPay);
@@ -1315,9 +1334,9 @@ export const ChatPage: React.FC = () => {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   {/* Buyer: Buy Now */}
-                  {activeConversation.direction === 'buying' && (!currentOrder || currentOrder.status === 'pending' || currentOrder.status === 'refunded') && (
+                  {activeConversation.direction === 'buying' && (!currentOrder || currentOrder.status === 'pending' || currentOrder.status === 'pending_payment' || currentOrder.status === 'refunded') && (
                     <button
-                      onClick={() => setShowCheckoutModal(true)}
+                      onClick={() => void handleOpenCheckout()}
                       className="btn btn-primary"
                       style={{
                         padding: '6px 14px',
@@ -1335,7 +1354,7 @@ export const ChatPage: React.FC = () => {
                   )}
 
                   {/* Seller: Request Safe Pay */}
-                  {activeConversation.direction === 'selling' && (!currentOrder || currentOrder.status === 'pending' || currentOrder.status === 'refunded') && (
+                  {activeConversation.direction === 'selling' && (!currentOrder || currentOrder.status === 'pending' || currentOrder.status === 'pending_payment' || currentOrder.status === 'refunded') && (
                     <button
                       onClick={handleSendPaymentRequest}
                       className="btn btn-secondary"
@@ -1599,7 +1618,7 @@ export const ChatPage: React.FC = () => {
                             </div>
                             {!isMine && (
                               <button
-                                onClick={() => setShowCheckoutModal(true)}
+                                onClick={() => void handleOpenCheckout()}
                                 className="btn btn-primary"
                                 style={{ padding: '6px 14px', fontSize: '0.82rem', backgroundColor: '#059669', borderColor: '#059669' }}
                               >
@@ -1905,9 +1924,13 @@ export const ChatPage: React.FC = () => {
       {/* 1. KiwiShare Safe Pay Checkout Modal */}
       {showCheckoutModal && activeConversation?.item && (() => {
         const priceNum = parseFloat(currentOrder?.itemAmountNzd || activeConversation.item.priceNzd || '0') || 0;
-        const feeNum = Math.max(1, Math.round(priceNum * 0.05 * 100) / 100);
+        const feeNum = currentOrder?.buyerFeeAmountNzd
+          ? parseFloat(currentOrder.buyerFeeAmountNzd)
+          : Math.max(1, Math.round(priceNum * 0.05 * 100) / 100);
         const gstNum = feeNum * (3 / 23); // 15% NZ GST included in platform fee
-        const totalNum = priceNum + feeNum;
+        const totalNum = currentOrder?.buyerTotalAmountNzd
+          ? parseFloat(currentOrder.buyerTotalAmountNzd)
+          : priceNum + feeNum;
 
         return (
           <div
@@ -2387,7 +2410,7 @@ export const ChatPage: React.FC = () => {
                     <button
                       onClick={() => {
                         setShowQrModal(false);
-                        setShowCheckoutModal(true);
+                        void handleOpenCheckout();
                       }}
                       className="btn btn-primary"
                       style={{
