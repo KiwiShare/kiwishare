@@ -4,6 +4,19 @@ This document explains the automated release flow and the deployment steps for b
 
 ---
 
+
+### Render Web SPA Routing
+
+The web frontend uses React Router with browser-history URLs such as `/products/:id` and `/chat/:conversationId`. The Render Static Site must serve `index.html` for unknown frontend paths so a browser refresh does not return a CDN 404.
+
+Configure the static site's **Redirects/Rewrites** rule:
+
+- Source: `/*`
+- Destination: `/index.html`
+- Action: **Rewrite**
+
+This is hosting configuration, not a React Router redirect. Keep asset files unchanged; Render serves existing files before applying the fallback rewrite.
+
 ## 1. Automated Release Flow (Merge to `main`)
 
 We have fully automated our release pipeline via GitHub Actions. **Developers do not need to manually create tags or run release scripts locally.**
