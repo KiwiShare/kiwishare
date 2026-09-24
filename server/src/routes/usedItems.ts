@@ -726,6 +726,15 @@ async function updateUsedItemHandler(ctx: any) {
     return;
   }
 
+  if (item.status === 'sold') {
+    ctx.status = 409;
+    ctx.body = {
+      status: 'error',
+      message: 'Sold listings are locked. Refund or cancel the transaction before editing the listing.'
+    };
+    return;
+  }
+
   const updateFields: Record<string, unknown> = {};
 
   if (updates.title != null) updateFields.title = updates.title;
@@ -739,13 +748,25 @@ async function updateUsedItemHandler(ctx: any) {
   }
   if (updates.status != null) {
     const statusVal = String(updates.status).trim();
+    if (statusVal === 'sold') {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'Listings become sold only after a completed payment. Sellers cannot mark an item sold manually.'
+      };
+      return;
+    }
     if (statusVal === 'delisted' || statusVal === 'draft') {
       updateFields.status = 'draft';
     } else if (statusVal === 'active') {
       updateFields.status = 'active';
       updateFields.publishedAt = new Date();
+    } else if (statusVal === 'reserved') {
+      updateFields.status = 'reserved';
     } else {
-      updateFields.status = statusVal;
+      ctx.status = 400;
+      ctx.body = { status: 'error', message: 'Unsupported seller listing status.' };
+      return;
     }
   }
   if (updates.isSustainable != null) {
@@ -785,7 +806,7 @@ async function updateUsedItemHandler(ctx: any) {
   const previousItem = await Item.findOneAndUpdate(
     {
       _id: item._id,
-      status: { $ne: 'deleted' },
+      status: { $nin: ['deleted', 'sold'] },
       ...ownerFilter
     },
     { $set: updateFields },
@@ -797,6 +818,12 @@ async function updateUsedItemHandler(ctx: any) {
     if (!latestItem || latestItem.status === 'deleted') {
       ctx.status = 404;
       ctx.body = { status: 'error', message: 'Used item not found.' };
+    } else if (latestItem.status === 'sold') {
+      ctx.status = 409;
+      ctx.body = {
+        status: 'error',
+        message: 'Sold listings are locked. Refund or cancel the transaction before editing the listing.'
+      };
     } else {
       ctx.status = 403;
       ctx.body = {
@@ -904,6 +931,15 @@ async function deleteUsedItemHandler(ctx: any) {
   if (currentOwner !== userId) {
     ctx.status = 403;
     ctx.body = { status: 'error', message: 'Unauthorized: You can only delete your own listings.' };
+    return;
+  }
+
+  if (item.status === 'sold') {
+    ctx.status = 409;
+    ctx.body = {
+      status: 'error',
+      message: 'Sold listings are locked. Refund the paid order before changing this listing.'
+    };
     return;
   }
 
@@ -1152,6 +1188,15 @@ async function delistUsedItemHandler(ctx: any) {
     return;
   }
 
+  if (item.status === 'sold') {
+    ctx.status = 409;
+    ctx.body = {
+      status: 'error',
+      message: 'Sold listings are locked. Refund the paid order before changing this listing.'
+    };
+    return;
+  }
+
   item.status = 'draft';
   await item.save();
   await item.populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
@@ -1183,6 +1228,15 @@ async function relistUsedItemHandler(ctx: any) {
   if (currentOwner !== userId) {
     ctx.status = 403;
     ctx.body = { status: 'error', message: 'Unauthorized: You can only relist your own listings.' };
+    return;
+  }
+
+  if (item.status === 'sold') {
+    ctx.status = 409;
+    ctx.body = {
+      status: 'error',
+      message: 'Sold listings are locked. Refund the paid order before changing this listing.'
+    };
     return;
   }
 

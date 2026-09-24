@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { itemsApi, UsedItem } from '../api/client';
 import { JumboCarousel } from '../components/JumboCarousel';
@@ -19,17 +19,26 @@ export const HomePage: React.FC = () => {
   const [selectedLocation, setSelectedLocation] = useState<string>('');
 
   useEffect(() => {
-    // Fetch recommended items once
-    itemsApi
-      .getRecommended(10)
-      .then((res) => {
+    const refreshRecommended = async () => {
+      try {
+        const res = await itemsApi.getRecommended(10);
         if (res.items) setRecommended(res.items);
-      })
-      .catch(() => {});
+      } catch {
+        // Keep the last successful recommendations on transient network failures.
+      }
+    };
+
+    void refreshRecommended();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshRecommended();
+      }
+    }, 10000);
+    return () => window.clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    setLoading(true);
+  const refreshItems = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const params: Record<string, any> = {};
     if (categoryParam) params.category = categoryParam;
     if (searchParam) params.search = searchParam;
@@ -38,18 +47,30 @@ export const HomePage: React.FC = () => {
     if (sortBy === 'price_asc') params.sort = 'price_asc';
     if (sortBy === 'price_desc') params.sort = 'price_desc';
 
-    itemsApi
-      .getItems(params)
-      .then((res) => {
-        setItems(res.items || []);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch items:', err);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    try {
+      const res = await itemsApi.getItems(params);
+      setItems(res.items || []);
+    } catch (err) {
+      if (!silent) console.error('Failed to fetch items:', err);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, [categoryParam, searchParam, sustainableParam, selectedLocation, sortBy]);
+
+  useEffect(() => {
+    void refreshItems(false);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshItems(true);
+      }
+    }, 10000);
+    const refreshOnFocus = () => void refreshItems(true);
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, [refreshItems]);
 
   const handleCategoryChange = (cat: string) => {
     const nextParams = new URLSearchParams(searchParams);

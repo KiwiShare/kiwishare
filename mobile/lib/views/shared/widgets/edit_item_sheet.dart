@@ -14,7 +14,33 @@ class EditItemSheet extends StatefulWidget {
   static Future<ItemModel?> show(
     BuildContext context, {
     required ItemModel item,
-  }) {
+  }) async {
+    if (item.status == ItemStatus.sold) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.lock_outline),
+              SizedBox(width: 8),
+              Expanded(child: Text('Sold listing is locked')),
+            ],
+          ),
+          content: const Text(
+            'This item has already been sold. Refund or cancel the paid order first. '
+            'After a successful refund, the listing can become active and editable again.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return null;
+    }
+
     return showModalBottomSheet<ItemModel>(
       context: context,
       isScrollControlled: true,
@@ -84,6 +110,13 @@ class _EditItemSheetState extends State<EditItemSheet> {
   }
 
   Future<void> _submit() async {
+    if (widget.item.status == ItemStatus.sold) {
+      setState(
+        () => _errorMessage =
+            'Sold listings are locked. Refund or cancel the paid order first.',
+      );
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     final token = context.read<AuthProvider?>()?.jwtToken;
     if (token == null || token.isEmpty) {
@@ -97,11 +130,14 @@ class _EditItemSheetState extends State<EditItemSheet> {
     });
 
     final finalPrice = _isFree ? '0' : _priceController.text.trim();
-    final statusStr = _status == ItemStatus.active
-        ? 'active'
-        : _status == ItemStatus.reserved
-        ? 'reserved'
-        : 'sold';
+    final statusStr = switch (_status) {
+      ItemStatus.active => 'active',
+      ItemStatus.reserved => 'reserved',
+      ItemStatus.delisted => 'draft',
+      ItemStatus.sold => throw StateError(
+        'Sold listings must be refunded or cancelled before editing.',
+      ),
+    };
 
     final normalizedCondition = _condition.trim().toLowerCase().replaceAll(
       RegExp(r'[\s-]+'),
@@ -223,7 +259,7 @@ class _EditItemSheetState extends State<EditItemSheet> {
                       ? '🟢 Available: Visible & searchable by all students on campus.'
                       : _status == ItemStatus.reserved
                       ? '🟡 Reserved: Held for a buyer (e.g. meetup scheduled).'
-                      : '⚪ Sold: Deal completed; item marked as sold.',
+                      : '⚪ Delisted: Hidden from discovery until you relist it.',
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.colorScheme.onSurfaceVariant,
@@ -243,9 +279,9 @@ class _EditItemSheetState extends State<EditItemSheet> {
                       icon: Icon(Icons.lock_clock),
                     ),
                     ButtonSegment(
-                      value: ItemStatus.sold,
-                      label: Text('Sold'),
-                      icon: Icon(Icons.task_alt),
+                      value: ItemStatus.delisted,
+                      label: Text('Delisted'),
+                      icon: Icon(Icons.archive_outlined),
                     ),
                   ],
                   selected: {_status},

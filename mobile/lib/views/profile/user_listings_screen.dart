@@ -228,6 +228,17 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
   Future<void> _handleToggleListing(ItemModel item, bool publish) async {
     final token = _token;
     if (token == null) return;
+    if (item.status == ItemStatus.sold) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sold listings are locked. Refund or cancel the paid order first.',
+          ),
+        ),
+      );
+      return;
+    }
 
     final actionLabel = publish ? 'Relist' : 'Delist';
     final confirmed = await showDialog<bool>(
@@ -644,7 +655,9 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: isDelisted
+                                color: isSold
+                                    ? Colors.grey.shade200
+                                    : isDelisted
                                     ? Colors.orange.shade50
                                     : isReserved
                                     ? Colors.amber.shade50
@@ -652,7 +665,9 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                isDelisted
+                                isSold
+                                    ? 'Sold'
+                                    : isDelisted
                                     ? 'Delisted'
                                     : isReserved
                                     ? 'Reserved'
@@ -660,7 +675,9 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
-                                  color: isDelisted
+                                  color: isSold
+                                      ? Colors.grey.shade800
+                                      : isDelisted
                                       ? Colors.orange.shade800
                                       : isReserved
                                       ? Colors.amber.shade900
@@ -799,26 +816,35 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                       ),
                     const SizedBox(width: 8),
                     // Edit Button
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                    if (isSold)
+                      const Chip(
+                        avatar: Icon(Icons.lock_outline, size: 14),
+                        label: Text(
+                          'Refund/cancel first',
+                          style: TextStyle(fontSize: 11),
                         ),
+                      )
+                    else
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                        ),
+                        onPressed: () async {
+                          final updated = await EditItemSheet.show(
+                            context,
+                            item: item,
+                          );
+                          if (updated != null) {
+                            setState(_load);
+                          }
+                        },
+                        icon: const Icon(Icons.edit_outlined, size: 14),
+                        label: const Text('Edit', style: TextStyle(fontSize: 12)),
                       ),
-                      onPressed: () async {
-                        final updated = await EditItemSheet.show(
-                          context,
-                          item: item,
-                        );
-                        if (updated != null) {
-                          setState(_load);
-                        }
-                      },
-                      icon: const Icon(Icons.edit_outlined, size: 14),
-                      label: const Text('Edit', style: TextStyle(fontSize: 12)),
-                    ),
                   ],
                 ),
               ],

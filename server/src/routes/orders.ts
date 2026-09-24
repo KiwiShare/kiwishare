@@ -440,7 +440,12 @@ router.post('/:orderId/refund', async (ctx: Context) => {
       payment.refundedAmount = order.buyerTotalAmount || order.itemAmount || 0;
       await payment.save();
     } catch (err: any) {
-      console.warn('[Orders] Stripe refund notice:', err.message);
+      ctx.status = 502;
+      ctx.body = {
+        status: 'error',
+        message: err.message || 'Stripe refund failed. The order remains paid and the listing remains sold.'
+      };
+      return;
     }
   }
 

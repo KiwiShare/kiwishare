@@ -397,6 +397,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Future<void> _editListing(ItemModel product) async {
+    if (product.status == ItemStatus.sold) {
+      await EditItemSheet.show(context, item: product);
+      return;
+    }
     final updated = await EditItemSheet.show(context, item: product);
     if (updated != null && mounted) {
       setState(() => _loadedItem = updated);
@@ -458,10 +462,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         (userId == product.ownerId ||
                             userId == product.seller?.id);
                     if (!ownsListing) return const SizedBox.shrink();
+                    final isSold = product.status == ItemStatus.sold;
                     return IconButton(
-                      tooltip: 'Edit listing',
-                      onPressed: () => _editListing(product),
-                      icon: const Icon(Icons.edit_outlined, size: 22),
+                      tooltip: isSold
+                          ? 'Sold listing locked — refund/cancel first'
+                          : 'Edit listing',
+                      onPressed: isSold ? null : () => _editListing(product),
+                      icon: Icon(
+                        isSold ? Icons.lock_outline : Icons.edit_outlined,
+                        size: 22,
+                      ),
                     );
                   },
                 ),
@@ -527,7 +537,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       product: product,
                       watchlist: watchlist,
                       ownsListing: ownsListing,
-                      onEditListing: () => _editListing(product),
+                      onEditListing: product.status == ItemStatus.sold
+                          ? null
+                          : () => _editListing(product),
                       onToggleWatch: () =>
                           _requestWatchlistToggle(watchlist, product),
                       messageSellerEnabled: canMessage,
@@ -1420,8 +1432,26 @@ class _ProductActions extends StatelessWidget {
       onPressed: onEditListing,
       icon: const Icon(Icons.edit_outlined),
       label: Text(
-        product.status != ItemStatus.active ? 'Re-list / Edit' : 'Edit Listing',
+        product.status == ItemStatus.delisted ? 'Re-list / Edit' : 'Edit Listing',
         style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+    );
+
+    final soldLockedButton = FilledButton.icon(
+      key: const Key('detail-sold-listing-locked-button'),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 50),
+        backgroundColor: theme.colorScheme.surfaceContainerHighest,
+        foregroundColor: theme.colorScheme.onSurfaceVariant,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+      ),
+      onPressed: null,
+      icon: const Icon(Icons.lock_outline),
+      label: Text(
+        'Sold — refund/cancel first',
+        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
       ),
     );
 
@@ -1561,8 +1591,10 @@ class _ProductActions extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (ownsListing && onEditListing != null) ...[
-                    editButton,
+                  if (ownsListing) ...[
+                    product.status == ItemStatus.sold
+                        ? soldLockedButton
+                        : editButton,
                     const SizedBox(height: AppSpacing.sm),
                   ],
                   if (!ownsListing && onBuyNow != null) ...[
@@ -1607,18 +1639,30 @@ class _ProductActions extends StatelessWidget {
               )
             : Row(
                 children: [
-                  if (ownsListing && onEditListing != null) ...[
+                  if (ownsListing) ...[
                     IconButton.filledTonal(
-                      key: const Key('detail-edit-listing-button'),
-                      tooltip: 'Edit listing',
+                      key: Key(
+                        product.status == ItemStatus.sold
+                            ? 'detail-sold-listing-locked-button'
+                            : 'detail-edit-listing-button',
+                      ),
+                      tooltip: product.status == ItemStatus.sold
+                          ? 'Sold — refund/cancel first'
+                          : 'Edit listing',
                       style: IconButton.styleFrom(
                         minimumSize: const Size(50, 50),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppRadius.medium),
                         ),
                       ),
-                      onPressed: onEditListing,
-                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: product.status == ItemStatus.sold
+                          ? null
+                          : onEditListing,
+                      icon: Icon(
+                        product.status == ItemStatus.sold
+                            ? Icons.lock_outline
+                            : Icons.edit_outlined,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                   ] else if (onScheduleMeetup != null) ...[

@@ -70,8 +70,23 @@ export const WatchlistProvider: React.FC<{ children: ReactNode }> = ({ children 
   }, [isLoggedIn]);
 
   useEffect(() => {
-    refreshWatchlist();
-  }, [refreshWatchlist]);
+    void refreshWatchlist();
+    if (!isLoggedIn) return;
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshWatchlist();
+      }
+    }, 10000);
+
+    const refreshOnFocus = () => void refreshWatchlist();
+    window.addEventListener('focus', refreshOnFocus);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, [isLoggedIn, refreshWatchlist]);
 
   const isWatched = (itemId: string): boolean => {
     return watchlistIds.has(itemId);

@@ -445,6 +445,44 @@ void main() {
     expect(repository.createCalls, 0);
   });
 
+  testWidgets('sold owner listing is locked from editing', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final soldItem = ItemModel(
+      id: _detailItem.id,
+      title: _detailItem.title,
+      priceNzd: _detailItem.priceNzd,
+      location: _detailItem.location,
+      imageUrl: _detailItem.imageUrl,
+      isSustainable: _detailItem.isSustainable,
+      category: _detailItem.category,
+      description: _detailItem.description,
+      status: ItemStatus.sold,
+      ownerId: _detailItem.ownerId,
+    );
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: soldItem,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+        currentUserId: soldItem.ownerId,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('detail-sold-listing-locked-button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('detail-edit-listing-button')), findsNothing);
+    expect(find.textContaining('refund/cancel first'), findsOneWidget);
+  });
+
   testWidgets('Message seller explains a recoverable service failure', (
     tester,
   ) async {
