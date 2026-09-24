@@ -630,23 +630,57 @@ export const ordersApi = {
 };
 
 export const paymentsApi = {
-  createIntent: (orderId: string) =>
-    apiRequest<{
-      status: string;
-      clientSecret?: string;
-      paymentIntentId: string;
-      amountNzd: string;
-      itemAmountNzd: string;
-      buyerFeeNzd: string;
-    }>('/payments/create-intent', {
+  createIntent: async (orderId: string) => {
+    const response = await apiRequest<any>('/payments/create-intent', {
       method: 'POST',
       body: JSON.stringify({ orderId }),
-    }),
-  confirm: (orderId: string, paymentIntentId: string) =>
-    apiRequest<{ status: string; order: OrderItem; paymentStatus: string }>('/payments/confirm', {
+    });
+
+    if (response.isFree) {
+      return {
+        status: response.status as string,
+        isFree: true,
+        paymentIntentId: '',
+        clientSecret: undefined,
+        amountNzd: response.totalAmountNzd || '0.00',
+        itemAmountNzd: '0.00',
+        buyerFeeNzd: '0.00',
+      };
+    }
+
+    const data = response.data || response;
+    return {
+      status: response.status as string,
+      isFree: false,
+      paymentIntentId: String(data.paymentIntentId || ''),
+      clientSecret: data.clientSecret as string | undefined,
+      amountNzd: (Number(data.amountCents || 0) / 100).toFixed(2),
+      itemAmountNzd: (Number(data.itemAmountCents || 0) / 100).toFixed(2),
+      buyerFeeNzd: (Number(data.buyerFeeCents || 0) / 100).toFixed(2),
+    };
+  },
+
+  createPaymentMethod: (body: {
+    cardNumber: string;
+    expMonth: number;
+    expYear: number;
+    cvc: string;
+  }) =>
+    apiRequest<{ status: string; paymentMethodId: string }>('/payments/payment-methods', {
       method: 'POST',
-      body: JSON.stringify({ orderId, paymentIntentId }),
+      body: JSON.stringify(body),
     }),
+
+  confirm: async (orderId: string, paymentIntentId: string, paymentMethodId?: string) => {
+    const response = await apiRequest<any>('/payments/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ orderId, paymentIntentId, paymentMethodId }),
+    });
+    return {
+      status: response.status as string,
+      data: response.data || response,
+    };
+  },
 };
 
 export const meetupsApi = {
