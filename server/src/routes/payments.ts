@@ -150,6 +150,28 @@ router.post('/payments/create-intent', authenticateToken, async (ctx) => {
       description: `KiwiShare: ${order.itemSnapshot?.title || 'Campus Item'} (${order.orderNumber})`
     });
 
+    const environment = (process.env.STRIPE_PAYMENT_API_KEY || '').startsWith('sk_live_')
+      ? 'live'
+      : 'test';
+    await Payment.findOneAndUpdate(
+      { stripePaymentIntentId: intent.paymentIntentId },
+      {
+        $set: {
+          orderId: order._id,
+          buyerId: order.buyerId,
+          provider: 'stripe',
+          environment,
+          amount: totalCents,
+          currency: 'NZD',
+          status: 'pending'
+        },
+        $setOnInsert: {
+          idempotencyKey: `payment_${order._id.toString()}_${intent.paymentIntentId}`
+        }
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
+
     ctx.body = {
       status: 'success',
       data: {
