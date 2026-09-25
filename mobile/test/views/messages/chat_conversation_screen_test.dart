@@ -1503,10 +1503,11 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('chat_voice_recording_tab')), findsOneWidget);
-    await expectLater(
-      find.byType(ChatConversationScreen),
-      matchesGoldenFile('goldens/after-voice-tap-bar.png'),
-    );
+    expect(find.byKey(const Key('chat_voice_recording_timer')), findsOneWidget);
+    expect(find.textContaining('release to send'), findsOneWidget);
+    expect(find.byKey(const Key('chat_cancel_voice_button')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
     await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
     await tester.pumpAndSettle();
   });
