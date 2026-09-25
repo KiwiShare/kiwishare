@@ -46,8 +46,7 @@ The backend Koa server is deployed to [Render.com](https://render.com) as a Web 
        ```bash
        npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter server run build
        ```
-       The workspace allowlist permits the `ffmpeg-static` install lifecycle so
-       the voice-message decoder binary is provisioned during deployment.
+       The workspace allowlist permits the `ffmpeg-static` install lifecycle so\n       the voice-message decoder binary is provisioned during deployment. The\n       server `prebuild` hook also rebuilds this package to recover safely when\n       Render restores a dependency cache created before lifecycle scripts were\n       enabled.
      - **Start Command**:
        ```bash
        node server/dist/index.js
@@ -58,7 +57,7 @@ The backend Koa server is deployed to [Render.com](https://render.com) as a Web 
    - `MONGODB_URI`: Your MongoDB Atlas connection string.
    - `NODE_ENV`: `production`
    - `PORT`: `10000` (Render binds to this automatically, but Koa will listen to it)
-   - `JWT_SECRET`: A secure random string for signing user authentication tokens.
+   - `JWT_SECRET`: A secure random string for signing user authentication tokens.\n   - `GEMINI_API_KEY`: Required for the **AI Help Me Write** listing suggestion feature. Keep this server-side only.\n   - `GEMINI_MODEL`: Optional Gemini model override. Defaults to `gemini-2.5-flash-lite`.
 
 ---
 
