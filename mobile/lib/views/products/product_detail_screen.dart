@@ -511,9 +511,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               builder: (context, watchlist, _) {
                 final chatProvider = _chatProvider;
                 if (chatProvider == null) {
+                  final auth = context.watch<AuthProvider?>();
+                  final userId =
+                      widget.currentUserId ?? auth?.currentUser?.id;
+                  final ownsListing =
+                      userId != null &&
+                      (userId == product.ownerId ||
+                          userId == product.seller?.id);
                   return _ProductActions(
                     product: product,
                     watchlist: watchlist,
+                    ownsListing: ownsListing,
+                    onEditListing: ownsListing &&
+                            product.status != ItemStatus.sold
+                        ? () => _editListing(product)
+                        : null,
                     onToggleWatch: () =>
                         _requestWatchlistToggle(watchlist, product),
                     messageSellerEnabled: false,
