@@ -14,7 +14,8 @@ const router = new Router();
 const DEFAULT_GOOGLE_OAUTH_CLIENT_IDS = [
   '353504132004-v9hv2iktcb0164pgsrp9ov41ihc7kba2.apps.googleusercontent.com', // Web/server
   '353504132004-ljdbt8oa154268k63uk73gkeviacpfr1.apps.googleusercontent.com', // iOS
-  '353504132004-5idmotm27ntcd9187lp1dmk8ffli1flb.apps.googleusercontent.com' // Android
+  '353504132004-5idmotm27ntcd9187lp1dmk8ffli1flb.apps.googleusercontent.com', // Android (release/registered certificate)
+  '353504132004-g358ohfr7doidm5fl9ptv0v3dfu61tov.apps.googleusercontent.com' // Android (WSL debug certificate)
 ];
 
 function allowedGoogleOAuthClientIds(): Set<string> {
