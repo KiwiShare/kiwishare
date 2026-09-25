@@ -22,7 +22,7 @@ class ItemCardSkeleton extends StatelessWidget {
           children: [
             // Image area skeleton
             AspectRatio(
-              aspectRatio: compact ? 1.32 : 1.22,
+              aspectRatio: compact ? 1.5 : 1.22,
               child: Container(
                 decoration: BoxDecoration(
                   color: colors.surface,

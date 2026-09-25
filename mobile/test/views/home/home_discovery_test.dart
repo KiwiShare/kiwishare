@@ -10,6 +10,7 @@ import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/product_location_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/widgets/kiwishare_logo.dart';
+import 'package:kiwishare/widgets/resilient_network_image.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/home/widgets/home_product_map.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
@@ -191,19 +192,22 @@ void main() {
   ) async {
     await _loadHome(
       tester,
-      _homeApp(themeMode: ThemeMode.dark, itemRepository: _PhotoItemRepository()),
+      _homeApp(
+        themeMode: ThemeMode.dark,
+        itemRepository: _PhotoItemRepository(),
+      ),
     );
 
-    final networkPhotos = find.byWidgetPredicate(
-      (widget) => widget is Image && widget.image is NetworkImage,
-    );
+    final networkPhotos = find.byType(ResilientNetworkImage);
     expect(networkPhotos, findsWidgets);
-    for (final image in tester.widgetList<Image>(networkPhotos)) {
+    for (final image in tester.widgetList<ResilientNetworkImage>(
+      networkPhotos,
+    )) {
       expect(image.loadingBuilder, isNotNull);
       expect(image.frameBuilder, isNotNull);
     }
 
-    final image = tester.widget<Image>(networkPhotos.first);
+    final image = tester.widget<ResilientNetworkImage>(networkPhotos.first);
     final placeholder = image.frameBuilder!(
       tester.element(networkPhotos.first),
       const SizedBox(),
@@ -213,7 +217,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildKiwiShareDarkTheme(),
-        home: Scaffold(body: SizedBox(width: 200, height: 100, child: placeholder)),
+        home: Scaffold(
+          body: SizedBox(width: 200, height: 100, child: placeholder),
+        ),
       ),
     );
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -545,7 +551,7 @@ void main() {
 
     final compactCards = find.byKey(const Key('compact-item-card'));
     expect(compactCards, findsWidgets);
-    expect(tester.getSize(compactCards.first).height, lessThan(220));
+    expect(tester.getSize(compactCards.first).height, lessThan(200));
     expect(find.byKey(const Key('home-scan-qr-button')), findsOneWidget);
     expect(find.byKey(const Key('home-location-button')), findsOneWidget);
     expect(tester.takeException(), isNull);

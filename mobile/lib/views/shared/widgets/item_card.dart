@@ -91,7 +91,7 @@ class ItemCard extends StatelessWidget {
               children: [
                 // 1. Photo Section with Overlays
                 AspectRatio(
-                  aspectRatio: compact ? 1.32 : 1.20,
+                  aspectRatio: compact ? 1.5 : 1.20,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -117,19 +117,21 @@ class ItemCard extends StatelessWidget {
                                 url: item.imageUrl,
                                 logicalCacheWidth: 220,
                                 fit: BoxFit.cover,
-                                frameBuilder: (context, child, frame, wasSync) =>
-                                    frame == null && !wasSync
-                                    ? Center(
-                                        child: SizedBox.square(
-                                          dimension: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: colors.primary,
-                                            semanticsLabel: 'Loading product photo',
-                                          ),
-                                        ),
-                                      )
-                                    : child,
+                                frameBuilder:
+                                    (context, child, frame, wasSync) =>
+                                        frame == null && !wasSync
+                                        ? Center(
+                                            child: SizedBox.square(
+                                              dimension: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: colors.primary,
+                                                semanticsLabel:
+                                                    'Loading product photo',
+                                              ),
+                                            ),
+                                          )
+                                        : child,
                                 loadingBuilder: (context, child, progress) =>
                                     progress == null
                                     ? child
@@ -139,7 +141,8 @@ class ItemCard extends StatelessWidget {
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
                                             color: colors.primary,
-                                            semanticsLabel: 'Loading product photo',
+                                            semanticsLabel:
+                                                'Loading product photo',
                                           ),
                                         ),
                                       ),
@@ -405,7 +408,7 @@ class ItemCard extends StatelessWidget {
                 // 2. Info & Details Body
                 Padding(
                   padding: compact
-                      ? const EdgeInsets.fromLTRB(10, 6, 10, 6)
+                      ? const EdgeInsets.fromLTRB(10, 4, 10, 4)
                       : const EdgeInsets.fromLTRB(10, 7, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -495,7 +498,7 @@ class ItemCard extends StatelessWidget {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 2),
+                      SizedBox(height: compact ? 1.5 : 2),
 
                       // Location Row
                       Row(
@@ -543,7 +546,7 @@ class ItemCard extends StatelessWidget {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 2.5),
+                      SizedBox(height: compact ? 2 : 2.5),
 
                       // Title (up to 2 lines)
                       Text(
@@ -562,75 +565,78 @@ class ItemCard extends StatelessWidget {
 
                       // Seller Row
                       if (!compact) const SizedBox(height: 4),
-                      if (!compact) Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 7.5,
-                            backgroundColor:
-                                item.seller?.isStudentVerified == true
-                                ? const Color(0xFFDBEAFE)
-                                : (isDark
-                                      ? const Color(0xFF374151)
-                                      : const Color(0xFFF1F5F9)),
-                            backgroundImage:
-                                item.seller?.avatarUrl != null &&
-                                    item.seller!.avatarUrl!.isNotEmpty
-                                ? NetworkImage(item.seller!.avatarUrl!)
-                                : null,
-                            child:
-                                item.seller?.avatarUrl == null ||
-                                    item.seller!.avatarUrl!.isEmpty
-                                ? Text(
-                                    (item.seller?.displayName.isNotEmpty ==
-                                            true)
-                                        ? item.seller!.displayName[0]
-                                              .toUpperCase()
-                                        : 'K',
-                                    style: TextStyle(
-                                      fontSize: 7.5,
-                                      fontWeight: FontWeight.w700,
-                                      color:
-                                          item.seller?.isStudentVerified == true
-                                          ? const Color(0xFF1D4ED8)
-                                          : (isDark
-                                                ? Colors.white70
-                                                : const Color(0xFF475569)),
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 4.5),
-                          Expanded(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    item.seller?.displayName ?? 'Kiwi Seller',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w500,
-                                      color: isDark
-                                          ? Colors.white70
-                                          : const Color(0xFF475569),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (item.seller?.isStudentVerified == true) ...[
-                                  const SizedBox(width: 3),
-                                  const Icon(
-                                    Icons.verified,
-                                    size: 11.5,
-                                    color: Color(0xFF2563EB),
-                                  ),
-                                ],
-                              ],
+                      if (!compact)
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 7.5,
+                              backgroundColor:
+                                  item.seller?.isStudentVerified == true
+                                  ? const Color(0xFFDBEAFE)
+                                  : (isDark
+                                        ? const Color(0xFF374151)
+                                        : const Color(0xFFF1F5F9)),
+                              backgroundImage:
+                                  item.seller?.avatarUrl != null &&
+                                      item.seller!.avatarUrl!.isNotEmpty
+                                  ? NetworkImage(item.seller!.avatarUrl!)
+                                  : null,
+                              child:
+                                  item.seller?.avatarUrl == null ||
+                                      item.seller!.avatarUrl!.isEmpty
+                                  ? Text(
+                                      (item.seller?.displayName.isNotEmpty ==
+                                              true)
+                                          ? item.seller!.displayName[0]
+                                                .toUpperCase()
+                                          : 'K',
+                                      style: TextStyle(
+                                        fontSize: 7.5,
+                                        fontWeight: FontWeight.w700,
+                                        color:
+                                            item.seller?.isStudentVerified ==
+                                                true
+                                            ? const Color(0xFF1D4ED8)
+                                            : (isDark
+                                                  ? Colors.white70
+                                                  : const Color(0xFF475569)),
+                                      ),
+                                    )
+                                  : null,
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 4.5),
+                            Expanded(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      item.seller?.displayName ?? 'Kiwi Seller',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : const Color(0xFF475569),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (item.seller?.isStudentVerified ==
+                                      true) ...[
+                                    const SizedBox(width: 3),
+                                    const Icon(
+                                      Icons.verified,
+                                      size: 11.5,
+                                      color: Color(0xFF2563EB),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
 
                       // Badges Under the User Row
                       if (!compact &&

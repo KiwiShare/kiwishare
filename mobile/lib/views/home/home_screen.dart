@@ -1479,7 +1479,6 @@ class _HomeProductsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1487,16 +1486,12 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.75 - (textScale - 1) * 0.22,
+        childAspectRatio: _compactCardAspectRatio(context),
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
         final item = products[index];
-        return ItemCard(
-          item: item,
-          compact: true,
-          onTap: () => onOpen(item),
-        );
+        return ItemCard(item: item, compact: true, onTap: () => onOpen(item));
       },
     );
   }
@@ -1518,11 +1513,11 @@ class _HomeLoadingState extends StatelessWidget {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 220,
             crossAxisSpacing: AppSpacing.md,
             mainAxisSpacing: AppSpacing.md,
-            childAspectRatio: 0.75,
+            childAspectRatio: _compactCardAspectRatio(context),
           ),
           itemCount: 4,
           itemBuilder: (_, _) => const ItemCardSkeleton(compact: true),
@@ -1530,6 +1525,11 @@ class _HomeLoadingState extends StatelessWidget {
       ],
     );
   }
+}
+
+double _compactCardAspectRatio(BuildContext context) {
+  final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+  return 0.84 - (textScale - 1) * 0.28;
 }
 
 class _HomeErrorState extends StatelessWidget {
