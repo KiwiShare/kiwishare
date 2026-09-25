@@ -32,6 +32,8 @@ router.get('/users/me', authenticateToken, async (ctx) => {
     user: {
       id: user._id.toString(),
       email: user.email,
+      username: user.username,
+      needsUsername: !user.username || !user.username.trim(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       bio: user.bio || '',
@@ -126,11 +128,25 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
     user: {
       id: user._id.toString(),
       email: user.email,
+      username: user.username,
+      needsUsername: !user.username || !user.username.trim(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       bio: user.bio || '',
+      role: user.role || 'user',
       trustScore: user.trustScore,
-      isVerified: user.isVerified
+      isVerified: user.isVerified,
+      isStudentVerified: Boolean(user.isStudentVerified),
+      studentInstitution: user.studentInstitution || null,
+      studentEmail: user.studentEmail || null,
+      kiwiGold: user.kiwiGold ?? 100,
+      isVip: Boolean(user.isVip && (!user.vipExpiresAt || new Date(user.vipExpiresAt) > new Date())),
+      vipExpiresAt: user.vipExpiresAt || null,
+      vipAutoRenew: user.vipAutoRenew ?? true,
+      authProvider: user.authProvider,
+      registrationPlatform: user.registrationPlatform,
+      lastUsedPlatform: user.lastUsedPlatform,
+      lastActiveAt: user.lastActiveAt
     }
   };
 });

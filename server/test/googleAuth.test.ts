@@ -114,6 +114,34 @@ describe('Google Authentication and Registration Flow', () => {
     expect(updatedUser!.isVerified).toBe(true);
   });
 
+  test('Google username onboarding persists across profile refreshes', async () => {
+    const googleRes = await request(app.callback())
+      .post('/api/auth/google')
+      .set('x-client-platform', 'web')
+      .send({ idToken: 'mock_google_token_username' });
+
+    expect(googleRes.status).toBe(200);
+    expect(googleRes.body.user.needsUsername).toBe(true);
+
+    const token = googleRes.body.token;
+    const updateRes = await request(app.callback())
+      .patch('/api/users/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ username: 'kiwi_google_user' });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.user.username).toBe('kiwi_google_user');
+    expect(updateRes.body.user.needsUsername).toBe(false);
+
+    const meRes = await request(app.callback())
+      .get('/api/users/me')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.user.username).toBe('kiwi_google_user');
+    expect(meRes.body.user.needsUsername).toBe(false);
+  });
+
   test('GET /api/users/me - works with Google user JWT token and returns 100 KiwiGold', async () => {
     const googleRes = await request(app.callback())
       .post('/api/auth/google')

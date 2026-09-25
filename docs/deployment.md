@@ -101,6 +101,37 @@ After choosing the stable release key, add its SHA-1 and SHA-256 certificate fin
 
 The release workflow also passes the generated semantic version into Flutter as Android `versionName` and uses the GitHub Actions run number as `versionCode`, keeping the APK metadata aligned with the GitHub Release.
 
+### Google Sign-In (Web, Android, iOS)
+
+KiwiShare uses one backend endpoint (`POST /api/auth/google`) and platform-specific Google sign-in clients:
+
+- Web: Google Identity Services with the Web OAuth client ID.
+- Android: native Google Sign-In for package `app.kiwishare.android`.
+- iOS: native Google Sign-In for bundle ID `com.kiwishare.ios`.
+
+The backend validates Google/Firebase identity tokens and only accepts configured OAuth client audiences. Override the built-in client list with `GOOGLE_OAUTH_CLIENT_IDS` when credentials change.
+
+#### Web OAuth console setup
+
+The Web OAuth client must include every frontend origin that can render the Google button under **Authorized JavaScript origins**. At minimum for the current deployment:
+
+- `https://kiwishare.online`
+- `http://localhost:5173` for local Vite development, if local Google sign-in is required
+
+If a Render preview/custom hostname is used directly, add that exact HTTPS origin as well. Google Identity Services does not require a redirect URI for the rendered ID-token button flow used by KiwiShare.
+
+The public Web client ID can be configured as `VITE_GOOGLE_CLIENT_ID`; it is an identifier, not a secret.
+
+#### Android certificate fingerprints
+
+Google Sign-In on Android is tied to both the package name and the APK signing certificate. Register the SHA-1 and SHA-256 fingerprints for every signing key that should be allowed (developer debug keys and the stable production release key) on the Firebase Android app `app.kiwishare.android`, then download a refreshed `google-services.json`.
+
+Do not rely on an ephemeral CI debug keystore for a production Google-enabled release. Configure the stable Android release keystore secrets above and register that release certificate in Firebase before promoting to `main`.
+
+#### iOS
+
+The repository's `GoogleService-Info.plist` and URL scheme must stay matched to the Firebase iOS app `com.kiwishare.ios`. The Web/server client ID remains the `GIDServerClientID` so the backend can validate the resulting Google identity token.
+
 ### GitHub Actions Secrets Configuration:
 
 To enable automated Firebase App Distribution, configure the following secrets in **GitHub Repository** -> **Settings** -> **Secrets and variables** -> **Actions**:

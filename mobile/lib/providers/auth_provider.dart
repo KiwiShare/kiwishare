@@ -242,21 +242,26 @@ class AuthProvider extends ChangeNotifier {
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-      String? idToken = googleAuth.idToken;
+      final idToken = googleAuth.idToken;
 
-      // Sync with FirebaseAuth if Firebase is initialized
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
+      }
+
+      // Authenticate KiwiShare with the original Google OAuth ID token.
+      // Do not replace it with a Firebase ID token: those tokens have
+      // different audiences and are verified by different authorities.
+      final result = await userRepository.loginWithGoogle(idToken);
+
+      // FirebaseAuth sync is optional client-side state for Firebase services.
+      // It must never decide whether the KiwiShare backend login succeeds.
       try {
         if (Firebase.apps.isNotEmpty) {
           final credential = GoogleAuthProvider.credential(
             accessToken: googleAuth.accessToken,
-            idToken: googleAuth.idToken,
+            idToken: idToken,
           );
-          final userCredential = await FirebaseAuth.instance
-              .signInWithCredential(credential);
-          final fbToken = await userCredential.user?.getIdToken();
-          if (fbToken != null && fbToken.isNotEmpty) {
-            idToken = fbToken;
-          }
+          await FirebaseAuth.instance.signInWithCredential(credential);
         }
       } catch (fbError) {
         debugPrint(
@@ -264,11 +269,6 @@ class AuthProvider extends ChangeNotifier {
         );
       }
 
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
-      }
-
-      final result = await userRepository.loginWithGoogle(idToken);
       final token = result['token'] as String;
       final user = result['user'] as UserModel;
 
