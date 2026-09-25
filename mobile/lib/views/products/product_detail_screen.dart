@@ -512,8 +512,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 final chatProvider = _chatProvider;
                 if (chatProvider == null) {
                   final auth = context.watch<AuthProvider?>();
-                  final userId =
-                      widget.currentUserId ?? auth?.currentUser?.id;
+                  final userId = widget.currentUserId ?? auth?.currentUser?.id;
                   final ownsListing =
                       userId != null &&
                       (userId == product.ownerId ||
@@ -522,8 +521,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     product: product,
                     watchlist: watchlist,
                     ownsListing: ownsListing,
-                    onEditListing: ownsListing &&
-                            product.status != ItemStatus.sold
+                    onEditListing:
+                        ownsListing && product.status != ItemStatus.sold
                         ? () => _editListing(product)
                         : null,
                     onToggleWatch: () =>
