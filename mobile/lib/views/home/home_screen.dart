@@ -15,6 +15,7 @@ import '../../widgets/kiwishare_logo.dart';
 import '../scanner/qr_scanner_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
+import '../shared/widgets/watchlist_heart_button.dart';
 import 'widgets/home_filter_sheet.dart';
 import 'widgets/home_product_map.dart';
 
@@ -757,7 +758,7 @@ class _HomeJumboCard extends StatelessWidget {
                 Positioned(
                   top: AppSpacing.sm,
                   left: AppSpacing.sm,
-                  right: AppSpacing.sm,
+                  right: 46,
                   child: Wrap(
                     spacing: AppSpacing.sm,
                     runSpacing: 4,
@@ -862,6 +863,14 @@ class _HomeJumboCard extends StatelessWidget {
                           ),
                         ),
                     ],
+                  ),
+                ),
+                Positioned(
+                  top: AppSpacing.sm,
+                  right: AppSpacing.sm,
+                  child: WatchlistHeartButton(
+                    key: Key('home-featured-heart-${item.id}'),
+                    item: item,
                   ),
                 ),
                 Positioned(
@@ -977,6 +986,8 @@ class _HomeRecommendedSection extends StatelessWidget {
                 Text(
                   'Recommended for You',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontSize: 20,
+                    height: 1.4,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.4,
                   ),
@@ -1130,16 +1141,24 @@ class _RecommendedProductCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: WatchlistHeartButton(
+                          key: Key('home-recommended-heart-${item.id}'),
+                          item: item,
+                        ),
+                      ),
                       if (item.isSustainable)
                         const Positioned(
-                          top: 6,
+                          bottom: 6,
                           right: 6,
                           child: CircleAvatar(
-                            radius: 11,
+                            radius: 10,
                             backgroundColor: AppColors.brandPrimaryContainer,
                             child: Icon(
                               Icons.eco,
-                              size: 13,
+                              size: 12,
                               color: AppColors.brandPrimary,
                             ),
                           ),
@@ -1312,7 +1331,14 @@ class _HomeDiscoveryResults extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_heading, style: Theme.of(context).textTheme.headlineMedium),
+        Text(
+          _heading,
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontSize: 20,
+            height: 1.4,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         const SizedBox(height: AppSpacing.sm),
         Wrap(
           spacing: AppSpacing.sm,
@@ -1453,7 +1479,11 @@ class _HomeProductsGrid extends StatelessWidget {
       itemCount: products.length,
       itemBuilder: (context, index) {
         final item = products[index];
-        return ItemCard(item: item, onTap: () => onOpen(item));
+        return ItemCard(
+          key: Key('home-grid-card-${item.id}'),
+          item: item,
+          onTap: () => onOpen(item),
+        );
       },
     );
   }
@@ -1469,7 +1499,11 @@ class _HomeLoadingState extends StatelessWidget {
       children: [
         Text(
           'Products across NZ',
-          style: Theme.of(context).textTheme.headlineMedium,
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontSize: 20,
+            height: 1.4,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
         GridView.builder(

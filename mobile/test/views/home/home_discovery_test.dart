@@ -12,6 +12,7 @@ import 'package:kiwishare/widgets/kiwishare_logo.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/home/widgets/home_product_map.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
+import 'package:kiwishare/views/shared/widgets/watchlist_heart_button.dart';
 import 'package:provider/provider.dart';
 
 import 'package:kiwishare/repositories/watchlist_repository.dart';
@@ -65,6 +66,7 @@ Widget _homeApp({
   ProductLocationService? locationService,
   HomeDiscoveryProvider? discovery,
   bool autoLocate = false,
+  bool darkMode = false,
 }) => MultiProvider(
   providers: [
     ChangeNotifierProvider.value(value: discovery ?? HomeDiscoveryProvider()),
@@ -77,6 +79,8 @@ Widget _homeApp({
   ],
   child: MaterialApp(
     theme: buildKiwiShareTheme(),
+    darkTheme: buildKiwiShareDarkTheme(),
+    themeMode: darkMode ? ThemeMode.dark : ThemeMode.light,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: textScaler),
       child: child!,
@@ -449,6 +453,74 @@ void main() {
       await tester.pump();
       expect(openedItem, isNotNull);
       expect(openedItem!.title, 'Monstera Plant');
+    },
+  );
+
+  testWidgets('every Home product card family exposes a heart control', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
+
+    final featuredHeart = find.byKey(const Key('home-featured-heart-item_1'));
+    final recommendedHeart = find.byKey(
+      const Key('home-recommended-heart-item_1'),
+    );
+    final gridCard = find.byKey(const Key('home-grid-card-item_1'));
+
+    expect(featuredHeart, findsOneWidget);
+    expect(recommendedHeart, findsOneWidget);
+    expect(gridCard, findsOneWidget);
+    expect(
+      find.descendant(
+        of: gridCard,
+        matching: find.byType(WatchlistHeartButton),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: featuredHeart,
+        matching: find.byIcon(Icons.favorite_border),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(recommendedHeart);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .element(recommendedHeart)
+          .read<FavoritesProvider>()
+          .isFavorite('item_1'),
+      isTrue,
+    );
+    expect(
+      find.descendant(
+        of: recommendedHeart,
+        matching: find.byIcon(Icons.favorite),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'heart controls and Home headings keep identical theme geometry',
+    (tester) async {
+      await _loadHome(tester, _homeApp());
+      final lightHeartSize = tester.getSize(
+        find.byKey(const Key('home-recommended-heart-item_1')),
+      );
+      final lightHeadingSize = tester.getSize(find.text('Recommended for You'));
+
+      await _loadHome(tester, _homeApp(darkMode: true));
+      final darkHeartSize = tester.getSize(
+        find.byKey(const Key('home-recommended-heart-item_1')),
+      );
+      final darkHeadingSize = tester.getSize(find.text('Recommended for You'));
+
+      expect(darkHeartSize, lightHeartSize);
+      expect(darkHeadingSize, lightHeadingSize);
+      expect(tester.takeException(), isNull);
     },
   );
 }

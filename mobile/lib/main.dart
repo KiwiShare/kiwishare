@@ -782,11 +782,11 @@ class KiwiShareShell extends StatelessWidget {
             const BottomNavigationBarItem(
               icon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
-                child: Icon(Icons.bookmark_outline, size: 24),
+                child: Icon(Icons.favorite_border, size: 23),
               ),
               activeIcon: Padding(
                 padding: EdgeInsets.only(bottom: 2.0),
-                child: Icon(Icons.bookmark, size: 26),
+                child: Icon(Icons.favorite, size: 25, color: Color(0xFFEF4444)),
               ),
               label: 'Watchlist',
             ),

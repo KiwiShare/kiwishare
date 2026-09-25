@@ -145,6 +145,27 @@ void main() {
     expect(watchlist.isWatched(item.id), isFalse);
     expect(controller.statusCalls, 1);
   });
+
+  testWidgets('shows one compact heart control without a popularity count', (
+    tester,
+  ) async {
+    const item = ItemModel(
+      id: 'popular-item',
+      title: 'Popular lamp',
+      priceNzd: '25',
+      location: 'Auckland',
+      imageUrl: '',
+      isSustainable: false,
+      category: 'Home',
+      status: ItemStatus.active,
+      watchlistCount: 7,
+    );
+
+    await tester.pumpWidget(buildCard(item));
+
+    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.text('7'), findsNothing);
+  });
 }
 
 class _PermissionController implements PushPermissionController {
