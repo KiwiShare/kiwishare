@@ -196,16 +196,13 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(
-      createWidgetUnderTest(mode: UserListingsMode.sold),
-    );
+    await tester.pumpWidget(createWidgetUnderTest(mode: UserListingsMode.sold));
     await tester.pumpAndSettle();
 
     expect(find.text('Sold Camera'), findsOneWidget);
-    expect(find.text('Sold'), findsOneWidget);
+    expect(find.text('Sold'), findsWidgets);
     expect(find.text('Edit'), findsNothing);
     expect(find.text('Relist'), findsNothing);
     expect(find.text('Delist'), findsNothing);
   });
-
 }

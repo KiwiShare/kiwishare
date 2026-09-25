@@ -480,7 +480,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('detail-edit-listing-button')), findsNothing);
-    expect(find.textContaining('refund/cancel first'), findsOneWidget);
+    expect(find.byTooltip('Sold — refund/cancel first'), findsOneWidget);
   });
 
   testWidgets('Message seller explains a recoverable service failure', (

@@ -176,10 +176,32 @@ describe('Payments & Price Synchronization', () => {
       });
 
       const buyerToken = generateToken(buyerId, 'user', 'buyer@example.com');
+
+      // CI must not depend on live Stripe credentials or network access.
+      // Use a scoped test key and mock the PaymentIntent response explicitly.
+      const previousStripeKey = process.env.STRIPE_PAYMENT_API_KEY;
+      process.env.STRIPE_PAYMENT_API_KEY = 'sk_test_ci_mock';
+      await User.findByIdAndUpdate(buyerId, { stripeCustomerId: 'cus_test_buyer' });
+      const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 'pi_test_create_intent',
+          client_secret: 'pi_test_create_intent_secret',
+          amount: 2090
+        })
+      } as any);
+
       const res = await request(app.callback())
         .post('/api/payments/create-intent')
         .set('Authorization', `Bearer ${buyerToken}`)
         .send({ orderId: order._id.toString() });
+
+      fetchMock.mockRestore();
+      if (previousStripeKey === undefined) {
+        delete process.env.STRIPE_PAYMENT_API_KEY;
+      } else {
+        process.env.STRIPE_PAYMENT_API_KEY = previousStripeKey;
+      }
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
