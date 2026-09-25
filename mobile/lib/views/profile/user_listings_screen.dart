@@ -843,7 +843,10 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                           }
                         },
                         icon: const Icon(Icons.edit_outlined, size: 14),
-                        label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                        label: const Text(
+                          'Edit',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
                   ],
                 ),

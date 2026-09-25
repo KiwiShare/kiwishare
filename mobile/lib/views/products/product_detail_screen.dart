@@ -1432,7 +1432,9 @@ class _ProductActions extends StatelessWidget {
       onPressed: onEditListing,
       icon: const Icon(Icons.edit_outlined),
       label: Text(
-        product.status == ItemStatus.delisted ? 'Re-list / Edit' : 'Edit Listing',
+        product.status == ItemStatus.delisted
+            ? 'Re-list / Edit'
+            : 'Edit Listing',
         style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
       ),
     );

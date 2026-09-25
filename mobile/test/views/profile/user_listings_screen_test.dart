@@ -196,9 +196,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(
-      createWidgetUnderTest(mode: UserListingsMode.sold),
-    );
+    await tester.pumpWidget(createWidgetUnderTest(mode: UserListingsMode.sold));
     await tester.pumpAndSettle();
 
     expect(find.text('Sold Camera'), findsOneWidget);
@@ -207,5 +205,4 @@ void main() {
     expect(find.text('Relist'), findsNothing);
     expect(find.text('Delist'), findsNothing);
   });
-
 }
