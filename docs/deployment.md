@@ -1,21 +1,37 @@
 # Deployment and Release Documentation
 
-This document explains the automated release flow and the deployment steps for both the backend (Render) and mobile frontend (Firebase App Distribution & GitHub Releases).
+This document explains the automated release flow and deployment topology for the Cloudflare-hosted web frontend, Render-hosted backend API, and mobile package distribution.
 
 ---
 
 
-### Render Web SPA Routing
+## Production Web Frontend on Cloudflare Workers
 
-The web frontend uses React Router with browser-history URLs such as `/products/:id` and `/chat/:conversationId`. The Render Static Site must serve `index.html` for unknown frontend paths so a browser refresh does not return a CDN 404.
+The React/Vite application in `web/` is deployed to the Cloudflare Worker `kiwishare-web` and served through the custom domains:
 
-Configure the static site's **Redirects/Rewrites** rule:
+- `https://kiwishare.online`
+- `https://www.kiwishare.online`
 
-- Source: `/*`
-- Destination: `/index.html`
-- Action: **Rewrite**
+The Worker serves the generated `web/dist` assets from Cloudflare's edge. `not_found_handling = "single-page-application"` ensures browser-history routes such as `/products/:id`, `/orders/:orderId`, and other React Router paths resolve to `index.html` instead of returning a hosting-layer 404.
 
-This is hosting configuration, not a React Router redirect. Keep asset files unchanged; Render serves existing files before applying the fallback rewrite.
+The web bundle is built with `VITE_API_URL=https://kiwishare.onrender.com/api`, so this migration changes only web hosting. The Koa API and Flutter remote-backend configuration remain on Render.
+
+Deployment configuration lives in the repository root:
+
+- `wrangler.toml` — Worker custom domains and static-asset binding
+- `worker.js` — minimal edge handler for the static asset binding
+- `.github/workflows/web-deploy-cloudflare.yml` — production web build/deployment after changes land on `pre`, plus manual dispatch
+
+The GitHub Actions deploy step requires the repository secret `CLOUDFLARE_API_TOKEN`. Until that secret is configured, CI still builds the production bundle but safely skips deployment instead of failing the branch. The Cloudflare account ID and Worker name are non-secret deployment metadata stored in the workflow/configuration.
+
+For a manual deployment from an authenticated developer machine:
+
+```bash
+VITE_API_URL=https://kiwishare.onrender.com/api pnpm --filter web run build
+npx wrangler deploy
+```
+
+A successful production response includes the diagnostic header `x-kiwishare-edge: cloudflare-worker`, which can be used to confirm that the request is no longer being served by the previous Render static site.
 
 ## 1. Automated Release Flow (Merge to `main`)
 
@@ -118,7 +134,7 @@ The Web OAuth client must include every frontend origin that can render the Goog
 - `https://kiwishare.online`
 - `http://localhost:5173` for local Vite development, if local Google sign-in is required
 
-If a Render preview/custom hostname is used directly, add that exact HTTPS origin as well. Google Identity Services does not require a redirect URI for the rendered ID-token button flow used by KiwiShare.
+If a separate preview hostname is introduced, add that exact HTTPS origin as well. Google Identity Services does not require a redirect URI for the rendered ID-token button flow used by KiwiShare.
 
 The public Web client ID can be configured as `VITE_GOOGLE_CLIENT_ID`; it is an identifier, not a secret.
 
@@ -148,4 +164,5 @@ To enable automated Firebase App Distribution, configure the following secrets i
 After merging a PR/MR from `pre` into `main`:
 1. **GitHub Actions Tab**: Observe the `Release & Publish Pipeline` running `Calculate Version & Tag`, `Build Android APK`, `Build iOS Package`, and `Publish Release & Distribute`.
 2. **GitHub Releases Tab**: A new Release entry will appear containing the release notes and downloadable `.apk` & `.zip` packages.
-3. **Render Dashboard**: The backend service will show a new deploy event automatically triggered by the push to `main`.
+3. **Cloudflare Worker**: For a web change on `pre`, confirm the `Deploy Web to Cloudflare` workflow built the Vite bundle and, when `CLOUDFLARE_API_TOKEN` is configured, deployed `kiwishare-web`. Verify `https://kiwishare.online` returns `x-kiwishare-edge: cloudflare-worker`.
+4. **Render Dashboard**: The backend service remains independent and will show its own deploy event when the backend deployment branch is updated.
