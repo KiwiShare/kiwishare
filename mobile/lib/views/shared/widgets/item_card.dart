@@ -10,12 +10,14 @@ class ItemCard extends StatelessWidget {
   final ItemModel item;
   final VoidCallback? onTap;
   final NotificationPermissionCoordinator? permissionCoordinator;
+  final bool compact;
 
   const ItemCard({
     super.key,
     required this.item,
     this.onTap,
     this.permissionCoordinator,
+    this.compact = false,
   });
 
   @override
@@ -23,10 +25,15 @@ class ItemCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+
+    if (compact) {
+      return _buildCompactCard(context, colors: colors, isDark: isDark);
+    }
+
     return Semantics(
       button: onTap != null,
       label:
-          '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.location}, category: ${item.category}',
+          '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.displayLocation}, category: ${item.category}',
       child: Container(
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E222A) : Colors.white,
@@ -397,7 +404,7 @@ class ItemCard extends StatelessWidget {
                           const SizedBox(width: 2.5),
                           Expanded(
                             child: Text(
-                              item.location,
+                              item.displayLocation,
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,
@@ -610,6 +617,150 @@ class ItemCard extends StatelessWidget {
     );
   }
 
+  Widget _buildCompactCard(
+    BuildContext context, {
+    required ColorScheme colors,
+    required bool isDark,
+  }) {
+    final sellerName = item.seller?.displayName.trim().isNotEmpty == true
+        ? item.seller!.displayName.trim()
+        : 'Kiwi Seller';
+    final category = _formatLabel(item.category);
+
+    return Semantics(
+      button: onTap != null,
+      label:
+          '${item.title}, ${item.priceNzd} NZD, $category, sold by $sellerName, ${item.displayLocation}',
+      child: Material(
+        color: isDark ? const Color(0xFF1E222A) : Colors.white,
+        elevation: 0,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.08)
+                    : const Color(0xFFE5E7EB),
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      item.imageUrl.isNotEmpty
+                          ? ResilientNetworkImage(
+                              url: item.imageUrl,
+                              logicalCacheWidth: 220,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => ColoredBox(
+                                color: colors.surfaceContainerHighest,
+                                child: const Icon(Icons.image_outlined),
+                              ),
+                            )
+                          : ColoredBox(
+                              color: colors.surfaceContainerHighest,
+                              child: const Icon(Icons.image_outlined),
+                            ),
+                      if (item.status != ItemStatus.active)
+                        Positioned(
+                          left: 7,
+                          top: 7,
+                          child: _CompactPill(
+                            label: item.status == ItemStatus.reserved
+                                ? 'Reserved'
+                                : 'Sold',
+                            dark: true,
+                          ),
+                        ),
+                      Positioned(
+                        right: 5,
+                        top: 5,
+                        child: WatchlistHeartButton(
+                          item: item,
+                          permissionCoordinator: permissionCoordinator,
+                          diameter: 28,
+                          iconSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  flex: 6,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.onSurface,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              item.isFree ? 'FREE' : '\$${item.priceNzd}',
+                              style: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
+                                color: item.isFree
+                                    ? const Color(0xFF059669)
+                                    : colors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        _CompactMetaRow(
+                          icon: Icons.person_outline_rounded,
+                          text: sellerName,
+                          trailing: item.seller?.isStudentVerified == true
+                              ? const Icon(
+                                  Icons.verified,
+                                  size: 12,
+                                  color: Color(0xFF2563EB),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(height: 3),
+                        _CompactMetaRow(
+                          icon: Icons.location_on_outlined,
+                          text: item.displayLocation,
+                        ),
+                        const Spacer(),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _CompactPill(label: category, dark: false),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   String _formatCategoryCondition(String category, String? condition) {
     final cat = _formatLabel(category);
     if (condition == null || condition.trim().isEmpty) return cat;
@@ -627,5 +778,72 @@ class ItemCard extends StatelessWidget {
           return word[0].toUpperCase() + word.substring(1).toLowerCase();
         })
         .join(' ');
+  }
+}
+
+class _CompactMetaRow extends StatelessWidget {
+  const _CompactMetaRow({
+    required this.icon,
+    required this.text,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(icon, size: 12, color: colors.onSurfaceVariant),
+        const SizedBox(width: 3),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 3), trailing!],
+      ],
+    );
+  }
+}
+
+class _CompactPill extends StatelessWidget {
+  const _CompactPill({required this.label, required this.dark});
+
+  final String label;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: dark
+            ? Colors.black.withOpacity(0.58)
+            : colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.inter(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: dark ? Colors.white : colors.onSurfaceVariant,
+        ),
+      ),
+    );
   }
 }
