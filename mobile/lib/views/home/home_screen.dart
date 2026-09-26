@@ -896,7 +896,7 @@ class _HomeJumboCard extends StatelessWidget {
                           const SizedBox(width: 2),
                           Expanded(
                             child: Text(
-                              item.location,
+                              item.displayLocation,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -1211,7 +1211,7 @@ class _RecommendedProductCard extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                item.location,
+                                item.displayLocation,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.labelSmall
@@ -1448,12 +1448,12 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.58 - (textScale - 1) * 0.20,
+        childAspectRatio: 0.78 - (textScale - 1) * 0.12,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
         final item = products[index];
-        return ItemCard(item: item, onTap: () => onOpen(item));
+        return ItemCard(item: item, compact: true, onTap: () => onOpen(item));
       },
     );
   }

@@ -568,12 +568,14 @@ class _LoginViewState extends State<LoginView> {
       if (authProvider.isLoggedIn && mounted) {
         final user = authProvider.currentUser;
         if (user?.username == null || user!.username!.trim().isEmpty) {
-          final username = await _promptForGoogleUsername(user?.email);
-          if (username == null || !mounted) {
+          final usernameSaved = await _promptForGoogleUsername(
+            authProvider,
+            user?.email,
+          );
+          if (!usernameSaved || !mounted) {
             await authProvider.logout();
             return;
           }
-          await authProvider.updateUsername(username);
         }
 
         if (!mounted) return;
@@ -611,10 +613,14 @@ class _LoginViewState extends State<LoginView> {
     }
   }
 
-  Future<String?> _promptForGoogleUsername(String? email) async {
+  Future<bool> _promptForGoogleUsername(
+    AuthProvider authProvider,
+    String? email,
+  ) async {
     final controller = TextEditingController();
     String? errorText;
-    final result = await showDialog<String>(
+    var isSubmitting = false;
+    final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
@@ -631,36 +637,103 @@ class _LoginViewState extends State<LoginView> {
               TextField(
                 controller: controller,
                 autofocus: true,
+                enabled: !isSubmitting,
+                textInputAction: TextInputAction.done,
                 decoration: InputDecoration(
                   labelText: 'Username',
                   hintText: 'e.g. kiwi_trader',
                   errorText: errorText,
                   helperText: '3-24 letters, numbers, or underscores',
                 ),
+                onSubmitted: isSubmitting
+                    ? null
+                    : (_) => _submitGoogleUsername(
+                        dialogContext,
+                        setDialogState,
+                        authProvider,
+                        controller,
+                        onSubmittingChanged: (value) => isSubmitting = value,
+                        onErrorChanged: (value) => errorText = value,
+                      ),
               ),
             ],
           ),
           actions: [
+            TextButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
             FilledButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(value)) {
-                  setDialogState(
-                    () => errorText =
-                        'Use 3-24 letters, numbers, or underscores.',
-                  );
-                  return;
-                }
-                Navigator.of(dialogContext).pop(value);
-              },
-              child: const Text('Continue'),
+              onPressed: isSubmitting
+                  ? null
+                  : () => _submitGoogleUsername(
+                      dialogContext,
+                      setDialogState,
+                      authProvider,
+                      controller,
+                      onSubmittingChanged: (value) => isSubmitting = value,
+                      onErrorChanged: (value) => errorText = value,
+                    ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Continue'),
             ),
           ],
         ),
       ),
     );
     controller.dispose();
-    return result;
+    return result == true;
+  }
+
+  Future<void> _submitGoogleUsername(
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+    AuthProvider authProvider,
+    TextEditingController controller, {
+    required ValueChanged<bool> onSubmittingChanged,
+    required ValueChanged<String?> onErrorChanged,
+  }) async {
+    final value = controller.text.trim();
+    if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(value)) {
+      setDialogState(() {
+        onErrorChanged('Use 3-24 letters, numbers, or underscores.');
+      });
+      return;
+    }
+
+    setDialogState(() {
+      onErrorChanged(null);
+      onSubmittingChanged(true);
+    });
+
+    try {
+      await authProvider.updateUsername(value);
+      if (dialogContext.mounted) {
+        Navigator.of(dialogContext).pop(true);
+      }
+    } catch (error) {
+      if (!dialogContext.mounted) return;
+      final message = error
+          .toString()
+          .replaceFirst('UserRepositoryException: ', '')
+          .replaceFirst('Exception: ', '')
+          .trim();
+      setDialogState(() {
+        onSubmittingChanged(false);
+        onErrorChanged(
+          message.isEmpty
+              ? 'Could not save that username. Try another.'
+              : message,
+        );
+      });
+    }
   }
 
   Future<void> _showPasswordReset() async {
