@@ -15,8 +15,6 @@ class ResilientNetworkImage extends StatefulWidget {
     required this.logicalCacheWidth,
     this.fit = BoxFit.cover,
     this.errorBuilder,
-    this.frameBuilder,
-    this.loadingBuilder,
     this.semanticLabel,
     this.maximumRetries = 2,
   });
@@ -25,8 +23,6 @@ class ResilientNetworkImage extends StatefulWidget {
   final double logicalCacheWidth;
   final BoxFit fit;
   final ImageErrorWidgetBuilder? errorBuilder;
-  final ImageFrameBuilder? frameBuilder;
-  final ImageLoadingBuilder? loadingBuilder;
   final String? semanticLabel;
   final int maximumRetries;
 
@@ -95,8 +91,6 @@ class _ResilientNetworkImageState extends State<ResilientNetworkImage> {
       fit: widget.fit,
       cacheWidth: cacheWidth,
       semanticLabel: widget.semanticLabel,
-      frameBuilder: widget.frameBuilder,
-      loadingBuilder: widget.loadingBuilder,
       errorBuilder: (context, error, stackTrace) {
         _scheduleRetry();
         return widget.errorBuilder?.call(context, error, stackTrace) ??

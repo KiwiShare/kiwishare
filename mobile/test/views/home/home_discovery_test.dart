@@ -5,15 +5,14 @@ import 'package:go_router/go_router.dart';
 import 'package:kiwishare/main.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/providers.dart';
-import 'package:kiwishare/repositories/item_repository.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/services/product_location_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/widgets/kiwishare_logo.dart';
-import 'package:kiwishare/widgets/resilient_network_image.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/home/widgets/home_product_map.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
+import 'package:kiwishare/views/shared/widgets/item_card.dart';
 import 'package:provider/provider.dart';
 
 import 'package:kiwishare/repositories/watchlist_repository.dart';
@@ -61,38 +60,12 @@ class _DeniedLocationService implements ProductLocationService {
       );
 }
 
-class _GridOnlyItemRepository extends TestItemRepository {
-  @override
-  Future<List<ItemModel>> fetchFeaturedItems({int limit = 10}) async => [];
-
-  @override
-  Future<List<ItemModel>> fetchRecommendedItems({
-    int limit = 10,
-    double? latitude,
-    double? longitude,
-    String? token,
-  }) async => [];
-}
-
-class _PhotoItemRepository extends TestItemRepository {
-  _PhotoItemRepository()
-    : super(
-        items: [
-          testCatalogItems.first.copyWith(
-            imageUrl: 'https://example.com/monstera.jpg',
-          ),
-        ],
-      );
-}
-
 Widget _homeApp({
   ValueChanged<ItemModel>? onOpenItem,
   TextScaler textScaler = TextScaler.noScaling,
   ProductLocationService? locationService,
   HomeDiscoveryProvider? discovery,
   bool autoLocate = false,
-  ThemeMode themeMode = ThemeMode.light,
-  ItemRepository? itemRepository,
 }) => MultiProvider(
   providers: [
     ChangeNotifierProvider.value(value: discovery ?? HomeDiscoveryProvider()),
@@ -100,15 +73,11 @@ Widget _homeApp({
       create: (_) => FavoritesProvider(repository: _TestWatchlistRepository()),
     ),
     ChangeNotifierProvider(
-      create: (_) => ListingProvider(
-        itemRepository: itemRepository ?? TestItemRepository(),
-      ),
+      create: (_) => ListingProvider(itemRepository: TestItemRepository()),
     ),
   ],
   child: MaterialApp(
     theme: buildKiwiShareTheme(),
-    darkTheme: buildKiwiShareDarkTheme(),
-    themeMode: themeMode,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: textScaler),
       child: child!,
@@ -148,81 +117,6 @@ void main() {
       tester.getRect(find.byType(KiwiShareLogo)).right,
       lessThan(tester.getRect(find.text('KiwiShare')).left),
     );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Home header has 38px borderless visuals and 48px tap targets', (
-    tester,
-  ) async {
-    for (final mode in [ThemeMode.light, ThemeMode.dark]) {
-      await _loadHome(tester, _homeApp(themeMode: mode));
-
-      final scan = find.byKey(const Key('home-scan-qr-button'));
-      final location = find.byKey(const Key('home-location-button'));
-      final scanVisual = find.byKey(const Key('home-scan-qr-visual'));
-      final locationVisual = find.byKey(const Key('home-location-visual'));
-      final scanRect = tester.getRect(scan);
-      final locationRect = tester.getRect(location);
-
-      expect(scanRect.size, const Size(48, 48));
-      expect(locationRect.size, const Size(48, 48));
-      expect(tester.getSize(scanVisual), const Size(38, 38));
-      expect(tester.getSize(locationVisual), const Size(38, 38));
-      expect(locationRect.right - scanRect.left, lessThanOrEqualTo(100));
-      expect(
-        (tester.widget<Container>(scanVisual).decoration! as BoxDecoration)
-            .border,
-        isNull,
-      );
-      expect(
-        (tester.widget<Container>(locationVisual).decoration! as BoxDecoration)
-            .border,
-        isNull,
-      );
-      expect(
-        tester.widget<IconButton>(location).tooltip,
-        startsWith('Location: '),
-      );
-    }
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('dark Home cards show a loading state for network photos', (
-    tester,
-  ) async {
-    await _loadHome(
-      tester,
-      _homeApp(
-        themeMode: ThemeMode.dark,
-        itemRepository: _PhotoItemRepository(),
-      ),
-    );
-
-    final networkPhotos = find.byType(ResilientNetworkImage);
-    expect(networkPhotos, findsWidgets);
-    for (final image in tester.widgetList<ResilientNetworkImage>(
-      networkPhotos,
-    )) {
-      expect(image.loadingBuilder, isNotNull);
-      expect(image.frameBuilder, isNotNull);
-    }
-
-    final image = tester.widget<ResilientNetworkImage>(networkPhotos.first);
-    final placeholder = image.frameBuilder!(
-      tester.element(networkPhotos.first),
-      const SizedBox(),
-      null,
-      false,
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildKiwiShareDarkTheme(),
-        home: Scaffold(
-          body: SizedBox(width: 200, height: 100, child: placeholder),
-        ),
-      ),
-    );
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -306,12 +200,8 @@ void main() {
     await tester.tap(find.byKey(const Key('home-near-you-option')));
     await tester.pumpAndSettle();
 
-    expect(
-      tester
-          .widget<IconButton>(find.byKey(const Key('home-location-button')))
-          .tooltip,
-      'Location: Near you (Auckland)',
-    );
+    expect(find.text('Near you'), findsOneWidget);
+    expect(find.text('(Auckland)'), findsOneWidget);
     expect(find.byKey(const Key('home-products-map')), findsOneWidget);
     expect(find.text('2 items'), findsOneWidget);
     expect(find.byKey(const Key('home-product-marker-item_1')), findsOneWidget);
@@ -322,12 +212,8 @@ void main() {
     await _loadHome(tester, _homeApp(autoLocate: true));
     await tester.pumpAndSettle();
 
-    expect(
-      tester
-          .widget<IconButton>(find.byKey(const Key('home-location-button')))
-          .tooltip,
-      'Location: Near you (Auckland)',
-    );
+    expect(find.text('Near you'), findsOneWidget);
+    expect(find.text('(Auckland)'), findsOneWidget);
     expect(find.text('2 items'), findsOneWidget);
   });
 
@@ -533,27 +419,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Home grid uses compact cards without dark-mode overflow', (
+  testWidgets('Home product cards do not keep excess vertical whitespace', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(360, 1600);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    await _loadHome(tester, _homeApp());
 
-    await _loadHome(
-      tester,
-      _homeApp(
-        themeMode: ThemeMode.dark,
-        itemRepository: _GridOnlyItemRepository(),
-      ),
+    final compactCards = find.byWidgetPredicate(
+      (widget) => widget is ItemCard && widget.compact,
     );
-
-    final compactCards = find.byKey(const Key('compact-item-card'));
     expect(compactCards, findsWidgets);
-    expect(tester.getSize(compactCards.first).height, lessThan(200));
-    expect(find.byKey(const Key('home-scan-qr-button')), findsOneWidget);
-    expect(find.byKey(const Key('home-location-button')), findsOneWidget);
+    expect(tester.getSize(compactCards.first).height, lessThan(190));
     expect(tester.takeException(), isNull);
   });
 

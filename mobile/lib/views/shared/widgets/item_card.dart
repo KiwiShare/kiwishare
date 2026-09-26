@@ -53,11 +53,21 @@ class ItemCard extends StatelessWidget {
     final favorites = context.watch<FavoritesProvider>();
     final isFavorite = favorites.isFavorite(item.id);
 
+    if (compact) {
+      return _buildCompactCard(
+        context,
+        colors: colors,
+        isDark: isDark,
+        isLoggedIn: isLoggedIn,
+        favorites: favorites,
+        isFavorite: isFavorite,
+      );
+    }
+
     return Semantics(
-      key: compact ? const Key('compact-item-card') : null,
       button: onTap != null,
       label:
-          '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.location}, category: ${item.category}',
+          '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.displayLocation}, category: ${item.category}',
       child: Container(
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E222A) : Colors.white,
@@ -91,7 +101,7 @@ class ItemCard extends StatelessWidget {
               children: [
                 // 1. Photo Section with Overlays
                 AspectRatio(
-                  aspectRatio: compact ? 1.5 : 1.20,
+                  aspectRatio: 1.20,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -117,35 +127,6 @@ class ItemCard extends StatelessWidget {
                                 url: item.imageUrl,
                                 logicalCacheWidth: 220,
                                 fit: BoxFit.cover,
-                                frameBuilder:
-                                    (context, child, frame, wasSync) =>
-                                        frame == null && !wasSync
-                                        ? Center(
-                                            child: SizedBox.square(
-                                              dimension: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: colors.primary,
-                                                semanticsLabel:
-                                                    'Loading product photo',
-                                              ),
-                                            ),
-                                          )
-                                        : child,
-                                loadingBuilder: (context, child, progress) =>
-                                    progress == null
-                                    ? child
-                                    : Center(
-                                        child: SizedBox.square(
-                                          dimension: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: colors.primary,
-                                            semanticsLabel:
-                                                'Loading product photo',
-                                          ),
-                                        ),
-                                      ),
                                 errorBuilder: (context, error, stackTrace) =>
                                     Center(
                                       child: Icon(
@@ -407,9 +388,7 @@ class ItemCard extends StatelessWidget {
 
                 // 2. Info & Details Body
                 Padding(
-                  padding: compact
-                      ? const EdgeInsets.fromLTRB(10, 4, 10, 4)
-                      : const EdgeInsets.fromLTRB(10, 7, 10, 8),
+                  padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -498,7 +477,7 @@ class ItemCard extends StatelessWidget {
                           ],
                         ],
                       ),
-                      SizedBox(height: compact ? 1.5 : 2),
+                      const SizedBox(height: 2),
 
                       // Location Row
                       Row(
@@ -511,7 +490,7 @@ class ItemCard extends StatelessWidget {
                           const SizedBox(width: 2.5),
                           Expanded(
                             child: Text(
-                              item.location,
+                              item.displayLocation,
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,
@@ -521,32 +500,9 @@ class ItemCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (compact &&
-                              item.seller?.isStudentVerified == true) ...[
-                            const SizedBox(width: 3),
-                            const Tooltip(
-                              message: 'Verified student seller',
-                              child: Icon(
-                                Icons.verified,
-                                size: 11.5,
-                                color: Color(0xFF2563EB),
-                              ),
-                            ),
-                          ],
-                          if (compact && item.isSustainable) ...[
-                            const SizedBox(width: 3),
-                            const Tooltip(
-                              message: 'Sustainable listing',
-                              child: Icon(
-                                Icons.eco_rounded,
-                                size: 11.5,
-                                color: Color(0xFF059669),
-                              ),
-                            ),
-                          ],
                         ],
                       ),
-                      SizedBox(height: compact ? 2 : 2.5),
+                      const SizedBox(height: 2.5),
 
                       // Title (up to 2 lines)
                       Text(
@@ -562,86 +518,82 @@ class ItemCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 4),
 
                       // Seller Row
-                      if (!compact) const SizedBox(height: 4),
-                      if (!compact)
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 7.5,
-                              backgroundColor:
-                                  item.seller?.isStudentVerified == true
-                                  ? const Color(0xFFDBEAFE)
-                                  : (isDark
-                                        ? const Color(0xFF374151)
-                                        : const Color(0xFFF1F5F9)),
-                              backgroundImage:
-                                  item.seller?.avatarUrl != null &&
-                                      item.seller!.avatarUrl!.isNotEmpty
-                                  ? NetworkImage(item.seller!.avatarUrl!)
-                                  : null,
-                              child:
-                                  item.seller?.avatarUrl == null ||
-                                      item.seller!.avatarUrl!.isEmpty
-                                  ? Text(
-                                      (item.seller?.displayName.isNotEmpty ==
-                                              true)
-                                          ? item.seller!.displayName[0]
-                                                .toUpperCase()
-                                          : 'K',
-                                      style: TextStyle(
-                                        fontSize: 7.5,
-                                        fontWeight: FontWeight.w700,
-                                        color:
-                                            item.seller?.isStudentVerified ==
-                                                true
-                                            ? const Color(0xFF1D4ED8)
-                                            : (isDark
-                                                  ? Colors.white70
-                                                  : const Color(0xFF475569)),
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 4.5),
-                            Expanded(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      item.seller?.displayName ?? 'Kiwi Seller',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDark
-                                            ? Colors.white70
-                                            : const Color(0xFF475569),
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 7.5,
+                            backgroundColor:
+                                item.seller?.isStudentVerified == true
+                                ? const Color(0xFFDBEAFE)
+                                : (isDark
+                                      ? const Color(0xFF374151)
+                                      : const Color(0xFFF1F5F9)),
+                            backgroundImage:
+                                item.seller?.avatarUrl != null &&
+                                    item.seller!.avatarUrl!.isNotEmpty
+                                ? NetworkImage(item.seller!.avatarUrl!)
+                                : null,
+                            child:
+                                item.seller?.avatarUrl == null ||
+                                    item.seller!.avatarUrl!.isEmpty
+                                ? Text(
+                                    (item.seller?.displayName.isNotEmpty ==
+                                            true)
+                                        ? item.seller!.displayName[0]
+                                              .toUpperCase()
+                                        : 'K',
+                                    style: TextStyle(
+                                      fontSize: 7.5,
+                                      fontWeight: FontWeight.w700,
+                                      color:
+                                          item.seller?.isStudentVerified == true
+                                          ? const Color(0xFF1D4ED8)
+                                          : (isDark
+                                                ? Colors.white70
+                                                : const Color(0xFF475569)),
                                     ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 4.5),
+                          Expanded(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    item.seller?.displayName ?? 'Kiwi Seller',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : const Color(0xFF475569),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  if (item.seller?.isStudentVerified ==
-                                      true) ...[
-                                    const SizedBox(width: 3),
-                                    const Icon(
-                                      Icons.verified,
-                                      size: 11.5,
-                                      color: Color(0xFF2563EB),
-                                    ),
-                                  ],
+                                ),
+                                if (item.seller?.isStudentVerified == true) ...[
+                                  const SizedBox(width: 3),
+                                  const Icon(
+                                    Icons.verified,
+                                    size: 11.5,
+                                    color: Color(0xFF2563EB),
+                                  ),
                                 ],
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
+                      ),
 
                       // Badges Under the User Row
-                      if (!compact &&
-                          (item.isSustainable ||
-                              item.seller?.isStudentVerified == true)) ...[
+                      if (item.isSustainable ||
+                          item.seller?.isStudentVerified == true) ...[
                         const SizedBox(height: 4),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
@@ -751,6 +703,172 @@ class ItemCard extends StatelessWidget {
     );
   }
 
+  Widget _buildCompactCard(
+    BuildContext context, {
+    required ColorScheme colors,
+    required bool isDark,
+    required bool isLoggedIn,
+    required FavoritesProvider favorites,
+    required bool isFavorite,
+  }) {
+    final sellerName = item.seller?.displayName.trim().isNotEmpty == true
+        ? item.seller!.displayName.trim()
+        : 'Kiwi Seller';
+    final category = _formatLabel(item.category);
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+    final contentFlex = textScale > 1.3 ? 7 : 5;
+
+    return Semantics(
+      button: onTap != null,
+      label:
+          '${item.title}, ${item.priceNzd} NZD, $category, sold by $sellerName, ${item.displayLocation}',
+      child: Material(
+        color: isDark ? const Color(0xFF1E222A) : Colors.white,
+        elevation: 0,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.08)
+                    : const Color(0xFFE5E7EB),
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      item.imageUrl.isNotEmpty
+                          ? ResilientNetworkImage(
+                              url: item.imageUrl,
+                              logicalCacheWidth: 220,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => ColoredBox(
+                                color: colors.surfaceContainerHighest,
+                                child: const Icon(Icons.image_outlined),
+                              ),
+                            )
+                          : ColoredBox(
+                              color: colors.surfaceContainerHighest,
+                              child: const Icon(Icons.image_outlined),
+                            ),
+                      if (item.status != ItemStatus.active)
+                        Positioned(
+                          left: 7,
+                          top: 7,
+                          child: _CompactPill(
+                            label: item.status == ItemStatus.reserved
+                                ? 'Reserved'
+                                : 'Sold',
+                            dark: true,
+                          ),
+                        ),
+                      if (isLoggedIn)
+                        Positioned(
+                          right: 5,
+                          top: 5,
+                          child: Material(
+                            color: Colors.black.withOpacity(0.42),
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: () => unawaited(
+                                _toggleFavorite(context, favorites),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Icon(
+                                  isFavorite
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
+                                  size: 15,
+                                  color: isFavorite
+                                      ? const Color(0xFFFF6B6B)
+                                      : Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  flex: contentFlex,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.onSurface,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              item.isFree ? 'FREE' : '\$${item.priceNzd}',
+                              style: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
+                                color: item.isFree
+                                    ? const Color(0xFF059669)
+                                    : colors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        _CompactMetaRow(
+                          icon: Icons.person_outline_rounded,
+                          text: sellerName,
+                          trailing: item.seller?.isStudentVerified == true
+                              ? const Icon(
+                                  Icons.verified,
+                                  size: 12,
+                                  color: Color(0xFF2563EB),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(height: 3),
+                        _CompactMetaRow(
+                          icon: Icons.location_on_outlined,
+                          text: item.displayLocation,
+                        ),
+                        const Spacer(),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _CompactPill(label: category, dark: false),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   String _formatCategoryCondition(String category, String? condition) {
     final cat = _formatLabel(category);
     if (condition == null || condition.trim().isEmpty) return cat;
@@ -768,5 +886,72 @@ class ItemCard extends StatelessWidget {
           return word[0].toUpperCase() + word.substring(1).toLowerCase();
         })
         .join(' ');
+  }
+}
+
+class _CompactMetaRow extends StatelessWidget {
+  const _CompactMetaRow({
+    required this.icon,
+    required this.text,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(icon, size: 12, color: colors.onSurfaceVariant),
+        const SizedBox(width: 3),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 3), trailing!],
+      ],
+    );
+  }
+}
+
+class _CompactPill extends StatelessWidget {
+  const _CompactPill({required this.label, required this.dark});
+
+  final String label;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: dark
+            ? Colors.black.withOpacity(0.58)
+            : colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.inter(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: dark ? Colors.white : colors.onSurfaceVariant,
+        ),
+      ),
+    );
   }
 }

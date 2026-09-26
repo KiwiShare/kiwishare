@@ -245,9 +245,17 @@ class RestUserRepository implements UserRepository {
       throw const UserAuthenticationException();
     }
     if (response.statusCode != 200) {
-      throw const UserRepositoryException(
-        'Could not update your profile. Please try again.',
-      );
+      var message = 'Could not update your profile. Please try again.';
+      try {
+        final error = jsonDecode(response.body) as Map<String, dynamic>;
+        final backendMessage = error['message']?.toString().trim();
+        if (backendMessage != null && backendMessage.isNotEmpty) {
+          message = backendMessage;
+        }
+      } catch (_) {
+        // Keep the safe fallback when a proxy returns a non-JSON error page.
+      }
+      throw UserRepositoryException(message);
     }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return UserModel.fromJson(data['user'] as Map<String, dynamic>);

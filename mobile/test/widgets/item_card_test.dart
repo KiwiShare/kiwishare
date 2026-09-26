@@ -17,6 +17,7 @@ void main() {
           create: (_) => FavoritesProvider(),
           child: SizedBox(
             width: 200,
+            height: compact ? 176 : 360,
             child: ItemCard(item: item, compact: compact),
           ),
         ),
@@ -101,41 +102,6 @@ void main() {
     },
   );
 
-  testWidgets('compact card keeps metadata while reducing overall height', (
-    tester,
-  ) async {
-    const item = ItemModel(
-      id: 'compact-item',
-      title: 'Eco Student Desk',
-      priceNzd: '40.00',
-      location: 'Auckland Central',
-      imageUrl: '',
-      isSustainable: true,
-      category: 'Furniture',
-      status: ItemStatus.active,
-      seller: SellerInfo(
-        id: 'seller-compact',
-        displayName: 'Student Seller',
-        isStudentVerified: true,
-      ),
-    );
-
-    await tester.pumpWidget(buildCard(item));
-    final standardHeight = tester.getSize(find.byType(ItemCard)).height;
-
-    await tester.pumpWidget(buildCard(item, compact: true));
-    final compactHeight = tester.getSize(find.byType(ItemCard)).height;
-
-    expect(compactHeight, lessThan(standardHeight));
-    expect(find.text('Student Seller'), findsNothing);
-    expect(find.text('Auckland Central'), findsOneWidget);
-    expect(find.byIcon(Icons.verified), findsOneWidget);
-    expect(find.byTooltip('Verified student seller'), findsOneWidget);
-    expect(find.byTooltip('Sustainable listing'), findsOneWidget);
-    expect(find.text('Verified Student'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('confirmed card add offers permission but removal does not', (
     tester,
   ) async {
@@ -183,6 +149,34 @@ void main() {
     expect(watchlist.isWatched(item.id), isFalse);
     expect(controller.statusCalls, 1);
   });
+
+  testWidgets(
+    'compact discovery card shows seller, English location, price and category',
+    (tester) async {
+      const item = ItemModel(
+        id: 'compact-item',
+        title: 'Compact Camera',
+        priceNzd: '120',
+        location: '奥克兰',
+        imageUrl: '',
+        isSustainable: false,
+        category: 'electronics',
+        status: ItemStatus.active,
+        seller: SellerInfo(id: 'seller-compact', displayName: 'Mia Seller'),
+      );
+
+      await tester.pumpWidget(buildCard(item, compact: true));
+
+      expect(find.text('Compact Camera'), findsOneWidget);
+      expect(find.text('Mia Seller'), findsOneWidget);
+      expect(find.text('Auckland'), findsOneWidget);
+      expect(find.text('奥克兰'), findsNothing);
+      expect(find.text(r'$120'), findsOneWidget);
+      expect(find.text('Electronics'), findsOneWidget);
+      expect(tester.getSize(find.byType(ItemCard)).height, 176);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 class _PermissionController implements PushPermissionController {

@@ -97,6 +97,12 @@ class ItemModel {
 
   String get ownerName => seller?.displayName ?? 'Seller';
 
+  String get displayLocation => NzLocations.standardizeDisplayLocation(
+    location,
+    latitude: latitude,
+    longitude: longitude,
+  );
+
   double? get effectiveLatitude =>
       latitude ?? NzLocations.getApproximateCoordinates(location)?.latitude;
 
