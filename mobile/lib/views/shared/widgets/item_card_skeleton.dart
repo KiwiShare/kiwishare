@@ -119,12 +119,14 @@ class _CompactItemCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+    final contentFlex = textScale > 1.3 ? 7 : 5;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(flex: 5, child: ColoredBox(color: colors.surface)),
+        Expanded(flex: 6, child: ColoredBox(color: colors.surface)),
         Expanded(
-          flex: 5,
+          flex: contentFlex,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
             child: Column(

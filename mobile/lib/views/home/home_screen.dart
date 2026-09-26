@@ -671,7 +671,7 @@ class _HomeJumboCarousel extends StatelessWidget {
           ),
         ),
         SizedBox(
-          height: 180,
+          height: 196,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -954,7 +954,7 @@ class _HomeRecommendedSection extends StatelessWidget {
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
-    final cardHeight = 172.0 + (textScale - 1.0) * 46.0;
+    final cardHeight = 190.0 + (textScale - 1.0) * 60.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -977,6 +977,8 @@ class _HomeRecommendedSection extends StatelessWidget {
                 Text(
                   'Recommended for You',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontSize: 20,
+                    height: 1.4,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.4,
                   ),
@@ -1055,6 +1057,7 @@ class _RecommendedProductCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
     final cardWidth = 155.0 + (textScale - 1.0) * 35.0;
+    const imageHeight = 110.0;
 
     return Container(
       width: cardWidth,
@@ -1082,7 +1085,7 @@ class _RecommendedProductCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  height: 95,
+                  height: imageHeight,
                   width: double.infinity,
                   child: Stack(
                     fit: StackFit.expand,
@@ -1312,7 +1315,12 @@ class _HomeDiscoveryResults extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_heading, style: Theme.of(context).textTheme.headlineMedium),
+        Text(
+          _heading,
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontSize: 20, height: 1.4),
+        ),
         const SizedBox(height: AppSpacing.sm),
         Wrap(
           spacing: AppSpacing.sm,
@@ -1441,7 +1449,7 @@ class _HomeProductsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
-    final cardHeight = 176.0 + (textScale - 1) * 84.0;
+    final cardHeight = 196.0 + (textScale - 1) * 84.0;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1466,13 +1474,15 @@ class _HomeLoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
-    final cardHeight = 176.0 + (textScale - 1) * 84.0;
+    final cardHeight = 196.0 + (textScale - 1) * 84.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Products across NZ',
-          style: Theme.of(context).textTheme.headlineMedium,
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontSize: 20, height: 1.4),
         ),
         const SizedBox(height: AppSpacing.md),
         GridView.builder(

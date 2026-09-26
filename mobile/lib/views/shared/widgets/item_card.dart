@@ -742,8 +742,9 @@ class ItemCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: 5,
+                  flex: 6,
                   child: Stack(
+                    key: Key('compact-item-image-${item.id}'),
                     fit: StackFit.expand,
                     children: [
                       item.imageUrl.isNotEmpty
