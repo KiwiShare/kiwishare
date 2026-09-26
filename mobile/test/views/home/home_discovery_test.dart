@@ -12,6 +12,7 @@ import 'package:kiwishare/widgets/kiwishare_logo.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/home/widgets/home_product_map.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
+import 'package:kiwishare/views/shared/widgets/item_card.dart';
 import 'package:provider/provider.dart';
 
 import 'package:kiwishare/repositories/watchlist_repository.dart';
@@ -65,6 +66,7 @@ Widget _homeApp({
   ProductLocationService? locationService,
   HomeDiscoveryProvider? discovery,
   bool autoLocate = false,
+  ThemeMode themeMode = ThemeMode.light,
 }) => MultiProvider(
   providers: [
     ChangeNotifierProvider.value(value: discovery ?? HomeDiscoveryProvider()),
@@ -77,6 +79,8 @@ Widget _homeApp({
   ],
   child: MaterialApp(
     theme: buildKiwiShareTheme(),
+    darkTheme: buildKiwiShareDarkTheme(),
+    themeMode: themeMode,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: textScaler),
       child: child!,
@@ -417,6 +421,43 @@ void main() {
     expect(find.byKey(const Key('home-category-Camping')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Home product cards do not keep excess vertical whitespace', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
+
+    final compactCards = find.byWidgetPredicate(
+      (widget) => widget is ItemCard && widget.compact,
+    );
+    expect(compactCards, findsWidgets);
+    expect(tester.getSize(compactCards.first).height, 196);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Home cards and section headings keep their geometry in dark mode',
+    (tester) async {
+      await _loadHome(tester, _homeApp());
+      final compactCards = find.byWidgetPredicate(
+        (widget) => widget is ItemCard && widget.compact,
+      );
+      final lightCardHeight = tester.getSize(compactCards.first).height;
+      final lightHeadingHeight = tester
+          .getSize(find.text('Recommended for You'))
+          .height;
+
+      await _loadHome(tester, _homeApp(themeMode: ThemeMode.dark));
+      final darkCardHeight = tester.getSize(compactCards.first).height;
+      final darkHeadingHeight = tester
+          .getSize(find.text('Recommended for You'))
+          .height;
+
+      expect(darkCardHeight, lightCardHeight);
+      expect(darkHeadingHeight, lightHeadingHeight);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'Home displays bold KiwiShare header, category icons, jumbo carousel, and recommendations',
