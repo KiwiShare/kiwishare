@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../../models/item_model.dart';
 import '../../../services/share_service.dart';
-import '../../../theme/app_theme.dart';
 
 class ShareBottomSheet extends StatelessWidget {
   final ItemModel item;
@@ -34,14 +33,15 @@ class ShareBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final shareService = ShareService.instance;
     final shareUrl = shareService.getItemShareUrl(item.id);
     final shareText = shareService.getItemShareText(item);
 
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainer,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
         top: 12,
@@ -59,7 +59,7 @@ class ShareBottomSheet extends StatelessWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.border.withValues(alpha: 0.6),
+                color: colors.outlineVariant,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -73,15 +73,15 @@ class ShareBottomSheet extends StatelessWidget {
                 'Share listing',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                  color: colors.onSurface,
                 ),
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.close,
                   size: 20,
-                  color: AppColors.textSecondary,
+                  color: colors.onSurfaceVariant,
                 ),
                 splashRadius: 20,
                 visualDensity: VisualDensity.compact,
@@ -95,11 +95,9 @@ class ShareBottomSheet extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.surfaceMuted,
+              color: colors.surfaceContainerHigh,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: AppColors.border.withValues(alpha: 0.5),
-              ),
+              border: Border.all(color: colors.outlineVariant),
             ),
             child: Row(
               children: [
@@ -108,20 +106,19 @@ class ShareBottomSheet extends StatelessWidget {
                   child: Container(
                     width: 54,
                     height: 54,
-                    color: Colors.white,
+                    color: colors.surfaceContainerHighest,
                     child: item.images.isNotEmpty
                         ? Image.network(
                             item.images.first,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(
-                                  Icons.image_not_supported_outlined,
-                                  color: AppColors.textSecondary,
-                                ),
+                            errorBuilder: (context, error, stackTrace) => Icon(
+                              Icons.image_not_supported_outlined,
+                              color: colors.onSurfaceVariant,
+                            ),
                           )
-                        : const Icon(
+                        : Icon(
                             Icons.shopping_bag_outlined,
-                            color: AppColors.brandPrimary,
+                            color: colors.primary,
                           ),
                   ),
                 ),
@@ -137,14 +134,14 @@ class ShareBottomSheet extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                          color: colors.onSurface,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '\$${item.priceNzd} NZD',
                         style: theme.textTheme.titleSmall?.copyWith(
-                          color: AppColors.brandPrimary,
+                          color: colors.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -247,7 +244,7 @@ class ShareBottomSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          const Divider(height: 1, color: AppColors.divider),
+          const Divider(height: 1),
           const SizedBox(height: 16),
 
           // Secondary actions: Copy link & System share
@@ -260,13 +257,13 @@ class ShareBottomSheet extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    side: const BorderSide(color: AppColors.border),
-                    foregroundColor: AppColors.textPrimary,
+                    side: BorderSide(color: colors.outlineVariant),
+                    foregroundColor: colors.onSurface,
                   ),
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.link_rounded,
                     size: 20,
-                    color: AppColors.brandPrimary,
+                    color: colors.primary,
                   ),
                   label: const Text(
                     'Copy link',
@@ -283,8 +280,8 @@ class ShareBottomSheet extends StatelessWidget {
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    backgroundColor: AppColors.brandPrimary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colors.primary,
+                    foregroundColor: colors.onPrimary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -360,10 +357,10 @@ class _ShareChannelButton extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ],

@@ -68,9 +68,16 @@ const kiwiShareDarkColorScheme = ColorScheme.dark(
   onSecondary: Color(0xFF19362B),
   surface: Color(0xFF101B17),
   onSurface: Color(0xFFE1EAE4),
+  onSurfaceVariant: Color(0xFFB6C6BD),
+  surfaceContainerLowest: Color(0xFF0B120F),
+  surfaceContainerLow: Color(0xFF101B17),
+  surfaceContainer: Color(0xFF16231D),
+  surfaceContainerHigh: Color(0xFF1C2C26),
+  surfaceContainerHighest: Color(0xFF24372F),
   error: Color(0xFFFFB4AB),
   onError: Color(0xFF690005),
   outline: Color(0xFF8DA79A),
+  outlineVariant: Color(0xFF496358),
 );
 
 ThemeData buildKiwiShareTheme() {
@@ -187,6 +194,28 @@ ThemeData buildKiwiShareDarkTheme() {
       displayColor: kiwiShareDarkColorScheme.onSurface,
     ),
     dividerColor: const Color(0xFF2B3B33),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Color(0xFF0B120F),
+      foregroundColor: Color(0xFFE1EAE4),
+      surfaceTintColor: Colors.transparent,
+    ),
+    cardTheme: const CardThemeData(
+      color: Color(0xFF101B17),
+      surfaceTintColor: Colors.transparent,
+    ),
+    dialogTheme: const DialogThemeData(
+      backgroundColor: Color(0xFF16231D),
+      surfaceTintColor: Colors.transparent,
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Color(0xFF16231D),
+      modalBackgroundColor: Color(0xFF16231D),
+      surfaceTintColor: Colors.transparent,
+    ),
+    dividerTheme: const DividerThemeData(
+      color: Color(0xFF2B3B33),
+      thickness: 1,
+    ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: kiwiShareDarkColorScheme.primaryContainer,
