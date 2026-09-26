@@ -226,6 +226,109 @@ class NzLocations {
     ),
   ];
 
+  static const Map<String, String> _displayAliases = {
+    '奥克兰': 'Auckland',
+    '奥克兰市': 'Auckland',
+    '奥克兰市中心': 'Auckland CBD',
+    '奥克兰中央商务区': 'Auckland CBD',
+    'auckland central': 'Auckland CBD',
+    'auckland city': 'Auckland CBD',
+    'auckland cbd, auckland': 'Auckland CBD',
+    '惠灵顿': 'Wellington',
+    '惠灵顿市中心': 'Wellington Central',
+    '基督城': 'Christchurch Central',
+    '汉密尔顿': 'Hamilton Central',
+    '达尼丁': 'Dunedin Central',
+    '皇后镇': 'Queenstown',
+    '陶朗加': 'Tauranga Central',
+    '罗托鲁瓦': 'Rotorua Central',
+  };
+
+  static final RegExp _coordinateLabel = RegExp(
+    r'^\s*(?:approx\.?\s*)?(-?\d{1,2}(?:\.\d+)?)\s*[,，]\s*(-?\d{1,3}(?:\.\d+)?)\s*$',
+    caseSensitive: false,
+  );
+
+  /// Returns a stable English place label for marketplace UI.
+  ///
+  /// Existing records may contain translated city names or legacy coordinate
+  /// strings. We keep coordinates for distance/map calculations, but never
+  /// expose them as the user-facing product location.
+  static String standardizeDisplayLocation(
+    String raw, {
+    double? latitude,
+    double? longitude,
+  }) {
+    var clean = raw.trim();
+    clean = clean.replaceFirst(
+      RegExp(r'^approx\.\s*', caseSensitive: false),
+      '',
+    );
+    clean = clean.replaceAll(
+      RegExp(r'\s*,\s*(?:new zealand|nz)\s*$', caseSensitive: false),
+      '',
+    );
+
+    final alias =
+        _displayAliases[clean.toLowerCase()] ?? _displayAliases[clean];
+    if (alias != null) return alias;
+
+    final coordinateMatch = _coordinateLabel.firstMatch(clean);
+    if (coordinateMatch != null) {
+      latitude ??= double.tryParse(coordinateMatch.group(1)!);
+      longitude ??= double.tryParse(coordinateMatch.group(2)!);
+      clean = '';
+    }
+
+    if (clean.isNotEmpty) {
+      final needle = clean.toLowerCase();
+      final canonical = <String>[
+        for (final region in regions) ...[region.name, ...region.suburbs],
+      ]..sort((a, b) => b.length.compareTo(a.length));
+
+      for (final place in canonical) {
+        final placeLower = place.toLowerCase();
+        if (needle == placeLower || needle.contains(placeLower)) {
+          return place;
+        }
+      }
+
+      // Preserve an already-English place supplied by the seller/geocoder,
+      // but never preserve coordinate-like or translated labels.
+      final containsCjk = clean.runes.any(
+        (rune) => rune >= 0x3400 && rune <= 0x9FFF,
+      );
+      if (!containsCjk) return clean;
+    }
+
+    if (latitude != null && longitude != null) {
+      final nearest = _nearestCanonicalLocation(latitude, longitude);
+      if (nearest != null) return nearest;
+    }
+
+    return defaultLocation;
+  }
+
+  static String? _nearestCanonicalLocation(double latitude, double longitude) {
+    String? nearestName;
+    var nearestDistance = double.infinity;
+
+    for (final region in regions) {
+      for (final name in <String>[region.name, ...region.suburbs]) {
+        final coordinates = _coordinatesMap[name.toLowerCase()];
+        if (coordinates == null) continue;
+        final latDiff = latitude - coordinates.latitude;
+        final lngDiff = longitude - coordinates.longitude;
+        final distance = latDiff * latDiff + lngDiff * lngDiff;
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestName = name;
+        }
+      }
+    }
+    return nearestName;
+  }
+
   static List<String> getSuburbsForRegion(String regionName) {
     for (final reg in regions) {
       if (reg.name.toLowerCase() == regionName.toLowerCase()) {
