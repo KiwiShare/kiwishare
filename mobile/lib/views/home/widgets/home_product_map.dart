@@ -104,6 +104,7 @@ class _HomeProductMapState extends State<HomeProductMap> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final hasSelectedLocation =
         widget.userLatitude != null && widget.userLongitude != null;
     return Semantics(
@@ -112,8 +113,8 @@ class _HomeProductMapState extends State<HomeProductMap> {
         borderRadius: BorderRadius.circular(AppRadius.large),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: AppColors.surfaceMuted,
-            border: Border.all(color: AppColors.border),
+            color: colors.surfaceContainerLow,
+            border: Border.all(color: colors.outlineVariant),
             borderRadius: BorderRadius.circular(AppRadius.large),
           ),
           child: Stack(
@@ -136,7 +137,7 @@ class _HomeProductMapState extends State<HomeProductMap> {
                         ),
                   minZoom: HomeProductMap.minimumZoom,
                   maxZoom: HomeProductMap.maximumZoom,
-                  backgroundColor: AppColors.surfaceMuted,
+                  backgroundColor: colors.surfaceContainerLow,
                   cameraConstraint: CameraConstraint.containCenter(
                     bounds: HomeProductMap.newZealandCameraBounds,
                   ),
@@ -313,10 +314,11 @@ class _ProductPriceMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Material(
-      color: selected ? AppColors.brandAccent : AppColors.brandPrimary,
+      color: selected ? AppColors.brandAccent : colors.primaryContainer,
       elevation: selected ? 3 : 1,
-      shadowColor: AppColors.textPrimary.withValues(alpha: 0.18),
+      shadowColor: Colors.black.withValues(alpha: 0.24),
       borderRadius: BorderRadius.circular(AppRadius.full),
       child: InkWell(
         onTap: onPressed,
@@ -328,9 +330,9 @@ class _ProductPriceMarker extends StatelessWidget {
               '\$$price',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: Colors.white),
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: selected ? Colors.white : colors.onPrimaryContainer,
+              ),
             ),
           ),
         ),
@@ -353,14 +355,15 @@ class _MapControlButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Material(
-      color: AppColors.surface,
+      color: colors.surfaceContainerHigh,
       elevation: 2,
       borderRadius: BorderRadius.circular(AppRadius.medium),
       child: IconButton(
         tooltip: tooltip,
         onPressed: onPressed,
-        color: AppColors.brandPrimary,
+        color: colors.primary,
         icon: Icon(icon),
       ),
     );
@@ -374,10 +377,11 @@ class _MapStatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.94),
-        border: Border.all(color: AppColors.border),
+        color: colors.surfaceContainerHigh.withValues(alpha: 0.94),
+        border: Border.all(color: colors.outlineVariant),
         borderRadius: BorderRadius.circular(AppRadius.full),
       ),
       child: Padding(

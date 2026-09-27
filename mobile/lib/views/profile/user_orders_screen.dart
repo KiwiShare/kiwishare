@@ -122,7 +122,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
               ),
             ),
           ),
-          const Divider(height: 1, color: AppColors.divider),
+          const Divider(height: 1),
 
           // Order Lists
           Expanded(
@@ -157,6 +157,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
     required String value,
   }) {
     final isSelected = _selectedStatusFilter == value;
+    final colors = Theme.of(context).colorScheme;
     return ChoiceChip(
       key: key,
       label: Text(
@@ -164,7 +165,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: isSelected ? Colors.white : AppColors.textPrimary,
+          color: isSelected ? colors.onPrimary : colors.onSurface,
         ),
       ),
       selected: isSelected,
@@ -175,16 +176,16 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
           });
         }
       },
-      backgroundColor: AppColors.surfaceMuted,
-      selectedColor: AppColors.brandPrimary,
-      checkmarkColor: Colors.white,
+      backgroundColor: colors.surfaceContainerHighest,
+      selectedColor: colors.primary,
+      checkmarkColor: colors.onPrimary,
       showCheckmark: false,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isSelected ? AppColors.brandPrimary : AppColors.border,
+          color: isSelected ? colors.primary : colors.outlineVariant,
         ),
       ),
     );
