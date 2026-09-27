@@ -626,6 +626,8 @@ class ItemCard extends StatelessWidget {
         ? item.seller!.displayName.trim()
         : 'Kiwi Seller';
     final category = _formatLabel(item.category);
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+    final contentFlex = textScale > 1.3 ? 7 : 5;
 
     return Semantics(
       button: onTap != null,
@@ -651,8 +653,9 @@ class ItemCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: 5,
+                  flex: 6,
                   child: Stack(
+                    key: Key('compact-item-image-${item.id}'),
                     fit: StackFit.expand,
                     children: [
                       item.imageUrl.isNotEmpty
@@ -694,7 +697,7 @@ class ItemCard extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  flex: 6,
+                  flex: contentFlex,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
                     child: Column(

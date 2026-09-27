@@ -684,6 +684,7 @@ class _EmptyWatchlistView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xxl),
@@ -694,7 +695,7 @@ class _EmptyWatchlistView extends StatelessWidget {
               width: 96,
               height: 96,
               decoration: BoxDecoration(
-                color: AppColors.brandPrimaryContainer.withValues(alpha: 0.5),
+                color: colors.primaryContainer,
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -716,15 +717,15 @@ class _EmptyWatchlistView extends StatelessWidget {
               'Discover eco-friendly pre-loved items and tap the Watch button to keep track of them here.',
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.xxl),
             ElevatedButton.icon(
               key: const Key('watchlist-explore-button'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandPrimary,
-                foregroundColor: Colors.white,
+                backgroundColor: colors.primary,
+                foregroundColor: colors.onPrimary,
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.xl,
                   vertical: AppSpacing.md,
@@ -799,6 +800,7 @@ class _NoMatchingWatchlistView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xxl),
@@ -808,14 +810,14 @@ class _NoMatchingWatchlistView extends StatelessWidget {
             Container(
               width: 80,
               height: 80,
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceMuted,
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.search_off_outlined,
                 size: 40,
-                color: AppColors.textSecondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -831,7 +833,7 @@ class _NoMatchingWatchlistView extends StatelessWidget {
               'Try adjusting your search terms or filter selection.',
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.lg),

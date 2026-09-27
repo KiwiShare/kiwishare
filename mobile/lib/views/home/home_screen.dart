@@ -495,6 +495,7 @@ class _HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -508,7 +509,7 @@ class _HomeHeader extends StatelessWidget {
               Text(
                 'KiwiShare',
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  color: AppColors.textBrand,
+                  color: colors.primary,
                   fontWeight: FontWeight.w900,
                   fontSize: 24,
                   letterSpacing: -0.6,
@@ -517,7 +518,7 @@ class _HomeHeader extends StatelessWidget {
               Text(
                 'Share & Reuse in NZ',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.brandSecondary,
+                  color: colors.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
                   fontSize: 11,
                   letterSpacing: 0.3,
@@ -542,22 +543,22 @@ class _HomeHeader extends StatelessWidget {
               horizontal: AppSpacing.sm,
               vertical: AppSpacing.xs,
             ),
-            backgroundColor: AppColors.surfaceMuted,
+            backgroundColor: colors.surfaceContainerHigh,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.full),
-              side: const BorderSide(color: AppColors.border),
+              side: BorderSide(color: colors.outlineVariant),
             ),
           ),
           icon: Icon(
             nearYou ? Icons.my_location : Icons.location_on_outlined,
             size: 18,
-            color: nearYou ? AppColors.brandPrimary : AppColors.textSecondary,
+            color: nearYou ? colors.primary : colors.onSurfaceVariant,
           ),
           label: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 140),
             child: DefaultTextStyle.merge(
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: AppColors.brandPrimary,
+                color: colors.primary,
                 fontWeight: FontWeight.w700,
               ),
               child: nearYou
@@ -672,7 +673,7 @@ class _HomeJumboCarousel extends StatelessWidget {
           ),
         ),
         SizedBox(
-          height: 180,
+          height: 196,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -963,7 +964,7 @@ class _HomeRecommendedSection extends StatelessWidget {
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
-    final cardHeight = 205.0 + (textScale - 1.0) * 45.0;
+    final cardHeight = 190.0 + (textScale - 1.0) * 60.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -977,11 +978,7 @@ class _HomeRecommendedSection extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.recommend,
-                  color: AppColors.brandPrimary,
-                  size: 22,
-                ),
+                Icon(Icons.recommend, color: colors.primary, size: 22),
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   'Recommended for You',
@@ -1066,6 +1063,7 @@ class _RecommendedProductCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
     final cardWidth = 155.0 + (textScale - 1.0) * 35.0;
+    const imageHeight = 110.0;
 
     return Container(
       width: cardWidth,
@@ -1093,7 +1091,7 @@ class _RecommendedProductCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  height: 95,
+                  height: imageHeight,
                   width: double.infinity,
                   child: Stack(
                     fit: StackFit.expand,
@@ -1105,18 +1103,18 @@ class _RecommendedProductCard extends StatelessWidget {
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
                                   Container(
-                                    color: AppColors.surfaceMuted,
-                                    child: const Icon(
+                                    color: colors.surfaceContainerHighest,
+                                    child: Icon(
                                       Icons.image_not_supported_outlined,
-                                      color: AppColors.brandSecondary,
+                                      color: colors.onSurfaceVariant,
                                     ),
                                   ),
                             )
                           : Container(
-                              color: AppColors.surfaceMuted,
-                              child: const Icon(
+                              color: colors.surfaceContainerHighest,
+                              child: Icon(
                                 Icons.eco_outlined,
-                                color: AppColors.brandPrimary,
+                                color: colors.primary,
                               ),
                             ),
                       Positioned(
@@ -1128,13 +1126,13 @@ class _RecommendedProductCard extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.brandPrimary,
+                            color: colors.primaryContainer,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             '#$rank',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: colors.onPrimaryContainer,
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
                             ),
@@ -1235,7 +1233,7 @@ class _RecommendedProductCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.labelSmall
                                     ?.copyWith(
-                                      color: AppColors.textSecondary,
+                                      color: colors.onSurfaceVariant,
                                       fontSize: 11,
                                     ),
                               ),
@@ -1249,7 +1247,7 @@ class _RecommendedProductCard extends StatelessWidget {
                               '\$${item.priceNzd}',
                               style: Theme.of(context).textTheme.titleSmall
                                   ?.copyWith(
-                                    color: AppColors.brandPrimary,
+                                    color: colors.primary,
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
@@ -1328,16 +1326,15 @@ class _HomeDiscoveryResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           _heading,
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontSize: 20,
-            height: 1.4,
-            fontWeight: FontWeight.w700,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontSize: 20, height: 1.4),
         ),
         const SizedBox(height: AppSpacing.sm),
         Wrap(
@@ -1350,7 +1347,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
               key: const Key('home-results-count'),
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
             OutlinedButton.icon(
               onPressed: onShowFilters,
@@ -1395,10 +1392,11 @@ class _HomeViewToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
+        color: colors.surfaceContainerLow,
+        border: Border.all(color: colors.outlineVariant),
         borderRadius: BorderRadius.circular(AppRadius.medium),
       ),
       child: Row(
@@ -1467,6 +1465,7 @@ class _HomeProductsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+    final cardHeight = 196.0 + (textScale - 1) * 84.0;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1474,7 +1473,7 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.78 - (textScale - 1) * 0.12,
+        mainAxisExtent: cardHeight,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
@@ -1495,29 +1494,29 @@ class _HomeLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+    final cardHeight = 196.0 + (textScale - 1) * 84.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Products across NZ',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontSize: 20,
-            height: 1.4,
-            fontWeight: FontWeight.w700,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontSize: 20, height: 1.4),
         ),
         const SizedBox(height: AppSpacing.md),
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 220,
             crossAxisSpacing: AppSpacing.md,
             mainAxisSpacing: AppSpacing.md,
-            childAspectRatio: 0.60,
+            mainAxisExtent: cardHeight,
           ),
           itemCount: 4,
-          itemBuilder: (_, _) => const ItemCardSkeleton(),
+          itemBuilder: (_, _) => const ItemCardSkeleton(compact: true),
         ),
       ],
     );
@@ -1555,15 +1554,16 @@ class _HomeEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
       child: Center(
         child: Column(
           children: [
-            const Icon(
+            Icon(
               Icons.search_off_outlined,
               size: 48,
-              color: AppColors.brandSecondary,
+              color: colors.onSurfaceVariant,
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
@@ -1576,7 +1576,7 @@ class _HomeEmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
           ],
         ),
@@ -1739,7 +1739,7 @@ class _NzCascadingLocationSheetState extends State<_NzCascadingLocationSheet> {
                             Text(
                               'Explore listings across New Zealand regions',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: AppColors.textSecondary,
+                                color: colors.onSurfaceVariant,
                               ),
                             ),
                           ],

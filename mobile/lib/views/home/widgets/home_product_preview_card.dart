@@ -21,11 +21,12 @@ class HomeProductPreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Material(
       key: const Key('home-product-preview-card'),
-      color: AppColors.surface,
+      color: colors.surfaceContainerLow,
       elevation: 3,
-      shadowColor: AppColors.textPrimary.withValues(alpha: 0.16),
+      shadowColor: Colors.black.withValues(alpha: 0.24),
       borderRadius: BorderRadius.circular(AppRadius.large),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -34,7 +35,7 @@ class HomeProductPreviewCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: colors.outlineVariant),
             borderRadius: BorderRadius.circular(AppRadius.large),
           ),
           child: Row(
@@ -51,9 +52,12 @@ class HomeProductPreviewCard extends StatelessWidget {
                       child: Image.network(
                         item.imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const ColoredBox(
-                          color: AppColors.surfaceMuted,
-                          child: Icon(Icons.image_not_supported_outlined),
+                        errorBuilder: (_, _, _) => ColoredBox(
+                          color: colors.surfaceContainerHighest,
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            color: colors.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),
@@ -85,17 +89,17 @@ class HomeProductPreviewCard extends StatelessWidget {
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       '\$${item.priceNzd} NZD',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppColors.textBrand,
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleMedium?.copyWith(color: colors.primary),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.location_on_outlined,
                           size: 16,
-                          color: AppColors.textSecondary,
+                          color: colors.onSurfaceVariant,
                         ),
                         const SizedBox(width: AppSpacing.xs),
                         Expanded(

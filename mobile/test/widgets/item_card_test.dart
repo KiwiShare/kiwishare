@@ -17,7 +17,7 @@ void main() {
           create: (_) => FavoritesProvider(),
           child: SizedBox(
             width: 200,
-            height: compact ? 225 : 360,
+            height: compact ? 196 : 360,
             child: ItemCard(item: item, compact: compact),
           ),
         ),
@@ -195,6 +195,12 @@ void main() {
       expect(find.text(r'$120'), findsOneWidget);
       expect(find.text('Electronics'), findsOneWidget);
       expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+      expect(tester.getSize(find.byType(ItemCard)).height, 196);
+      final imageArea = find.byKey(
+        const Key('compact-item-image-compact-item'),
+      );
+      expect(tester.getSize(imageArea).height, greaterThan(100));
+      expect(tester.getSize(imageArea).height, lessThan(115));
       expect(tester.takeException(), isNull);
     },
   );
