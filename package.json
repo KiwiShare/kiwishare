@@ -23,6 +23,7 @@
     "server:build": "pnpm --filter server run build",
     "server:test": "pnpm --filter server run test",
     "server:lint": "pnpm --filter server run lint",
+    "perf:api": "node scripts/api-performance-smoke.mjs",
 
     "web:dev": "pnpm --filter web run dev",
     "web:build": "pnpm --filter web run build",
