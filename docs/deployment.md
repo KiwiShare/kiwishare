@@ -48,6 +48,19 @@ We have fully automated our release pipeline via GitHub Actions. **Developers do
    - Create a **GitHub Release** with auto-generated release notes and attach both Android and iOS installation packages.
    - Distribute the Android APK to **Firebase App Distribution** (if configured).
 
+### Release integrity and supply-chain controls
+
+The release workflow treats an existing release tag as immutable. It creates and pushes tags without force, so a concurrent release or unexpected tag collision fails safely instead of moving a tag that may already identify published artifacts. Resolve the version/tag conflict and rerun the workflow; do not force-update the release tag.
+
+GitHub Actions used by the release workflow are pinned to full commit SHAs. The trailing version comments (for example, `# v4`) record the reviewed upstream release without relying on a movable version tag at execution time. When updating an Action:
+
+1. review the upstream release notes and repository ownership;
+2. resolve the intended release tag to its commit (dereference annotated tags);
+3. replace the full SHA and update the version comment in the same review; and
+4. run the existing backend, web, and mobile CI checks before merging.
+
+Workflow token permissions are read-only by default. Only the version and publish jobs receive `contents: write`, and only the sync job receives `pull-requests: write`. Build jobs and the publishing checkout do not persist Git credentials. These boundaries reduce the impact of a compromised build tool or third-party Action while preserving the current release behaviour.
+
 ---
 
 ## 2. Backend Deployment to Render (Cloud API)
