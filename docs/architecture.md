@@ -12,7 +12,12 @@ KiwiShare utilizes a decoupled client-server architecture hosted in a unified mo
 graph TD
     subgraph Client Tier
         MobileApp[Flutter Mobile Client - Android / iOS]
-        WebApp[Web Portal Client]
+        Browser[Web Browser]
+    end
+
+    subgraph Edge Web Tier
+        CFWorker[Cloudflare Worker - kiwishare.online]
+        WebApp[React / Vite Static Assets]
     end
 
     subgraph Backend Service Tier
@@ -34,8 +39,10 @@ graph TD
         FCM[Firebase Cloud Messaging - Push Notifications]
     end
 
-    MobileApp -->|RESTful HTTPS / JSON| KoaApp
+    Browser -->|HTTPS| CFWorker
+    CFWorker -->|Serves SPA assets + history fallback| WebApp
     WebApp -->|RESTful HTTPS / JSON| KoaApp
+    MobileApp -->|RESTful HTTPS / JSON| KoaApp
 
     KoaApp --> AuthRouter
     KoaApp --> UsedItemsRouter
@@ -57,7 +64,8 @@ graph TD
 ### Component Roles & Responsibilities
 
 * **Flutter Mobile App (`mobile/`)**: Cross-platform consumer application providing native experiences for used item discovery, keyword/category filtering, user trust scoring, and QR-based handover transactions.
-* **Koa.js Dedicated RESTful Backend (`server/`)**: Full-featured Node.js / Koa.js application server. Exposes structured RESTful API resources (`/api/usedItems`, `/api/auth`, `/api/users`, `/api/transactions`) with centralized middleware for JWT authentication, request logging, CORS, and unified error handling.
+* **React Web App (`web/`) + Cloudflare Worker**: The Vite production bundle is deployed as Worker static assets behind `kiwishare.online` and `www.kiwishare.online`. The Worker terminates the web request at Cloudflare's edge, serves frontend assets, and uses single-page-application fallback routing for React Router paths. Web API calls remain decoupled and target the Render-hosted Koa service.
+* **Koa.js Dedicated RESTful Backend (`server/`)**: Full-featured Node.js / Koa.js application server hosted on Render. Exposes structured RESTful API resources (`/api/usedItems`, `/api/auth`, `/api/users`, `/api/transactions`) with centralized middleware for JWT authentication, request logging, CORS, and unified error handling.
 * **MongoDB Database**: Core document database storing structured data models (Users, Used Items / Listings, Orders, OTP records, Transactions, Messages, and Audit Logs) with geospatial indexing (`2dsphere`) for location queries.
 * **Supporting Services**:
   - **Cloudflare R2**: S3-compatible object storage for listing and chat media, using backend-generated presigned upload URLs and configured public asset URLs.

@@ -12,7 +12,7 @@
 ## 🏗️ System Layers & Infrastructure Affected
 - [ ] **`mobile/`**: Flutter Frontend (UI, state management, providers, repositories)
 - [ ] **`server/`**: Backend RESTful Server (Koa, routes, controllers, MongoDB models, middlewares)
-- [ ] **`infra/ & CI/CD`**: Infrastructure (`.github/workflows/`, Render deploy, Docker, Firebase, scripts, Husky)
+- [ ] **`infra/ & CI/CD`**: Infrastructure (`.github/workflows/`, Cloudflare Workers/R2, Render API deploy, Docker, Firebase, scripts, Husky)
 - [ ] **`docs/`**: Documentation, design guidelines, architecture specs
 
 ---
@@ -39,7 +39,7 @@
 
 ### Infrastructure & Deployment (If applicable):
 - [ ] Verified CI/CD workflows and actions syntax.
-- [ ] Verified environment variables or Render service configuration requirements.
+- [ ] Verified environment variables and Cloudflare/Render deployment configuration requirements.
 - [ ] No private secrets, credentials, or `.env` files are committed.
 
 ---
