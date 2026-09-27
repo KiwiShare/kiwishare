@@ -163,7 +163,7 @@ void main() {
     );
     expect(permissionController.statusCalls, 1);
 
-    // 4. Tap AppBar bookmark button to unwatch
+    // 4. Tap AppBar heart button to unwatch
     await tester.tap(find.byKey(const Key('detail-favorite-button')));
     await tester.pumpAndSettle();
 

@@ -74,6 +74,10 @@ void main() {
     expect(find.text('0 items'), findsOneWidget);
     expect(find.text('Your watchlist is empty'), findsOneWidget);
     expect(find.byKey(const Key('watchlist-explore-button')), findsOneWidget);
+    expect(find.byIcon(Icons.favorite), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.byIcon(Icons.bookmark), findsNothing);
+    expect(find.byIcon(Icons.bookmark_outline), findsNothing);
   });
 
   testWidgets('Watchlist renders watched items and allows removing an item', (
@@ -100,6 +104,8 @@ void main() {
     expect(find.text('Vintage Oak Armchair'), findsOneWidget);
     expect(find.text('\$120 NZD'), findsOneWidget);
     expect(find.text('Reserved'), findsOneWidget);
+    expect(find.byIcon(Icons.favorite), findsNWidgets(3));
+    expect(find.byIcon(Icons.bookmark_remove_outlined), findsNothing);
 
     // 3. Tap card opens item details
     await tester.tap(find.text('Monstera Deliciosa'));

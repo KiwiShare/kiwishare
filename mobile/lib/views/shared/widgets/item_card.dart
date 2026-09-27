@@ -1,13 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 
 import '../../../models/item_model.dart';
-import '../../../providers/providers.dart';
 import '../../../services/notification_permission_coordinator.dart';
 import '../../../widgets/resilient_network_image.dart';
+import 'watchlist_heart_button.dart';
 
 class ItemCard extends StatelessWidget {
   final ItemModel item;
@@ -23,45 +20,14 @@ class ItemCard extends StatelessWidget {
     this.compact = false,
   });
 
-  Future<void> _toggleFavorite(
-    BuildContext context,
-    FavoritesProvider favorites,
-  ) async {
-    WatchlistMutationResult result;
-    try {
-      result = await favorites.toggleFavorite(item.id);
-    } catch (error) {
-      debugPrint('Watchlist update failed: $error');
-      return;
-    }
-    if (!context.mounted || result != WatchlistMutationResult.added) return;
-    await WidgetsBinding.instance.endOfFrame;
-    if (!context.mounted) return;
-    await offerContextualNotificationPermission(
-      context,
-      coordinator: permissionCoordinator,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final auth = Provider.of<AuthProvider?>(context, listen: true);
-    final isLoggedIn = auth == null || auth.isLoggedIn;
-    final favorites = context.watch<FavoritesProvider>();
-    final isFavorite = favorites.isFavorite(item.id);
 
     if (compact) {
-      return _buildCompactCard(
-        context,
-        colors: colors,
-        isDark: isDark,
-        isLoggedIn: isLoggedIn,
-        favorites: favorites,
-        isFavorite: isFavorite,
-      );
+      return _buildCompactCard(context, colors: colors, isDark: isDark);
     }
 
     return Semantics(
@@ -269,49 +235,14 @@ class ItemCard extends StatelessWidget {
                         ),
 
                       // Top Right: Favorite Button
-                      if (isLoggedIn)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 4,
-                                ),
-                              ],
-                            ),
-                            child: Material(
-                              color: const Color(0x73000000),
-                              shape: CircleBorder(
-                                side: BorderSide(
-                                  color: Colors.white.withOpacity(0.25),
-                                  width: 0.8,
-                                ),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: InkWell(
-                                onTap: () => unawaited(
-                                  _toggleFavorite(context, favorites),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: Icon(
-                                    isFavorite
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
-                                    size: 15.5,
-                                    color: isFavorite
-                                        ? const Color(0xFFEF4444)
-                                        : Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: WatchlistHeartButton(
+                          item: item,
+                          permissionCoordinator: permissionCoordinator,
                         ),
+                      ),
 
                       // Bottom Left: Category & Condition Glass Pill
                       Positioned(
@@ -455,23 +386,6 @@ class ItemCard extends StatelessWidget {
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w700,
                                 color: colors.onSurfaceVariant.withOpacity(0.8),
-                              ),
-                            ),
-                          ],
-                          if (item.watchlistCount > 0) ...[
-                            const Spacer(),
-                            const Icon(
-                              Icons.favorite,
-                              size: 11,
-                              color: Color(0xFFEF4444),
-                            ),
-                            const SizedBox(width: 2.5),
-                            Text(
-                              '${item.watchlistCount}',
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFFEF4444),
                               ),
                             ),
                           ],
@@ -707,9 +621,6 @@ class ItemCard extends StatelessWidget {
     BuildContext context, {
     required ColorScheme colors,
     required bool isDark,
-    required bool isLoggedIn,
-    required FavoritesProvider favorites,
-    required bool isFavorite,
   }) {
     final sellerName = item.seller?.displayName.trim().isNotEmpty == true
         ? item.seller!.displayName.trim()
@@ -772,33 +683,16 @@ class ItemCard extends StatelessWidget {
                             dark: true,
                           ),
                         ),
-                      if (isLoggedIn)
-                        Positioned(
-                          right: 5,
-                          top: 5,
-                          child: Material(
-                            color: Colors.black.withOpacity(0.42),
-                            shape: const CircleBorder(),
-                            child: InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: () => unawaited(
-                                _toggleFavorite(context, favorites),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: Icon(
-                                  isFavorite
-                                      ? Icons.favorite
-                                      : Icons.favorite_border,
-                                  size: 15,
-                                  color: isFavorite
-                                      ? const Color(0xFFFF6B6B)
-                                      : Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
+                      Positioned(
+                        right: 5,
+                        top: 5,
+                        child: WatchlistHeartButton(
+                          item: item,
+                          permissionCoordinator: permissionCoordinator,
+                          diameter: 28,
+                          iconSize: 15,
                         ),
+                      ),
                     ],
                   ),
                 ),

@@ -367,10 +367,8 @@ class _WatchlistHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final iconBg = isDark
-        ? const Color(0xFF163228)
-        : AppColors.brandPrimaryContainer;
-    final iconColor = isDark ? const Color(0xFF92D4B3) : AppColors.brandPrimary;
+    final iconBg = isDark ? const Color(0xFF351D22) : const Color(0xFFFEE2E2);
+    const iconColor = Color(0xFFEF4444);
     final countBg = isDark
         ? const Color(0xFF1C2C26)
         : AppColors.brandSecondaryContainer;
@@ -397,7 +395,7 @@ class _WatchlistHeader extends StatelessWidget {
                     color: iconBg,
                     borderRadius: BorderRadius.circular(AppRadius.medium),
                   ),
-                  child: Icon(Icons.bookmark, color: iconColor, size: 24),
+                  child: const Icon(Icons.favorite, color: iconColor, size: 23),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Text(
@@ -622,9 +620,9 @@ class _WatchlistCard extends StatelessWidget {
                 IconButton(
                   key: Key('watchlist-remove-${item.id}'),
                   icon: const Icon(
-                    Icons.bookmark_remove_outlined,
-                    color: AppColors.error,
-                    size: 22,
+                    Icons.favorite,
+                    color: Color(0xFFEF4444),
+                    size: 21,
                   ),
                   tooltip: 'Remove from Watchlist',
                   onPressed: onRemove,
@@ -700,10 +698,10 @@ class _EmptyWatchlistView extends StatelessWidget {
                 color: colors.primaryContainer,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.bookmark_outline,
+              child: const Icon(
+                Icons.favorite_border,
                 size: 48,
-                color: colors.onPrimaryContainer,
+                color: Color(0xFFEF4444),
               ),
             ),
             const SizedBox(height: AppSpacing.xl),

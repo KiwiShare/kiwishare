@@ -15,6 +15,7 @@ import '../../widgets/kiwishare_logo.dart';
 import '../scanner/qr_scanner_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
+import '../shared/widgets/watchlist_heart_button.dart';
 import 'widgets/home_filter_sheet.dart';
 import 'widgets/home_product_map.dart';
 
@@ -758,7 +759,7 @@ class _HomeJumboCard extends StatelessWidget {
                 Positioned(
                   top: AppSpacing.sm,
                   left: AppSpacing.sm,
-                  right: AppSpacing.sm,
+                  right: 46,
                   child: Wrap(
                     spacing: AppSpacing.sm,
                     runSpacing: 4,
@@ -863,6 +864,14 @@ class _HomeJumboCard extends StatelessWidget {
                           ),
                         ),
                     ],
+                  ),
+                ),
+                Positioned(
+                  top: AppSpacing.sm,
+                  right: AppSpacing.sm,
+                  child: WatchlistHeartButton(
+                    key: Key('home-featured-heart-${item.id}'),
+                    item: item,
                   ),
                 ),
                 Positioned(
@@ -1130,16 +1139,24 @@ class _RecommendedProductCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: WatchlistHeartButton(
+                          key: Key('home-recommended-heart-${item.id}'),
+                          item: item,
+                        ),
+                      ),
                       if (item.isSustainable)
                         const Positioned(
-                          top: 6,
+                          bottom: 6,
                           right: 6,
                           child: CircleAvatar(
-                            radius: 11,
+                            radius: 10,
                             backgroundColor: AppColors.brandPrimaryContainer,
                             child: Icon(
                               Icons.eco,
-                              size: 13,
+                              size: 12,
                               color: AppColors.brandPrimary,
                             ),
                           ),
@@ -1461,7 +1478,12 @@ class _HomeProductsGrid extends StatelessWidget {
       itemCount: products.length,
       itemBuilder: (context, index) {
         final item = products[index];
-        return ItemCard(item: item, compact: true, onTap: () => onOpen(item));
+        return ItemCard(
+          key: Key('home-grid-card-${item.id}'),
+          item: item,
+          compact: true,
+          onTap: () => onOpen(item),
+        );
       },
     );
   }

@@ -150,6 +150,27 @@ void main() {
     expect(controller.statusCalls, 1);
   });
 
+  testWidgets('shows one compact heart control without a popularity count', (
+    tester,
+  ) async {
+    const item = ItemModel(
+      id: 'popular-item',
+      title: 'Popular lamp',
+      priceNzd: '25',
+      location: 'Auckland',
+      imageUrl: '',
+      isSustainable: false,
+      category: 'Home',
+      status: ItemStatus.active,
+      watchlistCount: 7,
+    );
+
+    await tester.pumpWidget(buildCard(item));
+
+    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.text('7'), findsNothing);
+  });
+
   testWidgets(
     'compact discovery card shows seller, English location, price and category',
     (tester) async {
@@ -173,6 +194,7 @@ void main() {
       expect(find.text('奥克兰'), findsNothing);
       expect(find.text(r'$120'), findsOneWidget);
       expect(find.text('Electronics'), findsOneWidget);
+      expect(find.byIcon(Icons.favorite_border), findsOneWidget);
       expect(tester.getSize(find.byType(ItemCard)).height, 196);
       final imageArea = find.byKey(
         const Key('compact-item-image-compact-item'),
