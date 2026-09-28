@@ -134,7 +134,7 @@ void main() {
       find.byKey(const Key('public-profile-cover-edit-button')),
       findsOneWidget,
     );
-    expect(find.text('Change cover'), findsOneWidget);
+    expect(find.byTooltip('Change cover'), findsOneWidget);
   });
 
   testWidgets('another member public profile does not expose cover editing', (
@@ -184,7 +184,7 @@ void main() {
       find.byKey(const Key('public-profile-cover-edit-button')),
       findsNothing,
     );
-    expect(find.text('Change cover'), findsNothing);
+    expect(find.byTooltip('Change cover'), findsNothing);
   });
 
   testWidgets(
