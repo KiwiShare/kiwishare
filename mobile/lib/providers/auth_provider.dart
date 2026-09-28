@@ -404,6 +404,18 @@ class AuthProvider extends ChangeNotifier {
     await _storeProfile(token, updated);
   }
 
+  Future<void> updateCoverImage(String url) async {
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to edit your profile.');
+    }
+    final updated = await userRepository.updateProfile(
+      token: token,
+      coverImageUrl: url,
+    );
+    await _storeProfile(token, updated);
+  }
+
   Future<void> updateBio(String value) async {
     final bioText = value.trim();
     if (bioText.length > 200) {
