@@ -40,7 +40,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _loadedToken;
   String? _refreshError;
   bool _avatarBusy = false;
-  bool _coverBusy = false;
 
   @override
   void didChangeDependencies() {
@@ -158,49 +157,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } finally {
       if (mounted) setState(() => _avatarBusy = false);
-    }
-  }
-
-  Future<void> _editCoverImage() async {
-    final auth = context.read<AuthProvider>();
-    final token = auth.jwtToken;
-    if (token == null || _coverBusy) return;
-    final photo = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1600,
-      imageQuality: 85,
-    );
-    if (photo == null || !mounted || auth.jwtToken != token) return;
-    setState(() => _coverBusy = true);
-    try {
-      final bytes = await photo.readAsBytes();
-      if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
-        throw StateError('Choose an image smaller than 8 MB.');
-      }
-      final url = await R2UploadService().uploadImage(
-        bytes: bytes,
-        fileName: photo.name,
-        contentType:
-            photo.mimeType ??
-            (photo.name.toLowerCase().endsWith('.png')
-                ? 'image/png'
-                : 'image/jpeg'),
-        authToken: token,
-      );
-      if (auth.jwtToken != token) return;
-      await auth.updateCoverImage(url);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not save profile background. Try another image.',
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _coverBusy = false);
     }
   }
 
@@ -702,8 +658,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     user: user,
                     onEdit: () => _editName(context, user),
                     onStudentTap: () => _showStudentVerification(context),
-                    onCoverEdit: _editCoverImage,
-                    coverBusy: _coverBusy,
                   )
                 : _GuestHeader(
                     onLogin: () => _showLogin(context),
@@ -808,15 +762,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     title: _avatarBusy ? 'Saving photo...' : 'Profile photo',
                     subtitle: 'Photo and avatar',
                     onTap: _editAvatar,
-                  ),
-                  _ModernMenuTile(
-                    icon: Icons.panorama_outlined,
-                    iconColor: const Color(0xFF8B5CF6),
-                    title: _coverBusy
-                        ? 'Saving background...'
-                        : 'Profile background',
-                    subtitle: 'Image shown on your public profile',
-                    onTap: _editCoverImage,
                   ),
                   _ModernMenuTile(
                     icon: Icons.badge_outlined,
@@ -974,47 +919,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-class _ProfileCoverPlaceholder extends StatelessWidget {
-  const _ProfileCoverPlaceholder({required this.scheme});
-
-  final ColorScheme scheme;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            scheme.primaryContainer.withValues(alpha: 0.7),
-            scheme.secondaryContainer.withValues(alpha: 0.55),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          Icons.panorama_outlined,
-          size: 28,
-          color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-        ),
-      ),
-    );
-  }
-}
-
 class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.user,
     required this.onEdit,
-    required this.onCoverEdit,
-    required this.coverBusy,
     this.onStudentTap,
   });
   final UserModel user;
   final VoidCallback onEdit;
-  final VoidCallback onCoverEdit;
-  final bool coverBusy;
   final VoidCallback? onStudentTap;
 
   @override
@@ -1044,69 +956,6 @@ class _ProfileHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: SizedBox(
-                  key: const Key('profile-cover-image'),
-                  width: double.infinity,
-                  height: 108,
-                  child: user.coverImageUrl?.trim().isNotEmpty == true
-                      ? Image.network(
-                          user.coverImageUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) =>
-                              _ProfileCoverPlaceholder(scheme: scheme),
-                        )
-                      : _ProfileCoverPlaceholder(scheme: scheme),
-                ),
-              ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Material(
-                  color: scheme.surface.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(999),
-                  child: InkWell(
-                    key: const Key('profile-cover-edit-button'),
-                    borderRadius: BorderRadius.circular(999),
-                    onTap: coverBusy ? null : onCoverEdit,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (coverBusy)
-                            const SizedBox.square(
-                              dimension: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          else
-                            const Icon(
-                              Icons.photo_camera_back_outlined,
-                              size: 16,
-                            ),
-                          const SizedBox(width: 6),
-                          Text(
-                            coverBusy ? 'Saving...' : 'Edit background',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
           // ── Top User Info Row ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
