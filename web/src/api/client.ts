@@ -110,6 +110,19 @@ export interface AdminOrderStats {
   }>;
 }
 
+export interface AdminReport {
+  id: string;
+  reporterId: string | null;
+  targetType: 'user' | 'listing' | 'general';
+  targetId: string | null;
+  contextType: 'profile' | 'listing' | 'chat' | 'transaction' | 'general';
+  contextId: string | null;
+  reason: string;
+  details: string;
+  status: 'pending' | 'reviewed' | 'dismissed';
+  createdAt: string;
+}
+
 export interface AdminStats {
   totalUsers: number;
   totalItems: number;
@@ -408,6 +421,22 @@ export const itemsApi = {
 export const adminApi = {
   getStats: () =>
     apiRequest<{ status: string; stats: AdminStats }>('/admin/stats'),
+
+  getReports: (params?: { status?: string; targetType?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.targetType) query.set('targetType', params.targetType);
+    const qStr = query.toString();
+    return apiRequest<{ status: string; count: number; reports: AdminReport[] }>(
+      `/admin/reports${qStr ? `?${qStr}` : ''}`
+    );
+  },
+
+  updateReportStatus: (id: string, status: 'pending' | 'reviewed' | 'dismissed') =>
+    apiRequest<{ status: string; message: string; report: { id: string; status: string } }>(
+      `/admin/reports/${id}/status`,
+      { method: 'PATCH', body: JSON.stringify({ status }) }
+    ),
 
   getUsers: (params?: { search?: string; role?: string; status?: string }) => {
     const query = new URLSearchParams();
