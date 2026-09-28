@@ -39,6 +39,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _loadedToken;
   String? _refreshError;
   bool _avatarBusy = false;
+  bool _coverBusy = false;
 
   @override
   void didChangeDependencies() {
@@ -159,6 +160,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _editCoverImage() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.jwtToken;
+    if (token == null || _coverBusy) return;
+    final photo = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (photo == null || !mounted || auth.jwtToken != token) return;
+    setState(() => _coverBusy = true);
+    try {
+      final bytes = await photo.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+        throw StateError('Choose an image smaller than 8 MB.');
+      }
+      final url = await R2UploadService().uploadImage(
+        bytes: bytes,
+        fileName: photo.name,
+        contentType:
+            photo.mimeType ??
+            (photo.name.toLowerCase().endsWith('.png')
+                ? 'image/png'
+                : 'image/jpeg'),
+        authToken: token,
+      );
+      if (auth.jwtToken != token) return;
+      await auth.updateCoverImage(url);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save profile background. Try another image.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _coverBusy = false);
+    }
+  }
+
   Future<void> _showLogin(BuildContext context) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -239,6 +281,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _showStudentVerification(BuildContext context) async {
+    final user = context.read<AuthProvider>().currentUser;
+    if (user?.isStudentVerified == true) {
+      await showStudentVerificationBenefitsSheet(context, user!);
+      return;
+    }
     await showStudentVerificationSheet(context);
   }
 
@@ -758,6 +805,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: _editAvatar,
                   ),
                   _ModernMenuTile(
+                    icon: Icons.panorama_outlined,
+                    iconColor: const Color(0xFF8B5CF6),
+                    title: _coverBusy
+                        ? 'Saving background...'
+                        : 'Profile background',
+                    subtitle: 'Image shown on your public profile',
+                    onTap: _editCoverImage,
+                  ),
+                  _ModernMenuTile(
                     icon: Icons.badge_outlined,
                     iconColor: const Color(0xFF14B8A6),
                     title: 'Username',
@@ -950,6 +1006,30 @@ class _ProfileHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (user.coverImageUrl?.trim().isNotEmpty == true) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox(
+                key: const Key('profile-cover-image'),
+                width: double.infinity,
+                height: 108,
+                child: Image.network(
+                  user.coverImageUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                    ),
+                    child: Icon(
+                      Icons.panorama_outlined,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           // ── Top User Info Row ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -1091,7 +1171,7 @@ class _ProfileHeader extends StatelessWidget {
                               showKiwiTrustScoreSheet(context, user.trustScore),
                           child: Semantics(
                             label:
-                                'Trust score ${formatPublicTrustScore(user.trustScore)}',
+                                '${formatPublicTrustScore(user.trustScore)} · ${getTrustScoreInfo(user.trustScore).label}',
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -1123,7 +1203,7 @@ class _ProfileHeader extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'Trust score ${formatPublicTrustScore(user.trustScore)}',
+                                    '${formatPublicTrustScore(user.trustScore)} · ${getTrustScoreInfo(user.trustScore).label}',
                                     style: TextStyle(
                                       color: isDark
                                           ? const Color(0xFFD6F6E3)
@@ -1133,48 +1213,6 @@ class _ProfileHeader extends StatelessWidget {
                                     ),
                                   ),
                                 ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () =>
-                              showKiwiTrustScoreSheet(context, user.trustScore),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? getTrustScoreInfo(user.trustScore).darkBg
-                                  : getTrustScoreInfo(user.trustScore).lightBg,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color:
-                                    (isDark
-                                            ? getTrustScoreInfo(
-                                                user.trustScore,
-                                              ).darkColor
-                                            : getTrustScoreInfo(
-                                                user.trustScore,
-                                              ).lightColor)
-                                        .withOpacity(0.4),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              getTrustScoreInfo(user.trustScore).label,
-                              style: TextStyle(
-                                color: isDark
-                                    ? getTrustScoreInfo(
-                                        user.trustScore,
-                                      ).darkColor
-                                    : getTrustScoreInfo(
-                                        user.trustScore,
-                                      ).lightColor,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
                               ),
                             ),
                           ),
