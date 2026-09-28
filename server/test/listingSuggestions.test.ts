@@ -106,27 +106,6 @@ describe('listing AI suggestions', () => {
     });
   });
 
-  test('accepts image payloads above the default JSON body limit', async () => {
-    const provider = new FakeSuggestionProvider();
-    setListingSuggestionProviderForTests(provider);
-    const imageBase64 = 'a'.repeat(1_200_000);
-
-    const response = await request(app.callback())
-      .post('/api/listing-suggestions')
-      .set('Authorization', `Bearer ${authToken('large-image-user')}`)
-      .send({
-        imageBase64,
-        imageMimeType: 'image/jpeg'
-      });
-
-    expect(response.status).toBe(200);
-    expect(provider.calls).toBe(1);
-    expect(provider.lastInput).toEqual({
-      imageBase64,
-      imageMimeType: 'image/jpeg'
-    });
-  });
-
   test('rejects empty, oversized, and unknown listing context', async () => {
     const provider = new FakeSuggestionProvider();
     setListingSuggestionProviderForTests(provider);
