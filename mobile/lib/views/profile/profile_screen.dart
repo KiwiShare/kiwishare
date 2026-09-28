@@ -193,7 +193,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Could not save profile background. Try another image.'),
+            content: Text(
+              'Could not save profile background. Try another image.',
+            ),
           ),
         );
       }
