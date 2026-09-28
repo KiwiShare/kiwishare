@@ -134,22 +134,17 @@ The release workflow also passes the generated semantic version into Flutter as 
 
 KiwiShare uses one backend endpoint (`POST /api/auth/google`) and platform-specific Google sign-in clients:
 
-- Web: Google Identity Services with the Web OAuth client ID.
+- Web: Firebase Authentication JS SDK with the Google provider.
 - Android: native Google Sign-In for package `app.kiwishare.android`.
 - iOS: native Google Sign-In for bundle ID `com.kiwishare.ios`.
 
-The backend validates Google/Firebase identity tokens and only accepts configured OAuth client audiences. Override the built-in client list with `GOOGLE_OAUTH_CLIENT_IDS` when credentials change.
+The backend accepts the Google identity token obtained by each platform and only accepts configured OAuth client audiences. Override the built-in client list with `GOOGLE_OAUTH_CLIENT_IDS` when credentials change.
 
-#### Web OAuth console setup
+#### Web Firebase Authentication setup
 
-The Web OAuth client must include every frontend origin that can render the Google button under **Authorized JavaScript origins**. At minimum for the current deployment:
+The React web app is registered as the Firebase Web App `KiwiShare Web` in project `kiwishare-2791f`. Production injects the public Firebase web config through `VITE_FIREBASE_*` variables and uses `GoogleAuthProvider` with `signInWithPopup()`.
 
-- `https://kiwishare.online`
-- `http://localhost:5173` for local Vite development, if local Google sign-in is required
-
-If a separate preview hostname is introduced, add that exact HTTPS origin as well. Google Identity Services does not require a redirect URI for the rendered ID-token button flow used by KiwiShare.
-
-The public Web client ID can be configured as `VITE_GOOGLE_CLIENT_ID`; it is an identifier, not a secret.
+Firebase Authentication must keep `kiwishare.online` in **Authentication > Settings > Authorized domains**. The Google provider must remain enabled in **Authentication > Sign-in method**. The Firebase web config is public application metadata; server credentials and OAuth client secrets must never be exposed to the browser.
 
 #### Android certificate fingerprints
 

@@ -1,66 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (response: { credential?: string }) => void;
-            auto_select?: boolean;
-            cancel_on_tap_outside?: boolean;
-          }) => void;
-          renderButton: (
-            parent: HTMLElement,
-            options: {
-              type?: 'standard' | 'icon';
-              theme?: 'outline' | 'filled_blue' | 'filled_black';
-              size?: 'large' | 'medium' | 'small';
-              text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
-              shape?: 'rectangular' | 'pill' | 'circle' | 'square';
-              width?: number;
-              logo_alignment?: 'left' | 'center';
-            },
-          ) => void;
-        };
-      };
-    };
-  }
-}
-
-let googleScriptPromise: Promise<void> | null = null;
-
-function loadGoogleIdentityServices(): Promise<void> {
-  if (window.google?.accounts?.id) return Promise.resolve();
-  if (googleScriptPromise) return googleScriptPromise;
-
-  googleScriptPromise = new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src="https://accounts.google.com/gsi/client"]',
-    );
-    if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener(
-        'error',
-        () => reject(new Error('Failed to load Google Identity Services.')),
-        { once: true },
-      );
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () =>
-      reject(new Error('Failed to load Google Identity Services.'));
-    document.head.appendChild(script);
-  });
-
-  return googleScriptPromise;
-}
+import React, { useState } from 'react';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getFirebaseAuth } from '../lib/firebase';
 
 interface GoogleIdentityButtonProps {
   onCredential: (idToken: string) => void | Promise<void>;
@@ -69,88 +9,103 @@ interface GoogleIdentityButtonProps {
   onError?: (message: string) => void;
 }
 
+const labels = {
+  signin_with: 'Sign in with Google',
+  signup_with: 'Sign up with Google',
+  continue_with: 'Continue with Google',
+} as const;
+
 export const GoogleIdentityButton: React.FC<GoogleIdentityButtonProps> = ({
   onCredential,
   disabled = false,
   text = 'continue_with',
   onError,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const credentialHandlerRef = useRef(onCredential);
-  const errorHandlerRef = useRef(onError);
-  const [ready, setReady] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  credentialHandlerRef.current = onCredential;
-  errorHandlerRef.current = onError;
+  const handleGoogleSignIn = async () => {
+    try {
+      setBusy(true);
+      onError?.('');
 
-  useEffect(() => {
-    let cancelled = false;
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
 
-    loadGoogleIdentityServices()
-      .then(() => {
-        if (cancelled || !containerRef.current || !window.google?.accounts?.id) {
-          return;
-        }
+      const result = await signInWithPopup(getFirebaseAuth(), provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const idToken = credential?.idToken?.trim();
 
-        const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
-        if (!clientId) {
-          throw new Error('Google sign-in is not configured for this deployment.');
-        }
+      if (!idToken) {
+        throw new Error('Google did not return a valid identity token.');
+      }
 
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          auto_select: false,
-          cancel_on_tap_outside: true,
-          callback: (response) => {
-            const credential = response.credential?.trim();
-            if (!credential) {
-              errorHandlerRef.current?.('Google did not return a valid sign-in credential.');
-              return;
-            }
-            void credentialHandlerRef.current(credential);
-          },
-        });
+      await onCredential(idToken);
+    } catch (error: any) {
+      if (error?.code === 'auth/popup-closed-by-user') return;
 
-        containerRef.current.replaceChildren();
-        window.google.accounts.id.renderButton(containerRef.current, {
-          type: 'standard',
-          theme: 'outline',
-          size: 'large',
-          text,
-          shape: 'rectangular',
-          width: Math.min(containerRef.current.clientWidth || 400, 400),
-          logo_alignment: 'left',
-        });
-        setReady(true);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          errorHandlerRef.current?.(
-            error instanceof Error
-              ? error.message
-              : 'Google sign-in is currently unavailable.',
-          );
-        }
-      });
+      if (error?.code === 'auth/popup-blocked') {
+        onError?.('Your browser blocked the Google sign-in popup. Please allow popups and try again.');
+        return;
+      }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [text]);
+      if (error?.code === 'auth/unauthorized-domain') {
+        onError?.('This KiwiShare domain is not authorized in Firebase Authentication.');
+        return;
+      }
+
+      onError?.(
+        error instanceof Error
+          ? error.message
+          : 'Google sign-in is currently unavailable.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const isDisabled = disabled || busy;
 
   return (
-    <div
-      aria-busy={!ready}
+    <button
+      type="button"
+      onClick={handleGoogleSignIn}
+      disabled={isDisabled}
+      aria-busy={busy}
+      className="btn btn-secondary"
       style={{
         width: '100%',
         minHeight: 44,
+        borderRadius: '8px',
+        backgroundColor: '#ffffff',
+        border: '1px solid #dadce0',
+        color: '#3c4043',
+        fontWeight: 600,
         display: 'flex',
+        alignItems: 'center',
         justifyContent: 'center',
-        opacity: disabled ? 0.55 : 1,
-        pointerEvents: disabled ? 'none' : 'auto',
+        gap: '10px',
+        opacity: isDisabled ? 0.6 : 1,
       }}
     >
-      <div ref={containerRef} style={{ width: '100%', maxWidth: 400 }} />
-    </div>
+      <span
+        aria-hidden="true"
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: '50%',
+          border: '1px solid #dadce0',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 800,
+          fontSize: '0.8rem',
+          color: '#4285f4',
+          backgroundColor: '#fff',
+        }}
+      >
+        G
+      </span>
+      <span>{busy ? 'Connecting to Google…' : labels[text]}</span>
+    </button>
   );
 };
