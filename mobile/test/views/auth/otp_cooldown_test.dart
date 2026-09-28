@@ -84,6 +84,7 @@ class FakeCooldownUserRepository implements UserRepository {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? coverImageUrl,
     String? bio,
   }) async => const UserModel(
     id: 'test_u',
