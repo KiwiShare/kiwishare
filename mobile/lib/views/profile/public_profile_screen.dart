@@ -142,12 +142,17 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
       if (auth.jwtToken != token) return;
       await auth.updateCoverImage(url);
       await _loadAll();
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
+        final isServerMismatch = error.toString().contains(
+          'Profile background was not saved',
+        );
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Could not save profile background. Try another image.',
+              isServerMismatch
+                  ? 'Profile background is not supported by the current server version yet.'
+                  : 'Could not save profile background. Try another image.',
             ),
           ),
         );

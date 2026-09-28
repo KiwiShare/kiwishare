@@ -480,11 +480,15 @@ void main() {
 
       // 3. Featured Highlights Jumbo Carousel
       expect(find.text('Featured Highlights'), findsOneWidget);
-      expect(find.text('HOT PICK'), findsWidgets);
+      expect(find.text('Featured'), findsWidgets);
 
       // 4. Recommended for You Section
       expect(find.text('Recommended for You'), findsOneWidget);
       expect(find.text('Top 10'), findsOneWidget);
+      expect(
+        tester.getSize(find.text('Featured Highlights')).height,
+        tester.getSize(find.text('Recommended for You')).height,
+      );
 
       // 5. Open item by tapping recommended card
       await tester.tap(find.text('Monstera Plant').first);
@@ -493,6 +497,29 @@ void main() {
       expect(openedItem!.title, 'Monstera Plant');
     },
   );
+
+  testWidgets('Featured Highlights auto-advances and supports manual paging', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
+
+    expect(find.byKey(const Key('home-featured-carousel')), findsOneWidget);
+    expect(find.text('1/5'), findsOneWidget);
+    expect(find.byKey(const Key('home-featured-dot-0')), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('2/5'), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const Key('home-featured-carousel')),
+      const Offset(-500, 0),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('3/5'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('every Home product card family exposes a heart control', (
     tester,

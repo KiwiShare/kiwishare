@@ -725,7 +725,7 @@ class ItemCard extends StatelessWidget {
                                 fontWeight: FontWeight.w800,
                                 color: item.isFree
                                     ? const Color(0xFF059669)
-                                    : colors.primary,
+                                    : colors.onSurface,
                               ),
                             ),
                           ],

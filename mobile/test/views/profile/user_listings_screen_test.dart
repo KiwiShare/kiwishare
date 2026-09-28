@@ -136,10 +136,10 @@ void main() {
     await tester.pumpWidget(createWidgetUnderTest());
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Promote ('), findsOneWidget);
+    expect(find.text('Promote · 5'), findsOneWidget);
 
     // Tap Promote
-    await tester.tap(find.textContaining('Promote ('));
+    await tester.tap(find.text('Promote · 5'));
     await tester.pumpAndSettle();
 
     // Verify promotion confirmation dialog

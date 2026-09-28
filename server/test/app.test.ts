@@ -261,6 +261,36 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.user.displayName).toBe('Updated User Name');
   });
 
+  test('PATCH /api/users/me - persists public profile cover image', async () => {
+    const coverUser = {
+      email: `cover_${Date.now()}@kiwishare.co.nz`,
+      password: 'password123',
+      displayName: 'Cover Test User'
+    };
+    const register = await request(app.callback())
+      .post('/api/auth/register')
+      .set('x-client-platform', 'mobile_ios')
+      .send(coverUser);
+    expect(register.status).toBe(201);
+
+    const coverToken = register.body.token;
+    const coverUserId = register.body.user.id;
+    const coverImageUrl = 'https://cdn.example.test/profile-cover.jpg';
+    const update = await request(app.callback())
+      .patch('/api/users/me')
+      .set('Authorization', `Bearer ${coverToken}`)
+      .send({ coverImageUrl });
+
+    expect(update.status).toBe(200);
+    expect(update.body.user.coverImageUrl).toBe(coverImageUrl);
+
+    const publicProfile = await request(app.callback()).get(
+      `/api/users/${coverUserId}/public-profile`
+    );
+    expect(publicProfile.status).toBe(200);
+    expect(publicProfile.body.user.coverImageUrl).toBe(coverImageUrl);
+  });
+
   test('GET /api/usedItems - returns used items array', async () => {
     const res = await request(app.callback())
       .get('/api/usedItems');
