@@ -15,6 +15,8 @@ import '../../services/listing_suggestion_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/campus_locations.dart';
 
+const TextStyle _postPlaceholderStyle = TextStyle(color: Color(0xFF94A3B8));
+
 class PostItemScreen extends StatefulWidget {
   final VoidCallback onCancel;
   final VoidCallback? onPostItem;
@@ -862,6 +864,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                               ),
                               decoration: const InputDecoration(
                                 hintText: 'e.g. Solid Wood Desk',
+                                hintStyle: _postPlaceholderStyle,
                               ),
                               validator: _requiredTextValidator,
                             ),
@@ -894,6 +897,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                                       decoration: const InputDecoration(
                                         hintText:
                                             'Describe your item, condition, and details...',
+                                        hintStyle: _postPlaceholderStyle,
                                         alignLabelWithHint: true,
                                         contentPadding: EdgeInsets.fromLTRB(
                                           14,
@@ -1022,6 +1026,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                           decoration: const InputDecoration(
                             prefixText: '\$ ',
                             hintText: 'e.g. 120',
+                            hintStyle: _postPlaceholderStyle,
                           ),
                           validator: _priceValidator,
                         ),
@@ -2283,6 +2288,7 @@ class _CurrentLocationFormFieldState extends State<_CurrentLocationFormField> {
                     decoration: const InputDecoration(
                       labelText: 'Suburb or city',
                       hintText: 'e.g. Auckland Central',
+                      hintStyle: _postPlaceholderStyle,
                     ),
                     onChanged: (value) {
                       setSheetState(() => location = value.trim());
@@ -2357,6 +2363,7 @@ class _CurrentLocationFormFieldState extends State<_CurrentLocationFormField> {
                       decoration: InputDecoration(
                         labelText: 'Location / Campus / Suburb',
                         hintText: 'Type campus or suburb (e.g. UoA, Newmarket)',
+                        hintStyle: _postPlaceholderStyle,
                         prefixIcon: const Icon(Icons.location_on_outlined),
                         errorText: field.errorText,
                       ),
@@ -2487,6 +2494,7 @@ class _MobileSelectionFormField extends StatelessWidget {
               isEmpty: field.value == null,
               decoration: InputDecoration(
                 hintText: hintText,
+                hintStyle: _postPlaceholderStyle,
                 errorText: field.errorText,
                 suffixIcon: const Icon(Icons.chevron_right_rounded),
               ),
