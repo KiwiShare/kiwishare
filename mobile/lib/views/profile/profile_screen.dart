@@ -27,6 +27,7 @@ import '../support/support_chat_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
 import '../../utils/trust_score.dart';
 import 'student_verification_sheet.dart';
+import 'student_verification_benefits_sheet.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
