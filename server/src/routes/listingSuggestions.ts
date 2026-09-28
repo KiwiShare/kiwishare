@@ -47,15 +47,6 @@ function parseInput(body: unknown): ListingSuggestionInput {
   const condition = optionalText(record.condition, 'Condition', 20);
   const location = optionalText(record.location, 'Location', 120);
   const imageBase64 = optionalText(record.imageBase64, 'Image', 10_000_000);
-  const imageMimeType = optionalText(record.imageMimeType, 'Image type', 80);
-  if (
-    imageMimeType &&
-    !['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'].includes(
-      imageMimeType.toLowerCase()
-    )
-  ) {
-    throw new SuggestionInputError('Image type is not supported.');
-  }
 
   if (category && !LISTING_CATEGORIES.includes(category as ListingCategory)) {
     throw new SuggestionInputError('Category is not allowed.');
@@ -75,8 +66,7 @@ function parseInput(body: unknown): ListingSuggestionInput {
     ...(category ? { category: category as ListingCategory } : {}),
     ...(condition ? { condition: condition as ListingCondition } : {}),
     ...(location ? { location } : {}),
-    ...(imageBase64 ? { imageBase64 } : {}),
-    ...(imageMimeType ? { imageMimeType: imageMimeType.toLowerCase() } : {})
+    ...(imageBase64 ? { imageBase64 } : {})
   };
 }
 
