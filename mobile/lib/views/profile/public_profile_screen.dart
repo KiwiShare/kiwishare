@@ -629,12 +629,22 @@ class _HeroProfileHeader extends StatelessWidget {
         : profile.displayName.trim()[0].toUpperCase();
 
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [Color(0xFF047857), Color(0xFF065F46)],
         ),
+        image: profile.coverImageUrl?.trim().isNotEmpty == true
+            ? DecorationImage(
+                image: NetworkImage(profile.coverImageUrl!),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  Colors.black.withOpacity(0.28),
+                  BlendMode.darken,
+                ),
+              )
+            : null,
       ),
       padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
       child: Column(
