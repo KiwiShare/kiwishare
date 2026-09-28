@@ -228,38 +228,6 @@ void main() {
     expect(find.text('NZ Student Verification'), findsNothing);
   });
 
-  testWidgets('profile card exposes background editing directly', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({
-      'jwt_token': 'restored-token',
-      'current_user':
-          '{"id":"user-1","displayName":"Riley","trustScore":120,"isVerified":true}',
-    });
-    final auth = AuthProvider(userRepository: MockUserRepository());
-
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: auth),
-          ChangeNotifierProvider(create: (_) => ThemeProvider()),
-          Provider<NotificationPermissionCoordinator>.value(
-            value: NotificationPermissionCoordinator(
-              permissionController: null,
-              storage: _Storage(),
-            ),
-          ),
-        ],
-        child: const MaterialApp(home: ProfileScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('profile-cover-image')), findsOneWidget);
-    expect(find.byKey(const Key('profile-cover-edit-button')), findsOneWidget);
-    expect(find.text('Edit background'), findsOneWidget);
-  });
-
   testWidgets('Account & security exposes photo, nickname, and password', (
     tester,
   ) async {

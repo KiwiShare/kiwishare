@@ -8,6 +8,7 @@ import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/views/profile/public_profile_screen.dart';
 import 'package:kiwishare/widgets/vip_crown_icon.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakePublicProfileRepository implements UserRepository {
   final PublicProfileModel profile;
@@ -86,6 +87,106 @@ class _FakePublicProfileRepository implements UserRepository {
 }
 
 void main() {
+  testWidgets('own public profile exposes cover editing in the hero', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user_123","displayName":"Auckland Trader","trustScore":95,"isVerified":true}',
+    });
+    const profile = PublicProfileModel(
+      id: 'user_123',
+      displayName: 'Auckland Trader',
+      bio: '',
+      city: 'Auckland',
+      suburb: 'CBD',
+      trustScore: 95,
+      isVip: false,
+      isVerified: true,
+      isStudentVerified: false,
+      rating: 5,
+      reviewCount: 0,
+      activeItemsCount: 0,
+      soldItemsCount: 0,
+    );
+    final repo = _FakePublicProfileRepository(
+      profile: profile,
+      activeItems: [],
+      soldItems: [],
+      reviews: [],
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<UserRepository>.value(value: repo),
+          ChangeNotifierProvider<AuthProvider>(
+            create: (_) => AuthProvider(userRepository: repo),
+          ),
+        ],
+        child: const MaterialApp(home: PublicProfileScreen(userId: 'user_123')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('public-profile-cover-edit-button')),
+      findsOneWidget,
+    );
+    expect(find.text('Change cover'), findsOneWidget);
+  });
+
+  testWidgets('another member public profile does not expose cover editing', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"viewer_456","displayName":"Viewer","trustScore":80,"isVerified":true}',
+    });
+    const profile = PublicProfileModel(
+      id: 'user_123',
+      displayName: 'Auckland Trader',
+      bio: '',
+      city: 'Auckland',
+      suburb: 'CBD',
+      trustScore: 95,
+      isVip: false,
+      isVerified: true,
+      isStudentVerified: false,
+      rating: 5,
+      reviewCount: 0,
+      activeItemsCount: 0,
+      soldItemsCount: 0,
+    );
+    final repo = _FakePublicProfileRepository(
+      profile: profile,
+      activeItems: [],
+      soldItems: [],
+      reviews: [],
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<UserRepository>.value(value: repo),
+          ChangeNotifierProvider<AuthProvider>(
+            create: (_) => AuthProvider(userRepository: repo),
+          ),
+        ],
+        child: const MaterialApp(home: PublicProfileScreen(userId: 'user_123')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('public-profile-cover-edit-button')),
+      findsNothing,
+    );
+    expect(find.text('Change cover'), findsNothing);
+  });
+
   testWidgets(
     'PublicProfileScreen displays Xianyu header, trust score, VIP badge, bio and reviews',
     (tester) async {

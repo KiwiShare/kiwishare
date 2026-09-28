@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/item_model.dart';
@@ -8,6 +9,7 @@ import '../../models/public_profile_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../repositories/user_repository.dart';
+import '../../services/r2_upload_service.dart';
 import '../products/product_detail_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../../widgets/vip_crown_icon.dart';
@@ -32,6 +34,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
   List<ItemModel> _soldItems = [];
   List<PublicReviewModel> _reviews = [];
   bool _isChatStarting = false;
+  bool _coverBusy = false;
 
   @override
   void initState() {
@@ -105,6 +108,52 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
         _errorMessage = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _editCoverImage() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.jwtToken;
+    if (token == null || _coverBusy) return;
+
+    final photo = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (photo == null || !mounted || auth.jwtToken != token) return;
+
+    setState(() => _coverBusy = true);
+    try {
+      final bytes = await photo.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+        throw StateError('Choose an image smaller than 8 MB.');
+      }
+      final url = await R2UploadService().uploadImage(
+        bytes: bytes,
+        fileName: photo.name,
+        contentType:
+            photo.mimeType ??
+            (photo.name.toLowerCase().endsWith('.png')
+                ? 'image/png'
+                : 'image/jpeg'),
+        authToken: token,
+      );
+      if (auth.jwtToken != token) return;
+      await auth.updateCoverImage(url);
+      await _loadAll();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not save profile background. Try another image.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _coverBusy = false);
     }
   }
 
@@ -354,6 +403,23 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
             backgroundColor: isDark
                 ? const Color(0xFF13221C)
                 : const Color(0xFF059669),
+            actions: [
+              if (isOwnProfile)
+                IconButton(
+                  key: const Key('public-profile-cover-edit-button'),
+                  tooltip: 'Change cover',
+                  onPressed: _coverBusy ? null : _editCoverImage,
+                  icon: _coverBusy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.photo_camera_back_outlined),
+                ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: _HeroProfileHeader(
                 profile: p,
