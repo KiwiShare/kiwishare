@@ -6,13 +6,12 @@ import 'package:kiwishare/models/user_model.dart';
 import 'package:kiwishare/providers/providers.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/theme/app_theme.dart';
-import 'package:kiwishare/views/home/home_screen.dart';
+import 'package:kiwishare/views/profile/profile_screen.dart';
 import 'package:kiwishare/views/scanner/qr_scanner_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../meetups/meetup_flow_test.dart';
-import '../../support/test_item_repository.dart';
 
 void main() {
   group('QR Scanner and Home Screen Tests', () {
@@ -28,7 +27,7 @@ void main() {
       });
     });
 
-    testWidgets('HomeScreen opens the QR scanner from its header', (
+    testWidgets('ProfileScreen opens the QR scanner from its header', (
       tester,
     ) async {
       final fakeRepo = FakeMeetupRepository();
@@ -43,16 +42,10 @@ void main() {
             ChangeNotifierProvider.value(value: authProvider),
             ChangeNotifierProvider.value(value: themeProvider),
             ChangeNotifierProvider(create: (_) => FavoritesProvider()),
-            ChangeNotifierProvider(create: (_) => HomeDiscoveryProvider()),
-            ChangeNotifierProvider(create: (_) => SearchProvider()),
-            ChangeNotifierProvider(
-              create: (_) =>
-                  ListingProvider(itemRepository: TestItemRepository()),
-            ),
           ],
           child: MaterialApp(
             theme: buildKiwiShareTheme(),
-            home: const HomeScreen(),
+            home: const ProfileScreen(),
           ),
         ),
       );
@@ -60,7 +53,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 850));
 
-      final scanButton = find.byKey(const Key('home-scan-qr-button'));
+      final scanButton = find.byKey(const Key('profile-scan-qr-button'));
       expect(scanButton, findsOneWidget);
       await tester.tap(scanButton);
       await tester.pump();

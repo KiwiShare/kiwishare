@@ -383,8 +383,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
       return const _ChatMessageState(
         key: Key('chat_signed_out_state'),
         icon: Icons.lock_outline,
-        title: 'Sign in to view your chats',
-        message: 'Your conversations are kept private to your account.',
+        title: 'Please sign in to view your chats',
+        message: 'Your conversations will appear here after you sign in.',
       );
     }
 
