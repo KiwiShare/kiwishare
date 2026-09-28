@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const DEFAULT_GOOGLE_WEB_CLIENT_ID =
-  '353504132004-v9hv2iktcb0164pgsrp9ov41ihc7kba2.apps.googleusercontent.com';
-
 declare global {
   interface Window {
     google?: {
@@ -95,8 +92,10 @@ export const GoogleIdentityButton: React.FC<GoogleIdentityButtonProps> = ({
           return;
         }
 
-        const clientId =
-          import.meta.env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_WEB_CLIENT_ID;
+        const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
+        if (!clientId) {
+          throw new Error('Google sign-in is not configured for this deployment.');
+        }
 
         window.google.accounts.id.initialize({
           client_id: clientId,
