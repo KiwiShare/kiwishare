@@ -326,7 +326,7 @@ export const LoginPage: React.FC = () => {
           <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-subtle)' }} />
         </div>
 
-        {/* Real Google Identity Services sign-in */}
+        {/* Firebase Authentication Google sign-in */}
         <GoogleIdentityButton
           disabled={loading}
           text="continue_with"
