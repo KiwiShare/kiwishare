@@ -86,7 +86,7 @@ describe('listing AI suggestions', () => {
     });
   });
 
-  test('generates suggestion when seller provides only photo imageBase64', async () => {
+  test('generates suggestion when seller provides a photo with MIME type', async () => {
     const provider = new FakeSuggestionProvider();
     setListingSuggestionProviderForTests(provider);
 
@@ -94,13 +94,36 @@ describe('listing AI suggestions', () => {
       .post('/api/listing-suggestions')
       .set('Authorization', `Bearer ${authToken()}`)
       .send({
-        imageBase64: 'dGVzdGltYWdlZGF0YQ=='
+        imageBase64: 'dGVzdGltYWdlZGF0YQ==',
+        imageMimeType: 'IMAGE/HEIC'
       });
 
     expect(response.status).toBe(200);
     expect(response.body.suggestion).toEqual(validSuggestion);
     expect(provider.lastInput).toEqual({
-      imageBase64: 'dGVzdGltYWdlZGF0YQ=='
+      imageBase64: 'dGVzdGltYWdlZGF0YQ==',
+      imageMimeType: 'image/heic'
+    });
+  });
+
+  test('accepts image payloads above the default JSON body limit', async () => {
+    const provider = new FakeSuggestionProvider();
+    setListingSuggestionProviderForTests(provider);
+    const imageBase64 = 'a'.repeat(1_200_000);
+
+    const response = await request(app.callback())
+      .post('/api/listing-suggestions')
+      .set('Authorization', `Bearer ${authToken('large-image-user')}`)
+      .send({
+        imageBase64,
+        imageMimeType: 'image/jpeg'
+      });
+
+    expect(response.status).toBe(200);
+    expect(provider.calls).toBe(1);
+    expect(provider.lastInput).toEqual({
+      imageBase64,
+      imageMimeType: 'image/jpeg'
     });
   });
 
@@ -206,6 +229,62 @@ describe('listing AI suggestions', () => {
 
     expect(blocked.status).toBe(429);
     expect(blocked.headers['retry-after']).toBe('60');
+  });
+
+  test('uses the provided image MIME type in the Gemini request', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          { content: { parts: [{ text: JSON.stringify(validSuggestion) }] } }
+        ]
+      })
+    } as Response);
+    const provider = new GeminiListingSuggestionProvider(
+      'server-secret-key',
+      'gemini-test-model',
+      1000
+    );
+
+    await provider.suggest({
+      imageBase64: 'dGVzdGltYWdlZGF0YQ==',
+      imageMimeType: 'image/heic'
+    });
+
+    const [, options] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(options?.body));
+    expect(body.contents[0].parts[1].inlineData.mimeType).toBe('image/heic');
+  });
+
+  test('maps the retired default Gemini model to 3.5 flash lite', async () => {
+    const previousModel = process.env.GEMINI_MODEL;
+    process.env.GEMINI_MODEL = 'gemini-2.5-flash-lite';
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          { content: { parts: [{ text: JSON.stringify(validSuggestion) }] } }
+        ]
+      })
+    } as Response);
+
+    try {
+      const provider = new GeminiListingSuggestionProvider(
+        'server-secret-key',
+        undefined,
+        1000
+      );
+      await provider.suggest({ title: 'Desk' });
+      expect(String(fetchMock.mock.calls[0][0])).toContain(
+        '/models/gemini-3.5-flash-lite:generateContent'
+      );
+    } finally {
+      if (previousModel == null) {
+        delete process.env.GEMINI_MODEL;
+      } else {
+        process.env.GEMINI_MODEL = previousModel;
+      }
+    }
   });
 
   test('keeps the API key server-side and treats seller text as data', async () => {
