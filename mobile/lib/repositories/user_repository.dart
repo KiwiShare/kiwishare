@@ -75,6 +75,7 @@ abstract class UserRepository {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? coverImageUrl,
     String? bio,
   });
   Future<UserModel> updateBio(String bio, {required String token});
@@ -221,6 +222,7 @@ class RestUserRepository implements UserRepository {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? coverImageUrl,
     String? bio,
   }) async {
     late final http.Response response;
@@ -235,6 +237,7 @@ class RestUserRepository implements UserRepository {
           'username': ?username,
           'displayName': ?displayName,
           'avatarUrl': ?avatarUrl,
+          'coverImageUrl': ?coverImageUrl,
           'bio': ?bio,
         }),
       );
@@ -693,6 +696,7 @@ class MockUserRepository implements UserRepository {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? coverImageUrl,
     String? bio,
   }) async {
     await Future.delayed(const Duration(milliseconds: 200));
@@ -700,6 +704,7 @@ class MockUserRepository implements UserRepository {
       id: 'mock_user_1',
       displayName: displayName ?? 'Mock User',
       avatarUrl: avatarUrl,
+      coverImageUrl: coverImageUrl,
       bio: bio,
       trustScore: 100,
       isVerified: false,
