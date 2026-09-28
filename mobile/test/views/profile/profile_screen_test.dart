@@ -116,7 +116,8 @@ void main() {
 
     // Verify user info and trust badge
     expect(find.text('Riley'), findsWidgets);
-    expect(find.text('Trust score 95'), findsOneWidget);
+    expect(find.text('95 · Needs Improvement'), findsOneWidget);
+    expect(find.text('Needs Improvement'), findsNothing);
     expect(find.byKey(const Key('profile-support-button')), findsOneWidget);
 
     // Verify Xianyu 3-column marketplace action grid (6 modules)
@@ -183,13 +184,80 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Trust score 200+'), findsOneWidget);
+    expect(find.text('200+ · Exceptional Trust'), findsOneWidget);
     expect(
-      tester.getSemantics(find.text('Trust score 200+')).label,
-      contains('Trust score 200+'),
+      tester.getSemantics(find.text('200+ · Exceptional Trust')).label,
+      contains('200+ · Exceptional Trust'),
     );
     expect(find.textContaining('/100'), findsNothing);
     semantics.dispose();
+  });
+
+  testWidgets('verified Student badge opens benefits instead of verification', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":120,"isVerified":true,"isStudentVerified":true,"studentInstitution":"University of Auckland"}',
+    });
+    final auth = AuthProvider(userRepository: _VerifiedStudentRepository());
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          Provider<NotificationPermissionCoordinator>.value(
+            value: NotificationPermissionCoordinator(
+              permissionController: null,
+              storage: _Storage(),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Student').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Student verified'), findsOneWidget);
+    expect(find.text('Stronger trust signal'), findsOneWidget);
+    expect(find.text('NZ Student Verification'), findsNothing);
+  });
+
+  testWidgets('profile card exposes background editing directly', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'restored-token',
+      'current_user':
+          '{"id":"user-1","displayName":"Riley","trustScore":120,"isVerified":true}',
+    });
+    final auth = AuthProvider(userRepository: MockUserRepository());
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          Provider<NotificationPermissionCoordinator>.value(
+            value: NotificationPermissionCoordinator(
+              permissionController: null,
+              storage: _Storage(),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-cover-image')), findsOneWidget);
+    expect(find.byKey(const Key('profile-cover-edit-button')), findsOneWidget);
+    expect(find.text('Edit background'), findsOneWidget);
   });
 
   testWidgets('Account & security exposes photo, nickname, and password', (
@@ -409,5 +477,17 @@ class _FixedProfileRepository extends MockUserRepository {
     displayName: 'Riley',
     trustScore: trustScore,
     isVerified: true,
+  );
+}
+
+class _VerifiedStudentRepository extends MockUserRepository {
+  @override
+  Future<UserModel> fetchProfile(String token) async => UserModel(
+    id: 'user-1',
+    displayName: 'Riley',
+    trustScore: 120,
+    isVerified: true,
+    isStudentVerified: true,
+    studentInstitution: 'University of Auckland',
   );
 }
