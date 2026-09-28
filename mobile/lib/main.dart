@@ -70,10 +70,7 @@ final GoRouter _router = GoRouter(
       navigatorKey: _shellNavigatorKey,
       builder: (context, state, child) => KiwiShareShell(child: child),
       routes: [
-        GoRoute(
-          path: '/home',
-          builder: (context, state) => const HomeScreen(autoLocate: true),
-        ),
+        GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/watchlist',
           builder: (context, state) => const WatchlistScreen(),

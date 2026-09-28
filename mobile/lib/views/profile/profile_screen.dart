@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/r2_upload_service.dart';
+import '../../theme/app_theme.dart';
 
 import '../../models/user_model.dart';
 import '../../providers/providers.dart';
@@ -230,9 +231,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final auth = context.read<AuthProvider>();
     await showDialog<void>(
       context: context,
-      builder: (_) => _EditDisplayNameDialog(
-        initialName: user.displayName,
-        onSave: auth.updateDisplayName,
+      builder: (_) => _EditUsernameDialog(
+        initialUsername: user.username ?? '',
+        onSave: auth.updateUsername,
       ),
     );
   }
@@ -565,9 +566,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text(
-          'Profile',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        toolbarHeight: 72,
+        titleSpacing: 16,
+        title: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+              ),
+              child: Icon(
+                Icons.person_rounded,
+                color: colors.primary,
+                size: 23,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              'Profile',
+              style: theme.textTheme.headlineLarge?.copyWith(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.6,
+              ),
+            ),
+          ],
         ),
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -736,7 +761,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.badge_outlined,
                     iconColor: const Color(0xFF14B8A6),
                     title: 'Username',
-                    subtitle: user.displayName,
+                    subtitle: user.username?.trim().isNotEmpty == true
+                        ? '@${user.username}'
+                        : 'Set a username',
                     onTap: () => _editName(context, user),
                   ),
                   _ModernMenuTile(
@@ -1819,20 +1846,20 @@ class _ModernMenuTile extends StatelessWidget {
   }
 }
 
-class _EditDisplayNameDialog extends StatefulWidget {
-  const _EditDisplayNameDialog({
-    required this.initialName,
+class _EditUsernameDialog extends StatefulWidget {
+  const _EditUsernameDialog({
+    required this.initialUsername,
     required this.onSave,
   });
 
-  final String initialName;
-  final Future<void> Function(String name) onSave;
+  final String initialUsername;
+  final Future<void> Function(String username) onSave;
 
   @override
-  State<_EditDisplayNameDialog> createState() => _EditDisplayNameDialogState();
+  State<_EditUsernameDialog> createState() => _EditUsernameDialogState();
 }
 
-class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
+class _EditUsernameDialogState extends State<_EditUsernameDialog> {
   late final TextEditingController _controller;
   final _formKey = GlobalKey<FormState>();
   String? _failure;
@@ -1841,7 +1868,7 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialName);
+    _controller = TextEditingController(text: widget.initialUsername);
   }
 
   @override
@@ -1856,11 +1883,14 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
     try {
       await widget.onSave(_controller.text);
       if (mounted) Navigator.pop(context);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() {
           _saving = false;
-          _failure = 'Could not save your name. Try again.';
+          final message = error.toString().replaceFirst('Exception: ', '');
+          _failure = message.isEmpty
+              ? 'Could not save that username.'
+              : message;
         });
       }
     }
@@ -1875,15 +1905,21 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
         child: TextFormField(
           controller: _controller,
           autofocus: true,
-          maxLength: 30,
-          textCapitalization: TextCapitalization.words,
+          maxLength: 24,
+          textCapitalization: TextCapitalization.none,
+          autocorrect: false,
           decoration: InputDecoration(
             labelText: 'Username',
+            prefixText: '@',
+            helperText: '3-24 letters, numbers, or underscores',
             errorText: _failure,
           ),
           validator: (value) {
-            final length = value?.trim().length ?? 0;
-            return length < 2 ? 'Enter at least 2 characters.' : null;
+            final username = value?.trim() ?? '';
+            if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(username)) {
+              return 'Use 3-24 letters, numbers, or underscores.';
+            }
+            return null;
           },
         ),
       ),

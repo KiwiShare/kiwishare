@@ -10,6 +10,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val googleMapsApiKey = run {
+    val config = file("google-services.json")
+    if (!config.exists()) "" else {
+        Regex(
+            "\"package_name\"\\s*:\\s*\"app\\.kiwishare\\.android\"[\\s\\S]*?\"current_key\"\\s*:\\s*\"([^\"]+)\""
+        )
+            .find(config.readText())
+            ?.groupValues
+            ?.getOrNull(1)
+            .orEmpty()
+    }
+}
+
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
@@ -32,6 +45,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
     }
 
     signingConfigs {

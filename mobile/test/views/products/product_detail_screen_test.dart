@@ -80,6 +80,78 @@ final _detailItem = ItemModel(
 );
 
 void main() {
+  testWidgets('product images open a swipeable fullscreen gallery', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final item = _detailItem.copyWith(
+      images: const [
+        'https://example.com/one.jpg',
+        'https://example.com/two.jpg',
+      ],
+    );
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: item,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('detail-image-0')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('detail-fullscreen-gallery')), findsOneWidget);
+    expect(find.text('1 / 2'), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const Key('detail-fullscreen-gallery')),
+      const Offset(-600, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 / 2'), findsOneWidget);
+  });
+
+  testWidgets('listing location opens an embedded Google Map', (tester) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: _detailItem,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final locationButton = find
+        .byKey(const Key('detail-location-map-button'))
+        .first;
+    await tester.scrollUntilVisible(
+      locationButton,
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(locationButton);
+    await tester.tap(locationButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Listing location'), findsOneWidget);
+    expect(find.byKey(const Key('product-location-map')), findsOneWidget);
+    expect(find.text('Directions'), findsOneWidget);
+  });
+
   testWidgets('ProductDetailScreen caps public seller trust display at 200+', (
     tester,
   ) async {

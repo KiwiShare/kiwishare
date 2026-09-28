@@ -113,7 +113,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     AppSpacing.lg,
                     AppSpacing.lg,
                     AppSpacing.lg,
-                    AppSpacing.sm,
+                    AppSpacing.lg,
                   ),
                   child: _WatchlistHeader(
                     itemCount: items.length,
@@ -417,10 +417,6 @@ class _WatchlistHeader extends StatelessWidget {
     final countColor = isDark
         ? const Color(0xFF92D4B3)
         : AppColors.brandPrimaryAlt;
-    final subtextColor = isDark
-        ? const Color(0xFF94A3B8)
-        : AppColors.textSecondary;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -470,13 +466,6 @@ class _WatchlistHeader extends StatelessWidget {
               ),
             ),
           ],
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Keep track of pre-loved items you love and watch for updates',
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: subtextColor),
         ),
       ],
     );

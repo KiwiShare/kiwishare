@@ -233,6 +233,47 @@ router.post('/auth/login', async (ctx) => {
   };
 });
 
+function googleUsernameBase(name: string, email: string): string {
+  const source = name.trim() || email.split('@')[0] || 'kiwi_user';
+  let base = source
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 24);
+  if (base.length < 3) {
+    const emailBase = email
+      .split('@')[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    base = (emailBase || 'kiwi_user').slice(0, 24);
+  }
+  return base.length >= 3 ? base : 'kiwi_user';
+}
+
+async function ensureGoogleUsername(
+  user: any,
+  googleName: string,
+  googleEmail: string
+): Promise<void> {
+  if (user.username?.trim()) return;
+  const base = googleUsernameBase(googleName, googleEmail);
+  for (let suffix = 0; suffix < 100; suffix += 1) {
+    const suffixText = suffix === 0 ? '' : String(suffix + 1);
+    const candidate = `${base.slice(0, 24 - suffixText.length)}${suffixText}`;
+    const exists = await User.exists({
+      username: candidate,
+      _id: { $ne: user._id }
+    });
+    if (!exists) {
+      user.username = candidate;
+      return;
+    }
+  }
+  const stableSuffix = user._id.toString().slice(-6).toLowerCase();
+  user.username = `${base.slice(0, 17)}_${stableSuffix}`.slice(0, 24);
+}
+
 // --- 1.1 Passwordless OTP & Google Authentication Endpoints ---
 
 router.post('/auth/send-otp', async (ctx) => {
@@ -695,12 +736,13 @@ router.post('/auth/google', async (ctx) => {
     user.lastUsedPlatform = platform;
     user.lastLoginAt = now;
     user.lastActiveAt = now;
+    await ensureGoogleUsername(user, googleName, googleEmail);
     await user.save();
   } else {
     const role = googleEmail.toLowerCase() === 'admin@kiwishare.online' ? 'admin' : 'user';
     const isStudent = googleEmail.toLowerCase().endsWith('.ac.nz') || googleEmail.toLowerCase().endsWith('.edu');
 
-    user = await User.create({
+    user = new User({
       googleId: googleUid,
       email: googleEmail,
       displayName: googleName || googleEmail.split('@')[0],
@@ -721,6 +763,8 @@ router.post('/auth/google', async (ctx) => {
         watchlistPriceDrop: true
       }
     });
+    await ensureGoogleUsername(user, googleName, googleEmail);
+    await user.save();
   }
 
   const token = jwt.sign({ id: user._id.toString(), email: user.email }, getJwtSecret(), { expiresIn: '7d' });

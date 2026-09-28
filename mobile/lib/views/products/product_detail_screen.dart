@@ -24,6 +24,7 @@ import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/edit_item_sheet.dart';
 import '../shared/widgets/share_bottom_sheet.dart';
+import 'widgets/product_location_map_sheet.dart';
 import '../../providers/order_provider.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -986,8 +987,10 @@ class _ProductHighlightsGrid extends StatelessWidget {
       required String label,
       required String value,
       required Color accentColor,
+      VoidCallback? onTap,
+      Key? tapKey,
     }) {
-      return Container(
+      final tile = Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: 12,
@@ -1055,7 +1058,26 @@ class _ProductHighlightsGrid extends StatelessWidget {
                 ],
               ),
             ),
+            if (onTap != null) ...[
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: colors.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
+            ],
           ],
+        ),
+      );
+      if (onTap == null) return tile;
+      return Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          key: tapKey,
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: tile,
         ),
       );
     }
@@ -1068,8 +1090,10 @@ class _ProductHighlightsGrid extends StatelessWidget {
               child: buildTile(
                 icon: Icons.near_me_rounded,
                 label: 'Location',
-                value: product.location,
+                value: product.displayLocation,
                 accentColor: const Color(0xFF0284C7),
+                onTap: () => showProductLocationMap(context, product),
+                tapKey: const Key('detail-location-map-button'),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -1399,6 +1423,77 @@ class _KiwiShareCommunityCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FullScreenProductGallery extends StatefulWidget {
+  const _FullScreenProductGallery({
+    required this.images,
+    required this.initialIndex,
+  });
+
+  final List<String> images;
+  final int initialIndex;
+
+  @override
+  State<_FullScreenProductGallery> createState() =>
+      _FullScreenProductGalleryState();
+}
+
+class _FullScreenProductGalleryState extends State<_FullScreenProductGallery> {
+  late final PageController _controller;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+    _controller = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          '${_index + 1} / ${widget.images.length}',
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      body: PageView.builder(
+        key: const Key('detail-fullscreen-gallery'),
+        controller: _controller,
+        itemCount: widget.images.length,
+        onPageChanged: (index) => setState(() => _index = index),
+        itemBuilder: (context, index) {
+          return InteractiveViewer(
+            minScale: 1,
+            maxScale: 4,
+            child: Center(
+              child: Image.network(
+                widget.images[index],
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const Icon(
+                  Icons.image_not_supported_outlined,
+                  color: Colors.white54,
+                  size: 64,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1740,18 +1835,34 @@ class _ProductImageGallery extends StatelessWidget {
             onPageChanged: onPageChanged,
             itemCount: images.length,
             itemBuilder: (context, index) {
-              return ColoredBox(
-                color: isDark
-                    ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.3)
-                    : AppColors.surfaceMuted,
-                child: Image.network(
-                  images[index],
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Center(
-                    child: Icon(
-                      Icons.image_not_supported_outlined,
-                      size: 56,
-                      color: theme.colorScheme.primary.withOpacity(0.4),
+              return GestureDetector(
+                key: Key('detail-image-$index'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => _FullScreenProductGallery(
+                        images: images,
+                        initialIndex: index,
+                      ),
+                    ),
+                  );
+                },
+                child: ColoredBox(
+                  color: isDark
+                      ? theme.colorScheme.surfaceContainerHighest.withOpacity(
+                          0.3,
+                        )
+                      : AppColors.surfaceMuted,
+                  child: Image.network(
+                    images[index],
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Center(
+                      child: Icon(
+                        Icons.image_not_supported_outlined,
+                        size: 56,
+                        color: theme.colorScheme.primary.withOpacity(0.4),
+                      ),
                     ),
                   ),
                 ),
