@@ -26,7 +26,6 @@ export interface ListingSuggestionInput {
   condition?: ListingCondition;
   location?: string;
   imageBase64?: string;
-  imageMimeType?: string;
 }
 
 export interface ListingSuggestion {
@@ -44,16 +43,8 @@ export interface ListingSuggestionProvider {
 export class ListingSuggestionUnavailableError extends Error {}
 export class InvalidListingSuggestionError extends Error {}
 
-const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 const REQUEST_TIMEOUT_MS = 12_000;
-
-function normalizeGeminiModel(model?: string): string {
-  const configured = model?.trim();
-  if (!configured || configured === 'gemini-2.5-flash-lite') {
-    return DEFAULT_MODEL;
-  }
-  return configured;
-}
 
 const outputSchema = {
   type: 'OBJECT',
@@ -128,7 +119,7 @@ function responseText(payload: unknown): string | null {
 export class GeminiListingSuggestionProvider implements ListingSuggestionProvider {
   constructor(
     private readonly apiKey = process.env.GEMINI_API_KEY?.trim(),
-    private readonly model = normalizeGeminiModel(process.env.GEMINI_MODEL),
+    private readonly model = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL,
     private readonly requestTimeoutMs = REQUEST_TIMEOUT_MS
   ) {}
 
@@ -146,7 +137,7 @@ export class GeminiListingSuggestionProvider implements ListingSuggestionProvide
       if (input.imageBase64) {
         parts.push({
           inlineData: {
-            mimeType: input.imageMimeType || 'image/jpeg',
+            mimeType: 'image/jpeg',
             data: input.imageBase64
           }
         });
