@@ -700,6 +700,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     user: user,
                     onEdit: () => _editName(context, user),
                     onStudentTap: () => _showStudentVerification(context),
+                    onCoverEdit: _editCoverImage,
+                    coverBusy: _coverBusy,
                   )
                 : _GuestHeader(
                     onLogin: () => _showLogin(context),
@@ -970,14 +972,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+class _ProfileCoverPlaceholder extends StatelessWidget {
+  const _ProfileCoverPlaceholder({required this.scheme});
+
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.7),
+            scheme.secondaryContainer.withValues(alpha: 0.55),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.panorama_outlined,
+          size: 28,
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+        ),
+      ),
+    );
+  }
+}
+
 class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.user,
     required this.onEdit,
+    required this.onCoverEdit,
+    required this.coverBusy,
     this.onStudentTap,
   });
   final UserModel user;
   final VoidCallback onEdit;
+  final VoidCallback onCoverEdit;
+  final bool coverBusy;
   final VoidCallback? onStudentTap;
 
   @override
@@ -1007,30 +1042,69 @@ class _ProfileHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (user.coverImageUrl?.trim().isNotEmpty == true) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: SizedBox(
-                key: const Key('profile-cover-image'),
-                width: double.infinity,
-                height: 108,
-                child: Image.network(
-                  user.coverImageUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest,
-                    ),
-                    child: Icon(
-                      Icons.panorama_outlined,
-                      color: scheme.onSurfaceVariant,
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SizedBox(
+                  key: const Key('profile-cover-image'),
+                  width: double.infinity,
+                  height: 108,
+                  child: user.coverImageUrl?.trim().isNotEmpty == true
+                      ? Image.network(
+                          user.coverImageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) =>
+                              _ProfileCoverPlaceholder(scheme: scheme),
+                        )
+                      : _ProfileCoverPlaceholder(scheme: scheme),
+                ),
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Material(
+                  color: scheme.surface.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(999),
+                  child: InkWell(
+                    key: const Key('profile-cover-edit-button'),
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: coverBusy ? null : onCoverEdit,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 7,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (coverBusy)
+                            const SizedBox.square(
+                              dimension: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          else
+                            const Icon(
+                              Icons.photo_camera_back_outlined,
+                              size: 16,
+                            ),
+                          const SizedBox(width: 6),
+                          Text(
+                            coverBusy ? 'Saving...' : 'Edit background',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-          ],
+            ],
+          ),
+          const SizedBox(height: 14),
           // ── Top User Info Row ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
