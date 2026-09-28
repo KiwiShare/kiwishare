@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 Widget _watchlistApp({
   required WatchlistRepository repository,
   ValueChanged<ItemModel>? onOpenItem,
-  String? token,
+  String? token = 'test-token',
   NotificationPreferencesRepository? preferencesRepository,
   TextScaler textScaler = TextScaler.noScaling,
 }) {
@@ -63,6 +63,18 @@ final _testItem2 = ItemModel(
 );
 
 void main() {
+  testWidgets('Watchlist shows a sign-in state when logged out', (
+    tester,
+  ) async {
+    final repo = _RecoveringWatchlistRepository();
+    await tester.pumpWidget(_watchlistApp(repository: repo, token: null));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Please sign in to view your Watchlist'), findsOneWidget);
+    expect(find.text('Could not load your Watchlist.'), findsNothing);
+    expect(repo.shouldFail, isTrue);
+  });
+
   testWidgets('Watchlist displays empty state when no items are watched', (
     tester,
   ) async {

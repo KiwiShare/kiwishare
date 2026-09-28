@@ -267,6 +267,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       return;
     }
 
+    final auth = context.read<AuthProvider?>();
+    final userId = widget.currentUserId ?? auth?.currentUser?.id;
+    final ownsListing =
+        userId != null &&
+        (userId == product.ownerId || userId == product.seller?.id);
+    if (ownsListing) {
+      if (mounted) {
+        _showMessage('You can’t add your own listing to your Watchlist.');
+      }
+      return;
+    }
+
     WatchlistMutationResult result;
     try {
       result = await watchlist.toggleWatch(product.id, item: product);
@@ -519,14 +531,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           userId == product.seller?.id);
                   return _ProductActions(
                     product: product,
-                    watchlist: watchlist,
                     ownsListing: ownsListing,
                     onEditListing:
                         ownsListing && product.status != ItemStatus.sold
                         ? () => _editListing(product)
                         : null,
-                    onToggleWatch: () =>
-                        _requestWatchlistToggle(watchlist, product),
                     messageSellerEnabled: false,
                     isStartingConversation: false,
                     onMessageSeller: null,
@@ -546,13 +555,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         product.status == ItemStatus.active && !ownsListing;
                     return _ProductActions(
                       product: product,
-                      watchlist: watchlist,
                       ownsListing: ownsListing,
                       onEditListing: product.status == ItemStatus.sold
                           ? null
                           : () => _editListing(product),
-                      onToggleWatch: () =>
-                          _requestWatchlistToggle(watchlist, product),
                       messageSellerEnabled: canMessage,
                       isStartingConversation: chatProvider
                           .isStartingConversation(product.id),
@@ -1401,8 +1407,6 @@ class _KiwiShareCommunityCard extends StatelessWidget {
 class _ProductActions extends StatelessWidget {
   const _ProductActions({
     required this.product,
-    required this.watchlist,
-    required this.onToggleWatch,
     required this.messageSellerEnabled,
     required this.isStartingConversation,
     required this.onMessageSeller,
@@ -1414,8 +1418,6 @@ class _ProductActions extends StatelessWidget {
   });
 
   final ItemModel product;
-  final WatchlistProvider watchlist;
-  final VoidCallback onToggleWatch;
   final bool messageSellerEnabled;
   final bool isStartingConversation;
   final VoidCallback? onMessageSeller;
@@ -1428,7 +1430,6 @@ class _ProductActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isWatched = watchlist.isWatched(product.id);
     final useVerticalLayout = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
 
     final editButton = FilledButton.icon(
@@ -1486,53 +1487,6 @@ class _ProductActions extends StatelessWidget {
       icon: Icon(
         Icons.handshake_outlined,
         color: onScheduleMeetup != null ? theme.colorScheme.primary : null,
-      ),
-    );
-
-    final watchButton = OutlinedButton.icon(
-      key: const Key('detail-watch-action-button'),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 50),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.medium),
-        ),
-        side: BorderSide(
-          color: isWatched
-              ? const Color(0xFFEF4444)
-              : theme.colorScheme.outline.withOpacity(0.5),
-        ),
-        backgroundColor: isWatched
-            ? theme.brightness == Brightness.dark
-                  ? const Color(0xFF3A1D22)
-                  : const Color(0xFFFFF1F2)
-            : theme.brightness == Brightness.dark
-            ? theme.colorScheme.primaryContainer.withOpacity(0.42)
-            : AppColors.surfaceMuted,
-        foregroundColor: isWatched
-            ? const Color(0xFFEF4444)
-            : theme.colorScheme.onSurface,
-      ),
-      onPressed: onToggleWatch,
-      icon: Icon(
-        isWatched ? Icons.favorite : Icons.favorite_border,
-        size: 18,
-        color: isWatched
-            ? const Color(0xFFEF4444)
-            : theme.colorScheme.onSurface,
-      ),
-      label: Text(
-        isWatched ? 'Watchlisted' : 'Watchlist',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        softWrap: false,
-        style: GoogleFonts.inter(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: isWatched
-              ? const Color(0xFFEF4444)
-              : theme.colorScheme.onSurface,
-        ),
       ),
     );
 
@@ -1615,22 +1569,17 @@ class _ProductActions extends StatelessWidget {
                       children: [
                         messageButton,
                         const SizedBox(width: AppSpacing.sm),
-                        Expanded(child: watchButton),
-                        const SizedBox(width: AppSpacing.sm),
                         Expanded(child: buyNowButton),
                       ],
                     ),
                   ] else ...[
-                    Row(
-                      children: [
-                        if (onScheduleMeetup != null) ...[
-                          meetupButton,
-                          const SizedBox(width: AppSpacing.sm),
-                        ],
-                        Expanded(child: watchButton),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
+                    if (onScheduleMeetup != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: meetupButton,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
                     if (messageSellerEnabled)
                       Row(
                         children: [
@@ -1682,16 +1631,11 @@ class _ProductActions extends StatelessWidget {
                     meetupButton,
                     const SizedBox(width: AppSpacing.sm),
                   ],
-                  // For non-owner: show message icon on left + equal sized Watchlist & Buy Now buttons on right
                   if (!ownsListing && onBuyNow != null) ...[
                     messageButton,
                     const SizedBox(width: AppSpacing.sm),
-                    Expanded(child: watchButton),
-                    const SizedBox(width: AppSpacing.sm),
                     Expanded(child: buyNowButton),
                   ] else ...[
-                    Expanded(flex: 3, child: watchButton),
-                    const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       flex: 5,
                       child: FilledButton.icon(

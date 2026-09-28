@@ -23,6 +23,7 @@ import 'user_orders_screen.dart';
 import 'settings_screen.dart';
 import 'public_profile_screen.dart';
 import '../support/support_chat_screen.dart';
+import '../scanner/qr_scanner_screen.dart';
 import '../../utils/trust_score.dart';
 import 'student_verification_sheet.dart';
 
@@ -95,8 +96,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(sheet, 'camera'),
+            ),
+            ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose profile photo'),
+              title: const Text('Choose from photo library'),
               onTap: () => Navigator.pop(sheet, 'photo'),
             ),
             ListTile(
@@ -112,9 +118,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _avatarBusy = true);
     try {
       var url = '';
-      if (choice == 'photo') {
+      if (choice == 'photo' || choice == 'camera') {
         final photo = await ImagePicker().pickImage(
-          source: ImageSource.gallery,
+          source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
           maxWidth: 1024,
           imageQuality: 85,
         );
@@ -557,9 +563,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         user?.authProvider == null || user?.authProvider == 'email_password';
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0C1310)
-          : const Color(0xFFF7F8F6),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           'Profile',
@@ -569,6 +573,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
         actions: [
+          IconButton(
+            key: const Key('profile-scan-qr-button'),
+            icon: const Icon(Icons.qr_code_scanner_rounded, size: 24),
+            tooltip: 'Scan QR Code',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const QrScannerScreen()),
+            ),
+          ),
           IconButton(
             key: const Key('profile-support-button'),
             icon: const Icon(Icons.support_agent_rounded, size: 24),

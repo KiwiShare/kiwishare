@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/item_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/watchlist_provider.dart';
 import '../../theme/app_theme.dart';
 
@@ -25,6 +26,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final watchlist = context.read<WatchlistProvider>();
+      final token = context.read<AuthProvider?>()?.jwtToken;
+      final signedIn =
+          (token != null && token.isNotEmpty) || watchlist.isAuthenticated;
+      if (!signedIn) return;
       watchlist.loadWatchlist();
       watchlist.loadNotificationPreference();
     });
@@ -68,6 +73,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   @override
   Widget build(BuildContext context) {
     final watchlist = context.watch<WatchlistProvider>();
+    final token = context.watch<AuthProvider?>()?.jwtToken;
+    final signedIn =
+        (token != null && token.isNotEmpty) || watchlist.isAuthenticated;
     final items = watchlist.watchlistItems;
 
     final query = _searchController.text.trim().toLowerCase();
@@ -93,7 +101,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () => watchlist.loadWatchlist(forceRefresh: true),
+          onRefresh: signedIn
+              ? () => watchlist.loadWatchlist(forceRefresh: true)
+              : () async {},
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
@@ -253,7 +263,12 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     ),
                   ),
                 ),
-              if (watchlist.isLoading && items.isEmpty)
+              if (!signedIn)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _SignedOutWatchlistView(),
+                )
+              else if (watchlist.isLoading && items.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -328,6 +343,33 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       ),
     );
   }
+}
+
+class _SignedOutWatchlistView extends StatelessWidget {
+  const _SignedOutWatchlistView();
+
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Padding(
+      padding: EdgeInsets.all(AppSpacing.xxl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: 48),
+          SizedBox(height: AppSpacing.md),
+          Text(
+            'Please sign in to view your Watchlist',
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: AppSpacing.sm),
+          Text(
+            'Your saved items will appear here after you sign in.',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _WatchlistErrorView extends StatelessWidget {

@@ -12,7 +12,6 @@ import '../../services/product_location_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/resilient_network_image.dart';
 import '../../widgets/kiwishare_logo.dart';
-import '../scanner/qr_scanner_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
 import '../shared/widgets/watchlist_heart_button.dart';
@@ -270,12 +269,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   location: filters.selectedLocation,
                   nearYou: filters.isNearYou,
                   onChooseLocation: _showLocationPicker,
-                  onScanQr: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const QrScannerScreen(),
-                    ),
-                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
@@ -484,13 +477,11 @@ class _HomeHeader extends StatelessWidget {
   final String location;
   final bool nearYou;
   final VoidCallback onChooseLocation;
-  final VoidCallback onScanQr;
 
   const _HomeHeader({
     required this.location,
     required this.nearYou,
     required this.onChooseLocation,
-    required this.onScanQr,
   });
 
   @override
@@ -527,14 +518,6 @@ class _HomeHeader extends StatelessWidget {
             ],
           ),
         ),
-        IconButton(
-          key: const Key('home-scan-qr-button'),
-          icon: const Icon(Icons.qr_code_scanner_rounded, size: 24),
-          tooltip: 'Scan QR Code',
-          onPressed: onScanQr,
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
-        const SizedBox(width: 4),
         TextButton.icon(
           key: const Key('home-location-button'),
           onPressed: onChooseLocation,
@@ -546,7 +529,6 @@ class _HomeHeader extends StatelessWidget {
             backgroundColor: colors.surfaceContainerHigh,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.full),
-              side: BorderSide(color: colors.outlineVariant),
             ),
           ),
           icon: Icon(
