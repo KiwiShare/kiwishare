@@ -125,7 +125,7 @@ export const AdminReportsPanel: React.FC = () => {
                     </div>
                   </td>
                   <td style={{ padding: '14px 16px', fontSize: '0.84rem', textTransform: 'capitalize' }}>
-                    {report.reason.replaceAll('_', ' ')}
+                    {report.reason.replace(/_/g, ' ')}
                   </td>
                   <td style={{ padding: '14px 16px', maxWidth: '360px', whiteSpace: 'pre-wrap', fontSize: '0.84rem' }}>
                     {report.details}

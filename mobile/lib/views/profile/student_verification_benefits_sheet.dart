@@ -9,8 +9,9 @@ Future<void> showStudentVerificationBenefitsSheet(
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    isScrollControlled: true,
     builder: (sheetContext) => SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -26,7 +27,10 @@ Future<void> showStudentVerificationBenefitsSheet(
                     children: [
                       const Text(
                         'Student verified',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       Text(
                         user.studentInstitution ?? 'New Zealand university',
@@ -41,17 +45,20 @@ Future<void> showStudentVerificationBenefitsSheet(
             const _Benefit(
               icon: Icons.verified_user_outlined,
               title: 'Stronger trust signal',
-              body: 'Your student badge shows that your university account has been verified.',
+              body:
+                  'Your student badge shows that your university account has been verified.',
             ),
             const _Benefit(
               icon: Icons.trending_up_rounded,
               title: 'Trust score benefit',
-              body: 'First-time verification includes a one-time trust score bonus.',
+              body:
+                  'First-time verification includes a one-time trust score bonus.',
             ),
             const _Benefit(
               icon: Icons.groups_2_outlined,
               title: 'Safer campus trading',
-              body: 'Verified status adds confidence to campus meetups and peer-to-peer trading.',
+              body:
+                  'Verified status adds confidence to campus meetups and peer-to-peer trading.',
             ),
             const SizedBox(height: 6),
             SizedBox(
@@ -69,11 +76,7 @@ Future<void> showStudentVerificationBenefitsSheet(
 }
 
 class _Benefit extends StatelessWidget {
-  const _Benefit({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
+  const _Benefit({required this.icon, required this.title, required this.body});
 
   final IconData icon;
   final String title;
@@ -81,23 +84,23 @@ class _Benefit extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 20, color: const Color(0xFF2563EB)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(body, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: const Color(0xFF2563EB)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(body, style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
