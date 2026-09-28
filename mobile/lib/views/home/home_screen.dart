@@ -210,8 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showLocationPicker() {
-    final filters = context.read<HomeDiscoveryProvider>()
-      ..setView(HomeProductView.map);
+    final filters = context.read<HomeDiscoveryProvider>();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -229,14 +228,12 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final location = await _locationService.getCurrentLocation();
       if (!mounted) return;
-      context.read<HomeDiscoveryProvider>()
-        ..setLocation(
-          location.city,
-          nearYou: true,
-          latitude: location.latitude,
-          longitude: location.longitude,
-        )
-        ..setView(HomeProductView.map);
+      context.read<HomeDiscoveryProvider>().setLocation(
+        location.city,
+        nearYou: true,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      );
     } on ProductLocationException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -543,30 +540,11 @@ class _HomeHeader extends StatelessWidget {
                 color: colors.primary,
                 fontWeight: FontWeight.w700,
               ),
-              child: nearYou
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Near you'),
-                        if (location.isNotEmpty &&
-                            location !=
-                                HomeDiscoveryProvider.allLocationsLabel) ...[
-                          const SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              '($location)',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ],
-                    )
-                  : Text(
-                      location,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+              child: Text(
+                location,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ),
@@ -1649,13 +1627,11 @@ class _NzCascadingLocationSheetState extends State<_NzCascadingLocationSheet> {
 
   void _selectLocation(String location) {
     final coords = NzLocations.getApproximateCoordinates(location);
-    widget.filters
-      ..setLocation(
-        location,
-        latitude: coords?.latitude,
-        longitude: coords?.longitude,
-      )
-      ..setView(HomeProductView.map);
+    widget.filters.setLocation(
+      location,
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+    );
     Navigator.pop(context);
   }
 

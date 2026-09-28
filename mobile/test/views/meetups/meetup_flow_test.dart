@@ -220,6 +220,8 @@ void main() {
           orderId: 'order-123',
           scheduledAt: DateTime(2026, 9, 10, 14, 0),
           locationName: 'UoA Engineering Quad',
+          latitude: -36.8520,
+          longitude: 174.7703,
           proposalStatus: 'proposed',
           proposedBy: 'other-user',
         );
@@ -244,6 +246,8 @@ void main() {
 
         expect(find.text('Meetup Proposed'), findsOneWidget);
         expect(find.text('UoA Engineering Quad'), findsOneWidget);
+        expect(find.byKey(const Key('meetup_map_order-123')), findsOneWidget);
+        expect(find.text('Open map'), findsOneWidget);
         expect(find.text('Accept'), findsOneWidget);
         expect(find.text('Decline'), findsOneWidget);
       },

@@ -10,6 +10,7 @@ import {
   UserProfile 
 } from '../api/client';
 import { PostItemModal } from '../components/PostItemModal';
+import { AdminReportsPanel } from '../components/AdminReportsPanel';
 import { parseSafeInteger } from '../utils/trustScore';
 import { 
   ShieldCheck, 
@@ -43,14 +44,15 @@ import {
   X,
   Coins,
   Edit2,
-  Shield
+  Shield,
+  Flag
 } from 'lucide-react';
 
 export const AdminDashboardPage: React.FC = () => {
   const { user, isLoggedIn } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'categories' | 'items' | 'users'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'categories' | 'items' | 'users' | 'reports'>('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [items, setItems] = useState<UsedItem[]>([]);
@@ -449,6 +451,26 @@ export const AdminDashboardPage: React.FC = () => {
         >
           <Users size={18} />
           <span>User Management ({usersList.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('reports')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '12px 20px',
+            fontWeight: 700,
+            fontSize: '0.95rem',
+            color: activeTab === 'reports' ? 'var(--primary-700)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'reports' ? '3px solid var(--primary-600)' : '3px solid transparent',
+            background: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          <Flag size={18} />
+          <span>Safety Reports</span>
         </button>
 
         <button
@@ -1176,6 +1198,8 @@ export const AdminDashboardPage: React.FC = () => {
       )}
 
       {/* TAB 3: Product Moderation */}
+      {activeTab === 'reports' && <AdminReportsPanel />}
+
       {activeTab === 'items' && (
         <div className="animate-fade-in">
           

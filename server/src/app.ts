@@ -9,6 +9,8 @@ import Router from 'koa-router';
 
 const app = new Koa();
 const rootRouter = new Router();
+const defaultBodyParser = bodyParser();
+const listingSuggestionBodyParser = bodyParser({ jsonLimit: '12mb' });
 
 // Hook in root endpoints
 rootRouter.get('/', (ctx) => {
@@ -28,7 +30,13 @@ rootRouter.get('/health', (ctx) => {
 // Hook in logger, cors, body parser, and centralized error filter
 app.use(loggerMiddleware);
 app.use(corsMiddleware);
-app.use(bodyParser());
+app.use(async (ctx, next) => {
+  const parser =
+    ctx.method === 'POST' && ctx.path === '/api/listing-suggestions'
+      ? listingSuggestionBodyParser
+      : defaultBodyParser;
+  await parser(ctx, next);
+});
 app.use(errorHandler);
 
 // Enable security headers to prevent tech-stack finger printing

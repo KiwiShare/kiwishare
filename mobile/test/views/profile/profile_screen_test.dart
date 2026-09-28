@@ -198,7 +198,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'jwt_token': 'restored-token',
       'current_user':
-          '{"id":"user-1","displayName":"Riley","trustScore":95,"isVerified":true,"authProvider":"email_password"}',
+          '{"id":"user-1","displayName":"Riley","username":"riley","trustScore":95,"isVerified":true,"authProvider":"email_password"}',
     });
     final auth = AuthProvider(userRepository: MockUserRepository());
 
@@ -222,7 +222,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('Profile photo'), 100);
     expect(find.text('Profile photo'), findsOneWidget);
     expect(find.text('Username'), findsOneWidget);
-    expect(find.text('Riley'), findsWidgets);
+    expect(find.text('@riley'), findsOneWidget);
     expect(find.text('Change password'), findsOneWidget);
   });
 

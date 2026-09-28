@@ -4,6 +4,7 @@ class UserModel {
   final String? email;
   final String? username;
   final String? avatarUrl;
+  final String? coverImageUrl;
   final String? bio;
   final int trustScore;
   final bool isVerified;
@@ -22,6 +23,7 @@ class UserModel {
     this.email,
     this.username,
     this.avatarUrl,
+    this.coverImageUrl,
     this.bio,
     required this.trustScore,
     required this.isVerified,
@@ -42,6 +44,7 @@ class UserModel {
     String? email,
     String? username,
     String? avatarUrl,
+    String? coverImageUrl,
     String? bio,
     int? trustScore,
     bool? isVerified,
@@ -60,6 +63,7 @@ class UserModel {
       email: email ?? this.email,
       username: username ?? this.username,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      coverImageUrl: coverImageUrl ?? this.coverImageUrl,
       bio: bio ?? this.bio,
       trustScore: trustScore ?? this.trustScore,
       isVerified: isVerified ?? this.isVerified,
@@ -82,6 +86,7 @@ class UserModel {
       'email': email,
       'username': username,
       'avatarUrl': avatarUrl,
+      'coverImageUrl': coverImageUrl,
       'bio': bio,
       'trustScore': trustScore,
       'isVerified': isVerified,
@@ -104,6 +109,7 @@ class UserModel {
       email: map['email']?.toString(),
       username: map['username']?.toString(),
       avatarUrl: map['avatarUrl'] as String?,
+      coverImageUrl: map['coverImageUrl'] as String?,
       bio: map['bio'] as String?,
       trustScore: (map['trustScore'] is num)
           ? (map['trustScore'] as num).toInt()
@@ -139,6 +145,7 @@ class UserModel {
         other.email == email &&
         other.username == username &&
         other.avatarUrl == avatarUrl &&
+        other.coverImageUrl == coverImageUrl &&
         other.trustScore == trustScore &&
         other.isVerified == isVerified &&
         other.authProvider == authProvider &&
@@ -153,6 +160,7 @@ class UserModel {
       email,
       username,
       avatarUrl,
+      coverImageUrl,
       trustScore,
       isVerified,
       authProvider,

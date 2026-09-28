@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kiwishare/main.dart';
@@ -181,16 +181,16 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('home-products-map')), findsOneWidget);
-    final map = tester.widget<FlutterMap>(
+    final map = tester.widget<GoogleMap>(
       find.byKey(const Key('home-products-map')),
     );
-    expect(map.options.minZoom, HomeProductMap.minimumZoom);
-    expect(map.options.maxZoom, HomeProductMap.maximumZoom);
-    expect(map.options.cameraConstraint, isA<ContainCameraCenter>());
-    final tiles = tester.widget<TileLayer>(find.byType(TileLayer));
-    expect(tiles.urlTemplate, HomeProductMap.tileUrl);
-    expect(tiles.urlTemplate, contains('openstreetmap'));
-    expect(find.byKey(const Key('home-product-marker-item_1')), findsOneWidget);
+    expect(map.minMaxZoomPreference.minZoom, HomeProductMap.minimumZoom);
+    expect(map.minMaxZoomPreference.maxZoom, HomeProductMap.maximumZoom);
+    expect(map.mapType, MapType.normal);
+    expect(
+      map.markers.any((marker) => marker.markerId.value == 'product-item_1'),
+      isTrue,
+    );
     expect(find.byKey(const Key('home-map-locate-me')), findsOneWidget);
   });
 
@@ -204,21 +204,21 @@ void main() {
     await tester.tap(find.byKey(const Key('home-near-you-option')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Near you'), findsOneWidget);
-    expect(find.text('(Auckland)'), findsOneWidget);
-    expect(find.byKey(const Key('home-products-map')), findsOneWidget);
+    expect(find.text('Auckland'), findsWidgets);
+    expect(find.text('Near you'), findsNothing);
+    expect(find.byKey(const Key('home-products-map')), findsNothing);
     expect(find.text('2 items'), findsOneWidget);
-    expect(find.byKey(const Key('home-product-marker-item_1')), findsOneWidget);
-    expect(find.byKey(const Key('home-product-marker-item_6')), findsOneWidget);
   });
 
-  testWidgets('autoLocate detects current GPS city on launch', (tester) async {
-    await _loadHome(tester, _homeApp(autoLocate: true));
+  testWidgets('Home launch defaults to Auckland without requesting GPS', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Near you'), findsOneWidget);
-    expect(find.text('(Auckland)'), findsOneWidget);
-    expect(find.text('2 items'), findsOneWidget);
+    expect(find.text('Auckland CBD'), findsWidgets);
+    expect(find.text('Near you'), findsNothing);
+    expect(find.byKey(const Key('home-products-map')), findsNothing);
   });
 
   testWidgets('denied location keeps conventional Home browsing available', (

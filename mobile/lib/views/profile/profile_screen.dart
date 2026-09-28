@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/r2_upload_service.dart';
+import '../../theme/app_theme.dart';
 
 import '../../models/user_model.dart';
 import '../../providers/providers.dart';
@@ -26,6 +27,7 @@ import '../support/support_chat_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
 import '../../utils/trust_score.dart';
 import 'student_verification_sheet.dart';
+import 'student_verification_benefits_sheet.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -38,6 +40,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _loadedToken;
   String? _refreshError;
   bool _avatarBusy = false;
+  bool _coverBusy = false;
 
   @override
   void didChangeDependencies() {
@@ -158,6 +161,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _editCoverImage() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.jwtToken;
+    if (token == null || _coverBusy) return;
+    final photo = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (photo == null || !mounted || auth.jwtToken != token) return;
+    setState(() => _coverBusy = true);
+    try {
+      final bytes = await photo.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+        throw StateError('Choose an image smaller than 8 MB.');
+      }
+      final url = await R2UploadService().uploadImage(
+        bytes: bytes,
+        fileName: photo.name,
+        contentType:
+            photo.mimeType ??
+            (photo.name.toLowerCase().endsWith('.png')
+                ? 'image/png'
+                : 'image/jpeg'),
+        authToken: token,
+      );
+      if (auth.jwtToken != token) return;
+      await auth.updateCoverImage(url);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save profile background. Try another image.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _coverBusy = false);
+    }
+  }
+
   Future<void> _showLogin(BuildContext context) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -230,14 +274,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final auth = context.read<AuthProvider>();
     await showDialog<void>(
       context: context,
-      builder: (_) => _EditDisplayNameDialog(
-        initialName: user.displayName,
-        onSave: auth.updateDisplayName,
+      builder: (_) => _EditUsernameDialog(
+        initialUsername: user.username ?? '',
+        onSave: auth.updateUsername,
       ),
     );
   }
 
   Future<void> _showStudentVerification(BuildContext context) async {
+    final user = context.read<AuthProvider>().currentUser;
+    if (user?.isStudentVerified == true) {
+      await showStudentVerificationBenefitsSheet(context, user!);
+      return;
+    }
     await showStudentVerificationSheet(context);
   }
 
@@ -565,9 +614,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text(
-          'Profile',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        toolbarHeight: 72,
+        titleSpacing: 16,
+        title: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+              ),
+              child: Icon(
+                Icons.person_rounded,
+                color: colors.primary,
+                size: 23,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              'Profile',
+              style: theme.textTheme.headlineLarge?.copyWith(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.6,
+              ),
+            ),
+          ],
         ),
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -733,10 +806,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: _editAvatar,
                   ),
                   _ModernMenuTile(
+                    icon: Icons.panorama_outlined,
+                    iconColor: const Color(0xFF8B5CF6),
+                    title: _coverBusy
+                        ? 'Saving background...'
+                        : 'Profile background',
+                    subtitle: 'Image shown on your public profile',
+                    onTap: _editCoverImage,
+                  ),
+                  _ModernMenuTile(
                     icon: Icons.badge_outlined,
                     iconColor: const Color(0xFF14B8A6),
                     title: 'Username',
-                    subtitle: user.displayName,
+                    subtitle: user.username?.trim().isNotEmpty == true
+                        ? '@${user.username}'
+                        : 'Set a username',
                     onTap: () => _editName(context, user),
                   ),
                   _ModernMenuTile(
@@ -923,6 +1007,30 @@ class _ProfileHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (user.coverImageUrl?.trim().isNotEmpty == true) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox(
+                key: const Key('profile-cover-image'),
+                width: double.infinity,
+                height: 108,
+                child: Image.network(
+                  user.coverImageUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                    ),
+                    child: Icon(
+                      Icons.panorama_outlined,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           // ── Top User Info Row ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -1064,7 +1172,7 @@ class _ProfileHeader extends StatelessWidget {
                               showKiwiTrustScoreSheet(context, user.trustScore),
                           child: Semantics(
                             label:
-                                'Trust score ${formatPublicTrustScore(user.trustScore)}',
+                                '${formatPublicTrustScore(user.trustScore)} · ${getTrustScoreInfo(user.trustScore).label}',
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -1096,7 +1204,7 @@ class _ProfileHeader extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'Trust score ${formatPublicTrustScore(user.trustScore)}',
+                                    '${formatPublicTrustScore(user.trustScore)} · ${getTrustScoreInfo(user.trustScore).label}',
                                     style: TextStyle(
                                       color: isDark
                                           ? const Color(0xFFD6F6E3)
@@ -1106,48 +1214,6 @@ class _ProfileHeader extends StatelessWidget {
                                     ),
                                   ),
                                 ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () =>
-                              showKiwiTrustScoreSheet(context, user.trustScore),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? getTrustScoreInfo(user.trustScore).darkBg
-                                  : getTrustScoreInfo(user.trustScore).lightBg,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color:
-                                    (isDark
-                                            ? getTrustScoreInfo(
-                                                user.trustScore,
-                                              ).darkColor
-                                            : getTrustScoreInfo(
-                                                user.trustScore,
-                                              ).lightColor)
-                                        .withOpacity(0.4),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              getTrustScoreInfo(user.trustScore).label,
-                              style: TextStyle(
-                                color: isDark
-                                    ? getTrustScoreInfo(
-                                        user.trustScore,
-                                      ).darkColor
-                                    : getTrustScoreInfo(
-                                        user.trustScore,
-                                      ).lightColor,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
                               ),
                             ),
                           ),
@@ -1819,20 +1885,20 @@ class _ModernMenuTile extends StatelessWidget {
   }
 }
 
-class _EditDisplayNameDialog extends StatefulWidget {
-  const _EditDisplayNameDialog({
-    required this.initialName,
+class _EditUsernameDialog extends StatefulWidget {
+  const _EditUsernameDialog({
+    required this.initialUsername,
     required this.onSave,
   });
 
-  final String initialName;
-  final Future<void> Function(String name) onSave;
+  final String initialUsername;
+  final Future<void> Function(String username) onSave;
 
   @override
-  State<_EditDisplayNameDialog> createState() => _EditDisplayNameDialogState();
+  State<_EditUsernameDialog> createState() => _EditUsernameDialogState();
 }
 
-class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
+class _EditUsernameDialogState extends State<_EditUsernameDialog> {
   late final TextEditingController _controller;
   final _formKey = GlobalKey<FormState>();
   String? _failure;
@@ -1841,7 +1907,7 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialName);
+    _controller = TextEditingController(text: widget.initialUsername);
   }
 
   @override
@@ -1856,11 +1922,14 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
     try {
       await widget.onSave(_controller.text);
       if (mounted) Navigator.pop(context);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() {
           _saving = false;
-          _failure = 'Could not save your name. Try again.';
+          final message = error.toString().replaceFirst('Exception: ', '');
+          _failure = message.isEmpty
+              ? 'Could not save that username.'
+              : message;
         });
       }
     }
@@ -1875,15 +1944,21 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
         child: TextFormField(
           controller: _controller,
           autofocus: true,
-          maxLength: 30,
-          textCapitalization: TextCapitalization.words,
+          maxLength: 24,
+          textCapitalization: TextCapitalization.none,
+          autocorrect: false,
           decoration: InputDecoration(
             labelText: 'Username',
+            prefixText: '@',
+            helperText: '3-24 letters, numbers, or underscores',
             errorText: _failure,
           ),
           validator: (value) {
-            final length = value?.trim().length ?? 0;
-            return length < 2 ? 'Enter at least 2 characters.' : null;
+            final username = value?.trim() ?? '';
+            if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(username)) {
+              return 'Use 3-24 letters, numbers, or underscores.';
+            }
+            return null;
           },
         ),
       ),

@@ -2,6 +2,7 @@ class PublicProfileModel {
   final String id;
   final String displayName;
   final String? avatarUrl;
+  final String? coverImageUrl;
   final String bio;
   final String city;
   final String suburb;
@@ -20,6 +21,7 @@ class PublicProfileModel {
     required this.id,
     required this.displayName,
     this.avatarUrl,
+    this.coverImageUrl,
     required this.bio,
     required this.city,
     required this.suburb,
@@ -53,6 +55,7 @@ class PublicProfileModel {
       id: (json['id'] ?? json['_id'] ?? '').toString(),
       displayName: (json['displayName'] ?? 'Kiwi Member').toString(),
       avatarUrl: json['avatarUrl'] as String?,
+      coverImageUrl: json['coverImageUrl'] as String?,
       bio: (json['bio'] ?? '').toString(),
       city: city,
       suburb: suburb,

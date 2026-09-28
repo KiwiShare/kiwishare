@@ -36,6 +36,7 @@ router.get('/users/me', authenticateToken, async (ctx) => {
       needsUsername: !user.username || !user.username.trim(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      coverImageUrl: user.coverImageUrl || null,
       bio: user.bio || '',
       role: user.role || 'user',
       trustScore: user.trustScore,
@@ -58,7 +59,7 @@ router.get('/users/me', authenticateToken, async (ctx) => {
 // PATCH /users/me - Update authenticated user profile
 router.patch('/users/me', authenticateToken, async (ctx) => {
   const userId = ctx.state.user.id;
-  const { username, displayName, avatarUrl, bio } = ctx.request.body as any;
+  const { username, displayName, avatarUrl, coverImageUrl, bio } = ctx.request.body as any;
 
   if (username !== undefined && (typeof username !== 'string' ||
     !/^[a-zA-Z0-9_]{3,24}$/.test(username.trim()))) {
@@ -92,6 +93,20 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
     }
   }
 
+  if (coverImageUrl !== undefined && coverImageUrl !== null && coverImageUrl !== "") {
+    let valid = false;
+    if (typeof coverImageUrl === "string" && coverImageUrl.length <= 2048) {
+      try {
+        const url = new URL(coverImageUrl);
+        valid = ["https:", "http:"].includes(url.protocol) && !url.username && !url.password;
+      } catch { /* Reject malformed URLs. */ }
+    }
+    if (!valid) {
+      ctx.status = 400;
+      ctx.body = { message: "Profile background must be an HTTP image URL or null." };
+      return;
+    }
+  }
   const user = mongoose.Types.ObjectId.isValid(userId)
     ? await User.findById(userId)
     : await User.findOne({ id: userId });
@@ -118,6 +133,7 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
   }
   if (displayName !== undefined) user.displayName = displayName.trim();
   if (avatarUrl !== undefined) user.avatarUrl = avatarUrl || null;
+  if (coverImageUrl !== undefined) user.coverImageUrl = coverImageUrl || null;
   if (bio !== undefined) user.bio = typeof bio === 'string' ? bio.trim() : '';
 
   await user.save();
@@ -132,6 +148,7 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
       needsUsername: !user.username || !user.username.trim(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      coverImageUrl: user.coverImageUrl || null,
       bio: user.bio || '',
       role: user.role || 'user',
       trustScore: user.trustScore,
@@ -509,6 +526,7 @@ router.get('/users/:id/public-profile', async (ctx) => {
       id: user._id.toString(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      coverImageUrl: user.coverImageUrl || null,
       bio: user.bio || '',
       location: {
         city: user.location?.city || 'Auckland',

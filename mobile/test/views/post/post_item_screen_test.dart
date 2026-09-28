@@ -644,6 +644,8 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(helpFinder, findsOneWidget);
+      await tester.ensureVisible(helpFinder);
+      await tester.pumpAndSettle();
 
       await tester.tap(helpFinder);
       await tester.pumpAndSettle();
