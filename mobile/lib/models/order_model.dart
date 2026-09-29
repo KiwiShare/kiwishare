@@ -98,6 +98,9 @@ class OrderModel {
   final DateTime? completedAt;
   final DateTime? paidAt;
   final DateTime? refundedAt;
+  final bool? paymentConfirmed;
+  final bool? meetupConfirmed;
+  final bool? handoverReady;
 
   /// The actual agreed/settled price (may differ from item.priceNzd due to special price negotiation)
   final String? itemAmountNzd;
@@ -118,6 +121,9 @@ class OrderModel {
     this.completedAt,
     this.paidAt,
     this.refundedAt,
+    this.paymentConfirmed,
+    this.meetupConfirmed,
+    this.handoverReady,
     this.itemAmountNzd,
     this.buyerTotalAmountNzd,
     this.buyerFeeAmountNzd,
@@ -125,7 +131,26 @@ class OrderModel {
 
   bool get isBuying => role == 'buying';
   bool get isSelling => role == 'selling';
-  bool get isPaid => paidAt != null || status == 'paid';
+  bool get isPaid =>
+      paymentConfirmed ??
+      (paidAt != null ||
+          status == 'paid' ||
+          status == 'completed' ||
+          status == 'seller_paid');
+
+  bool get isMeetupConfirmed =>
+      meetupConfirmed ??
+      (meeting?.proposalStatus == 'confirmed' ||
+          meeting?.proposalStatus == 'accepted');
+
+  bool get isHandoverReady =>
+      handoverReady ??
+      (isPaid &&
+          isMeetupConfirmed &&
+          !isCompleted &&
+          !isCancelled &&
+          !isRefunded);
+
   bool get isRefunded => status == 'refunded' || refundedAt != null;
 
   bool get isCompleted =>
@@ -150,18 +175,13 @@ class OrderModel {
       if (status == 'disputed') return 'Disputed';
       return 'Cancelled';
     }
-    if (isPaid) {
-      if (status == 'meeting_scheduled' ||
-          status == 'meetup_scheduled' ||
-          status == 'meeting_in_progress') {
-        return 'Paid · Meetup Arranged';
-      }
-      return 'Paid · Awaiting Handover';
+    if (isHandoverReady) return 'Paid · Meetup Confirmed';
+    if (isPaid) return 'Paid · Awaiting Meetup';
+    if (isMeetupConfirmed) return 'Meetup Confirmed · Payment Required';
+    if (meeting != null && meeting!.proposalStatus == 'proposed') {
+      return 'Meetup Proposed · Payment Required';
     }
     if (status == 'pending_payment') return 'Pending Payment';
-    if (status == 'meetup_scheduled' || status == 'meeting_scheduled') {
-      return 'Meetup Scheduled';
-    }
     if (status == 'meeting_in_progress') return 'Meetup in Progress';
     if (status == 'qr_scanned') return 'Handover Confirmed';
     if (status == 'seller_paid') return 'Completed · Paid';
@@ -207,6 +227,13 @@ class OrderModel {
           : null,
       refundedAt: json['refundedAt'] != null
           ? DateTime.tryParse(json['refundedAt'].toString())
+          : null,
+      paymentConfirmed: json['isPaid'] is bool ? json['isPaid'] as bool : null,
+      meetupConfirmed: json['isMeetupConfirmed'] is bool
+          ? json['isMeetupConfirmed'] as bool
+          : null,
+      handoverReady: json['isHandoverReady'] is bool
+          ? json['isHandoverReady'] as bool
           : null,
       itemAmountNzd:
           json['itemAmountNzd']?.toString() ?? json['itemAmount']?.toString(),

@@ -264,7 +264,6 @@ class _OrderItemCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     final isCompleted = order.isCompleted;
-    final isInProgress = order.isInProgress;
     final isPaid = order.isPaid;
 
     // Status Badge colors: green for completed, emerald for paid & awaiting pickup, amber for to-pay, red for cancelled
@@ -558,8 +557,9 @@ class _OrderItemCard extends StatelessWidget {
                   children: [
                     // Pay Now — only for buyers with pending payment that is not yet paid
                     if (order.isBuying &&
-                        order.status == 'pending_payment' &&
-                        !isPaid)
+                        !isPaid &&
+                        !isCompleted &&
+                        !order.isCancelled)
                       FilledButton.icon(
                         key: Key('pay_now_btn_${order.id}'),
                         style: FilledButton.styleFrom(
@@ -650,7 +650,7 @@ class _OrderItemCard extends StatelessWidget {
                         ),
                       ),
 
-                    if ((isInProgress || isPaid) && !order.isRefunded)
+                    if (order.isHandoverReady)
                       FilledButton.tonalIcon(
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(

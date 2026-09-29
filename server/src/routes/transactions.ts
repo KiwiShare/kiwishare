@@ -9,6 +9,11 @@ import {
   MongoTransactionsRequiredError,
   runRequiredMongoTransaction
 } from '../services/mongoTransaction';
+import {
+  isHandoverReady,
+  isMeetupConfirmed,
+  isOrderPaid
+} from '../services/orderFlowState';
 
 const router = new Router();
 const COMPLETION_CREDIT_POINTS = 5;
@@ -80,10 +85,16 @@ router.post('/transactions/handover/claim', authenticateToken, async (ctx) => {
       if (qr.status !== 'active' || qr.expiresAt.getTime() <= Date.now()) {
         throw new HandoverError(400, 'This handover QR code is expired or unavailable.');
       }
-      if (order.status !== 'meeting_scheduled' || order.meeting?.proposalStatus !== 'confirmed') {
+      if (!isOrderPaid(order)) {
+        throw new HandoverError(409, 'Order must be paid before handover.');
+      }
+      if (!isMeetupConfirmed(order)) {
+        throw new HandoverError(409, 'Meetup must be confirmed before handover.');
+      }
+      if (!isHandoverReady(order) || order.status !== 'meeting_scheduled') {
         throw new HandoverError(409, 'This transaction is not eligible for completion.');
       }
-      if (item.status === 'sold' || item.status === 'deleted') {
+      if (item.status === 'deleted') {
         throw new HandoverError(409, 'Conflict: Item is not available for handover.');
       }
 
@@ -94,8 +105,16 @@ router.post('/transactions/handover/claim', authenticateToken, async (ctx) => {
 
       const now = new Date();
       const reservedOrder = await Order.updateOne(
-        { _id: order._id, status: 'meeting_scheduled', 'meeting.proposalStatus': 'confirmed',
-          'completionCredit.awardedAt': { $exists: false } },
+        {
+          _id: order._id,
+          status: 'meeting_scheduled',
+          'meeting.proposalStatus': 'confirmed',
+          $or: [
+            { paidAt: { $exists: true, $ne: null } },
+            { itemAmount: 0, buyerTotalAmount: 0 }
+          ],
+          'completionCredit.awardedAt': { $exists: false }
+        },
         { $set: { status: 'completed', completedAt: now, qrScannedAt: now,
           completionCredit: { pointsPerParticipant: COMPLETION_CREDIT_POINTS, awardedAt: now } } },
         { session }
@@ -115,7 +134,7 @@ router.post('/transactions/handover/claim', authenticateToken, async (ctx) => {
       }
 
       const transferredItem = await Item.updateOne(
-        { _id: item._id, sellerId: order.sellerId, status: { $nin: ['sold', 'deleted'] } },
+        { _id: item._id, sellerId: order.sellerId, status: { $ne: 'deleted' } },
         { $set: { status: 'sold', sellerId: order.buyerId, ownerId: buyerId } },
         { session }
       );

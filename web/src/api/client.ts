@@ -610,6 +610,9 @@ export interface OrderItem {
   role: 'buying' | 'selling';
   itemId: string;
   isPaid?: boolean;
+  isMeetupConfirmed?: boolean;
+  isHandoverReady?: boolean;
+  paidAt?: string | null;
   itemAmountNzd?: string;
   buyerFeeAmountNzd?: string;
   buyerTotalAmountNzd?: string;
@@ -729,8 +732,8 @@ export const meetupsApi = {
       qrToken?: string | null;
       isUnlocked?: boolean;
     }>(`/meetups/${orderId}`),
-  propose: (orderId: string, body: { scheduledAt: string; locationName: string; latitude?: number; longitude?: number; note?: string }) =>
-    apiRequest<{ status: string; meetup: any }>(`/meetups/${orderId}/propose`, {
+  propose: (body: { itemId: string; conversationId?: string; scheduledAt: string; locationName: string; latitude?: number; longitude?: number; note?: string }) =>
+    apiRequest<{ status: string; meetup: any }>('/meetups/propose', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

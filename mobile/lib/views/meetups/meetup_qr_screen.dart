@@ -322,8 +322,8 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
         meetup.proposalStatus == 'confirmed' ||
         meetup.proposalStatus == 'accepted';
     final isPaid = meetup.isPaid;
-
-    final qrData = meetup.qrToken ?? 'QR_HANDOVER_TOKEN_${meetup.id}';
+    final isHandoverReady = meetup.isHandoverReady;
+    final qrData = meetup.qrToken;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -931,8 +931,69 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                 ),
               ),
             ),
+          ] else if (!isHandoverReady) ...[
+            Card(
+              elevation: 0,
+              color: colors.surfaceContainerHighest.withOpacity(0.45),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    Icon(Icons.sync_problem_rounded, color: colors.error),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Handover is not ready yet.',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Refresh this order after payment and meetup confirmation are both complete.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ] else if (qrData == null || qrData.isEmpty) ...[
+            Card(
+              elevation: 0,
+              color: colors.surfaceContainerHighest.withOpacity(0.45),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.qr_code_2_rounded,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Handover QR unavailable',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'The order is ready, but the server has not returned a valid handover token. Refresh and try again.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: _loadDetails,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Refresh'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ] else ...[
-            // BOTH CONFIRMED AND PAID: Display QR Code and Direct Confirmation Buttons
+            // BOTH CONFIRMED AND PAID: Display server-issued QR Code and Direct Confirmation Buttons
             Card(
               elevation: 1,
               shape: RoundedRectangleBorder(

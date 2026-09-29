@@ -12,6 +12,13 @@ import QrCode from '../models/QrCode';
 import { notifyMeetupConfirmed, notifyMeetupPendingPayment } from '../services/pushNotification';
 import { runMongoTransaction } from '../services/mongoTransaction';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
+import {
+  isHandoverReady,
+  isMeetupConfirmed,
+  isOrderPaid,
+  statusAfterMeetupConfirmed,
+  statusAfterMeetupProposal
+} from '../services/orderFlowState';
 
 const router = new Router({ prefix: '/meetups' });
 router.use(authenticateToken);
@@ -27,7 +34,15 @@ function objectId(value: any): string {
   return (value?._id ?? value)?.toString() ?? '';
 }
 
-export async function ensureOrderMeetupQr(order: any): Promise<string> {
+export async function ensureOrderMeetupQr(order: any): Promise<string | null> {
+  if (!isHandoverReady(order)) {
+    await QrCode.updateMany(
+      { orderId: order._id, status: 'active' },
+      { $set: { status: 'cancelled' } }
+    );
+    return null;
+  }
+
   const existing = await QrCode.findOne({ orderId: order._id, status: 'active' });
   if (existing) {
     return existing.tokenHash;
@@ -56,7 +71,9 @@ export function formatOrderMeetup(order: any, userId: string, qrCodeToken?: stri
   const buyerUser = order.buyerId as any;
   const sellerUser = order.sellerId as any;
 
-  const isPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
+  const isPaid = isOrderPaid(order);
+  const meetupConfirmed = isMeetupConfirmed(order);
+  const handoverReady = isHandoverReady(order);
 
   return {
     id: objectId(order),
@@ -67,6 +84,8 @@ export function formatOrderMeetup(order: any, userId: string, qrCodeToken?: stri
     buyerFeeNzd: ((order.buyerFeeAmount ?? 0) / 100).toFixed(2),
     buyerTotalAmountNzd: ((order.buyerTotalAmount ?? order.itemAmount ?? 0) / 100).toFixed(2),
     isPaid,
+    isMeetupConfirmed: meetupConfirmed,
+    isHandoverReady: handoverReady,
     itemImageUrl: order.itemSnapshot?.imageUrl ?? '',
     status: order.status,
     role: isBuyer ? 'buying' : 'selling',
@@ -85,7 +104,7 @@ export function formatOrderMeetup(order: any, userId: string, qrCodeToken?: stri
     proposalStatus: order.meeting?.proposalStatus ?? 'proposed',
     proposedBy: objectId(order.meeting?.proposedBy),
     note: order.meeting?.note ?? '',
-    qrToken: qrCodeToken ?? null,
+    qrToken: handoverReady ? qrCodeToken ?? null : null,
     buyerConfirmedAt: order.buyerConfirmedAt ? new Date(order.buyerConfirmedAt).toISOString() : null,
     sellerConfirmedAt: order.sellerConfirmedAt ? new Date(order.sellerConfirmedAt).toISOString() : null,
     buyerConfirmed: Boolean(order.buyerConfirmedAt),
@@ -208,7 +227,7 @@ router.post('/propose', async (ctx: Context) => {
     itemId: item._id,
     buyerId,
     sellerId,
-    status: { $in: ['pending_payment', 'meeting_scheduled', 'meeting_in_progress'] }
+    status: { $in: ['pending_payment', 'paid', 'meeting_scheduled', 'meeting_in_progress'] }
   });
 
   // Check if conversation has specialPrice or item price was modified
@@ -232,7 +251,11 @@ router.post('/propose', async (ctx: Context) => {
       proposalStatus: 'proposed',
       note: typeof note === 'string' ? note.trim() : undefined
     };
-    order.status = 'meeting_scheduled';
+    order.status = statusAfterMeetupProposal(order);
+    await QrCode.updateMany(
+      { orderId: order._id, status: 'active' },
+      { $set: { status: 'cancelled' } }
+    );
     if (!order.paidAt) {
       order.itemAmount = effectivePriceCents;
       order.buyerFeeAmount = buyerFeeAmount;
@@ -248,7 +271,7 @@ router.post('/propose', async (ctx: Context) => {
       itemId: item._id,
       buyerId,
       sellerId,
-      status: 'meeting_scheduled',
+      status: 'pending_payment',
       itemSnapshot: {
         title: item.title,
         description: item.description,
@@ -319,8 +342,7 @@ router.post('/propose', async (ctx: Context) => {
     );
   });
 
-  const isOrderPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
-  if (!isOrderPaid) {
+  if (!isOrderPaid(order)) {
     void notifyMeetupPendingPayment({
       receiverId: new mongoose.Types.ObjectId(order.buyerId),
       orderId: order._id.toString(),
@@ -393,29 +415,14 @@ router.post('/:orderId/accept', async (ctx: Context) => {
   if (longitude !== undefined) order.meeting.longitude = longitude;
   if (note !== undefined) order.meeting.note = note;
 
-  // Update order meeting status
+  // Confirm the meetup. Payment and meetup can happen in either order, but
+  // QR/handover only unlocks after both prerequisites are satisfied.
   order.meeting = order.meeting ?? {};
   order.meeting.proposalStatus = 'confirmed';
-  order.status = 'meeting_scheduled';
+  order.status = statusAfterMeetupConfirmed(order);
   await order.save();
 
-  // Generate cryptographically unique QR handover token
-  const tokenRandom = crypto.randomBytes(8).toString('hex').toUpperCase();
-  const claimCode = `QR_HANDOVER_TOKEN_${order._id.toString()}_${tokenRandom}`;
-
-  // Upsert QrCode
-  await QrCode.findOneAndUpdate(
-    { orderId: order._id },
-    {
-      orderId: order._id,
-      sellerId: order.sellerId,
-      buyerId: order.buyerId,
-      tokenHash: claimCode,
-      status: 'active',
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    },
-    { upsert: true, new: true }
-  );
+  const claimCode = await ensureOrderMeetupQr(order);
 
   // Post confirmation message to conversation
   const counterpartyId = buyerId === userStr ? sellerId : buyerId;
@@ -492,8 +499,7 @@ router.post('/:orderId/accept', async (ctx: Context) => {
       );
     });
 
-    const isPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
-    if (!isPaid) {
+    if (!isOrderPaid(order)) {
       const priceNzd = ((order.buyerTotalAmount ?? order.itemAmount ?? 0) / 100).toFixed(2);
       const paymentReqMsg = await new Message({
         conversationId: conversation._id,
@@ -527,8 +533,7 @@ router.post('/:orderId/accept', async (ctx: Context) => {
   void notifyMeetupConfirmed({ ...pushRequest, receiverId: new mongoose.Types.ObjectId(buyerId) });
   void notifyMeetupConfirmed({ ...pushRequest, receiverId: new mongoose.Types.ObjectId(sellerId) });
 
-  const isConfirmedPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
-  if (!isConfirmedPaid) {
+  if (!isOrderPaid(order)) {
     void notifyMeetupPendingPayment({
       receiverId: new mongoose.Types.ObjectId(buyerId),
       orderId: order._id.toString(),
@@ -574,6 +579,7 @@ router.post('/:orderId/decline', async (ctx: Context) => {
 
   order.meeting = order.meeting ?? {};
   order.meeting.proposalStatus = 'declined';
+  order.status = statusAfterMeetupProposal(order);
   await order.save();
 
   // Cancel any active QR codes for this order
@@ -729,18 +735,22 @@ router.post('/:orderId/confirm-handover', async (ctx: Context) => {
     return;
   }
 
-  // Check state machine: Order must be paid and location confirmed
-  const isPaid = !!order.paidAt || ((order.itemAmount ?? 0) === 0 && (order.buyerTotalAmount ?? 0) === 0);
-  if (!isPaid && order.status === 'pending_payment') {
+  // Enforce the same handover gate used by QR generation and clients.
+  if (!isOrderPaid(order)) {
     ctx.status = 400;
     ctx.body = { status: 'error', message: 'Order must be paid before completing handover.' };
     return;
   }
 
-  const proposalStatus = order.meeting?.proposalStatus;
-  if (proposalStatus !== 'confirmed' && proposalStatus !== 'accepted') {
+  if (!isMeetupConfirmed(order)) {
     ctx.status = 400;
     ctx.body = { status: 'error', message: 'Meetup location must be confirmed before completing handover.' };
+    return;
+  }
+
+  if (!isHandoverReady(order)) {
+    ctx.status = 409;
+    ctx.body = { status: 'error', message: 'This order is not eligible for handover.' };
     return;
   }
 

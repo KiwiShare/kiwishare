@@ -15,6 +15,16 @@ import {
 } from '../api/client';
 import { CAMPUS_LOCATIONS } from '../utils/campusLocations';
 import {
+  canArrangeMeetup,
+  canPayOrder,
+  isCompletedOrder,
+  isHandoverReady,
+  isMeetupConfirmed,
+  isOrderPaid,
+  isRefundedOrder,
+} from '../utils/orderFlow';
+import { QRCodeSVG } from 'qrcode.react';
+import {
   Send,
   Image as ImageIcon,
   ArrowLeft,
@@ -653,7 +663,9 @@ export const ChatPage: React.FC = () => {
 
     setIsSubmittingMeetup(true);
     try {
-      const res = await meetupsApi.propose(currentOrder.id, {
+      const res = await meetupsApi.propose({
+        itemId: activeConversation!.item.id,
+        conversationId: activeConversation!.id,
         scheduledAt: new Date(meetupDate).toISOString(),
         locationName: meetupLocation.trim(),
         note: meetupNote.trim() || undefined,
@@ -1177,9 +1189,9 @@ export const ChatPage: React.FC = () => {
 
               {/* Linked Product Banner with Top-Right Corner Status Badge */}
               {activeConversation?.item && (() => {
-                const isPaid = currentOrder?.status === 'paid' || currentOrder?.status === 'meeting_scheduled';
-                const isRefunded = currentOrder?.status === 'refunded' || currentOrder?.isRefunded;
-                const isCompleted = currentOrder?.status === 'completed';
+                const isPaid = isOrderPaid(currentOrder);
+                const isRefunded = isRefundedOrder(currentOrder);
+                const isCompleted = isCompletedOrder(currentOrder);
                 const isSold = activeConversation.item.status === 'sold' || isPaid || isCompleted;
                 const isDelisted = activeConversation.item.status === 'delisted';
 
@@ -1304,7 +1316,7 @@ export const ChatPage: React.FC = () => {
             </div>
 
             {/* KiwiShare Safe Trade Action Bar */}
-            {activeConversation?.item && activeConversation.item.status !== 'sold' && (
+            {activeConversation?.item && (currentOrder || activeConversation.item.status !== 'sold') && (
               <div
                 style={{
                   padding: '8px 18px',
@@ -1322,19 +1334,23 @@ export const ChatPage: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
                   <ShieldCheck size={16} color="#059669" />
                   <span style={{ fontWeight: 500 }}>
-                    {currentOrder?.status === 'paid' || currentOrder?.status === 'meeting_scheduled'
-                      ? 'KiwiShare Escrow Active: Payment protected until meetup handover.'
-                      : currentOrder?.status === 'completed'
+                    {isHandoverReady(currentOrder)
+                      ? 'Ready for handover: payment and meetup are confirmed.'
+                      : isOrderPaid(currentOrder)
+                      ? 'KiwiShare Escrow Active: payment protected while meetup is arranged.'
+                      : isMeetupConfirmed(currentOrder)
+                      ? 'Meetup confirmed: buyer payment is still required.'
+                      : isCompletedOrder(currentOrder)
                       ? 'Order Completed: Handover verified.'
-                      : currentOrder?.status === 'refunded' || currentOrder?.isRefunded
+                      : isRefundedOrder(currentOrder)
                       ? 'Order Refunded: Funds returned to buyer.'
-                      : 'Campus Safe Trade: NZ Escrow Protection.'}
+                      : 'Campus Safe Trade: payment and meetup can be completed in either order.'}
                   </span>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   {/* Buyer: Buy Now */}
-                  {activeConversation.direction === 'buying' && (!currentOrder || currentOrder.status === 'pending' || currentOrder.status === 'pending_payment' || currentOrder.status === 'refunded') && (
+                  {activeConversation.direction === 'buying' && canPayOrder(currentOrder) && (
                     <button
                       onClick={() => void handleOpenCheckout()}
                       className="btn btn-primary"
@@ -1354,7 +1370,7 @@ export const ChatPage: React.FC = () => {
                   )}
 
                   {/* Seller: Request Safe Pay */}
-                  {activeConversation.direction === 'selling' && (!currentOrder || currentOrder.status === 'pending' || currentOrder.status === 'pending_payment' || currentOrder.status === 'refunded') && (
+                  {activeConversation.direction === 'selling' && canPayOrder(currentOrder) && (
                     <button
                       onClick={handleSendPaymentRequest}
                       className="btn btn-secondary"
@@ -1365,71 +1381,68 @@ export const ChatPage: React.FC = () => {
                     </button>
                   )}
 
-                  {/* If Paid / Scheduled */}
-                  {(currentOrder?.status === 'paid' || currentOrder?.status === 'meeting_scheduled') && !currentOrder?.isRefunded && (
-                    <>
-                      <button
-                        onClick={() => setShowScheduleModal(true)}
-                        className="btn btn-secondary"
-                        style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                      >
-                        <Calendar size={14} />
-                        <span>{currentOrder.meeting ? 'Reschedule' : 'Schedule Meetup'}</span>
-                      </button>
-
-                      <button
-                        onClick={() => setShowQrModal(true)}
-                        className="btn btn-primary"
-                        style={{ padding: '6px 14px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                      >
-                        <QrCode size={14} />
-                        <span>Meetup & QR</span>
-                      </button>
-
-                      <button
-                        onClick={() => setShowInvoiceModal(true)}
-                        className="btn btn-secondary"
-                        style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                        title="View Tax Invoice"
-                      >
-                        <Receipt size={14} />
-                        <span>Invoice</span>
-                      </button>
-
-                      {/* Seller Refund */}
-                      {activeConversation.direction === 'selling' && (
-                        <button
-                          onClick={handleRefundOrder}
-                          disabled={isRefunding}
-                          className="btn btn-secondary"
-                          style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#dc2626', borderColor: '#fca5a5' }}
-                        >
-                          <RotateCcw size={14} />
-                          <span>{isRefunding ? 'Refunding…' : 'Refund'}</span>
-                        </button>
-                      )}
-
-                      {/* Buyer 48h Refund Claim */}
-                      {activeConversation.direction === 'buying' && (() => {
-                        const ageHours = (Date.now() - new Date(currentOrder.createdAt).getTime()) / (1000 * 3600);
-                        const isUnmet48h = ageHours >= 48 && (!currentOrder.meeting || currentOrder.meeting.proposalStatus !== 'accepted');
-                        if (isUnmet48h) {
-                          return (
-                            <button
-                              onClick={handleRefundOrder}
-                              disabled={isRefunding}
-                              className="btn btn-secondary"
-                              style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#b45309', borderColor: '#fde68a', backgroundColor: '#fffbeb' }}
-                            >
-                              <RotateCcw size={14} />
-                              <span>Claim Refund (48h)</span>
-                            </button>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </>
+                  {currentOrder && canArrangeMeetup(currentOrder) && (
+                    <button
+                      onClick={() => setShowScheduleModal(true)}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Calendar size={14} />
+                      <span>{currentOrder.meeting ? 'Reschedule' : 'Schedule Meetup'}</span>
+                    </button>
                   )}
+
+                  {currentOrder && isHandoverReady(currentOrder) && (
+                    <button
+                      onClick={() => setShowQrModal(true)}
+                      className="btn btn-primary"
+                      style={{ padding: '6px 14px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <QrCode size={14} />
+                      <span>Meetup & QR</span>
+                    </button>
+                  )}
+
+                  {currentOrder && (isOrderPaid(currentOrder) || isCompletedOrder(currentOrder)) && (
+                    <button
+                      onClick={() => setShowInvoiceModal(true)}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      title="View Tax Invoice"
+                    >
+                      <Receipt size={14} />
+                      <span>Invoice</span>
+                    </button>
+                  )}
+
+                  {currentOrder && isOrderPaid(currentOrder) && !isCompletedOrder(currentOrder) && !isRefundedOrder(currentOrder) && activeConversation.direction === 'selling' && (
+                    <button
+                      onClick={handleRefundOrder}
+                      disabled={isRefunding}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#dc2626', borderColor: '#fca5a5' }}
+                    >
+                      <RotateCcw size={14} />
+                      <span>{isRefunding ? 'Refunding…' : 'Refund'}</span>
+                    </button>
+                  )}
+
+                  {currentOrder && activeConversation.direction === 'buying' && isOrderPaid(currentOrder) && !isMeetupConfirmed(currentOrder) && (() => {
+                    const paidBase = currentOrder.paidAt || currentOrder.createdAt;
+                    const ageHours = (Date.now() - new Date(paidBase).getTime()) / (1000 * 3600);
+                    if (ageHours < 48) return null;
+                    return (
+                      <button
+                        onClick={handleRefundOrder}
+                        disabled={isRefunding}
+                        className="btn btn-secondary"
+                        style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#b45309', borderColor: '#fde68a', backgroundColor: '#fffbeb' }}
+                      >
+                        <RotateCcw size={14} />
+                        <span>Claim Refund (48h)</span>
+                      </button>
+                    );
+                  })()}
 
                   {/* If Completed */}
                   {currentOrder?.status === 'completed' && (
@@ -2345,8 +2358,10 @@ export const ChatPage: React.FC = () => {
 
       {/* 3. Meetup Handover QR & Confirmation Modal */}
       {showQrModal && currentOrder && (() => {
-        const isPaid = currentOrder.status === 'paid' || currentOrder.status === 'meeting_scheduled' || currentOrder.status === 'completed';
-        const isMeetupConfirmed = currentOrder.meeting?.proposalStatus === 'accepted' || meetupDetails?.proposalStatus === 'accepted';
+        const isPaid = isOrderPaid(currentOrder);
+        const meetupConfirmed = isMeetupConfirmed(currentOrder);
+        const handoverReady = isHandoverReady(currentOrder);
+        const qrToken = typeof meetupDetails?.qrToken === 'string' ? meetupDetails.qrToken : '';
         const role = activeConversation?.direction === 'buying' ? 'buyer' : 'seller';
 
         return (
@@ -2429,7 +2444,7 @@ export const ChatPage: React.FC = () => {
                     </button>
                   )}
                 </div>
-              ) : !isMeetupConfirmed ? (
+              ) : !meetupConfirmed ? (
                 <div style={{ padding: '16px', backgroundColor: '#eff6ff', borderRadius: '10px', border: '1px solid #bfdbfe', color: '#1e40af', fontSize: '0.88rem', marginBottom: '16px' }}>
                   <Calendar size={20} style={{ margin: '0 auto 6px', color: '#2563eb' }} />
                   <div style={{ fontWeight: 700 }}>Meetup Agreement Required</div>
@@ -2445,9 +2460,27 @@ export const ChatPage: React.FC = () => {
                     Schedule Meetup
                   </button>
                 </div>
+              ) : !handoverReady ? (
+                <div style={{ padding: '16px', backgroundColor: '#fff7ed', borderRadius: '10px', border: '1px solid #fed7aa', color: '#9a3412', fontSize: '0.88rem', marginBottom: '16px' }}>
+                  <AlertCircle size={20} style={{ margin: '0 auto 6px' }} />
+                  <div style={{ fontWeight: 700 }}>Handover Not Ready</div>
+                  <div>Payment and meetup confirmation must both be current before handover can start.</div>
+                </div>
+              ) : !qrToken ? (
+                <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', fontSize: '0.88rem', marginBottom: '16px' }}>
+                  <QrCode size={22} style={{ margin: '0 auto 6px' }} />
+                  <div style={{ fontWeight: 700 }}>Handover QR Unavailable</div>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: '10px' }}>The order is ready, but the server has not returned a valid handover token.</div>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => void loadOrderAndMeetup(activeConversation!.item.id)}
+                  >
+                    Refresh order
+                  </button>
+                </div>
               ) : (
                 <>
-                  {/* Visual QR Code Card */}
+                  {/* Server-issued QR Code */}
                   <div
                     style={{
                       padding: '20px',
@@ -2474,38 +2507,16 @@ export const ChatPage: React.FC = () => {
                         justifyContent: 'center',
                       }}
                     >
-                      <svg viewBox="0 0 100 100" width="140" height="140">
-                        {/* Styled QR pattern placeholder */}
-                        <rect width="100" height="100" fill="white" />
-                        <rect x="10" y="10" width="25" height="25" fill="#0f172a" />
-                        <rect x="15" y="15" width="15" height="15" fill="white" />
-                        <rect x="18" y="18" width="9" height="9" fill="#0f172a" />
-
-                        <rect x="65" y="10" width="25" height="25" fill="#0f172a" />
-                        <rect x="70" y="15" width="15" height="15" fill="white" />
-                        <rect x="73" y="18" width="9" height="9" fill="#0f172a" />
-
-                        <rect x="10" y="65" width="25" height="25" fill="#0f172a" />
-                        <rect x="15" y="70" width="15" height="15" fill="white" />
-                        <rect x="18" y="73" width="9" height="9" fill="#0f172a" />
-
-                        <rect x="42" y="10" width="8" height="8" fill="#059669" />
-                        <rect x="42" y="24" width="8" height="8" fill="#059669" />
-                        <rect x="10" y="42" width="8" height="8" fill="#059669" />
-                        <rect x="24" y="42" width="8" height="8" fill="#059669" />
-                        <rect x="42" y="42" width="16" height="16" fill="#0f172a" rx="4" />
-                        <rect x="46" y="46" width="8" height="8" fill="#10b981" />
-                        <rect x="65" y="42" width="10" height="8" fill="#0f172a" />
-                        <rect x="80" y="42" width="10" height="8" fill="#0f172a" />
-                        <rect x="42" y="65" width="10" height="10" fill="#0f172a" />
-                        <rect x="58" y="65" width="15" height="10" fill="#0f172a" />
-                        <rect x="78" y="65" width="12" height="10" fill="#0f172a" />
-                        <rect x="42" y="80" width="20" height="10" fill="#0f172a" />
-                        <rect x="68" y="80" width="22" height="10" fill="#059669" />
-                      </svg>
+                      <QRCodeSVG
+                        value={qrToken}
+                        size={140}
+                        level="M"
+                        bgColor="#ffffff"
+                        fgColor="#064B3A"
+                      />
                     </div>
                     <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                      Token: {currentOrder.id.slice(0, 16).toUpperCase()}
+                      Token: {qrToken}
                     </span>
                   </div>
 

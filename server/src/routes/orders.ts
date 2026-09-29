@@ -11,6 +11,11 @@ import Refund from '../models/Refund';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import { resolveOrderEffectivePriceCents } from './payments';
 import { createStripeRefund } from '../services/stripeService';
+import {
+  isHandoverReady,
+  isMeetupConfirmed,
+  isOrderPaid
+} from '../services/orderFlowState';
 
 const router = new Router({ prefix: '/orders' });
 router.use(authenticateToken);
@@ -39,6 +44,9 @@ function formatOrder(order: any, userId: string) {
     id: objectId(order),
     orderNumber: order.orderNumber,
     status: order.status,
+    isPaid: isOrderPaid(order),
+    isMeetupConfirmed: isMeetupConfirmed(order),
+    isHandoverReady: isHandoverReady(order),
     role: isBuyer ? 'buying' : 'selling',
     itemId: objectId(order.itemId),
     item: {
