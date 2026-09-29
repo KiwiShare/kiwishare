@@ -198,24 +198,42 @@ class RestListingSuggestionService implements ListingSuggestionService {
     }
 
     late http.Response response;
+    var usedCategoryCompatibilityFallback = false;
     try {
-      response = await _client
-          .post(
-            Uri.parse('${ApiConfig.baseUrl}/api/listing-suggestions'),
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $authToken',
-              'x-client-platform': 'mobile',
-            },
-            body: jsonEncode(input.toJson()),
-          )
-          .timeout(timeout);
+      response = await _postSuggestion(
+        payload: input.toJson(),
+        authToken: authToken,
+      );
+
+      // Production can briefly lag behind a mobile rollout that introduces a
+      // new listing category. Older servers reject the new category before
+      // Gemini is called. Retry without the category so AI Help Me Write still
+      // produces title/description/condition/price, then preserve the category
+      // the seller explicitly selected on the client.
+      final firstData = _decodeObject(response.body);
+      final serverMessage = firstData?['message'];
+      final categoryRejected =
+          response.statusCode == 400 &&
+          serverMessage is String &&
+          serverMessage.trim().toLowerCase() == 'category is not allowed.';
+      if (categoryRejected &&
+          input.category != null &&
+          input.category!.trim().isNotEmpty) {
+        final fallbackPayload = Map<String, Object>.from(input.toJson())
+          ..remove('category')
+          ..remove('attributes');
+        response = await _postSuggestion(
+          payload: fallbackPayload,
+          authToken: authToken,
+        );
+        usedCategoryCompatibilityFallback = true;
+      }
     } on TimeoutException {
       throw const ListingSuggestionException(
         'AI suggestions took too long. Please try again.',
       );
-    } catch (_) {
+    } catch (error) {
+      if (error is ListingSuggestionException) rethrow;
       throw const ListingSuggestionException(
         'AI suggestions could not be reached. Please try again.',
       );
@@ -240,7 +258,40 @@ class RestListingSuggestionService implements ListingSuggestionService {
         'The server returned an invalid AI suggestion.',
       );
     }
-    return ListingSuggestion.fromJson(Map<String, dynamic>.from(suggestion));
+    final parsed = ListingSuggestion.fromJson(
+      Map<String, dynamic>.from(suggestion),
+    );
+    if (usedCategoryCompatibilityFallback &&
+        input.category != null &&
+        listingSuggestionCategories.contains(input.category)) {
+      return ListingSuggestion(
+        title: parsed.title,
+        description: parsed.description,
+        category: input.category!,
+        condition: parsed.condition,
+        priceNzd: parsed.priceNzd,
+        attributes: const {},
+      );
+    }
+    return parsed;
+  }
+
+  Future<http.Response> _postSuggestion({
+    required Map<String, Object> payload,
+    required String authToken,
+  }) {
+    return _client
+        .post(
+          Uri.parse('${ApiConfig.baseUrl}/api/listing-suggestions'),
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $authToken',
+            'x-client-platform': 'mobile',
+          },
+          body: jsonEncode(payload),
+        )
+        .timeout(timeout);
   }
 
   Map<String, dynamic>? _decodeObject(String body) {
