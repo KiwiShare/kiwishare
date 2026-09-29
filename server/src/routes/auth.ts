@@ -8,6 +8,7 @@ import Otp from '../models/Otp';
 import { resolveClientPlatform } from '../middleware/logger';
 import { getJwtSecret } from '../middleware/auth';
 import { configuredFirebaseApp } from '../services/pushNotification';
+import { isOutboundEmailDeliveryEnabled } from '../services/emailSafety';
 
 const router = new Router();
 
@@ -48,6 +49,8 @@ async function sendVerificationEmail(options: {
   text: string;
   html: string;
 }) {
+  if (!isOutboundEmailDeliveryEnabled()) return false;
+
   const resendApiKey = process.env.RESEND_API_KEY;
   const resendFrom = process.env.RESEND_FROM || 'onboarding@resend.dev';
 
@@ -338,7 +341,7 @@ router.post('/auth/send-otp', async (ctx) => {
   console.log(`\n📬 [OTP Sent] Email: ${normalizedEmail} | Code: ${code} (Expires in 10 minutes)\n`);
 
   // Attempt to send email via Resend API if configured
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const resendApiKey = isOutboundEmailDeliveryEnabled() ? process.env.RESEND_API_KEY : undefined;
   const resendFrom = process.env.RESEND_FROM || 'onboarding@resend.dev';
 
   let mailSent = false;
@@ -373,7 +376,7 @@ router.post('/auth/send-otp', async (ctx) => {
   }
 
   // Attempt to send email via SMTP if configured and not already sent via Resend
-  if (!mailSent) {
+  if (!mailSent && isOutboundEmailDeliveryEnabled()) {
     const smtpHost = process.env.SMTP_HOST;
     const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 465;
     const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
