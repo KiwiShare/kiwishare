@@ -86,7 +86,7 @@ The backend Koa server is deployed to [Render.com](https://render.com) as a Web 
      - **Runtime**: `Node`
      - **Build Command**:
        ```bash
-       npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter server run build
+       npm install -g pnpm@9.15.9 && pnpm install --frozen-lockfile && pnpm --filter server run build
        ```
        The workspace allowlist permits the `ffmpeg-static` install lifecycle so
        the voice-message decoder binary is provisioned during deployment. The
