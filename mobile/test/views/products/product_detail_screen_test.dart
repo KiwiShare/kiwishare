@@ -171,6 +171,7 @@ void main() {
         'fuelType': 'Hybrid',
         'transmission': 'Automatic',
         'bodyType': 'Hatchback',
+        'wofExpiry': '2027-06-30',
       },
     );
 
@@ -199,6 +200,50 @@ void main() {
     expect(find.text('85000 km'), findsOneWidget);
     expect(find.text('Hybrid'), findsOneWidget);
     expect(find.text('Automatic'), findsOneWidget);
+    expect(find.text('30 Jun 2027'), findsOneWidget);
+  });
+
+  testWidgets('non-vehicle listings render their category-specific details', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final laptop = _detailItem.copyWith(
+      title: 'MacBook Air',
+      category: 'Electronics',
+      attributes: const {
+        'brand': 'Apple',
+        'model': 'MacBook Air M2',
+        'storage': '256 GB',
+      },
+    );
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: laptop,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final scrollable = find.byType(Scrollable).first;
+    for (
+      var attempt = 0;
+      attempt < 8 && find.text('Electronics details').evaluate().isEmpty;
+      attempt += 1
+    ) {
+      await tester.drag(scrollable, const Offset(0, -300));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Electronics details'), findsOneWidget);
+    expect(find.text('Apple'), findsOneWidget);
+    expect(find.text('MacBook Air M2'), findsOneWidget);
+    expect(find.text('256 GB'), findsOneWidget);
   });
 
   testWidgets('ProductDetailScreen caps public seller trust display at 200+', (

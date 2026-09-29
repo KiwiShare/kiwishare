@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/item_model.dart';
+import 'package:kiwishare/models/listing_category_config.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
 import 'package:kiwishare/providers/listing_provider.dart';
 import 'package:kiwishare/repositories/item_repository.dart';
@@ -146,6 +147,9 @@ void main() {
       'post_attribute_fuelType',
       'post_attribute_transmission',
       'post_attribute_bodyType',
+      'post_attribute_engineSize',
+      'post_attribute_registration',
+      'post_attribute_wofExpiry',
     ];
     for (final key in expectedKeys) {
       for (
@@ -158,6 +162,34 @@ void main() {
       }
       expect(find.byKey(Key(key)), findsOneWidget);
     }
+
+    final vehicleDefinition = listingCategoryDefinition('Cars & Vehicles');
+    expect(vehicleDefinition, isNotNull);
+    expect(
+      vehicleDefinition!.attributes.every((field) => !field.required),
+      isTrue,
+    );
+    expect(
+      listingAttributeField('Cars & Vehicles', 'year')?.type,
+      ListingAttributeInputType.year,
+    );
+    expect(
+      listingAttributeField('Cars & Vehicles', 'wofExpiry')?.type,
+      ListingAttributeInputType.date,
+    );
+    expect(find.text('Make *'), findsNothing);
+    expect(find.text('Mileage *'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('post_attribute_wofExpiry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(DatePickerDialog),
+        matching: find.text('Cancel'),
+      ),
+    );
+    await tester.pumpAndSettle();
   });
 
   testWidgets('AI-first photo flow detects a category and opens its form', (

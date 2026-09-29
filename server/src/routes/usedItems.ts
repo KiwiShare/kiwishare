@@ -662,9 +662,7 @@ async function createUsedItemHandler(ctx: any) {
           : undefined)
       ),
       isSustainable: body.isSustainable ?? false,
-      attributes: sanitizeListingAttributes(category, body.attributes, {
-        requireRequired: category === 'Cars & Vehicles'
-      })
+      attributes: sanitizeListingAttributes(category, body.attributes)
     };
   } catch (error) {
     if (
@@ -796,8 +794,7 @@ async function updateUsedItemHandler(ctx: any) {
     try {
       updateFields.attributes = sanitizeListingAttributes(
         nextCategory,
-        updates.attributes ?? currentAttributes,
-        { requireRequired: nextCategory === 'Cars & Vehicles' }
+        updates.attributes ?? currentAttributes
       );
     } catch (error) {
       if (error instanceof ListingAttributeValidationError) {

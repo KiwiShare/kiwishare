@@ -122,6 +122,7 @@ function buildPrompt(input: ListingSuggestionInput): string {
     'Choose exactly one allowed category and condition.',
     'For category-specific attributes, include only facts visible in the photo or explicitly supplied by the seller. Never guess mileage, year, registration, WOF, storage size, dimensions, ISBN, model, brand, or similar details.',
     'For Cars & Vehicles, identify make/model/body/fuel/transmission only when reasonably supported; leave unknown fields out so the seller can complete them.',
+    'Use a four-digit YYYY value for vehicle year. Use YYYY-MM-DD for date fields such as WOF expiry; if the exact date is not supported by the image or seller text, omit it instead of guessing.',
     'Suggest a plausible positive NZD asking price, but do not claim it is a valuation.',
     'Do not include contact details, URLs, markdown, emojis, or discriminatory language.',
     'Return only the requested JSON object.',

@@ -179,6 +179,51 @@ class _PostItemScreenState extends State<PostItemScreen> {
     await _requestSuggestion(autoApply: true, openFormAfter: true);
   }
 
+  DateTime? _parseAttributeDate(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    if (RegExp(r'^\d{4}$').hasMatch(trimmed)) {
+      final year = int.tryParse(trimmed);
+      return year == null ? null : DateTime(year);
+    }
+    return DateTime.tryParse(trimmed);
+  }
+
+  String _isoDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
+  Future<void> _pickAttributeDate(ListingAttributeField field) async {
+    final controller = _attributeController(field.key);
+    final existing = _parseAttributeDate(controller.text);
+    final now = DateTime.now();
+    final firstYear = field.min?.toInt() ?? 1900;
+    final lastYear = field.max?.toInt() ?? 2100;
+    final initialYear = (existing?.year ?? now.year).clamp(firstYear, lastYear);
+    final initialDate = field.type == ListingAttributeInputType.year
+        ? DateTime(initialYear)
+        : (existing ?? now);
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(firstYear),
+      lastDate: DateTime(lastYear, 12, 31),
+      initialDatePickerMode: field.type == ListingAttributeInputType.year
+          ? DatePickerMode.year
+          : DatePickerMode.day,
+      helpText: 'Select ${field.label.toLowerCase()}',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      controller.text = field.type == ListingAttributeInputType.year
+          ? picked.year.toString()
+          : _isoDate(picked);
+    });
+  }
+
   String? _attributeValidator(ListingAttributeField field, String? value) {
     final text = value?.trim() ?? '';
     if (field.required && text.isEmpty) return 'Required';
@@ -224,7 +269,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
       Padding(
         padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
         child: Text(
-          'Add category-specific details so buyers can compare listings more easily.',
+          'These details are optional, but they help buyers compare listings more easily.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
@@ -245,6 +290,24 @@ class _PostItemScreenState extends State<PostItemScreen> {
                     required: field.required,
                     onChanged: (value) =>
                         setState(() => _attributeSelections[field.key] = value),
+                  )
+                : field.type == ListingAttributeInputType.date ||
+                      field.type == ListingAttributeInputType.year
+                ? TextFormField(
+                    key: Key('post_attribute_${field.key}'),
+                    controller: _attributeController(field.key),
+                    readOnly: true,
+                    onTap: () => _pickAttributeDate(field),
+                    decoration: InputDecoration(
+                      hintText:
+                          field.hint ??
+                          (field.type == ListingAttributeInputType.year
+                              ? 'Select year'
+                              : 'Select date'),
+                      hintStyle: _postPlaceholderStyle,
+                      suffixIcon: const Icon(Icons.calendar_today_rounded),
+                    ),
+                    validator: (value) => _attributeValidator(field, value),
                   )
                 : TextFormField(
                     key: Key('post_attribute_${field.key}'),

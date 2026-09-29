@@ -4,32 +4,26 @@ import {
 } from '../src/config/listingCategories';
 
 describe('listing category attributes', () => {
-  test('requires core vehicle fields for published car listings', () => {
-    expect(() =>
-      sanitizeListingAttributes(
-        'Cars & Vehicles',
-        {
-          make: 'Toyota',
-          model: 'Corolla',
-          year: '2018',
-          mileageKm: '85000',
-          fuelType: 'Hybrid',
-          transmission: 'Automatic',
-          bodyType: 'Hatchback'
-        },
-        { requireRequired: true }
-      )
-    ).not.toThrow();
+  test('keeps category-specific details optional for vehicle listings', () => {
+    expect(sanitizeListingAttributes('Cars & Vehicles', undefined)).toEqual({});
+    expect(
+      sanitizeListingAttributes('Cars & Vehicles', {
+        make: 'Toyota',
+        model: 'Corolla'
+      })
+    ).toEqual({ make: 'Toyota', model: 'Corolla' });
+  });
+
+  test('validates optional vehicle year and WOF dates when supplied', () => {
+    expect(
+      sanitizeListingAttributes('Cars & Vehicles', {
+        year: '2018',
+        wofExpiry: '2027-06-30'
+      })
+    ).toEqual({ year: '2018', wofExpiry: '2027-06-30' });
 
     expect(() =>
-      sanitizeListingAttributes(
-        'Cars & Vehicles',
-        {
-          make: 'Toyota',
-          model: 'Corolla'
-        },
-        { requireRequired: true }
-      )
+      sanitizeListingAttributes('Cars & Vehicles', { wofExpiry: 'June 2027' })
     ).toThrow(ListingAttributeValidationError);
   });
 

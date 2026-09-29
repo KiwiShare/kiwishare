@@ -1,4 +1,4 @@
-enum ListingAttributeInputType { text, number, choice }
+enum ListingAttributeInputType { text, number, choice, date, year }
 
 class ListingAttributeField {
   const ListingAttributeField({
@@ -177,23 +177,12 @@ const listingCategoryDefinitions = <ListingCategoryDefinition>[
     name: 'Cars & Vehicles',
     subtitle: 'Cars and road vehicles with vehicle-specific details',
     attributes: [
-      ListingAttributeField(
-        key: 'make',
-        label: 'Make',
-        hint: 'e.g. Toyota',
-        required: true,
-      ),
-      ListingAttributeField(
-        key: 'model',
-        label: 'Model',
-        hint: 'e.g. Corolla',
-        required: true,
-      ),
+      ListingAttributeField(key: 'make', label: 'Make', hint: 'e.g. Toyota'),
+      ListingAttributeField(key: 'model', label: 'Model', hint: 'e.g. Corolla'),
       ListingAttributeField(
         key: 'year',
         label: 'Year',
-        type: ListingAttributeInputType.number,
-        required: true,
+        type: ListingAttributeInputType.year,
         min: 1900,
         max: 2100,
       ),
@@ -201,7 +190,6 @@ const listingCategoryDefinitions = <ListingCategoryDefinition>[
         key: 'mileageKm',
         label: 'Mileage',
         type: ListingAttributeInputType.number,
-        required: true,
         unit: 'km',
         min: 0,
         max: 2000000,
@@ -219,14 +207,12 @@ const listingCategoryDefinitions = <ListingCategoryDefinition>[
           'LPG',
           'Other',
         ],
-        required: true,
       ),
       ListingAttributeField(
         key: 'transmission',
         label: 'Transmission',
         type: ListingAttributeInputType.choice,
         options: ['Automatic', 'Manual', 'CVT', 'Other'],
-        required: true,
       ),
       ListingAttributeField(
         key: 'bodyType',
@@ -243,7 +229,6 @@ const listingCategoryDefinitions = <ListingCategoryDefinition>[
           'Convertible',
           'Other',
         ],
-        required: true,
       ),
       ListingAttributeField(
         key: 'engineSize',
@@ -258,7 +243,8 @@ const listingCategoryDefinitions = <ListingCategoryDefinition>[
       ListingAttributeField(
         key: 'wofExpiry',
         label: 'WOF expiry',
-        hint: 'e.g. Jun 2027',
+        hint: 'Select expiry date',
+        type: ListingAttributeInputType.date,
       ),
     ],
   ),

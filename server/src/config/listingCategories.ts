@@ -18,6 +18,7 @@ export interface ListingAttributeSpec {
   required?: boolean;
   options?: readonly string[];
   numeric?: boolean;
+  dateKind?: 'date' | 'year';
   min?: number;
   max?: number;
 }
@@ -63,13 +64,12 @@ export const LISTING_CATEGORY_ATTRIBUTES: Record<ListingCategory, readonly Listi
     { key: 'material', label: 'Material' }
   ],
   'Cars & Vehicles': [
-    { key: 'make', label: 'Make', required: true },
-    { key: 'model', label: 'Model', required: true },
-    { key: 'year', label: 'Year', required: true, numeric: true, min: 1900, max: 2100 },
+    { key: 'make', label: 'Make' },
+    { key: 'model', label: 'Model' },
+    { key: 'year', label: 'Year', numeric: true, dateKind: 'year', min: 1900, max: 2100 },
     {
       key: 'mileageKm',
       label: 'Mileage',
-      required: true,
       numeric: true,
       min: 0,
       max: 2_000_000
@@ -77,24 +77,21 @@ export const LISTING_CATEGORY_ATTRIBUTES: Record<ListingCategory, readonly Listi
     {
       key: 'fuelType',
       label: 'Fuel / energy',
-      required: true,
       options: ['Petrol', 'Diesel', 'Hybrid', 'Plug-in Hybrid', 'Electric', 'LPG', 'Other']
     },
     {
       key: 'transmission',
       label: 'Transmission',
-      required: true,
       options: ['Automatic', 'Manual', 'CVT', 'Other']
     },
     {
       key: 'bodyType',
       label: 'Body type',
-      required: true,
       options: ['Hatchback', 'Sedan', 'SUV', 'Wagon', 'Ute', 'Van', 'Coupe', 'Convertible', 'Other']
     },
     { key: 'engineSize', label: 'Engine / motor' },
     { key: 'registration', label: 'Registration' },
-    { key: 'wofExpiry', label: 'WOF expiry' }
+    { key: 'wofExpiry', label: 'WOF expiry', dateKind: 'date' }
   ],
   Other: []
 };
@@ -178,6 +175,16 @@ export function sanitizeListingAttributes(
       }
       if (spec.max != null && numeric > spec.max) {
         throw new ListingAttributeValidationError(`${spec.label} is above the allowed range.`);
+      }
+    }
+
+    if (spec.dateKind === 'year' && !/^\d{4}$/.test(text)) {
+      throw new ListingAttributeValidationError(`${spec.label} must be a four-digit year.`);
+    }
+
+    if (spec.dateKind === 'date') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(`${text}T00:00:00Z`))) {
+        throw new ListingAttributeValidationError(`${spec.label} must be a valid date.`);
       }
     }
 
