@@ -24,6 +24,7 @@ void main() {
     category: 'Furniture',
     condition: 'Like new',
     description: 'A sturdy study desk.',
+    attributes: const {'material': 'Oak'},
     photos: [photo],
   );
 
@@ -82,6 +83,7 @@ void main() {
       },
     ]);
     expect(body['isSustainable'], false);
+    expect(body['attributes'], {'material': 'Oak'});
     expect(body['location'], {
       'city': 'Auckland',
       'suburb': 'Mount Eden',

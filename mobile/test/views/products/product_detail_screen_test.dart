@@ -152,6 +152,55 @@ void main() {
     expect(find.text('Directions'), findsOneWidget);
   });
 
+  testWidgets('vehicle listings render vehicle-specific attributes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final car = _detailItem.copyWith(
+      title: '2018 Toyota Corolla Hybrid',
+      category: 'Cars & Vehicles',
+      attributes: const {
+        'make': 'Toyota',
+        'model': 'Corolla',
+        'year': '2018',
+        'mileageKm': '85000',
+        'fuelType': 'Hybrid',
+        'transmission': 'Automatic',
+        'bodyType': 'Hatchback',
+      },
+    );
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: car,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final scrollable = find.byType(Scrollable).first;
+    for (
+      var attempt = 0;
+      attempt < 8 && find.text('Vehicle details').evaluate().isEmpty;
+      attempt += 1
+    ) {
+      await tester.drag(scrollable, const Offset(0, -300));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Vehicle details'), findsOneWidget);
+    expect(find.text('Toyota'), findsOneWidget);
+    expect(find.text('Corolla'), findsOneWidget);
+    expect(find.text('85000 km'), findsOneWidget);
+    expect(find.text('Hybrid'), findsOneWidget);
+    expect(find.text('Automatic'), findsOneWidget);
+  });
+
   testWidgets('ProductDetailScreen caps public seller trust display at 200+', (
     tester,
   ) async {

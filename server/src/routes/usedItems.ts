@@ -10,6 +10,10 @@ import Conversation from '../models/Conversation';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import { notifyWatchlistPriceDrop } from '../services/pushNotification';
 import { sendAdminItemNotification } from '../services/adminNotification';
+import {
+  ListingAttributeValidationError,
+  sanitizeListingAttributes
+} from '../config/listingCategories';
 
 const router = new Router();
 
@@ -225,6 +229,9 @@ export function formatItem(itemDoc: any) {
     ? itemObj.images
     : (itemObj.imageUrl ? [{ url: itemObj.imageUrl, sortOrder: 0 }] : []);
   const imageUrl = rawImages[0]?.url || itemObj.imageUrl || '';
+  const attributes = itemObj.attributes instanceof Map
+    ? Object.fromEntries(itemObj.attributes.entries())
+    : (itemObj.attributes || {});
   
   let sellerInfo: any = null;
   let ownerId = itemObj.ownerId || '';
@@ -250,6 +257,7 @@ export function formatItem(itemDoc: any) {
     id: itemObj.id || itemObj._id?.toString(),
     imageUrl,
     images: rawImages,
+    attributes,
     location: locationStr,
     priceNzd,
     isFree,
@@ -615,6 +623,7 @@ async function createUsedItemHandler(ctx: any) {
     images: Array<{ url: string; thumbnailUrl: string; sortOrder: number }>;
     location: any;
     isSustainable: boolean;
+    attributes: Record<string, string>;
   };
   try {
     const title = requireTrimmedText(body.title, 'Title', {
@@ -652,10 +661,16 @@ async function createUsedItemHandler(ctx: any) {
           ? { city: body.city, suburb: body.suburb }
           : undefined)
       ),
-      isSustainable: body.isSustainable ?? false
+      isSustainable: body.isSustainable ?? false,
+      attributes: sanitizeListingAttributes(category, body.attributes, {
+        requireRequired: category === 'Cars & Vehicles'
+      })
     };
   } catch (error) {
-    if (!(error instanceof ListingValidationError)) throw error;
+    if (
+      !(error instanceof ListingValidationError) &&
+      !(error instanceof ListingAttributeValidationError)
+    ) throw error;
     ctx.status = 400;
     ctx.body = { status: 'error', message: error.message };
     return;
@@ -669,6 +684,7 @@ async function createUsedItemHandler(ctx: any) {
     price: validated.priceCents,
     currency: 'NZD',
     negotiable: false,
+    attributes: validated.attributes,
     images: validated.images,
     location: validated.location,
     category: validated.category,
@@ -771,6 +787,26 @@ async function updateUsedItemHandler(ctx: any) {
   }
   if (updates.isSustainable != null) {
     updateFields.isSustainable = Boolean(updates.isSustainable);
+  }
+  if (updates.attributes != null || updates.category != null) {
+    const nextCategory = String(updates.category ?? item.category);
+    const currentAttributes = item.attributes instanceof Map
+      ? Object.fromEntries(item.attributes.entries())
+      : (item.attributes || {});
+    try {
+      updateFields.attributes = sanitizeListingAttributes(
+        nextCategory,
+        updates.attributes ?? currentAttributes,
+        { requireRequired: nextCategory === 'Cars & Vehicles' }
+      );
+    } catch (error) {
+      if (error instanceof ListingAttributeValidationError) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: error.message };
+        return;
+      }
+      throw error;
+    }
   }
   if (updates.imageUrl != null) {
     updateFields.imageUrl = updates.imageUrl;

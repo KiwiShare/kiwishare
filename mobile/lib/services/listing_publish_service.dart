@@ -31,6 +31,7 @@ class ListingDraft {
     this.isSustainable = false,
     this.latitude,
     this.longitude,
+    this.attributes = const {},
   });
 
   final String title;
@@ -43,6 +44,7 @@ class ListingDraft {
   final bool isSustainable;
   final double? latitude;
   final double? longitude;
+  final Map<String, String> attributes;
 }
 
 class ListingPublishException implements Exception {
@@ -124,6 +126,7 @@ class RestListingPublishService implements ListingPublishService {
         'condition': _conditionValue(draft.condition),
         'description': draft.description.trim(),
         'isSustainable': draft.isSustainable,
+        'attributes': draft.attributes,
         'images': [
           for (var index = 0; index < imageUrls.length; index++)
             {

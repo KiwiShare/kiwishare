@@ -1,13 +1,12 @@
-export const LISTING_CATEGORIES = [
-  'Furniture',
-  'Electronics',
-  'Books',
-  'Home',
-  'Sports',
-  'Kids',
-  'Fashion',
-  'Other'
-] as const;
+import {
+  ALL_LISTING_ATTRIBUTE_KEYS,
+  LISTING_CATEGORIES,
+  ListingCategory,
+  sanitizeListingAttributes
+} from '../config/listingCategories';
+
+export { LISTING_CATEGORIES };
+export type { ListingCategory };
 
 export const LISTING_CONDITIONS = [
   'New',
@@ -16,7 +15,6 @@ export const LISTING_CONDITIONS = [
   'Fair'
 ] as const;
 
-export type ListingCategory = typeof LISTING_CATEGORIES[number];
 export type ListingCondition = typeof LISTING_CONDITIONS[number];
 
 export interface ListingSuggestionInput {
@@ -27,6 +25,7 @@ export interface ListingSuggestionInput {
   location?: string;
   imageBase64?: string;
   imageMimeType?: string;
+  attributes?: Record<string, string>;
 }
 
 export interface ListingSuggestion {
@@ -35,6 +34,7 @@ export interface ListingSuggestion {
   category: ListingCategory;
   condition: ListingCondition;
   priceNzd: string;
+  attributes: Record<string, string>;
 }
 
 export interface ListingSuggestionProvider {
@@ -77,10 +77,35 @@ const outputSchema = {
     priceNzd: {
       type: 'STRING',
       description: 'A positive NZD amount with at most two decimal places.'
+    },
+    attributes: {
+      type: 'OBJECT',
+      description:
+        'Category-specific factual attributes. Include only values visible in the photo or supplied by the seller. Use an empty object when unknown.',
+      properties: Object.fromEntries(
+        ALL_LISTING_ATTRIBUTE_KEYS.map((key) => [
+          key,
+          { type: 'STRING', description: 'Optional factual value for ' + key + '.' }
+        ])
+      )
     }
   },
-  required: ['title', 'description', 'category', 'condition', 'priceNzd'],
-  propertyOrdering: ['title', 'description', 'category', 'condition', 'priceNzd']
+  required: [
+    'title',
+    'description',
+    'category',
+    'condition',
+    'priceNzd',
+    'attributes'
+  ],
+  propertyOrdering: [
+    'title',
+    'description',
+    'category',
+    'condition',
+    'priceNzd',
+    'attributes'
+  ]
 };
 
 function buildPrompt(input: ListingSuggestionInput): string {
@@ -95,6 +120,8 @@ function buildPrompt(input: ListingSuggestionInput): string {
     'Do not invent brands, dimensions, age, defects, accessories, provenance, or safety claims.',
     'Preserve useful facts supplied by the seller and use cautious wording for missing facts.',
     'Choose exactly one allowed category and condition.',
+    'For category-specific attributes, include only facts visible in the photo or explicitly supplied by the seller. Never guess mileage, year, registration, WOF, storage size, dimensions, ISBN, model, brand, or similar details.',
+    'For Cars & Vehicles, identify make/model/body/fuel/transmission only when reasonably supported; leave unknown fields out so the seller can complete them.',
     'Suggest a plausible positive NZD asking price, but do not claim it is a valuation.',
     'Do not include contact details, URLs, markdown, emojis, or discriminatory language.',
     'Return only the requested JSON object.',
@@ -284,12 +311,19 @@ export function validateListingSuggestion(value: unknown): ListingSuggestion {
     throw new InvalidListingSuggestionError('Price is invalid.');
   }
 
+  const attributes = sanitizeListingAttributes(
+    category,
+    record.attributes ?? {},
+    { requireRequired: false }
+  );
+
   return {
     title,
     description,
     category: category as ListingCategory,
     condition: condition as ListingCondition,
-    priceNzd
+    priceNzd,
+    attributes
   };
 }
 

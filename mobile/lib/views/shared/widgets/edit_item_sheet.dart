@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../models/listing_category_config.dart';
 import '../../../models/item_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/listing_provider.dart';
@@ -60,16 +61,7 @@ class _EditItemSheetState extends State<EditItemSheet> {
   late final TextEditingController _priceController;
   late final TextEditingController _imageUrlController;
 
-  static const _categories = <String>[
-    'Furniture',
-    'Electronics',
-    'Books',
-    'Home',
-    'Sports',
-    'Kids',
-    'Fashion',
-    'Other',
-  ];
+  static final _categories = listingCategoryNames;
 
   static const _conditions = <String>['New', 'Like new', 'Good', 'Fair'];
 

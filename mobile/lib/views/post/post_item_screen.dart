@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/listing_category_config.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/listing_provider.dart';
 import '../../services/listing_image_picker.dart';
@@ -25,6 +26,7 @@ class PostItemScreen extends StatefulWidget {
   final ListingPublishService? publishService;
   final ListingSuggestionService? suggestionService;
   final String? authToken;
+  final String? initialCategory;
 
   const PostItemScreen({
     super.key,
@@ -35,6 +37,7 @@ class PostItemScreen extends StatefulWidget {
     this.publishService,
     this.suggestionService,
     this.authToken,
+    this.initialCategory,
   });
 
   @override
@@ -43,28 +46,21 @@ class PostItemScreen extends StatefulWidget {
 
 class _PostItemScreenState extends State<PostItemScreen> {
   static const _maximumPhotoCount = 10;
-  static const _categories = <String>[
-    'Furniture',
-    'Electronics',
-    'Books',
-    'Home',
-    'Sports',
-    'Kids',
-    'Fashion',
-    'Other',
-  ];
   static const _conditions = <String>['New', 'Like new', 'Good', 'Fair'];
 
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final Map<String, TextEditingController> _attributeControllers = {};
+  final Map<String, String> _attributeSelections = {};
   late final ListingImagePicker _imagePicker;
   late final ListingLocationService _locationService;
   late final ListingPublishService _publishService;
   late final ListingSuggestionService _suggestionService;
 
   String? _category;
+  late bool _flowStarted;
   ListingLocation? _location;
   String? _condition;
   final List<_SelectedPhoto> _photos = [];
@@ -78,6 +74,10 @@ class _PostItemScreenState extends State<PostItemScreen> {
   @override
   void initState() {
     super.initState();
+    _category = listingCategoryNames.contains(widget.initialCategory)
+        ? widget.initialCategory
+        : null;
+    _flowStarted = _category != null;
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _locationService = widget.locationService ?? DeviceListingLocationService();
     _publishService = widget.publishService ?? RestListingPublishService();
@@ -93,7 +93,182 @@ class _PostItemScreenState extends State<PostItemScreen> {
     _titleController.dispose();
     _priceController.dispose();
     _descriptionController.dispose();
+    for (final controller in _attributeControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  TextEditingController _attributeController(String key) {
+    return _attributeControllers.putIfAbsent(key, TextEditingController.new);
+  }
+
+  Map<String, String> _currentAttributes() {
+    final definition = listingCategoryDefinition(_category);
+    if (definition == null) return const {};
+    final result = <String, String>{};
+    for (final field in definition.attributes) {
+      final raw = field.type == ListingAttributeInputType.choice
+          ? _attributeSelections[field.key]
+          : _attributeControllers[field.key]?.text;
+      final value = raw?.trim() ?? '';
+      if (value.isNotEmpty) result[field.key] = value;
+    }
+    return result;
+  }
+
+  void _applySuggestion(ListingSuggestion suggestion) {
+    _titleController.text = suggestion.title;
+    _descriptionController.text = suggestion.description;
+    _priceController.text = suggestion.priceNzd;
+    _category = suggestion.category;
+    _condition = suggestion.condition;
+
+    final definition = listingCategoryDefinition(suggestion.category);
+    for (final field
+        in definition?.attributes ?? const <ListingAttributeField>[]) {
+      final value = suggestion.attributes[field.key]?.trim() ?? '';
+      if (value.isEmpty) continue;
+      if (field.type == ListingAttributeInputType.choice) {
+        String? matched;
+        for (final option in field.options) {
+          if (option.toLowerCase() == value.toLowerCase()) {
+            matched = option;
+            break;
+          }
+        }
+        if (matched != null) _attributeSelections[field.key] = matched;
+      } else {
+        _attributeController(field.key).text = value;
+      }
+    }
+  }
+
+  Future<void> _startCategoryFlow() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) => _SelectionSheet(
+        title: 'What are you selling?',
+        options: listingCategoryNames,
+        selectedValue: _category,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _category = selected;
+      _flowStarted = true;
+    });
+  }
+
+  Future<void> _startAiFlow() async {
+    if (_isGeneratingSuggestion || _isPickingPhotos) return;
+    final source = await showModalBottomSheet<_PhotoSource>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) => const _PhotoSourceSheet(),
+    );
+    if (source == null || !mounted) return;
+
+    final before = _photos.length;
+    await _pickPhotos(source);
+    if (!mounted || _photos.length == before) return;
+    await _requestSuggestion(autoApply: true, openFormAfter: true);
+  }
+
+  String? _attributeValidator(ListingAttributeField field, String? value) {
+    final text = value?.trim() ?? '';
+    if (field.required && text.isEmpty) return 'Required';
+    if (text.isEmpty || field.type != ListingAttributeInputType.number) {
+      return null;
+    }
+    final number = num.tryParse(text);
+    if (number == null) return 'Enter a valid number';
+    if (field.min != null && number < field.min!) return 'Minimum ${field.min}';
+    if (field.max != null && number > field.max!) return 'Maximum ${field.max}';
+    return null;
+  }
+
+  List<Widget> _buildCategoryAttributeFields(BuildContext context) {
+    final definition = listingCategoryDefinition(_category);
+    if (definition == null || definition.attributes.isEmpty) return const [];
+
+    return [
+      const SizedBox(height: AppSpacing.sm),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 6, 4, 2),
+        child: Row(
+          children: [
+            Icon(
+              _category == 'Cars & Vehicles'
+                  ? Icons.directions_car_outlined
+                  : Icons.tune_rounded,
+              size: 18,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${definition.name} details',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+        child: Text(
+          'Add category-specific details so buyers can compare listings more easily.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+      for (final field in definition.attributes) ...[
+        _XianyuCardTile(
+          child: _ResponsiveFieldRow(
+            label: field.required ? '${field.label} *' : field.label,
+            child: field.type == ListingAttributeInputType.choice
+                ? _MobileSelectionFormField(
+                    key: Key('post_attribute_${field.key}'),
+                    value: _attributeSelections[field.key],
+                    hintText:
+                        field.hint ?? 'Select ${field.label.toLowerCase()}',
+                    sheetTitle: field.label,
+                    options: field.options,
+                    required: field.required,
+                    onChanged: (value) =>
+                        setState(() => _attributeSelections[field.key] = value),
+                  )
+                : TextFormField(
+                    key: Key('post_attribute_${field.key}'),
+                    controller: _attributeController(field.key),
+                    keyboardType: field.type == ListingAttributeInputType.number
+                        ? const TextInputType.numberWithOptions(decimal: false)
+                        : TextInputType.text,
+                    inputFormatters:
+                        field.type == ListingAttributeInputType.number
+                        ? [FilteringTextInputFormatter.digitsOnly]
+                        : null,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      hintText: field.hint ?? 'Optional',
+                      hintStyle: _postPlaceholderStyle,
+                      suffixText: field.unit,
+                    ),
+                    validator: (value) => _attributeValidator(field, value),
+                  ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+      ],
+    ];
   }
 
   Future<void> _recoverLostPhotos() async {
@@ -579,7 +754,10 @@ class _PostItemScreenState extends State<PostItemScreen> {
     );
   }
 
-  Future<void> _requestSuggestion() async {
+  Future<void> _requestSuggestion({
+    bool autoApply = false,
+    bool openFormAfter = false,
+  }) async {
     if (_isGeneratingSuggestion || _isPublishing) return;
     final hasItemContext =
         _photos.isNotEmpty ||
@@ -613,6 +791,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
       _category,
       _condition,
       _location?.label,
+      jsonEncode(_currentAttributes()),
     );
 
     String? photoBase64;
@@ -636,6 +815,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
           location: _location?.label,
           imageBase64: photoBase64,
           imageMimeType: photoMimeType,
+          attributes: _currentAttributes(),
         ),
       );
       if (!mounted) return;
@@ -650,6 +830,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
         _category,
         _condition,
         _location?.label,
+        jsonEncode(_currentAttributes()),
       );
       if (currentDraft != requestedDraft) {
         _showPhotoMessage(
@@ -657,21 +838,25 @@ class _PostItemScreenState extends State<PostItemScreen> {
         );
         return;
       }
-      final shouldApply = await showModalBottomSheet<bool>(
-        context: context,
-        showDragHandle: true,
-        isScrollControlled: true,
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        builder: (context) => _ListingSuggestionSheet(suggestion: suggestion),
-      );
-      if (shouldApply == true && mounted) {
+      if (autoApply) {
         setState(() {
-          _titleController.text = suggestion.title;
-          _descriptionController.text = suggestion.description;
-          _priceController.text = suggestion.priceNzd;
-          _category = suggestion.category;
-          _condition = suggestion.condition;
+          _applySuggestion(suggestion);
+          if (openFormAfter) _flowStarted = true;
         });
+        _showPhotoMessage(
+          'AI draft ready. Review the detected category and details before publishing.',
+        );
+      } else {
+        final shouldApply = await showModalBottomSheet<bool>(
+          context: context,
+          showDragHandle: true,
+          isScrollControlled: true,
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          builder: (context) => _ListingSuggestionSheet(suggestion: suggestion),
+        );
+        if (shouldApply == true && mounted) {
+          setState(() => _applySuggestion(suggestion));
+        }
       }
     } on ListingSuggestionAuthenticationException catch (error) {
       if (!mounted) return;
@@ -718,6 +903,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
           condition: _condition!,
           description: _descriptionController.text,
           isSustainable: _isSustainable,
+          attributes: _currentAttributes(),
           photos: [
             for (var index = 0; index < _photos.length; index++)
               ListingPhotoDraft(
@@ -809,6 +995,72 @@ class _PostItemScreenState extends State<PostItemScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    if (!_flowStarted) {
+      return Scaffold(
+        backgroundColor: isDark
+            ? const Color(0xFF0C1310)
+            : const Color(0xFFF8FAFC),
+        body: SafeArea(
+          child: Column(
+            children: [
+              _PostHeader(onCancel: widget.onCancel, onPreview: null),
+              const Divider(key: Key('post_header_divider'), height: 1),
+              Expanded(
+                child: ListView(
+                  key: const Key('post_start_page'),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.xl,
+                    AppSpacing.lg,
+                    AppSpacing.xl,
+                  ),
+                  children: [
+                    Text(
+                      'How do you want to list it?',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Choose a category for a tailored form, or let AI identify the item from a photo and prepare the right form for you.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    _PublishStartCard(
+                      key: const Key('post_start_category_button'),
+                      icon: Icons.category_outlined,
+                      title: 'Choose a category',
+                      subtitle:
+                          'Pick what you are selling and fill in a form designed for that category.',
+                      buttonLabel: 'Choose category',
+                      onTap: _startCategoryFlow,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _PublishStartCard(
+                      key: const Key('post_start_ai_button'),
+                      icon: Icons.auto_awesome_rounded,
+                      title: 'AI list it for me',
+                      subtitle:
+                          'Take a photo or choose one from your library. AI will identify the category, prefill the draft, then open the tailored form for review.',
+                      buttonLabel: _isGeneratingSuggestion
+                          ? 'Identifying item…'
+                          : 'Start with a photo',
+                      loading: _isGeneratingSuggestion || _isPickingPhotos,
+                      onTap: _startAiFlow,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: isDark
@@ -1004,7 +1256,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                           value: _category,
                           hintText: 'Select a category',
                           sheetTitle: 'Choose category',
-                          options: _categories,
+                          options: listingCategoryNames,
                           onChanged: (value) =>
                               setState(() => _category = value),
                         ),
@@ -1065,6 +1317,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                         ),
                       ),
                     ),
+                    ..._buildCategoryAttributeFields(context),
                     const SizedBox(height: AppSpacing.sm),
                     _XianyuCardTile(
                       child: Material(
@@ -1238,6 +1491,27 @@ class _ListingSuggestionSheet extends StatelessWidget {
               label: 'Description',
               value: suggestion.description,
             ),
+            if (suggestion.attributes.isNotEmpty) ...[
+              Text(
+                suggestion.category == 'Cars & Vehicles'
+                    ? 'Detected vehicle details'
+                    : 'Detected category details',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              for (final field
+                  in listingCategoryDefinition(
+                        suggestion.category,
+                      )?.attributes ??
+                      const <ListingAttributeField>[])
+                if (suggestion.attributes[field.key]?.trim().isNotEmpty == true)
+                  _SuggestionValue(
+                    label: field.label,
+                    value: suggestion.attributes[field.key]!,
+                  ),
+            ],
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [
@@ -1282,6 +1556,91 @@ class _SuggestionValue extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           SelectableText(value),
         ],
+      ),
+    );
+  }
+}
+
+class _PublishStartCard extends StatelessWidget {
+  const _PublishStartCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.buttonLabel,
+    required this.onTap,
+    this.loading = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String buttonLabel;
+  final Future<void> Function() onTap;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.large),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.large),
+        onTap: loading ? null : () => onTap(),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.large),
+            border: Border.all(
+              color: colors.outlineVariant.withValues(alpha: 0.65),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: colors.primary),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: loading ? null : () => onTap(),
+                  icon: loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(icon, size: 18),
+                  label: Text(buttonLabel),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2451,6 +2810,7 @@ class _MobileSelectionFormField extends StatelessWidget {
   final String sheetTitle;
   final List<String> options;
   final ValueChanged<String> onChanged;
+  final bool required;
 
   const _MobileSelectionFormField({
     super.key,
@@ -2459,6 +2819,7 @@ class _MobileSelectionFormField extends StatelessWidget {
     required this.sheetTitle,
     required this.options,
     required this.onChanged,
+    this.required = true,
   });
 
   Future<String?> _showOptions(BuildContext context, String? selectedValue) {
@@ -2485,7 +2846,7 @@ class _MobileSelectionFormField extends StatelessWidget {
     return FormField<String>(
       key: ValueKey(value),
       initialValue: value,
-      validator: (value) => value == null ? 'Required' : null,
+      validator: (value) => required && value == null ? 'Required' : null,
       autovalidateMode: AutovalidateMode.onUserInteraction,
       builder: (field) {
         return Semantics(
@@ -2712,6 +3073,9 @@ IconData? _getOptionIcon(String option) {
   }
   if (lower.contains('cloth') || lower.contains('fashion')) {
     return Icons.checkroom_outlined;
+  }
+  if (lower.contains('car') || lower.contains('vehicle')) {
+    return Icons.directions_car_outlined;
   }
   if (lower.contains('other')) return Icons.category_outlined;
   if (lower == 'new') return Icons.verified_outlined;

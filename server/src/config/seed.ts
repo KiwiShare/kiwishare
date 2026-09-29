@@ -7,25 +7,33 @@ import Order from '../models/Order';
 export const DEFAULT_CATEGORIES = [
   { name: 'Furniture', slug: 'furniture', icon: 'Armchair', description: 'Chairs, desks, sofas, and home furnishings', sortOrder: 1 },
   { name: 'Electronics', slug: 'electronics', icon: 'Tv', description: 'Computers, screens, audio, and gadgets', sortOrder: 2 },
-  { name: 'Outdoor', slug: 'outdoor', icon: 'Tent', description: 'Camping, hiking, tents, and adventure gear', sortOrder: 3 },
-  { name: 'Clothing', slug: 'clothing', icon: 'Shirt', description: 'Vintage, jackets, shoes, and apparel', sortOrder: 4 },
-  { name: 'Tools', slug: 'tools', icon: 'Wrench', description: 'Power tools, hand tools, and DIY equipment', sortOrder: 5 },
-  { name: 'Kitchen', slug: 'kitchen', icon: 'Utensils', description: 'Cookware, appliances, and dining essentials', sortOrder: 6 },
-  { name: 'Plants', slug: 'plants', icon: 'Flower2', description: 'Indoor plants, cuttings, pots, and garden tools', sortOrder: 7 },
-  { name: 'Sports', slug: 'sports', icon: 'Trophy', description: 'Bikes, surfboards, rackets, and fitness items', sortOrder: 8 },
-  { name: 'Books', slug: 'books', icon: 'BookOpen', description: 'Novels, textbooks, puzzles, and board games', sortOrder: 9 },
-  { name: 'Other', slug: 'other', icon: 'Package', description: 'Miscellaneous community treasures', sortOrder: 10 },
+  { name: 'Books', slug: 'books', icon: 'BookOpen', description: 'Novels, textbooks, puzzles, and board games', sortOrder: 3 },
+  { name: 'Home', slug: 'home', icon: 'House', description: 'Homeware, decor, and household essentials', sortOrder: 4 },
+  { name: 'Sports', slug: 'sports', icon: 'Trophy', description: 'Bikes, surfboards, rackets, and fitness items', sortOrder: 5 },
+  { name: 'Kids', slug: 'kids', icon: 'Baby', description: 'Toys, baby gear, and children items', sortOrder: 6 },
+  { name: 'Fashion', slug: 'fashion', icon: 'Shirt', description: 'Clothing, shoes, bags, and accessories', sortOrder: 7 },
+  { name: 'Cars & Vehicles', slug: 'cars-vehicles', icon: 'Car', description: 'Cars and road vehicles with vehicle-specific details', sortOrder: 8 },
+  { name: 'Other', slug: 'other', icon: 'Package', description: 'Miscellaneous community treasures', sortOrder: 9 },
+  // Legacy discovery categories are retained for existing listings.
+  { name: 'Outdoor', slug: 'outdoor', icon: 'Tent', description: 'Camping, hiking, tents, and adventure gear', sortOrder: 20 },
+  { name: 'Clothing', slug: 'clothing', icon: 'Shirt', description: 'Vintage, jackets, shoes, and apparel', sortOrder: 21 },
+  { name: 'Tools', slug: 'tools', icon: 'Wrench', description: 'Power tools, hand tools, and DIY equipment', sortOrder: 22 },
+  { name: 'Kitchen', slug: 'kitchen', icon: 'Utensils', description: 'Cookware, appliances, and dining essentials', sortOrder: 23 },
+  { name: 'Plants', slug: 'plants', icon: 'Flower2', description: 'Indoor plants, cuttings, pots, and garden tools', sortOrder: 24 },
 ];
 
 export async function seedDatabase() {
   try {
-    // 1. Seed Categories if empty
-    const categoryCount = await Category.countDocuments();
-    if (categoryCount === 0) {
-      console.log('🌱 [Seeding] Populating default Categories in MongoDB...');
-      await Category.insertMany(DEFAULT_CATEGORIES);
-      console.log(`✅ [Seeding] Inserted ${DEFAULT_CATEGORIES.length} default categories.`);
-    }
+    // 1. Ensure all built-in Categories exist without overwriting admin edits.
+    await Category.bulkWrite(
+      DEFAULT_CATEGORIES.map((category) => ({
+        updateOne: {
+          filter: { slug: category.slug },
+          update: { $setOnInsert: category },
+          upsert: true
+        }
+      }))
+    );
 
     // 2. Seed Default Admin User if not present
     const adminEmail = 'admin@kiwishare.online';

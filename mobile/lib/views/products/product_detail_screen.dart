@@ -9,6 +9,7 @@ import '../../utils/trust_score.dart';
 import '../../models/chat_conversation_model.dart';
 import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
+import '../../models/listing_category_config.dart';
 import '../../models/report_draft.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
@@ -982,6 +983,32 @@ class _ProductHighlightsGrid extends StatelessWidget {
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
+    final definition = listingCategoryDefinition(product.category);
+    final attributeEntries = <({String label, String value, String? unit})>[];
+    for (final field
+        in definition?.attributes ?? const <ListingAttributeField>[]) {
+      final value = product.attributes[field.key]?.trim();
+      if (value == null || value.isEmpty) continue;
+      attributeEntries.add((
+        label: field.label,
+        value: value,
+        unit: field.unit,
+      ));
+    }
+    final knownKeys = {
+      for (final field
+          in definition?.attributes ?? const <ListingAttributeField>[])
+        field.key,
+    };
+    for (final entry in product.attributes.entries) {
+      if (knownKeys.contains(entry.key) || entry.value.trim().isEmpty) continue;
+      attributeEntries.add((
+        label: entry.key,
+        value: entry.value.trim(),
+        unit: null,
+      ));
+    }
+
     Widget buildTile({
       required IconData icon,
       required String label,
@@ -1135,6 +1162,46 @@ class _ProductHighlightsGrid extends StatelessWidget {
             ),
           ],
         ),
+        if (attributeEntries.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              product.category == 'Cars & Vehicles'
+                  ? 'Vehicle details'
+                  : '${product.category} details',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = (constraints.maxWidth - AppSpacing.sm) / 2;
+              return Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final entry in attributeEntries)
+                    SizedBox(
+                      width: width,
+                      child: buildTile(
+                        icon: product.category == 'Cars & Vehicles'
+                            ? Icons.directions_car_outlined
+                            : Icons.tune_rounded,
+                        label: entry.label,
+                        value: entry.unit == null
+                            ? entry.value
+                            : '${entry.value} ${entry.unit}',
+                        accentColor: const Color(0xFF0F766E),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
       ],
     );
   }
