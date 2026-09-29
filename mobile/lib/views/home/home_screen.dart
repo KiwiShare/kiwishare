@@ -600,52 +600,139 @@ class _HomeCategoryChip extends StatelessWidget {
   }
 }
 
-class _HomeJumboCarousel extends StatelessWidget {
+class _HomeJumboCarousel extends StatefulWidget {
   final List<ItemModel> items;
   final ValueChanged<ItemModel> onOpen;
 
   const _HomeJumboCarousel({required this.items, required this.onOpen});
 
   @override
+  State<_HomeJumboCarousel> createState() => _HomeJumboCarouselState();
+}
+
+class _HomeJumboCarouselState extends State<_HomeJumboCarousel> {
+  late final PageController _controller;
+  Timer? _timer;
+  int _index = 0;
+
+  int get _count => widget.items.length > 5 ? 5 : widget.items.length;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HomeJumboCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items.length != widget.items.length) {
+      _index = 0;
+      if (_controller.hasClients) {
+        _controller.jumpToPage(0);
+      }
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    if (_count <= 1) return;
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || !_controller.hasClients) return;
+      final next = (_index + 1) % _count;
+      _controller.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const SizedBox.shrink();
+    if (widget.items.isEmpty) return const SizedBox.shrink();
+    final colors = Theme.of(context).colorScheme;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.auto_awesome,
-                color: AppColors.brandAccent,
-                size: 20,
+        Row(
+          children: [
+            Icon(Icons.auto_awesome_rounded, color: colors.primary, size: 22),
+            const SizedBox(width: AppSpacing.xs),
+            Text(
+              'Featured Highlights',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontSize: 20,
+                height: 1.4,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
               ),
-              const SizedBox(width: AppSpacing.xs),
-              Text(
-                'Featured Highlights',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.3,
-                ),
+            ),
+            const Spacer(),
+            Text(
+              '${_index + 1}/$_count',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: colors.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+        const SizedBox(height: AppSpacing.md),
         SizedBox(
-          height: 196,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            itemCount: items.length > 5 ? 5 : items.length,
-            separatorBuilder: (context, index) =>
-                const SizedBox(width: AppSpacing.md),
+          height: 214,
+          child: PageView.builder(
+            key: const Key('home-featured-carousel'),
+            controller: _controller,
+            itemCount: _count,
+            onPageChanged: (index) {
+              setState(() => _index = index);
+              _startTimer();
+            },
             itemBuilder: (context, index) {
-              final item = items[index];
-              return _HomeJumboCard(item: item, onTap: () => onOpen(item));
+              final item = widget.items[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 2),
+                child: _HomeJumboCard(
+                  item: item,
+                  onTap: () => widget.onOpen(item),
+                ),
+              );
             },
           ),
         ),
+        if (_count > 1) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              _count,
+              (dotIndex) => AnimatedContainer(
+                key: Key('home-featured-dot-$dotIndex'),
+                duration: const Duration(milliseconds: 220),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: dotIndex == _index ? 18 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: dotIndex == _index
+                      ? colors.primary
+                      : colors.outlineVariant,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -660,7 +747,7 @@ class _HomeJumboCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 290,
+      width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.large),
         boxShadow: [
@@ -683,7 +770,7 @@ class _HomeJumboCard extends StatelessWidget {
                 item.imageUrl.isNotEmpty
                     ? ResilientNetworkImage(
                         url: item.imageUrl,
-                        logicalCacheWidth: 290,
+                        logicalCacheWidth: 720,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
                           color: AppColors.brandPrimaryAlt,
@@ -732,8 +819,8 @@ class _HomeJumboCard extends StatelessWidget {
                           vertical: AppSpacing.xs,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.brandAccent,
-                          borderRadius: BorderRadius.circular(AppRadius.small),
+                          color: Colors.black.withValues(alpha: 0.62),
+                          borderRadius: BorderRadius.circular(AppRadius.full),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
@@ -745,12 +832,12 @@ class _HomeJumboCard extends StatelessWidget {
                             ),
                             SizedBox(width: 2),
                             Text(
-                              'HOT PICK',
+                              'Featured',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
                               ),
                             ),
                           ],
@@ -763,10 +850,8 @@ class _HomeJumboCard extends StatelessWidget {
                             vertical: AppSpacing.xs,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.brandPrimaryContainer,
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.small,
-                            ),
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(AppRadius.full),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -774,13 +859,13 @@ class _HomeJumboCard extends StatelessWidget {
                               Icon(
                                 Icons.eco,
                                 size: 14,
-                                color: AppColors.brandPrimary,
+                                color: Color(0xFF86EFAC),
                               ),
                               SizedBox(width: 2),
                               Text(
                                 'ECO',
                                 style: TextStyle(
-                                  color: AppColors.brandPrimary,
+                                  color: Colors.white,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -795,12 +880,8 @@ class _HomeJumboCard extends StatelessWidget {
                             vertical: AppSpacing.xs,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF1E3A8A,
-                            ).withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.small,
-                            ),
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(AppRadius.full),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -876,24 +957,28 @@ class _HomeJumboCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.sm,
-                              vertical: 3,
-                            ),
+                          DecoratedBox(
                             decoration: BoxDecoration(
-                              color: AppColors.brandPrimary,
+                              color: Colors.black.withValues(alpha: 0.5),
                               borderRadius: BorderRadius.circular(
-                                AppRadius.small,
+                                AppRadius.full,
                               ),
-                              border: Border.all(color: Colors.white30),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.18),
+                              ),
                             ),
-                            child: Text(
-                              '\$${item.priceNzd} NZD',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              child: Text(
+                                item.isFree ? 'Free' : '\$${item.priceNzd} NZD',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ),
                           ),
@@ -1207,7 +1292,7 @@ class _RecommendedProductCard extends StatelessWidget {
                               '\$${item.priceNzd}',
                               style: Theme.of(context).textTheme.titleSmall
                                   ?.copyWith(
-                                    color: colors.primary,
+                                    color: colors.onSurface,
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),

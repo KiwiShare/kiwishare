@@ -20,6 +20,7 @@ import {
 } from '../services/stripeService';
 import { ensureOrderMeetupQr } from './meetups';
 import { notifyPaymentPendingMeetup } from '../services/pushNotification';
+import { isMeetupConfirmed, statusAfterPayment } from '../services/orderFlowState';
 
 const router = new Router();
 
@@ -115,7 +116,7 @@ router.post('/payments/create-intent', authenticateToken, async (ctx) => {
   // If item is completely free, auto-mark paid and lock the listing from other buyers.
   if (totalCents === 0) {
     order.paidAt = new Date();
-    order.status = 'paid';
+    order.status = statusAfterPayment(order);
     await order.save();
     await Item.findByIdAndUpdate(order.itemId, { status: 'sold' });
     const qrToken = await ensureOrderMeetupQr(order);
@@ -221,6 +222,8 @@ router.post('/payments/confirm', authenticateToken, async (ctx) => {
   }
 
   if (order.paidAt) {
+    order.status = statusAfterPayment(order);
+    await order.save();
     const qrToken = await ensureOrderMeetupQr(order);
     ctx.body = {
       status: 'success',
@@ -371,10 +374,8 @@ router.post('/payments/confirm', authenticateToken, async (ctx) => {
 
   // Mark order as paid. Only transition to meeting_scheduled if meeting was already agreed.
   order.paidAt = new Date();
-  const isMeetupAgreed =
-    order.meeting?.proposalStatus === 'confirmed' ||
-    order.meeting?.proposalStatus === 'accepted';
-  order.status = isMeetupAgreed ? 'meeting_scheduled' : 'paid';
+  const isMeetupAgreed = isMeetupConfirmed(order);
+  order.status = statusAfterPayment(order);
   await order.save();
 
   // Immediately delist item and set to sold to prevent concurrent purchases

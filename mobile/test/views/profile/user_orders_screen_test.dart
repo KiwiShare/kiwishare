@@ -115,7 +115,7 @@ void main() {
 
       // Verify order rendered cleanly
       expect(find.textContaining('ORD-2026-999988887777'), findsOneWidget);
-      expect(find.text('Pending Payment'), findsOneWidget);
+      expect(find.text('Meetup Confirmed · Payment Required'), findsOneWidget);
       expect(find.text('\$250.00 NZD'), findsOneWidget);
 
       // Verify action buttons present
@@ -129,6 +129,99 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('handover actions require both payment and confirmed meetup', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'jwt_token': 'test-token',
+      'current_user': '{"id":"user-1","displayName":"Riley","trustScore":95}',
+    });
+
+    final unpaidConfirmed = OrderModel(
+      id: 'order_unpaid_confirmed',
+      orderNumber: 'ORD-UNPAID-CONFIRMED',
+      status: 'meeting_scheduled',
+      role: 'buying',
+      itemId: 'item_unpaid',
+      item: const OrderItemInfo(
+        id: 'item_unpaid',
+        title: 'Unpaid Confirmed Meetup',
+        priceNzd: '40.00',
+        imageUrl: '',
+      ),
+      counterparty: const OrderCounterparty(
+        id: 'seller_1',
+        displayName: 'Seller',
+        role: 'seller',
+      ),
+      meeting: OrderMeetingInfo(
+        scheduledAt: DateTime(2026, 10, 1, 14),
+        locationName: 'Student Hub',
+        proposalStatus: 'confirmed',
+      ),
+      paymentConfirmed: false,
+      meetupConfirmed: true,
+      handoverReady: false,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    final ready = OrderModel(
+      id: 'order_ready',
+      orderNumber: 'ORD-READY',
+      status: 'meeting_scheduled',
+      role: 'buying',
+      itemId: 'item_ready',
+      item: const OrderItemInfo(
+        id: 'item_ready',
+        title: 'Ready for Handover',
+        priceNzd: '50.00',
+        imageUrl: '',
+      ),
+      counterparty: const OrderCounterparty(
+        id: 'seller_2',
+        displayName: 'Seller Two',
+        role: 'seller',
+      ),
+      meeting: OrderMeetingInfo(
+        scheduledAt: DateTime(2026, 10, 1, 15),
+        locationName: 'Engineering Building',
+        proposalStatus: 'confirmed',
+      ),
+      paidAt: DateTime.now(),
+      paymentConfirmed: true,
+      meetupConfirmed: true,
+      handoverReady: true,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    final auth = AuthProvider(userRepository: MockUserRepository());
+    final orderProvider = OrderProvider(
+      repository: _FakeOrderRepository([unpaidConfirmed, ready]),
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider<OrderProvider>.value(value: orderProvider),
+        ],
+        child: const MaterialApp(home: UserOrdersScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('pay_now_btn_order_unpaid_confirmed')),
+      findsOneWidget,
+    );
+    expect(find.text('Meetup Confirmed · Payment Required'), findsOneWidget);
+    expect(find.text('Paid · Meetup Confirmed'), findsOneWidget);
+    expect(find.text('QR Handover'), findsOneWidget);
+    expect(find.byKey(const Key('pay_now_btn_order_ready')), findsNothing);
+  });
 
   testWidgets(
     'UserOrdersScreen distinguishes Paid, To Pay, and Completed orders with tabs',
@@ -235,7 +328,7 @@ void main() {
       expect(find.text('Desk Lamp'), findsOneWidget);
       expect(find.text('Coffee Press'), findsOneWidget);
       expect(find.text('Pending Payment'), findsOneWidget);
-      expect(find.text('Paid · Awaiting Handover'), findsOneWidget);
+      expect(find.text('Paid · Awaiting Meetup'), findsOneWidget);
       expect(find.text('Completed'), findsWidgets);
 
       // Paid order should NOT have 'Pay Now' button

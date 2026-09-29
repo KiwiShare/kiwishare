@@ -3,6 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest, UsedItem, ordersApi, OrderItem } from '../api/client';
 import { formatPublicTrustScore } from '../utils/trustScore';
+import {
+  isCompletedOrder,
+  isHandoverReady,
+  isMeetupConfirmed,
+  isOrderPaid,
+  isRefundedOrder,
+} from '../utils/orderFlow';
 import { ProductCard } from '../components/ProductCard';
 import { EditItemModal } from '../components/EditItemModal';
 import { 
@@ -361,13 +368,16 @@ export const ProfilePage: React.FC = () => {
           ) : orders.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {orders.map((order) => {
-                const isCompleted = ['completed', 'qr_scanned', 'seller_paid'].includes(order.status);
-                const isPaid = order.status === 'paid' || order.isPaid;
-                const isRefunded = order.status === 'refunded' || order.isRefunded;
-                const isInProgress = ['meeting_scheduled', 'meeting_in_progress', 'pending_payment', 'paid', 'transfer_pending'].includes(order.status);
+                const isCompleted = isCompletedOrder(order);
+                const isPaid = isOrderPaid(order);
+                const isRefunded = isRefundedOrder(order);
+                const meetupConfirmed = isMeetupConfirmed(order);
+                const handoverReady = isHandoverReady(order);
+                const isInProgress = !isCompleted && !isRefunded && !['cancelled', 'disputed'].includes(order.status);
 
-                const hoursElapsed = (Date.now() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60);
-                const isOver48hUnmet = isPaid && !order.meeting && hoursElapsed >= 48;
+                const paidBase = order.paidAt || order.createdAt;
+                const hoursElapsed = (Date.now() - new Date(paidBase).getTime()) / (1000 * 60 * 60);
+                const isOver48hUnmet = isPaid && !meetupConfirmed && hoursElapsed >= 48;
 
                 return (
                   <div
@@ -410,13 +420,17 @@ export const ProfilePage: React.FC = () => {
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, backgroundColor: '#dcfce7', color: '#15803d' }}>
                           <CheckCircle2 size={13} /> Completed
                         </span>
-                      ) : order.status === 'meeting_scheduled' ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, backgroundColor: '#e0f2fe', color: '#0369a1' }}>
-                          <Clock size={13} /> Meetup Scheduled
+                      ) : handoverReady ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, backgroundColor: '#dcfce7', color: '#166534' }}>
+                          <CheckCircle2 size={13} /> READY FOR HANDOVER
                         </span>
                       ) : isPaid ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, backgroundColor: '#d1fae5', color: '#065f46', border: '1px solid #10b981' }}>
                           <CheckCircle2 size={13} /> PAID · Awaiting Meetup
+                        </span>
+                      ) : meetupConfirmed ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, backgroundColor: '#fef3c7', color: '#92400e' }}>
+                          <Clock size={13} /> MEETUP CONFIRMED · PAYMENT REQUIRED
                         </span>
                       ) : (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, backgroundColor: '#fef3c7', color: '#b45309' }}>
@@ -543,18 +557,20 @@ export const ProfilePage: React.FC = () => {
 
                     {/* Actions Row */}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', paddingTop: '8px', flexWrap: 'wrap' }}>
-                      {/* Invoice button */}
-                      <button
-                        onClick={() => setInvoiceOrder(order)}
-                        className="btn btn-secondary"
-                        style={{ padding: '6px 14px', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                      >
-                        <Receipt size={14} />
-                        <span>Invoice</span>
-                      </button>
+                      {/* Invoice only exists after payment. */}
+                      {(isPaid || isCompleted) && (
+                        <button
+                          onClick={() => setInvoiceOrder(order)}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 14px', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                        >
+                          <Receipt size={14} />
+                          <span>Invoice</span>
+                        </button>
+                      )}
 
                       {/* Seller Refund Button */}
-                      {activeTab === 'selling' && ['paid', 'meeting_scheduled'].includes(order.status) && !isRefunded && (
+                      {activeTab === 'selling' && isPaid && !isCompleted && !isRefunded && (
                         <button
                           onClick={() => handleRefund(order)}
                           disabled={refundingOrderId === order.id}

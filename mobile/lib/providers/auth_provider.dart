@@ -413,6 +413,11 @@ class AuthProvider extends ChangeNotifier {
       token: token,
       coverImageUrl: url,
     );
+    if (updated.coverImageUrl?.trim() != url.trim()) {
+      throw StateError(
+        'Profile background was not saved by the current server.',
+      );
+    }
     await _storeProfile(token, updated);
   }
 
