@@ -13,7 +13,39 @@ on:
       - '.github/workflows/mobile.yml'
 
 jobs:
-  mobile_ci:
+  mobile_quality:
+    name: Analyze, Format & Test
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.44.9'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run code analysis (Linter)
+        run: flutter analyze
+
+      - name: Verify code formatting
+        run: dart format --set-exit-if-changed lib/ test/
+
+      - name: Run unit and widget tests
+        run: flutter test
+
+  android_release_build:
+    name: Verify Android Release Build
     runs-on: ubuntu-latest
 
     defaults:
@@ -39,15 +71,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get --enforce-lockfile
-
-      - name: Run code analysis (Linter)
-        run: flutter analyze
-
-      - name: Verify code formatting
-        run: dart format --set-exit-if-changed lib/ test/
-
-      - name: Run unit and widget tests
-        run: flutter test
 
       - name: Verify Android release build
         run: flutter build apk --release --no-pub
