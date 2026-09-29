@@ -20,8 +20,13 @@ describe('report confirmation email', () => {
     MockedResend.mockImplementation(() => ({
       emails: { send: mockSend }
     }) as unknown as Resend);
+    process.env.ALLOW_TEST_EMAIL_DELIVERY = 'true';
     process.env.RESEND_API_KEY = 'test-resend-key';
     process.env.RESEND_FROM = 'KiwiShare <reports@kiwishare.online>';
+  });
+
+  afterEach(() => {
+    delete process.env.ALLOW_TEST_EMAIL_DELIVERY;
   });
 
   afterAll(() => {

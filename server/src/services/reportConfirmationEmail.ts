@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { isOutboundEmailDeliveryEnabled } from './emailSafety';
 
 interface ReportConfirmationEmailOptions {
   email: string;
@@ -28,6 +29,8 @@ function formatReason(reason: string): string {
 export async function sendReportConfirmationEmail(
   options: ReportConfirmationEmailOptions
 ): Promise<void> {
+  if (!isOutboundEmailDeliveryEnabled()) return;
+
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return;
 
