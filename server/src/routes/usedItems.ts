@@ -805,11 +805,23 @@ async function updateUsedItemHandler(ctx: any) {
       throw error;
     }
   }
-  if (updates.imageUrl != null) {
-    updateFields.imageUrl = updates.imageUrl;
-    updateFields.images = [
-      { url: updates.imageUrl, thumbnailUrl: updates.imageUrl, sortOrder: 0 }
-    ];
+  if (updates.images != null) {
+    try {
+      const parsedImages = parseRequiredImages(updates.images, updates.imageUrl ?? item.imageUrl);
+      updateFields.images = parsedImages;
+      updateFields.imageUrl = parsedImages[0].url;
+    } catch (error) {
+      if (error instanceof ListingValidationError) {
+        ctx.status = 400;
+        ctx.body = { status: 'error', message: error.message };
+        return;
+      }
+      throw error;
+    }
+  } else if (updates.imageUrl != null) {
+    const parsedImages = parseRequiredImages(undefined, updates.imageUrl);
+    updateFields.imageUrl = parsedImages[0].url;
+    updateFields.images = parsedImages;
   }
   if (updates.priceNzd != null || updates.price != null) {
     try {
