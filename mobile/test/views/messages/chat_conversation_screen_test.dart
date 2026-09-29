@@ -8,10 +8,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/chat_conversation_model.dart';
 import 'package:kiwishare/models/chat_message_model.dart';
 import 'package:kiwishare/models/report_draft.dart';
+import 'package:kiwishare/models/order_model.dart';
 import 'package:kiwishare/navigation/app_route_observer.dart';
 import 'package:kiwishare/config/api_config.dart';
 import 'package:kiwishare/providers/chat_provider.dart';
+import 'package:kiwishare/providers/order_provider.dart';
 import 'package:kiwishare/repositories/chat_repository.dart';
+import 'package:kiwishare/repositories/order_repository.dart';
 import 'package:kiwishare/services/chat_photo_upload_service.dart';
 import 'package:kiwishare/services/chat_voice_service.dart';
 import 'package:kiwishare/services/listing_image_picker.dart';
@@ -21,6 +24,7 @@ import 'package:provider/provider.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/views/messages/chat_conversation_screen.dart';
+import 'package:kiwishare/views/profile/payment_methods_screen.dart';
 import 'package:kiwishare/views/profile/public_profile_screen.dart';
 import 'package:kiwishare/views/profile/report_screen.dart';
 import 'package:kiwishare/views/shared/widgets/review_bottom_sheet.dart';
@@ -75,6 +79,38 @@ Widget _buildSubject({
       ),
     ),
   );
+}
+
+class _ConversationOrderRepository implements OrderRepository {
+  _ConversationOrderRepository(this.orders);
+
+  final List<OrderModel> orders;
+
+  @override
+  Future<List<OrderModel>> fetchMyOrders({
+    required String token,
+    String? type,
+    String? status,
+  }) async => orders;
+
+  @override
+  Future<OrderModel> fetchOrderDetails({
+    required String orderId,
+    required String token,
+  }) async => orders.firstWhere((order) => order.id == orderId);
+
+  @override
+  Future<OrderModel> createOrGetOrder({
+    required String itemId,
+    required String token,
+  }) async => orders.first;
+
+  @override
+  Future<OrderModel> refundOrder({
+    required String orderId,
+    required String token,
+    String? reason,
+  }) async => orders.firstWhere((order) => order.id == orderId);
 }
 
 void main() {
@@ -375,6 +411,90 @@ void main() {
     expect(find.byKey(const Key('chat_meetup_card_1')), findsOneWidget);
     expect(find.byKey(const Key('chat_read_receipt_1')), findsOneWidget);
   });
+
+  testWidgets(
+    'pending order without a confirmed meetup never renders Meetup Scheduled',
+    (tester) async {
+      final orderProvider = OrderProvider(
+        repository: _ConversationOrderRepository([
+          OrderModel(
+            id: 'order-pending',
+            orderNumber: 'ORD-PENDING',
+            status: 'pending_payment',
+            role: 'buying',
+            itemId: 'item-conversation-1',
+            item: const OrderItemInfo(
+              id: 'item-conversation-1',
+              title: 'Ergonomic Office Chair',
+              priceNzd: '65.00',
+              imageUrl: '',
+            ),
+            counterparty: const OrderCounterparty(
+              id: 'participant-conversation-1',
+              displayName: 'Sophie M.',
+              role: 'seller',
+            ),
+            createdAt: DateTime.utc(2026, 9, 29),
+            updatedAt: DateTime.utc(2026, 9, 29),
+          ),
+        ]),
+      );
+      await orderProvider.loadMyOrders('valid-token');
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<OrderProvider>.value(
+          value: orderProvider,
+          child: _buildSubject(repository: FakeChatRepository()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Meetup Scheduled'), findsNothing);
+      expect(find.textContaining('Transaction Ready'), findsNothing);
+      expect(find.text('Payment Complete — Schedule Handover'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'treats a meetup proposal as a proposal until the other person confirms it',
+    (tester) async {
+      final repository = FakeChatRepository(
+        messages: {
+          'conversation-1': [
+            testMessage(
+              id: '10',
+              text: 'Meetup proposed',
+              isMine: true,
+              type: 'meetup',
+              meetup: ChatMeetupPayload(
+                orderId: 'order-proposal-1',
+                scheduledAt: DateTime.utc(2026, 9, 30, 1),
+                locationName: 'Auckland Central Library',
+                latitude: -36.8527,
+                longitude: 174.7660,
+                proposalStatus: 'proposed',
+              ),
+            ),
+          ],
+        },
+      );
+
+      await tester.pumpWidget(_buildSubject(repository: repository));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Meetup Proposal Sent'), findsOneWidget);
+      expect(find.textContaining('Meetup Scheduled'), findsNothing);
+      expect(find.text('Waiting for response...'), findsNothing);
+      expect(
+        find.text('Proposal sent. The other person can accept or decline it.'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('meetup_map_order-proposal-1')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('refreshes read receipts after returning from the background', (
     tester,
@@ -902,10 +1022,18 @@ void main() {
 
     await tester.tap(find.byKey(const Key('chat_record_voice_button')));
     await tester.pump();
+    expect(recorder.startCalls, 0);
+    expect(find.byKey(const Key('chat_voice_hold_tab')), findsOneWidget);
+    expect(find.text('Hold to Talk'), findsOneWidget);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
+    );
+    await tester.pump();
     expect(recorder.startCalls, 1);
     expect(find.byKey(const Key('chat_voice_recording_timer')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('chat_send_voice_button')));
+    await gesture.up();
     await tester.pumpAndSettle();
 
     expect(recorder.stopCalls, 1);
@@ -916,35 +1044,7 @@ void main() {
     expect(permissionController.statusCalls, 1);
   });
 
-  testWidgets('holding the microphone and releasing sends the recording', (
-    tester,
-  ) async {
-    final repository = FakeChatRepository();
-    final uploader = FakeChatVoiceUploader();
-    final recorder = FakeChatVoiceRecorder();
-    await tester.pumpWidget(
-      _buildSubject(
-        repository: repository,
-        voiceUploader: uploader,
-        voiceRecorder: recorder,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(const Key('chat_record_voice_button'))),
-    );
-    await tester.pump(const Duration(milliseconds: 500));
-    await gesture.up();
-    await tester.pumpAndSettle();
-
-    expect(recorder.startCalls, 1);
-    expect(recorder.stopCalls, 1);
-    expect(uploader.uploadCalls, 1);
-    expect(repository.sentAudioUrls, [uploader.url]);
-  });
-
-  testWidgets('cancels a recording without uploading a message', (
+  testWidgets('holding the voice tab and releasing sends the recording', (
     tester,
   ) async {
     final repository = FakeChatRepository();
@@ -961,13 +1061,66 @@ void main() {
 
     await tester.tap(find.byKey(const Key('chat_record_voice_button')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(recorder.startCalls, 1);
+    expect(recorder.stopCalls, 1);
+    expect(uploader.uploadCalls, 1);
+    expect(repository.sentAudioUrls, [uploader.url]);
+  });
+
+  testWidgets('sliding up then releasing cancels a voice message', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository();
+    final uploader = FakeChatVoiceUploader();
+    final recorder = FakeChatVoiceRecorder();
+    await tester.pumpWidget(
+      _buildSubject(
+        repository: repository,
+        voiceUploader: uploader,
+        voiceRecorder: recorder,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
+    );
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, -80));
+    await tester.pump();
+    expect(find.textContaining('release to cancel'), findsOneWidget);
+    await gesture.up();
     await tester.pumpAndSettle();
 
     expect(recorder.cancelCalls, 1);
     expect(uploader.uploadCalls, 0);
     expect(repository.sentAudioUrls, isEmpty);
     expect(find.byKey(const Key('chat_voice_recording_timer')), findsNothing);
+    expect(find.byKey(const Key('chat_voice_hold_tab')), findsOneWidget);
+  });
+
+  testWidgets('voice mode switches back to the text composer', (tester) async {
+    await tester.pumpWidget(_buildSubject(repository: FakeChatRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+    expect(find.byKey(const Key('chat_voice_hold_tab')), findsOneWidget);
+    expect(find.byKey(const Key('chat_message_input')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('chat_keyboard_mode_button')));
+    await tester.pump();
+    expect(find.byKey(const Key('chat_message_input')), findsOneWidget);
+    expect(find.byKey(const Key('chat_voice_hold_tab')), findsNothing);
   });
 
   testWidgets('auto-stops with headroom before the hard duration limit', (
@@ -987,15 +1140,21 @@ void main() {
 
     await tester.tap(find.byKey(const Key('chat_record_voice_button')));
     await tester.pump();
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
+    );
+    await tester.pump();
     await tester.pump(const Duration(seconds: 59));
     await tester.pumpAndSettle();
 
     expect(recorder.stopCalls, 1);
     expect(uploader.uploadCalls, 1);
     expect(find.byKey(const Key('chat_voice_recording_timer')), findsNothing);
+    await gesture.up();
+    await tester.pump();
   });
 
-  testWidgets('keeps the microphone locked while stop is finalizing', (
+  testWidgets('keeps hold-to-talk locked while stop is finalizing', (
     tester,
   ) async {
     final stopGate = Completer<void>();
@@ -1011,19 +1170,23 @@ void main() {
 
     await tester.tap(find.byKey(const Key('chat_record_voice_button')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('chat_send_voice_button')));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
+    );
+    await tester.pump();
+    await gesture.up();
     await tester.pump();
 
-    final microphone = tester.widget<Listener>(
-      find.byKey(const Key('chat_record_voice_button')),
+    final holdSurface = tester.widget<Listener>(
+      find.byKey(const Key('chat_hold_to_talk_button')),
     );
-    expect(microphone.onPointerDown, isNull);
+    expect(holdSurface.onPointerDown, isNull);
     stopGate.complete();
     await tester.pumpAndSettle();
     expect(recorder.startCalls, 1);
   });
 
-  testWidgets('keeps the microphone locked while cancel is finalizing', (
+  testWidgets('keeps hold-to-talk locked while cancel is finalizing', (
     tester,
   ) async {
     final cancelGate = Completer<void>();
@@ -1039,19 +1202,25 @@ void main() {
 
     await tester.tap(find.byKey(const Key('chat_record_voice_button')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
+    );
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, -80));
+    await tester.pump();
+    await gesture.up();
     await tester.pump();
 
-    final microphone = tester.widget<Listener>(
-      find.byKey(const Key('chat_record_voice_button')),
+    final holdSurface = tester.widget<Listener>(
+      find.byKey(const Key('chat_hold_to_talk_button')),
     );
-    expect(microphone.onPointerDown, isNull);
+    expect(holdSurface.onPointerDown, isNull);
     cancelGate.complete();
     await tester.pumpAndSettle();
     expect(recorder.startCalls, 1);
   });
 
-  testWidgets('locks the microphone while recorder startup is pending', (
+  testWidgets('locks hold-to-talk while recorder startup is pending', (
     tester,
   ) async {
     final startGate = Completer<void>();
@@ -1063,18 +1232,25 @@ void main() {
 
     await tester.tap(find.byKey(const Key('chat_record_voice_button')));
     await tester.pump();
-    final microphone = tester.widget<Listener>(
-      find.byKey(const Key('chat_record_voice_button')),
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
     );
-    expect(microphone.onPointerDown, isNull);
-    expect(recorder.startCalls, 1);
-
-    startGate.complete();
     await tester.pump();
+
+    final holdSurface = tester.widget<Listener>(
+      find.byKey(const Key('chat_hold_to_talk_button')),
+    );
+    expect(holdSurface.onPointerDown, isNull);
     expect(recorder.startCalls, 1);
 
-    await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
+    await gesture.moveBy(const Offset(0, -80));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    startGate.complete();
     await tester.pumpAndSettle();
+    expect(recorder.startCalls, 1);
+    expect(recorder.cancelCalls, 1);
   });
 
   testWidgets('releasing a hold during recorder startup still sends', (
@@ -1093,10 +1269,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
     final gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(const Key('chat_record_voice_button'))),
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
     );
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
     await gesture.up();
     await tester.pump();
     expect(recorder.stopCalls, 0);
@@ -1121,7 +1299,12 @@ void main() {
       _buildSubject(repository: FakeChatRepository(), voiceRecorder: recorder),
     );
     await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('chat_record_voice_button')));
+    await tester.pump();
+    await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
+    );
     await tester.pump();
 
     await tester.pumpWidget(const SizedBox());
@@ -1483,6 +1666,46 @@ void main() {
     },
   );
 
+  testWidgets('seller payout Wallet opens the payment methods screen', (
+    tester,
+  ) async {
+    final repository = FakeChatRepository(
+      messages: {
+        'conversation-1': [
+          testMessage(
+            id: '103',
+            text: '🤝 [Transaction Completed] Handover complete!',
+            isMine: false,
+          ),
+        ],
+      },
+    );
+    final mockUserRepo = MockUserRepository();
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<UserRepository>.value(value: mockUserRepo),
+          ChangeNotifierProvider<AuthProvider>(
+            create: (_) => AuthProvider(userRepository: mockUserRepo),
+          ),
+        ],
+        child: _buildSubject(
+          repository: repository,
+          conversation: testConversation(direction: ChatDirection.selling),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Wallet'), findsOneWidget);
+    await tester.tap(find.text('Wallet'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PaymentMethodsScreen), findsOneWidget);
+    expect(find.text('Please sign in to manage your wallet.'), findsOneWidget);
+  });
+
   testWidgets('captures the voice recording composer for review evidence', (
     tester,
   ) async {
@@ -1502,13 +1725,23 @@ void main() {
     await tester.tap(find.byKey(const Key('chat_record_voice_button')));
     await tester.pump();
 
+    expect(find.byKey(const Key('chat_voice_hold_tab')), findsOneWidget);
+    expect(find.text('Hold to Talk'), findsOneWidget);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_hold_to_talk_button'))),
+    );
+    await tester.pump();
+
     expect(find.byKey(const Key('chat_voice_recording_tab')), findsOneWidget);
     expect(find.byKey(const Key('chat_voice_recording_timer')), findsOneWidget);
     expect(find.textContaining('release to send'), findsOneWidget);
-    expect(find.byKey(const Key('chat_cancel_voice_button')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byKey(const Key('chat_cancel_voice_button')));
+    await gesture.moveBy(const Offset(0, -80));
+    await tester.pump();
+    expect(find.textContaining('release to cancel'), findsOneWidget);
+    await gesture.up();
     await tester.pumpAndSettle();
   });
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:provider/provider.dart';
 
 import '../../../providers/auth_provider.dart';
@@ -77,6 +78,35 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
     }
   }
 
+  Future<({double latitude, double longitude})?> _resolveCoordinates(
+    String locationName,
+  ) async {
+    const knownLocations = <String, (double, double)>{
+      'UoA Student Hub (Alfred Nathan House)': (-36.8529, 174.7691),
+      'UoA General Library (5 Alfred St)': (-36.8519, 174.7690),
+      'UoA Engineering Quad': (-36.8520, 174.7703),
+      'Britomart Transport Centre': (-36.8445, 174.7681),
+      'Newmarket Westfield (Broadway)': (-36.8712, 174.7764),
+    };
+    final known = knownLocations[locationName];
+    if (known != null) {
+      return (latitude: known.$1, longitude: known.$2);
+    }
+
+    try {
+      final results = await geocoding.Geocoding().locationFromAddress(
+        locationName,
+      );
+      if (results.isEmpty) return null;
+      final first = results.first;
+      return (latitude: first.latitude, longitude: first.longitude);
+    } catch (_) {
+      // The proposal is still valid if the platform geocoder is unavailable.
+      // The card will fall back to the text address in that rare case.
+      return null;
+    }
+  }
+
   Future<void> _submitProposal() async {
     final location = _locationController.text.trim();
     if (location.isEmpty) {
@@ -107,12 +137,16 @@ class _ScheduleMeetupSheetState extends State<ScheduleMeetupSheet> {
     });
 
     try {
+      final coordinates = await _resolveCoordinates(location);
+      if (!mounted) return;
       final meetupProvider = context.read<MeetupProvider>();
       final proposed = await meetupProvider.proposeMeetup(
         itemId: widget.itemId,
         conversationId: widget.conversationId,
         scheduledAt: scheduled,
         locationName: location,
+        latitude: coordinates?.latitude,
+        longitude: coordinates?.longitude,
         note: _noteController.text.trim().isNotEmpty
             ? _noteController.text.trim()
             : null,
