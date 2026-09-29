@@ -22,6 +22,8 @@ class MeetupModel {
     this.proposedBy,
     this.note,
     this.qrToken,
+    this.paymentConfirmed,
+    this.handoverReady,
     this.createdAt,
     this.updatedAt,
   });
@@ -49,6 +51,8 @@ class MeetupModel {
   final String? proposedBy;
   final String? note;
   final String? qrToken;
+  final bool? paymentConfirmed;
+  final bool? handoverReady;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -61,9 +65,12 @@ class MeetupModel {
   bool get isCancelled => proposalStatus == 'cancelled';
   bool get isCompleted => status == 'completed';
   bool get isPaid =>
-      (qrToken != null && qrToken!.isNotEmpty) ||
-      status == 'completed' ||
-      status == 'paid';
+      paymentConfirmed ??
+      (status == 'completed' || status == 'paid' || status == 'seller_paid');
+
+  bool get isHandoverReady =>
+      handoverReady ??
+      (isPaid && isConfirmed && !isCompleted && !isCancelled && !isDeclined);
 
   bool get hasCoordinates => latitude != null && longitude != null;
 
@@ -95,6 +102,8 @@ class MeetupModel {
     String? proposedBy,
     String? note,
     String? qrToken,
+    bool? paymentConfirmed,
+    bool? handoverReady,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -121,6 +130,8 @@ class MeetupModel {
       proposedBy: proposedBy ?? this.proposedBy,
       note: note ?? this.note,
       qrToken: qrToken ?? this.qrToken,
+      paymentConfirmed: paymentConfirmed ?? this.paymentConfirmed,
+      handoverReady: handoverReady ?? this.handoverReady,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -152,6 +163,10 @@ class MeetupModel {
       proposedBy: json['proposedBy']?.toString(),
       note: json['note']?.toString(),
       qrToken: json['qrToken']?.toString(),
+      paymentConfirmed: json['isPaid'] is bool ? json['isPaid'] as bool : null,
+      handoverReady: json['isHandoverReady'] is bool
+          ? json['isHandoverReady'] as bool
+          : null,
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
       updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
     );

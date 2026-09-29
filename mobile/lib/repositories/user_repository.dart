@@ -72,8 +72,10 @@ abstract class UserRepository {
   Future<UserModel> fetchProfile(String token);
   Future<UserModel> updateProfile({
     required String token,
+    String? username,
     String? displayName,
     String? avatarUrl,
+    String? coverImageUrl,
     String? bio,
   });
   Future<UserModel> updateBio(String bio, {required String token});
@@ -217,8 +219,10 @@ class RestUserRepository implements UserRepository {
   @override
   Future<UserModel> updateProfile({
     required String token,
+    String? username,
     String? displayName,
     String? avatarUrl,
+    String? coverImageUrl,
     String? bio,
   }) async {
     late final http.Response response;
@@ -230,8 +234,10 @@ class RestUserRepository implements UserRepository {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
+          'username': ?username,
           'displayName': ?displayName,
           'avatarUrl': ?avatarUrl,
+          'coverImageUrl': ?coverImageUrl,
           'bio': ?bio,
         }),
       );
@@ -242,9 +248,17 @@ class RestUserRepository implements UserRepository {
       throw const UserAuthenticationException();
     }
     if (response.statusCode != 200) {
-      throw const UserRepositoryException(
-        'Could not update your profile. Please try again.',
-      );
+      var message = 'Could not update your profile. Please try again.';
+      try {
+        final error = jsonDecode(response.body) as Map<String, dynamic>;
+        final backendMessage = error['message']?.toString().trim();
+        if (backendMessage != null && backendMessage.isNotEmpty) {
+          message = backendMessage;
+        }
+      } catch (_) {
+        // Keep the safe fallback when a proxy returns a non-JSON error page.
+      }
+      throw UserRepositoryException(message);
     }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return UserModel.fromJson(data['user'] as Map<String, dynamic>);
@@ -523,7 +537,9 @@ class RestUserRepository implements UserRepository {
       throw const UserNetworkException();
     }
     if (response.statusCode != 200) {
-      throw const UserRepositoryException('Failed to load user public profile.');
+      throw const UserRepositoryException(
+        'Failed to load user public profile.',
+      );
     }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return PublicProfileModel.fromJson(data['user'] as Map<String, dynamic>);
@@ -542,7 +558,9 @@ class RestUserRepository implements UserRepository {
     late final http.Response response;
     try {
       response = await _client.get(
-        Uri.parse('${ApiConfig.baseUrl}/api/users/$userId/public-items?status=$status'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/users/$userId/public-items?status=$status',
+        ),
         headers: headers,
       );
     } catch (_) {
@@ -675,8 +693,10 @@ class MockUserRepository implements UserRepository {
   @override
   Future<UserModel> updateProfile({
     required String token,
+    String? username,
     String? displayName,
     String? avatarUrl,
+    String? coverImageUrl,
     String? bio,
   }) async {
     await Future.delayed(const Duration(milliseconds: 200));
@@ -684,6 +704,7 @@ class MockUserRepository implements UserRepository {
       id: 'mock_user_1',
       displayName: displayName ?? 'Mock User',
       avatarUrl: avatarUrl,
+      coverImageUrl: coverImageUrl,
       bio: bio,
       trustScore: 100,
       isVerified: false,
@@ -748,12 +769,13 @@ class MockUserRepository implements UserRepository {
         reviewerName: 'Alice M.',
         reviewerAvatarUrl: null,
         rating: 5,
-        comment: 'Great seller! Item was exactly as described and meetup on campus was super smooth.',
+        comment:
+            'Great seller! Item was exactly as described and meetup on campus was super smooth.',
         tags: const ['Punctual', 'Item as described', 'Fast response'],
         role: 'buyer',
         itemTitle: 'Sony WH-1000XM4',
         createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      )
+      ),
     ];
   }
 

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/listing_provider.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/kiwigold_coin_icon.dart';
 import '../../widgets/vip_crown_icon.dart';
 import '../products/product_detail_screen.dart';
@@ -228,6 +229,17 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
   Future<void> _handleToggleListing(ItemModel item, bool publish) async {
     final token = _token;
     if (token == null) return;
+    if (item.status == ItemStatus.sold) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sold listings are locked. Refund or cancel the paid order first.',
+          ),
+        ),
+      );
+      return;
+    }
 
     final actionLabel = publish ? 'Relist' : 'Delist';
     final confirmed = await showDialog<bool>(
@@ -417,53 +429,89 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
   }
 
   Widget _buildFilterTabs(List<ItemModel> allItems) {
+    final colors = Theme.of(context).colorScheme;
     final activeCount = allItems.where((i) => i.isActive).length;
     final delistedCount = allItems.where((i) => i.isDelisted).length;
+    final filters = <(int, String)>[
+      (0, 'Active ($activeCount)'),
+      (1, 'Delisted ($delistedCount)'),
+      (2, 'All (${allItems.length})'),
+    ];
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: SegmentedButton<int>(
-        segments: [
-          ButtonSegment(
-            value: 0,
-            label: Text('Active ($activeCount)'),
-            icon: const Icon(Icons.check_circle_outline, size: 16),
-          ),
-          ButtonSegment(
-            value: 1,
-            label: Text('Delisted ($delistedCount)'),
-            icon: const Icon(Icons.archive_outlined, size: 16),
-          ),
-          ButtonSegment(value: 2, label: Text('All (${allItems.length})')),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+      child: Row(
+        children: [
+          for (final filter in filters) ...[
+            ChoiceChip(
+              key: Key('listing-filter-${filter.$1}'),
+              label: Text(filter.$2),
+              selected: _selectedFilterIndex == filter.$1,
+              onSelected: (_) {
+                setState(() => _selectedFilterIndex = filter.$1);
+              },
+              showCheckmark: false,
+              side: BorderSide.none,
+              backgroundColor: colors.surfaceContainerLow,
+              selectedColor: colors.primaryContainer,
+              labelStyle: TextStyle(
+                color: _selectedFilterIndex == filter.$1
+                    ? colors.onPrimaryContainer
+                    : colors.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
         ],
-        selected: {_selectedFilterIndex},
-        onSelectionChanged: (set) {
-          setState(() => _selectedFilterIndex = set.first);
-        },
       ),
     );
   }
 
   Widget _buildItemCard(BuildContext context, ItemModel item) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final isDelisted = item.isDelisted;
     final isActive = item.isActive;
     final isReserved = item.status == ItemStatus.reserved;
     final isSold = item.status == ItemStatus.sold;
     final isVipUser = context.watch<AuthProvider>().currentUser?.isVip == true;
 
+    final statusLabel = isSold
+        ? 'Sold'
+        : isDelisted
+        ? 'Delisted'
+        : isReserved
+        ? 'Reserved'
+        : 'Active';
+    final statusForeground = isSold
+        ? colors.onSurfaceVariant
+        : isDelisted
+        ? const Color(0xFFB45309)
+        : isReserved
+        ? const Color(0xFF9A6700)
+        : colors.primary;
+    final statusBackground = isSold
+        ? colors.surfaceContainerHighest
+        : isDelisted
+        ? const Color(0xFFFFF7ED)
+        : isReserved
+        ? const Color(0xFFFFF8E1)
+        : colors.primaryContainer.withValues(alpha: isDark ? 0.7 : 0.6);
+
     return Card(
-      elevation: 0.8,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: isDelisted
-              ? Colors.orange.shade200
-              : Colors.grey.withOpacity(0.2),
-        ),
-      ),
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+      color: isDark ? colors.surfaceContainerLow : colors.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         onTap: () {
           Navigator.of(context)
               .push(
@@ -475,19 +523,18 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
               .then((_) => setState(_load));
         },
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Thumbnail with Status Badges
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                     child: SizedBox(
-                      width: 84,
-                      height: 84,
+                      width: 92,
+                      height: 92,
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
@@ -495,328 +542,259 @@ class _UserListingsScreenState extends State<UserListingsScreen> {
                               ? Image.network(
                                   item.imageUrl,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Container(
-                                        color: Colors.grey.shade200,
-                                        child: const Icon(
-                                          Icons.image_not_supported,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
+                                  errorBuilder: (_, _, _) => Container(
+                                    color: colors.surfaceContainerHighest,
+                                    child: Icon(
+                                      Icons.image_not_supported_outlined,
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ),
                                 )
                               : Container(
-                                  color: Colors.grey.shade200,
-                                  child: const Icon(
-                                    Icons.image,
-                                    color: Colors.grey,
+                                  color: colors.surfaceContainerHighest,
+                                  child: Icon(
+                                    Icons.image_outlined,
+                                    color: colors.onSurfaceVariant,
                                   ),
                                 ),
-                          if (isDelisted)
-                            Container(
-                              color: Colors.black54,
-                              child: const Center(
-                                child: Text(
-                                  'DELISTED',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            )
-                          else if (isReserved)
-                            Container(
-                              color: Colors.amber.withOpacity(0.7),
-                              child: const Center(
-                                child: Text(
-                                  'RESERVED',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                          if (isDelisted || isSold)
+                            ColoredBox(
+                              color: Colors.black.withValues(alpha: 0.18),
+                            ),
+                          Positioned(
+                            left: 7,
+                            bottom: 7,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.58),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.full,
                                 ),
                               ),
-                            )
-                          else if (isSold)
-                            Container(
-                              color: Colors.black45,
-                              child: const Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
                                 child: Text(
-                                  'SOLD',
-                                  style: TextStyle(
+                                  statusLabel,
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 10,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
                             ),
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  // Details
+                  const SizedBox(width: 14),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                item.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
+                    child: SizedBox(
+                      height: 92,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  item.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.2,
+                                  ),
                                 ),
                               ),
-                            ),
-                            if (item.isPromoted) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFF59E0B),
-                                      Color(0xFFD97706),
-                                    ],
+                              if (item.isPromoted) ...[
+                                const SizedBox(width: 8),
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFFF59E0B,
+                                    ).withValues(alpha: isDark ? 0.2 : 0.12),
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.full,
+                                    ),
                                   ),
-                                  borderRadius: BorderRadius.circular(4),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFD97706).withOpacity(0.35),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 1),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 7,
+                                      vertical: 4,
                                     ),
-                                  ],
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.rocket_launch_rounded,
+                                          size: 11,
+                                          color: Color(0xFFD97706),
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Boosted',
+                                          style: TextStyle(
+                                            color: Color(0xFFD97706),
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.rocket_launch_rounded,
-                                      size: 10,
-                                      color: Colors.white,
+                              ],
+                            ],
+                          ),
+                          const Spacer(),
+                          Text(
+                            item.isFree ? 'Free' : '\$${item.priceNzd} NZD',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: colors.onSurface,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: statusBackground,
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.full,
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  child: Text(
+                                    statusLabel,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: statusForeground,
                                     ),
-                                    SizedBox(width: 3),
-                                    Text(
-                                      'TOP',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              Icon(
+                                Icons.favorite_border_rounded,
+                                size: 14,
+                                color: colors.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${item.watchlistCount}',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.isFree ? 'FREE' : '\$${item.priceNzd} NZD',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF059669),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDelisted
-                                    ? Colors.orange.shade50
-                                    : isReserved
-                                    ? Colors.amber.shade50
-                                    : const Color(0xFFECFDF5),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                isDelisted
-                                    ? 'Delisted'
-                                    : isReserved
-                                    ? 'Reserved'
-                                    : 'Active',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDelisted
-                                      ? Colors.orange.shade800
-                                      : isReserved
-                                      ? Colors.amber.shade900
-                                      : const Color(0xFF047857),
-                                ),
-                              ),
-                            ),
-                            const Spacer(),
-                            Icon(
-                              Icons.favorite_outline,
-                              size: 14,
-                              color: Colors.grey.shade500,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              '${item.watchlistCount}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
-              // Action Buttons Row (only in Selling mode)
               if (widget.mode == UserListingsMode.selling) ...[
-                const SizedBox(height: 10),
-                const Divider(height: 1),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
-                    // Promote Button (enabled on active items)
-                    if (isActive) ...[
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
+                    if (isActive)
+                      FilledButton.tonalIcon(
+                        style: FilledButton.styleFrom(
                           visualDensity: VisualDensity.compact,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
+                            horizontal: 12,
+                            vertical: 8,
                           ),
-                          side: BorderSide(
-                            color: isVipUser
-                                ? const Color(0xFF8B5CF6)
-                                : const Color(0xFFD97706),
-                          ),
-                          foregroundColor: isVipUser
-                              ? const Color(0xFF7C3AED)
-                              : const Color(0xFFB45309),
                         ),
                         onPressed: () => _handlePromote(item),
                         icon: isVipUser
                             ? const VipCrownIcon(size: 14)
                             : const Icon(
                                 Icons.rocket_launch_outlined,
-                                size: 13,
+                                size: 14,
                               ),
-                        label: isVipUser
-                            ? Text(
-                                item.isPromoted
+                        label: Text(
+                          isVipUser
+                              ? item.isPromoted
                                     ? 'VIP Boosted'
-                                    : 'VIP Boost (Free)',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              )
-                            : Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    item.isPromoted
-                                        ? 'Boost Again ('
-                                        : 'Promote (',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  const KiwiGoldCoinIcon(size: 12),
-                                  const Text(
-                                    ' 5)',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    // Delist / Relist Button
-                    if (isActive)
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
+                                    : 'VIP Boost (Free)'
+                              : item.isPromoted
+                              ? 'Boost again'
+                              : 'Promote · 5',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
                           ),
-                          side: BorderSide(color: Colors.grey.shade400),
-                          foregroundColor: Colors.grey.shade800,
                         ),
+                      ),
+                    if (isActive)
+                      TextButton.icon(
                         onPressed: () => _handleToggleListing(item, false),
-                        icon: const Icon(Icons.archive_outlined, size: 14),
-                        label: const Text(
-                          'Delist',
-                          style: TextStyle(fontSize: 12),
-                        ),
+                        icon: const Icon(Icons.archive_outlined, size: 15),
+                        label: const Text('Delist'),
                       )
                     else if (isDelisted)
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          backgroundColor: const Color(0xFF059669),
-                          foregroundColor: Colors.white,
-                        ),
+                      FilledButton.tonalIcon(
                         onPressed: () => _handleToggleListing(item, true),
-                        icon: const Icon(Icons.unarchive_outlined, size: 14),
-                        label: const Text(
-                          'Relist',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        icon: const Icon(Icons.unarchive_outlined, size: 15),
+                        label: const Text('Relist'),
                       ),
-                    const SizedBox(width: 8),
-                    // Edit Button
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
+                    if (isSold)
+                      Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                          horizontal: 8,
+                          vertical: 10,
                         ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.lock_outline_rounded,
+                              size: 14,
+                              color: colors.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Locked after sale',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      TextButton.icon(
+                        onPressed: () async {
+                          final updated = await EditItemSheet.show(
+                            context,
+                            item: item,
+                          );
+                          if (updated != null) {
+                            setState(_load);
+                          }
+                        },
+                        icon: const Icon(Icons.edit_outlined, size: 15),
+                        label: const Text('Edit'),
                       ),
-                      onPressed: () async {
-                        final updated = await EditItemSheet.show(
-                          context,
-                          item: item,
-                        );
-                        if (updated != null) {
-                          setState(_load);
-                        }
-                      },
-                      icon: const Icon(Icons.edit_outlined, size: 14),
-                      label: const Text('Edit', style: TextStyle(fontSize: 12)),
-                    ),
                   ],
                 ),
               ],

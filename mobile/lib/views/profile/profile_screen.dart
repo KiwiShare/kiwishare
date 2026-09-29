@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/r2_upload_service.dart';
+import '../../theme/app_theme.dart';
 
 import '../../models/user_model.dart';
 import '../../providers/providers.dart';
@@ -22,10 +23,11 @@ import 'user_meetups_screen.dart';
 import 'user_orders_screen.dart';
 import 'settings_screen.dart';
 import 'public_profile_screen.dart';
-import '../scanner/qr_scanner_screen.dart';
 import '../support/support_chat_screen.dart';
+import '../scanner/qr_scanner_screen.dart';
 import '../../utils/trust_score.dart';
 import 'student_verification_sheet.dart';
+import 'student_verification_benefits_sheet.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -96,8 +98,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(sheet, 'camera'),
+            ),
+            ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose profile photo'),
+              title: const Text('Choose from photo library'),
               onTap: () => Navigator.pop(sheet, 'photo'),
             ),
             ListTile(
@@ -113,9 +120,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _avatarBusy = true);
     try {
       var url = '';
-      if (choice == 'photo') {
+      if (choice == 'photo' || choice == 'camera') {
         final photo = await ImagePicker().pickImage(
-          source: ImageSource.gallery,
+          source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
           maxWidth: 1024,
           imageQuality: 85,
         );
@@ -205,18 +212,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _showOtpSetPassword(BuildContext context) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _OtpSetPasswordDialog(),
+    );
+    if (changed == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Password set. You can now sign in with your email and password.',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _editName(BuildContext context, UserModel user) async {
     final auth = context.read<AuthProvider>();
     await showDialog<void>(
       context: context,
-      builder: (_) => _EditDisplayNameDialog(
-        initialName: user.displayName,
-        onSave: auth.updateDisplayName,
+      builder: (_) => _EditUsernameDialog(
+        initialUsername: user.username ?? '',
+        onSave: auth.updateUsername,
       ),
     );
   }
 
   Future<void> _showStudentVerification(BuildContext context) async {
+    final user = context.read<AuthProvider>().currentUser;
+    if (user?.isStudentVerified == true) {
+      await showStudentVerificationBenefitsSheet(context, user!);
+      return;
+    }
     await showStudentVerificationSheet(context);
   }
 
@@ -542,18 +570,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
         user?.authProvider == null || user?.authProvider == 'email_password';
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0C1310)
-          : const Color(0xFFF7F8F6),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text(
-          'Profile',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        toolbarHeight: 72,
+        titleSpacing: 16,
+        title: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+              ),
+              child: Icon(
+                Icons.person_rounded,
+                color: colors.primary,
+                size: 23,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              'Profile',
+              style: theme.textTheme.headlineLarge?.copyWith(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.6,
+              ),
+            ),
+          ],
         ),
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
         actions: [
+          IconButton(
+            key: const Key('profile-scan-qr-button'),
+            icon: const Icon(Icons.qr_code_scanner_rounded, size: 24),
+            tooltip: 'Scan QR Code',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const QrScannerScreen()),
+            ),
+          ),
           IconButton(
             key: const Key('profile-support-button'),
             icon: const Icon(Icons.support_agent_rounded, size: 24),
@@ -707,8 +766,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _ModernMenuTile(
                     icon: Icons.badge_outlined,
                     iconColor: const Color(0xFF14B8A6),
-                    title: 'Nickname',
-                    subtitle: user.displayName,
+                    title: 'Username',
+                    subtitle: user.username?.trim().isNotEmpty == true
+                        ? '@${user.username}'
+                        : 'Set a username',
                     onTap: () => _editName(context, user),
                   ),
                   _ModernMenuTile(
@@ -717,16 +778,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     title: 'Change password',
                     subtitle: canChangePassword
                         ? 'Update your password'
-                        : 'Managed by your sign-in provider',
+                        : 'Set a password using an email code',
                     onTap: canChangePassword
                         ? () => _showChangePassword(context)
-                        : () => ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Password changes are unavailable for this account. Use your sign-in provider instead.',
-                              ),
-                            ),
-                          ),
+                        : () => _showOtpSetPassword(context),
                   ),
                 ],
               ),
@@ -1038,10 +1093,11 @@ class _ProfileHeader extends StatelessWidget {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         GestureDetector(
-                          onTap: () => showKiwiTrustScoreSheet(context, user.trustScore),
+                          onTap: () =>
+                              showKiwiTrustScoreSheet(context, user.trustScore),
                           child: Semantics(
                             label:
-                                'Trust score ${formatPublicTrustScore(user.trustScore)}',
+                                '${formatPublicTrustScore(user.trustScore)} · ${getTrustScoreInfo(user.trustScore).label}',
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -1073,7 +1129,7 @@ class _ProfileHeader extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'Trust score ${formatPublicTrustScore(user.trustScore)}',
+                                    '${formatPublicTrustScore(user.trustScore)} · ${getTrustScoreInfo(user.trustScore).label}',
                                     style: TextStyle(
                                       color: isDark
                                           ? const Color(0xFFD6F6E3)
@@ -1083,38 +1139,6 @@ class _ProfileHeader extends StatelessWidget {
                                     ),
                                   ),
                                 ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => showKiwiTrustScoreSheet(context, user.trustScore),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? getTrustScoreInfo(user.trustScore).darkBg
-                                  : getTrustScoreInfo(user.trustScore).lightBg,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: (isDark
-                                        ? getTrustScoreInfo(user.trustScore).darkColor
-                                        : getTrustScoreInfo(user.trustScore).lightColor)
-                                    .withOpacity(0.4),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              getTrustScoreInfo(user.trustScore).label,
-                              style: TextStyle(
-                                color: isDark
-                                    ? getTrustScoreInfo(user.trustScore).darkColor
-                                    : getTrustScoreInfo(user.trustScore).lightColor,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
                               ),
                             ),
                           ),
@@ -1173,7 +1197,8 @@ class _ProfileHeader extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute<void>(
-                            builder: (_) => PublicProfileScreen(userId: user.id),
+                            builder: (_) =>
+                                PublicProfileScreen(userId: user.id),
                           ),
                         );
                       },
@@ -1785,20 +1810,20 @@ class _ModernMenuTile extends StatelessWidget {
   }
 }
 
-class _EditDisplayNameDialog extends StatefulWidget {
-  const _EditDisplayNameDialog({
-    required this.initialName,
+class _EditUsernameDialog extends StatefulWidget {
+  const _EditUsernameDialog({
+    required this.initialUsername,
     required this.onSave,
   });
 
-  final String initialName;
-  final Future<void> Function(String name) onSave;
+  final String initialUsername;
+  final Future<void> Function(String username) onSave;
 
   @override
-  State<_EditDisplayNameDialog> createState() => _EditDisplayNameDialogState();
+  State<_EditUsernameDialog> createState() => _EditUsernameDialogState();
 }
 
-class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
+class _EditUsernameDialogState extends State<_EditUsernameDialog> {
   late final TextEditingController _controller;
   final _formKey = GlobalKey<FormState>();
   String? _failure;
@@ -1807,7 +1832,7 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialName);
+    _controller = TextEditingController(text: widget.initialUsername);
   }
 
   @override
@@ -1822,11 +1847,14 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
     try {
       await widget.onSave(_controller.text);
       if (mounted) Navigator.pop(context);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() {
           _saving = false;
-          _failure = 'Could not save your name. Try again.';
+          final message = error.toString().replaceFirst('Exception: ', '');
+          _failure = message.isEmpty
+              ? 'Could not save that username.'
+              : message;
         });
       }
     }
@@ -1835,21 +1863,27 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Edit nickname'),
+      title: const Text('Edit username'),
       content: Form(
         key: _formKey,
         child: TextFormField(
           controller: _controller,
           autofocus: true,
-          maxLength: 30,
-          textCapitalization: TextCapitalization.words,
+          maxLength: 24,
+          textCapitalization: TextCapitalization.none,
+          autocorrect: false,
           decoration: InputDecoration(
-            labelText: 'Nickname',
+            labelText: 'Username',
+            prefixText: '@',
+            helperText: '3-24 letters, numbers, or underscores',
             errorText: _failure,
           ),
           validator: (value) {
-            final length = value?.trim().length ?? 0;
-            return length < 2 ? 'Enter at least 2 characters.' : null;
+            final username = value?.trim() ?? '';
+            if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(username)) {
+              return 'Use 3-24 letters, numbers, or underscores.';
+            }
+            return null;
           },
         ),
       ),
@@ -1947,6 +1981,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             validator: (v) =>
                 v == null || v.isEmpty ? 'Enter your current password.' : null,
           ),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _next,
             obscureText: !_showNext,
@@ -1967,6 +2002,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             validator: (v) =>
                 v == null || v.length < 8 ? 'Use at least 8 characters.' : null,
           ),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _confirm,
             obscureText: !_showConfirm,
@@ -2365,3 +2401,195 @@ class _VipPerkItem extends StatelessWidget {
   }
 }
 
+class _OtpSetPasswordDialog extends StatefulWidget {
+  const _OtpSetPasswordDialog();
+
+  @override
+  State<_OtpSetPasswordDialog> createState() => _OtpSetPasswordDialogState();
+}
+
+class _OtpSetPasswordDialogState extends State<_OtpSetPasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _code = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _sending = false;
+  bool _saving = false;
+  bool _showPassword = false;
+  String? _failure;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _code.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendCode() async {
+    setState(() {
+      _sending = true;
+      _failure = null;
+    });
+    try {
+      final email = _email.text.trim();
+      if (!email.contains('@')) {
+        setState(() => _failure = 'Enter a valid email address.');
+        return;
+      }
+      await context.read<AuthProvider>().requestPasswordReset(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Reset code sent. If email delivery is not configured, read the code from the server log.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _failure = error.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _saving = true;
+      _failure = null;
+    });
+    try {
+      await context.read<AuthProvider>().resetPassword(
+        email: _email.text.trim(),
+        code: _code.text.trim(),
+        newPassword: _next.text,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _failure = error.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Set a password'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'We will send a verification code to the email below.',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Account email',
+                border: OutlineInputBorder(),
+              ),
+              validator: (v) => v == null || !v.contains('@')
+                  ? 'Enter a valid email address.'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _code,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'Verification code',
+                      counterText: '',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? 'Enter the code.'
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: TextButton(
+                    onPressed: _sending ? null : _sendCode,
+                    child: Text(_sending ? 'Sending…' : 'Send code'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _next,
+              obscureText: !_showPassword,
+              decoration: InputDecoration(
+                labelText: 'New password',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  tooltip: _showPassword ? 'Hide password' : 'Show password',
+                  icon: Icon(
+                    _showPassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                  onPressed: _saving
+                      ? null
+                      : () => setState(() => _showPassword = !_showPassword),
+                ),
+              ),
+              validator: (v) => v == null || v.length < 8
+                  ? 'Use at least 8 characters.'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _confirm,
+              obscureText: !_showPassword,
+              decoration: const InputDecoration(
+                labelText: 'Confirm new password',
+                border: OutlineInputBorder(),
+              ),
+              validator: (v) =>
+                  v != _next.text ? 'Passwords do not match.' : null,
+            ),
+            if (_failure != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_failure!, style: TextStyle(color: colors.error)),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: Text(_saving ? 'Saving…' : 'Save'),
+        ),
+      ],
+    );
+  }
+}

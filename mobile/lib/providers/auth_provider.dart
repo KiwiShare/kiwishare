@@ -222,33 +222,13 @@ class AuthProvider extends ChangeNotifier {
       try {
         googleUser = await _googleSignIn.signIn();
       } on PlatformException catch (pe) {
-        debugPrint('[AuthProvider] Google Sign-in PlatformException: ${pe.code} - ${pe.message}');
-        if (pe.code == 'sign_in_canceled' || pe.code == 'popup_closed_by_user') {
+        debugPrint(
+          '[AuthProvider] Google Sign-in PlatformException: ${pe.code} - ${pe.message}',
+        );
+        if (pe.code == 'sign_in_canceled' ||
+            pe.code == 'popup_closed_by_user') {
           _isLoggingIn = false;
           notifyListeners();
-          return;
-        }
-        // In local development / iOS simulator when Google account/browser flow is unavailable:
-        if (kDebugMode &&
-            (pe.code == 'network_error' ||
-             pe.code == 'sign_in_failed' ||
-             pe.message?.contains('keychain') == true ||
-             pe.message?.contains('Safari') == true)) {
-          debugPrint('[AuthProvider] Using dev mock token fallback on Simulator.');
-          final result = await userRepository.loginWithGoogle('mock_google_token_sam');
-          final token = result['token'] as String;
-          final user = result['user'] as UserModel;
-
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('jwt_token', token);
-          await prefs.setString('current_user', jsonEncode(user.toJson()));
-
-          _jwtToken = token;
-          _currentUser = user;
-          _isLoggedIn = true;
-          unawaited(
-            pushNotifications?.activate(token, userId: user.id) ?? Future.value(),
-          );
           return;
         }
         rethrow;
@@ -262,36 +242,33 @@ class AuthProvider extends ChangeNotifier {
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-      String? idToken = googleAuth.idToken;
+      final idToken = googleAuth.idToken;
 
-      // Sync with FirebaseAuth if Firebase is initialized
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
+      }
+
+      // Authenticate KiwiShare with the original Google OAuth ID token.
+      // Do not replace it with a Firebase ID token: those tokens have
+      // different audiences and are verified by different authorities.
+      final result = await userRepository.loginWithGoogle(idToken);
+
+      // FirebaseAuth sync is optional client-side state for Firebase services.
+      // It must never decide whether the KiwiShare backend login succeeds.
       try {
         if (Firebase.apps.isNotEmpty) {
           final credential = GoogleAuthProvider.credential(
             accessToken: googleAuth.accessToken,
-            idToken: googleAuth.idToken,
+            idToken: idToken,
           );
-          final userCredential =
-              await FirebaseAuth.instance.signInWithCredential(credential);
-          final fbToken = await userCredential.user?.getIdToken();
-          if (fbToken != null && fbToken.isNotEmpty) {
-            idToken = fbToken;
-          }
+          await FirebaseAuth.instance.signInWithCredential(credential);
         }
       } catch (fbError) {
-        debugPrint('[AuthProvider] Optional FirebaseAuth sync notice: $fbError');
+        debugPrint(
+          '[AuthProvider] Optional FirebaseAuth sync notice: $fbError',
+        );
       }
 
-      if (idToken == null || idToken.isEmpty) {
-        if (kDebugMode) {
-          debugPrint('[AuthProvider] No idToken received in debug mode, using mock token.');
-          idToken = 'mock_google_token_sam';
-        } else {
-          throw Exception('Google Sign-in failed: Could not retrieve ID Token.');
-        }
-      }
-
-      final result = await userRepository.loginWithGoogle(idToken);
       final token = result['token'] as String;
       final user = result['user'] as UserModel;
 
@@ -371,6 +348,24 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> updateUsername(String value) async {
+    final username = value.trim();
+    if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(username)) {
+      throw ArgumentError(
+        'Username must be 3-24 characters using only letters, numbers, or underscores.',
+      );
+    }
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to set your username.');
+    }
+    final updated = await userRepository.updateProfile(
+      token: token,
+      username: username,
+    );
+    await _storeProfile(token, updated);
+  }
+
   Future<void> updateDisplayName(String value) async {
     final name = value.trim();
     if (name.length < 2 || name.length > 30) {
@@ -409,6 +404,23 @@ class AuthProvider extends ChangeNotifier {
     await _storeProfile(token, updated);
   }
 
+  Future<void> updateCoverImage(String url) async {
+    final token = _jwtToken;
+    if (!_isLoggedIn || token == null) {
+      throw StateError('Please log in to edit your profile.');
+    }
+    final updated = await userRepository.updateProfile(
+      token: token,
+      coverImageUrl: url,
+    );
+    if (updated.coverImageUrl?.trim() != url.trim()) {
+      throw StateError(
+        'Profile background was not saved by the current server.',
+      );
+    }
+    await _storeProfile(token, updated);
+  }
+
   Future<void> updateBio(String value) async {
     final bioText = value.trim();
     if (bioText.length > 200) {
@@ -418,10 +430,7 @@ class AuthProvider extends ChangeNotifier {
     if (!_isLoggedIn || token == null) {
       throw StateError('Please log in to edit your profile.');
     }
-    final updated = await userRepository.updateBio(
-      bioText,
-      token: token,
-    );
+    final updated = await userRepository.updateBio(bioText, token: token);
     await _storeProfile(token, updated);
   }
 

@@ -119,9 +119,15 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
         await _loadDetails();
         if (mounted && _meetup != null) {
           final isBuyerTarget = isBuyer;
-          final targetUserId = isBuyerTarget ? _meetup!.sellerId : _meetup!.buyerId;
-          final targetName = isBuyerTarget ? _meetup!.sellerName : _meetup!.buyerName;
-          final targetAvatar = isBuyerTarget ? _meetup!.sellerAvatarUrl : _meetup!.buyerAvatarUrl;
+          final targetUserId = isBuyerTarget
+              ? _meetup!.sellerId
+              : _meetup!.buyerId;
+          final targetName = isBuyerTarget
+              ? _meetup!.sellerName
+              : _meetup!.buyerName;
+          final targetAvatar = isBuyerTarget
+              ? _meetup!.sellerAvatarUrl
+              : _meetup!.buyerAvatarUrl;
           if (targetUserId.isNotEmpty) {
             await Future<void>.delayed(const Duration(milliseconds: 300));
             if (mounted) {
@@ -139,11 +145,13 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
             }
           }
         }
-        if (!isBuyer && token != null) {
-          unawaited(_checkSellerPayoutNotice(
-            token: token,
-            priceNzd: _meetup?.itemPriceNzd ?? '',
-          ));
+        if (!isBuyer) {
+          unawaited(
+            _checkSellerPayoutNotice(
+              token: token,
+              priceNzd: _meetup?.itemPriceNzd ?? '',
+            ),
+          );
         }
       }
     } catch (e) {
@@ -200,7 +208,10 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
           builder: (dialogCtx) => AlertDialog(
             title: const Row(
               children: [
-                Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF2563EB)),
+                Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: Color(0xFF2563EB),
+                ),
                 SizedBox(width: 8),
                 Text('Bind Payout Card'),
               ],
@@ -310,10 +321,9 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
         meetup.isConfirmed ||
         meetup.proposalStatus == 'confirmed' ||
         meetup.proposalStatus == 'accepted';
-    final isPaid =
-        meetup.isPaid || (meetup.qrToken != null && meetup.qrToken!.isNotEmpty);
-
-    final qrData = meetup.qrToken ?? 'QR_HANDOVER_TOKEN_${meetup.id}';
+    final isPaid = meetup.isPaid;
+    final isHandoverReady = meetup.isHandoverReady;
+    final qrData = meetup.qrToken;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -673,7 +683,7 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'The item handover has been verified and ownership transferred. Both parties have been awarded 10 trust score points!',
+                      'The item handover has been verified and ownership transferred. Each participant has been awarded 5 trust score points.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: isDark
@@ -689,9 +699,15 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                         key: const Key('leave_counterpart_review_button'),
                         onPressed: () {
                           final isBuyer = meetup.isBuying;
-                          final targetUserId = isBuyer ? meetup.sellerId : meetup.buyerId;
-                          final targetName = isBuyer ? meetup.sellerName : meetup.buyerName;
-                          final targetAvatar = isBuyer ? meetup.sellerAvatarUrl : meetup.buyerAvatarUrl;
+                          final targetUserId = isBuyer
+                              ? meetup.sellerId
+                              : meetup.buyerId;
+                          final targetName = isBuyer
+                              ? meetup.sellerName
+                              : meetup.buyerName;
+                          final targetAvatar = isBuyer
+                              ? meetup.sellerAvatarUrl
+                              : meetup.buyerAvatarUrl;
                           ReviewBottomSheet.show(
                             context,
                             targetUserId: targetUserId,
@@ -704,7 +720,11 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                             role: isBuyer ? 'seller' : 'buyer',
                           );
                         },
-                        icon: const Icon(Icons.star_rounded, size: 20, color: Colors.amber),
+                        icon: const Icon(
+                          Icons.star_rounded,
+                          size: 20,
+                          color: Colors.amber,
+                        ),
                         label: Text(
                           'Rate & Review ${meetup.counterpartyName}',
                           style: const TextStyle(
@@ -716,7 +736,9 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                           backgroundColor: const Color(0xFF059669),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.medium),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.medium,
+                            ),
                           ),
                         ),
                       ),
@@ -909,8 +931,69 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
                 ),
               ),
             ),
+          ] else if (!isHandoverReady) ...[
+            Card(
+              elevation: 0,
+              color: colors.surfaceContainerHighest.withOpacity(0.45),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    Icon(Icons.sync_problem_rounded, color: colors.error),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Handover is not ready yet.',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Refresh this order after payment and meetup confirmation are both complete.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ] else if (qrData == null || qrData.isEmpty) ...[
+            Card(
+              elevation: 0,
+              color: colors.surfaceContainerHighest.withOpacity(0.45),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.qr_code_2_rounded,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Handover QR unavailable',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'The order is ready, but the server has not returned a valid handover token. Refresh and try again.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: _loadDetails,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Refresh'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ] else ...[
-            // BOTH CONFIRMED AND PAID: Display QR Code and Direct Confirmation Buttons
+            // BOTH CONFIRMED AND PAID: Display server-issued QR Code and Direct Confirmation Buttons
             Card(
               elevation: 1,
               shape: RoundedRectangleBorder(

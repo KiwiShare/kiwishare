@@ -10,12 +10,16 @@ import 'package:kiwishare/views/shared/widgets/item_card.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  Widget buildCard(ItemModel item) {
+  Widget buildCard(ItemModel item, {bool compact = false}) {
     return MaterialApp(
       home: Scaffold(
         body: ChangeNotifierProvider(
           create: (_) => FavoritesProvider(),
-          child: SizedBox(width: 200, child: ItemCard(item: item)),
+          child: SizedBox(
+            width: 200,
+            height: compact ? 196 : 360,
+            child: ItemCard(item: item, compact: compact),
+          ),
         ),
       ),
     );
@@ -145,6 +149,61 @@ void main() {
     expect(watchlist.isWatched(item.id), isFalse);
     expect(controller.statusCalls, 1);
   });
+
+  testWidgets('shows one compact heart control without a popularity count', (
+    tester,
+  ) async {
+    const item = ItemModel(
+      id: 'popular-item',
+      title: 'Popular lamp',
+      priceNzd: '25',
+      location: 'Auckland',
+      imageUrl: '',
+      isSustainable: false,
+      category: 'Home',
+      status: ItemStatus.active,
+      watchlistCount: 7,
+    );
+
+    await tester.pumpWidget(buildCard(item));
+
+    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.text('7'), findsNothing);
+  });
+
+  testWidgets(
+    'compact discovery card shows seller, English location, price and category',
+    (tester) async {
+      const item = ItemModel(
+        id: 'compact-item',
+        title: 'Compact Camera',
+        priceNzd: '120',
+        location: '奥克兰',
+        imageUrl: '',
+        isSustainable: false,
+        category: 'electronics',
+        status: ItemStatus.active,
+        seller: SellerInfo(id: 'seller-compact', displayName: 'Mia Seller'),
+      );
+
+      await tester.pumpWidget(buildCard(item, compact: true));
+
+      expect(find.text('Compact Camera'), findsOneWidget);
+      expect(find.text('Mia Seller'), findsOneWidget);
+      expect(find.text('Auckland'), findsOneWidget);
+      expect(find.text('奥克兰'), findsNothing);
+      expect(find.text(r'$120'), findsOneWidget);
+      expect(find.text('Electronics'), findsOneWidget);
+      expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+      expect(tester.getSize(find.byType(ItemCard)).height, 196);
+      final imageArea = find.byKey(
+        const Key('compact-item-image-compact-item'),
+      );
+      expect(tester.getSize(imageArea).height, greaterThan(100));
+      expect(tester.getSize(imageArea).height, lessThan(115));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 class _PermissionController implements PushPermissionController {

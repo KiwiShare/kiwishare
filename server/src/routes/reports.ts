@@ -19,7 +19,6 @@ import User from '../models/User';
 import { sendReportConfirmationEmail } from '../services/reportConfirmationEmail';
 
 const router = new Router();
-const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
 
 type ReportPayload = Record<string, unknown>;
 
@@ -67,6 +66,18 @@ function validReason(targetType: ReportTargetType, reason: string) {
     ? LISTING_REPORT_REASONS
     : USER_REPORT_REASONS;
   return reasons.includes(reason as never);
+}
+
+function duplicateReportMessage(targetType: ReportTargetType) {
+  const target = targetType === 'listing' ? 'listing' : 'user';
+  return `You have already reported this ${target}. We will review your existing report.`;
+}
+
+function isDuplicateKeyError(value: unknown): value is { code: number } {
+  return typeof value === 'object' &&
+    value !== null &&
+    'code' in value &&
+    (value as { code?: unknown }).code === 11000;
 }
 
 async function validateUserContext(
@@ -215,6 +226,7 @@ router.post('/reports', authenticateToken, async (ctx: Context) => {
 
   let targetId: mongoose.Types.ObjectId | undefined;
   let contextId: mongoose.Types.ObjectId | undefined;
+  let listingTitle: string | undefined;
   if (targetIdValue !== undefined) {
     if (!mongoose.Types.ObjectId.isValid(targetIdValue)) {
       error(ctx, 400, 'Invalid report target ID.');
@@ -272,7 +284,7 @@ router.post('/reports', authenticateToken, async (ctx: Context) => {
       return;
     }
     const item = await Item.findById(targetId)
-      .select('sellerId ownerId')
+      .select('title sellerId ownerId')
       .exec() as IItem | null;
     if (!item) {
       error(ctx, 404, 'Reported listing not found.');
@@ -283,40 +295,48 @@ router.post('/reports', authenticateToken, async (ctx: Context) => {
       error(ctx, 400, 'You cannot report your own listing.');
       return;
     }
+    listingTitle = item.title;
     contextId = targetId;
   }
 
-  const duplicate = await Report.exists({
-    reporterId,
-    targetType,
-    targetId: targetId ?? null,
-    contextType,
-    contextId: contextId ?? null,
-    reason,
-    createdAt: { $gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) }
-  });
-  if (duplicate) {
-    error(ctx, 409, 'You have already submitted this report. We will review it shortly.');
+  const dedupeKey = targetId
+    ? `${reporterId}:${targetType}:${targetId}`
+    : undefined;
+  if (targetId && await Report.exists({ reporterId, targetType, targetId })) {
+    error(ctx, 409, duplicateReportMessage(targetType));
     return;
   }
 
-  const report = await Report.create({
-    reporterId,
-    targetType,
-    targetId,
-    contextType,
-    contextId,
-    reason: reason as ReportReasonCode,
-    details,
-    status: 'pending'
-  });
+  let report: IReport;
+  try {
+    report = await Report.create({
+      reporterId,
+      targetType,
+      targetId,
+      dedupeKey,
+      contextType,
+      contextId,
+      reason: reason as ReportReasonCode,
+      details,
+      status: 'pending'
+    });
+  } catch (createError) {
+    if (targetId && isDuplicateKeyError(createError)) {
+      error(ctx, 409, duplicateReportMessage(targetType));
+      return;
+    }
+    throw createError;
+  }
 
   try {
     await sendReportConfirmationEmail({
       email: reporter.email,
       displayName: reporter.displayName,
       reportId: report._id.toString(),
-      submittedAt: report.createdAt
+      submittedAt: report.createdAt,
+      reason: report.reason,
+      details: report.details,
+      listingTitle
     });
   } catch (emailError) {
     const message = emailError instanceof Error ? emailError.message : 'Unknown error';

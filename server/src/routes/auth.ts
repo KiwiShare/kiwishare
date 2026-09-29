@@ -11,6 +11,37 @@ import { configuredFirebaseApp } from '../services/pushNotification';
 
 const router = new Router();
 
+const DEFAULT_GOOGLE_OAUTH_CLIENT_IDS = [
+  '353504132004-v9hv2iktcb0164pgsrp9ov41ihc7kba2.apps.googleusercontent.com', // Web/server
+  '353504132004-ljdbt8oa154268k63uk73gkeviacpfr1.apps.googleusercontent.com', // iOS
+  '353504132004-5idmotm27ntcd9187lp1dmk8ffli1flb.apps.googleusercontent.com', // Android (release/registered certificate)
+  '353504132004-g358ohfr7doidm5fl9ptv0v3dfu61tov.apps.googleusercontent.com' // Android (WSL debug certificate)
+];
+
+function allowedGoogleOAuthClientIds(): Set<string> {
+  const configured = process.env.GOOGLE_OAUTH_CLIENT_IDS
+    ?.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return new Set(configured?.length ? configured : DEFAULT_GOOGLE_OAUTH_CLIENT_IDS);
+}
+
+function validateGoogleOAuthClaims(data: any): void {
+  const issuer = data.iss?.toString();
+  if (issuer && issuer !== 'accounts.google.com' && issuer !== 'https://accounts.google.com') {
+    throw new Error('Google token issuer is invalid.');
+  }
+
+  const audience = data.aud?.toString();
+  if (!audience || !allowedGoogleOAuthClientIds().has(audience)) {
+    throw new Error('Google token was issued for a different application.');
+  }
+
+  if (data.email_verified !== true && data.email_verified !== 'true') {
+    throw new Error('Google account email is not verified.');
+  }
+}
+
 async function sendVerificationEmail(options: {
   to: string;
   subject: string;
@@ -98,6 +129,11 @@ router.post('/auth/register', async (ctx) => {
   if (!email || !password || !displayName) {
     ctx.status = 400;
     ctx.body = { status: 'error', message: 'Missing required registration parameters.' };
+    return;
+  }
+  if (displayName.trim().length < 2 || displayName.trim().length > 30) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Username must be between 2 and 30 characters.' };
     return;
   }
 
@@ -196,6 +232,47 @@ router.post('/auth/login', async (ctx) => {
     }
   };
 });
+
+function googleUsernameBase(name: string, email: string): string {
+  const source = name.trim() || email.split('@')[0] || 'kiwi_user';
+  let base = source
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 24);
+  if (base.length < 3) {
+    const emailBase = email
+      .split('@')[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    base = (emailBase || 'kiwi_user').slice(0, 24);
+  }
+  return base.length >= 3 ? base : 'kiwi_user';
+}
+
+async function ensureGoogleUsername(
+  user: any,
+  googleName: string,
+  googleEmail: string
+): Promise<void> {
+  if (user.username?.trim()) return;
+  const base = googleUsernameBase(googleName, googleEmail);
+  for (let suffix = 0; suffix < 100; suffix += 1) {
+    const suffixText = suffix === 0 ? '' : String(suffix + 1);
+    const candidate = `${base.slice(0, 24 - suffixText.length)}${suffixText}`;
+    const exists = await User.exists({
+      username: candidate,
+      _id: { $ne: user._id }
+    });
+    if (!exists) {
+      user.username = candidate;
+      return;
+    }
+  }
+  const stableSuffix = user._id.toString().slice(-6).toLowerCase();
+  user.username = `${base.slice(0, 17)}_${stableSuffix}`.slice(0, 24);
+}
 
 // --- 1.1 Passwordless OTP & Google Authentication Endpoints ---
 
@@ -390,7 +467,7 @@ router.post('/auth/verify-otp', async (ctx) => {
   if (!user) {
     user = await User.create({
       email: normalizedEmail,
-      displayName: trimmedName || normalizedEmail.split('@')[0],
+      displayName: (trimmedName || normalizedEmail.split('@')[0]).slice(0, 30),
       avatarUrl: null,
       trustScore: 100,
       kiwiGold: 100,
@@ -405,7 +482,7 @@ router.post('/auth/verify-otp', async (ctx) => {
     user.lastUsedPlatform = platform;
     user.lastLoginAt = now;
     user.lastActiveAt = now;
-    if (trimmedName && trimmedName.length >= 2 && user.displayName !== trimmedName) {
+    if (trimmedName && trimmedName.length >= 2 && trimmedName.length <= 30 && user.displayName !== trimmedName) {
       user.displayName = trimmedName;
     }
     await user.save();
@@ -421,6 +498,8 @@ router.post('/auth/verify-otp', async (ctx) => {
       id: user._id.toString(),
       email: user.email,
       displayName: user.displayName,
+      username: user.username,
+      needsUsername: !user.username || !user.username.trim(),
       avatarUrl: user.avatarUrl,
       trustScore: user.trustScore,
       isVerified: user.isVerified,
@@ -442,11 +521,11 @@ router.post('/auth/request-password-reset', async (ctx) => {
 
   const normalizedEmail = email.trim().toLowerCase();
   const user = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
-  if (!user || user.authProvider !== 'email_password' || !user.passwordHash) {
+  if (!user) {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: 'Password reset is only available for email and password accounts.'
+      message: 'Password reset is not available for this account.'
     };
     return;
   }
@@ -547,15 +626,15 @@ router.post('/auth/reset-password', async (ctx) => {
   }
 
   const user = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
-  if (!user || user.authProvider !== 'email_password' || !user.passwordHash) {
+  if (!user) {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: 'Password reset is only available for email and password accounts.'
+      message: 'Password reset is not available for this account.'
     };
     return;
   }
-  if (await bcrypt.compare(newPassword, user.passwordHash)) {
+  if (user.passwordHash && (await bcrypt.compare(newPassword, user.passwordHash))) {
     ctx.status = 400;
     ctx.body = { status: 'error', message: 'New password must be different from your current password.' };
     return;
@@ -583,8 +662,8 @@ router.post('/auth/google', async (ctx) => {
   let googleName = '';
   let googlePicture = '';
 
-  // Handle Mock verification for local testing and automated tests
-  if (idToken.startsWith('mock_google_token')) {
+  // Mock identities are strictly non-production test fixtures.
+  if (process.env.NODE_ENV !== 'production' && idToken.startsWith('mock_google_token')) {
     const suffix = idToken.split('_')[3] || 'sam';
     googleUid = `google_uid_${suffix}`;
     googleEmail = `${suffix}@kiwishare.co.nz`;
@@ -597,6 +676,9 @@ router.post('/auth/google', async (ctx) => {
       if (app) {
         const { getAuth } = await import('firebase-admin/auth');
         const decoded = await getAuth(app).verifyIdToken(idToken);
+        if (decoded.email_verified === false) {
+          throw new Error('Firebase identity does not have a verified email.');
+        }
         googleUid = decoded.uid;
         googleEmail = (decoded.email || '').trim().toLowerCase();
         googleName = decoded.name || '';
@@ -617,6 +699,7 @@ router.post('/auth/google', async (ctx) => {
         if (data.error_description) {
           throw new Error(data.error_description);
         }
+        validateGoogleOAuthClaims(data);
         googleUid = data.sub;
         googleEmail = (data.email || '').trim().toLowerCase();
         googleName = data.name || '';
@@ -627,6 +710,12 @@ router.post('/auth/google', async (ctx) => {
         return;
       }
     }
+  }
+
+  if (!googleUid || !googleEmail || !googleEmail.includes('@')) {
+    ctx.status = 401;
+    ctx.body = { status: 'error', message: 'Google authentication did not return a verified email address.' };
+    return;
   }
 
   const platform = ctx.state.clientPlatform || resolveClientPlatform(ctx);
@@ -647,12 +736,13 @@ router.post('/auth/google', async (ctx) => {
     user.lastUsedPlatform = platform;
     user.lastLoginAt = now;
     user.lastActiveAt = now;
+    await ensureGoogleUsername(user, googleName, googleEmail);
     await user.save();
   } else {
     const role = googleEmail.toLowerCase() === 'admin@kiwishare.online' ? 'admin' : 'user';
     const isStudent = googleEmail.toLowerCase().endsWith('.ac.nz') || googleEmail.toLowerCase().endsWith('.edu');
 
-    user = await User.create({
+    user = new User({
       googleId: googleUid,
       email: googleEmail,
       displayName: googleName || googleEmail.split('@')[0],
@@ -673,6 +763,8 @@ router.post('/auth/google', async (ctx) => {
         watchlistPriceDrop: true
       }
     });
+    await ensureGoogleUsername(user, googleName, googleEmail);
+    await user.save();
   }
 
   const token = jwt.sign({ id: user._id.toString(), email: user.email }, getJwtSecret(), { expiresIn: '7d' });
@@ -684,6 +776,8 @@ router.post('/auth/google', async (ctx) => {
     user: {
       id: user._id.toString(),
       email: user.email,
+      username: user.username,
+      needsUsername: !user.username || !user.username.trim(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       role: user.role,

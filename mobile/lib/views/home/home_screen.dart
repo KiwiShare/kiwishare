@@ -10,10 +10,11 @@ import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/product_location_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/resilient_network_image.dart';
 import '../../widgets/kiwishare_logo.dart';
-import '../scanner/qr_scanner_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../shared/widgets/item_card_skeleton.dart';
+import '../shared/widgets/watchlist_heart_button.dart';
 import 'widgets/home_filter_sheet.dart';
 import 'widgets/home_product_map.dart';
 
@@ -168,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     await Future.wait([
       _itemsFuture!,
-      if (_featuredFuture != null) _featuredFuture!,
+      ?_featuredFuture,
       _recommendedFuture!,
       _loadDiscoveryOptions(forceRefresh: true),
     ]);
@@ -209,8 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showLocationPicker() {
-    final filters = context.read<HomeDiscoveryProvider>()
-      ..setView(HomeProductView.map);
+    final filters = context.read<HomeDiscoveryProvider>();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -228,14 +228,12 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final location = await _locationService.getCurrentLocation();
       if (!mounted) return;
-      context.read<HomeDiscoveryProvider>()
-        ..setLocation(
-          location.city,
-          nearYou: true,
-          latitude: location.latitude,
-          longitude: location.longitude,
-        )
-        ..setView(HomeProductView.map);
+      context.read<HomeDiscoveryProvider>().setLocation(
+        location.city,
+        nearYou: true,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      );
     } on ProductLocationException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -268,12 +266,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   location: filters.selectedLocation,
                   nearYou: filters.isNearYou,
                   onChooseLocation: _showLocationPicker,
-                  onScanQr: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const QrScannerScreen(),
-                    ),
-                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
@@ -482,17 +474,16 @@ class _HomeHeader extends StatelessWidget {
   final String location;
   final bool nearYou;
   final VoidCallback onChooseLocation;
-  final VoidCallback onScanQr;
 
   const _HomeHeader({
     required this.location,
     required this.nearYou,
     required this.onChooseLocation,
-    required this.onScanQr,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -506,7 +497,7 @@ class _HomeHeader extends StatelessWidget {
               Text(
                 'KiwiShare',
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  color: AppColors.textBrand,
+                  color: colors.primary,
                   fontWeight: FontWeight.w900,
                   fontSize: 24,
                   letterSpacing: -0.6,
@@ -515,7 +506,7 @@ class _HomeHeader extends StatelessWidget {
               Text(
                 'Share & Reuse in NZ',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.brandSecondary,
+                  color: colors.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
                   fontSize: 11,
                   letterSpacing: 0.3,
@@ -524,14 +515,6 @@ class _HomeHeader extends StatelessWidget {
             ],
           ),
         ),
-        IconButton(
-          key: const Key('home-scan-qr-button'),
-          icon: const Icon(Icons.qr_code_scanner_rounded, size: 24),
-          tooltip: 'Scan QR Code',
-          onPressed: onScanQr,
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
-        const SizedBox(width: 4),
         TextButton.icon(
           key: const Key('home-location-button'),
           onPressed: onChooseLocation,
@@ -540,48 +523,28 @@ class _HomeHeader extends StatelessWidget {
               horizontal: AppSpacing.sm,
               vertical: AppSpacing.xs,
             ),
-            backgroundColor: AppColors.surfaceMuted,
+            backgroundColor: colors.surfaceContainerHigh,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.full),
-              side: const BorderSide(color: AppColors.border),
             ),
           ),
           icon: Icon(
             nearYou ? Icons.my_location : Icons.location_on_outlined,
             size: 18,
-            color: nearYou ? AppColors.brandPrimary : AppColors.textSecondary,
+            color: nearYou ? colors.primary : colors.onSurfaceVariant,
           ),
           label: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 140),
             child: DefaultTextStyle.merge(
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: AppColors.brandPrimary,
+                color: colors.primary,
                 fontWeight: FontWeight.w700,
               ),
-              child: nearYou
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Near you'),
-                        if (location.isNotEmpty &&
-                            location !=
-                                HomeDiscoveryProvider.allLocationsLabel) ...[
-                          const SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              '($location)',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ],
-                    )
-                  : Text(
-                      location,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+              child: Text(
+                location,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ),
@@ -637,52 +600,139 @@ class _HomeCategoryChip extends StatelessWidget {
   }
 }
 
-class _HomeJumboCarousel extends StatelessWidget {
+class _HomeJumboCarousel extends StatefulWidget {
   final List<ItemModel> items;
   final ValueChanged<ItemModel> onOpen;
 
   const _HomeJumboCarousel({required this.items, required this.onOpen});
 
   @override
+  State<_HomeJumboCarousel> createState() => _HomeJumboCarouselState();
+}
+
+class _HomeJumboCarouselState extends State<_HomeJumboCarousel> {
+  late final PageController _controller;
+  Timer? _timer;
+  int _index = 0;
+
+  int get _count => widget.items.length > 5 ? 5 : widget.items.length;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HomeJumboCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items.length != widget.items.length) {
+      _index = 0;
+      if (_controller.hasClients) {
+        _controller.jumpToPage(0);
+      }
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    if (_count <= 1) return;
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || !_controller.hasClients) return;
+      final next = (_index + 1) % _count;
+      _controller.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const SizedBox.shrink();
+    if (widget.items.isEmpty) return const SizedBox.shrink();
+    final colors = Theme.of(context).colorScheme;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.auto_awesome,
-                color: AppColors.brandAccent,
-                size: 20,
+        Row(
+          children: [
+            Icon(Icons.auto_awesome_rounded, color: colors.primary, size: 22),
+            const SizedBox(width: AppSpacing.xs),
+            Text(
+              'Featured Highlights',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontSize: 20,
+                height: 1.4,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
               ),
-              const SizedBox(width: AppSpacing.xs),
-              Text(
-                'Featured Highlights',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.3,
-                ),
+            ),
+            const Spacer(),
+            Text(
+              '${_index + 1}/$_count',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: colors.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+        const SizedBox(height: AppSpacing.md),
         SizedBox(
-          height: 180,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            itemCount: items.length > 5 ? 5 : items.length,
-            separatorBuilder: (context, index) =>
-                const SizedBox(width: AppSpacing.md),
+          height: 214,
+          child: PageView.builder(
+            key: const Key('home-featured-carousel'),
+            controller: _controller,
+            itemCount: _count,
+            onPageChanged: (index) {
+              setState(() => _index = index);
+              _startTimer();
+            },
             itemBuilder: (context, index) {
-              final item = items[index];
-              return _HomeJumboCard(item: item, onTap: () => onOpen(item));
+              final item = widget.items[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 2),
+                child: _HomeJumboCard(
+                  item: item,
+                  onTap: () => widget.onOpen(item),
+                ),
+              );
             },
           ),
         ),
+        if (_count > 1) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              _count,
+              (dotIndex) => AnimatedContainer(
+                key: Key('home-featured-dot-$dotIndex'),
+                duration: const Duration(milliseconds: 220),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: dotIndex == _index ? 18 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: dotIndex == _index
+                      ? colors.primary
+                      : colors.outlineVariant,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -697,7 +747,7 @@ class _HomeJumboCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 290,
+      width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.large),
         boxShadow: [
@@ -718,8 +768,9 @@ class _HomeJumboCard extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 item.imageUrl.isNotEmpty
-                    ? Image.network(
-                        item.imageUrl,
+                    ? ResilientNetworkImage(
+                        url: item.imageUrl,
+                        logicalCacheWidth: 720,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
                           color: AppColors.brandPrimaryAlt,
@@ -755,7 +806,7 @@ class _HomeJumboCard extends StatelessWidget {
                 Positioned(
                   top: AppSpacing.sm,
                   left: AppSpacing.sm,
-                  right: AppSpacing.sm,
+                  right: 46,
                   child: Wrap(
                     spacing: AppSpacing.sm,
                     runSpacing: 4,
@@ -768,8 +819,8 @@ class _HomeJumboCard extends StatelessWidget {
                           vertical: AppSpacing.xs,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.brandAccent,
-                          borderRadius: BorderRadius.circular(AppRadius.small),
+                          color: Colors.black.withValues(alpha: 0.62),
+                          borderRadius: BorderRadius.circular(AppRadius.full),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
@@ -781,12 +832,12 @@ class _HomeJumboCard extends StatelessWidget {
                             ),
                             SizedBox(width: 2),
                             Text(
-                              'HOT PICK',
+                              'Featured',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
                               ),
                             ),
                           ],
@@ -799,10 +850,8 @@ class _HomeJumboCard extends StatelessWidget {
                             vertical: AppSpacing.xs,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.brandPrimaryContainer,
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.small,
-                            ),
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(AppRadius.full),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -810,13 +859,13 @@ class _HomeJumboCard extends StatelessWidget {
                               Icon(
                                 Icons.eco,
                                 size: 14,
-                                color: AppColors.brandPrimary,
+                                color: Color(0xFF86EFAC),
                               ),
                               SizedBox(width: 2),
                               Text(
                                 'ECO',
                                 style: TextStyle(
-                                  color: AppColors.brandPrimary,
+                                  color: Colors.white,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -831,12 +880,8 @@ class _HomeJumboCard extends StatelessWidget {
                             vertical: AppSpacing.xs,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF1E3A8A,
-                            ).withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.small,
-                            ),
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(AppRadius.full),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -860,6 +905,14 @@ class _HomeJumboCard extends StatelessWidget {
                           ),
                         ),
                     ],
+                  ),
+                ),
+                Positioned(
+                  top: AppSpacing.sm,
+                  right: AppSpacing.sm,
+                  child: WatchlistHeartButton(
+                    key: Key('home-featured-heart-${item.id}'),
+                    item: item,
                   ),
                 ),
                 Positioned(
@@ -894,7 +947,7 @@ class _HomeJumboCard extends StatelessWidget {
                           const SizedBox(width: 2),
                           Expanded(
                             child: Text(
-                              item.location,
+                              item.displayLocation,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -904,24 +957,28 @@ class _HomeJumboCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.sm,
-                              vertical: 3,
-                            ),
+                          DecoratedBox(
                             decoration: BoxDecoration(
-                              color: AppColors.brandPrimary,
+                              color: Colors.black.withValues(alpha: 0.5),
                               borderRadius: BorderRadius.circular(
-                                AppRadius.small,
+                                AppRadius.full,
                               ),
-                              border: Border.all(color: Colors.white30),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.18),
+                              ),
                             ),
-                            child: Text(
-                              '\$${item.priceNzd} NZD',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              child: Text(
+                                item.isFree ? 'Free' : '\$${item.priceNzd} NZD',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ),
                           ),
@@ -952,7 +1009,7 @@ class _HomeRecommendedSection extends StatelessWidget {
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
-    final cardHeight = 205.0 + (textScale - 1.0) * 45.0;
+    final cardHeight = 190.0 + (textScale - 1.0) * 60.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -966,15 +1023,13 @@ class _HomeRecommendedSection extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.recommend,
-                  color: AppColors.brandPrimary,
-                  size: 22,
-                ),
+                Icon(Icons.recommend, color: colors.primary, size: 22),
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   'Recommended for You',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontSize: 20,
+                    height: 1.4,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.4,
                   ),
@@ -1053,6 +1108,7 @@ class _RecommendedProductCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
     final cardWidth = 155.0 + (textScale - 1.0) * 35.0;
+    const imageHeight = 110.0;
 
     return Container(
       width: cardWidth,
@@ -1080,29 +1136,30 @@ class _RecommendedProductCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  height: 95,
+                  height: imageHeight,
                   width: double.infinity,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
                       item.imageUrl.isNotEmpty
-                          ? Image.network(
-                              item.imageUrl,
+                          ? ResilientNetworkImage(
+                              url: item.imageUrl,
+                              logicalCacheWidth: cardWidth,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
                                   Container(
-                                    color: AppColors.surfaceMuted,
-                                    child: const Icon(
+                                    color: colors.surfaceContainerHighest,
+                                    child: Icon(
                                       Icons.image_not_supported_outlined,
-                                      color: AppColors.brandSecondary,
+                                      color: colors.onSurfaceVariant,
                                     ),
                                   ),
                             )
                           : Container(
-                              color: AppColors.surfaceMuted,
-                              child: const Icon(
+                              color: colors.surfaceContainerHighest,
+                              child: Icon(
                                 Icons.eco_outlined,
-                                color: AppColors.brandPrimary,
+                                color: colors.primary,
                               ),
                             ),
                       Positioned(
@@ -1114,29 +1171,37 @@ class _RecommendedProductCard extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.brandPrimary,
+                            color: colors.primaryContainer,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             '#$rank',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: colors.onPrimaryContainer,
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
                       ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: WatchlistHeartButton(
+                          key: Key('home-recommended-heart-${item.id}'),
+                          item: item,
+                        ),
+                      ),
                       if (item.isSustainable)
                         const Positioned(
-                          top: 6,
+                          bottom: 6,
                           right: 6,
                           child: CircleAvatar(
-                            radius: 11,
+                            radius: 10,
                             backgroundColor: AppColors.brandPrimaryContainer,
                             child: Icon(
                               Icons.eco,
-                              size: 13,
+                              size: 12,
                               color: AppColors.brandPrimary,
                             ),
                           ),
@@ -1208,12 +1273,12 @@ class _RecommendedProductCard extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                item.location,
+                                item.displayLocation,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.labelSmall
                                     ?.copyWith(
-                                      color: AppColors.textSecondary,
+                                      color: colors.onSurfaceVariant,
                                       fontSize: 11,
                                     ),
                               ),
@@ -1227,7 +1292,7 @@ class _RecommendedProductCard extends StatelessWidget {
                               '\$${item.priceNzd}',
                               style: Theme.of(context).textTheme.titleSmall
                                   ?.copyWith(
-                                    color: AppColors.brandPrimary,
+                                    color: colors.onSurface,
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
@@ -1306,10 +1371,16 @@ class _HomeDiscoveryResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_heading, style: Theme.of(context).textTheme.headlineMedium),
+        Text(
+          _heading,
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontSize: 20, height: 1.4),
+        ),
         const SizedBox(height: AppSpacing.sm),
         Wrap(
           spacing: AppSpacing.sm,
@@ -1321,7 +1392,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
               key: const Key('home-results-count'),
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
             OutlinedButton.icon(
               onPressed: onShowFilters,
@@ -1366,10 +1437,11 @@ class _HomeViewToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
+        color: colors.surfaceContainerLow,
+        border: Border.all(color: colors.outlineVariant),
         borderRadius: BorderRadius.circular(AppRadius.medium),
       ),
       child: Row(
@@ -1438,6 +1510,7 @@ class _HomeProductsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+    final cardHeight = 196.0 + (textScale - 1) * 84.0;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1445,12 +1518,17 @@ class _HomeProductsGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing: AppSpacing.md,
-        childAspectRatio: 0.58 - (textScale - 1) * 0.20,
+        mainAxisExtent: cardHeight,
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
         final item = products[index];
-        return ItemCard(item: item, onTap: () => onOpen(item));
+        return ItemCard(
+          key: Key('home-grid-card-${item.id}'),
+          item: item,
+          compact: true,
+          onTap: () => onOpen(item),
+        );
       },
     );
   }
@@ -1461,25 +1539,29 @@ class _HomeLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+    final cardHeight = 196.0 + (textScale - 1) * 84.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Products across NZ',
-          style: Theme.of(context).textTheme.headlineMedium,
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontSize: 20, height: 1.4),
         ),
         const SizedBox(height: AppSpacing.md),
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 220,
             crossAxisSpacing: AppSpacing.md,
             mainAxisSpacing: AppSpacing.md,
-            childAspectRatio: 0.60,
+            mainAxisExtent: cardHeight,
           ),
           itemCount: 4,
-          itemBuilder: (_, _) => const ItemCardSkeleton(),
+          itemBuilder: (_, _) => const ItemCardSkeleton(compact: true),
         ),
       ],
     );
@@ -1517,15 +1599,16 @@ class _HomeEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
       child: Center(
         child: Column(
           children: [
-            const Icon(
+            Icon(
               Icons.search_off_outlined,
               size: 48,
-              color: AppColors.brandSecondary,
+              color: colors.onSurfaceVariant,
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
@@ -1538,7 +1621,7 @@ class _HomeEmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
           ],
         ),
@@ -1629,13 +1712,11 @@ class _NzCascadingLocationSheetState extends State<_NzCascadingLocationSheet> {
 
   void _selectLocation(String location) {
     final coords = NzLocations.getApproximateCoordinates(location);
-    widget.filters
-      ..setLocation(
-        location,
-        latitude: coords?.latitude,
-        longitude: coords?.longitude,
-      )
-      ..setView(HomeProductView.map);
+    widget.filters.setLocation(
+      location,
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+    );
     Navigator.pop(context);
   }
 
@@ -1655,8 +1736,9 @@ class _NzCascadingLocationSheetState extends State<_NzCascadingLocationSheet> {
     final isDark = theme.brightness == Brightness.dark;
     final activeSuburbs = NzLocations.getSuburbsForRegion(_selectedRegion);
     final isSearching = _searchQuery.trim().isNotEmpty;
-    final searchResults =
-        isSearching ? NzLocations.searchLocations(_searchQuery) : const [];
+    final searchResults = isSearching
+        ? NzLocations.searchLocations(_searchQuery)
+        : const [];
 
     return Material(
       color: colors.surface,
@@ -1666,391 +1748,401 @@ class _NzCascadingLocationSheetState extends State<_NzCascadingLocationSheet> {
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.78,
         child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 38,
-                    height: 4.5,
-                    decoration: BoxDecoration(
-                      color: colors.outline.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(3),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 4.5,
+                      decoration: BoxDecoration(
+                        color: colors.outline.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Select Location',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Explore listings across New Zealand regions',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _searchCtrl,
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  decoration: InputDecoration(
-                    hintText:
-                        'Search region or suburb (e.g. CBD, Newmarket, Dunedin)...',
-                    hintStyle: TextStyle(
-                      fontSize: 13,
-                      color: colors.onSurfaceVariant.withValues(alpha: 0.6),
-                    ),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, size: 18),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: isDark
-                        ? colors.surfaceContainerHighest.withValues(alpha: 0.3)
-                        : colors.surfaceContainerHighest.withValues(alpha: 0.5),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 8,
-                      horizontal: 12,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        key: const Key('home-near-you-option'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          widget.onUseCurrentLocation();
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF0C2B1D)
-                                : const Color(0xFFECFDF5),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.my_location_rounded,
-                                size: 16,
-                                color: Color(0xFF059669),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'Current Location',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark
-                                        ? const Color(0xFF6EE7B7)
-                                        : const Color(0xFF047857),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: InkWell(
-                        key: const Key('home-location-All NZ'),
-                        onTap: () => _selectLocation(
-                          HomeDiscoveryProvider.allLocationsLabel,
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? colors.surfaceContainerHighest.withValues(
-                                    alpha: 0.4,
-                                  )
-                                : colors.surfaceContainerHighest.withValues(
-                                    alpha: 0.6,
-                                  ),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: widget.filters.selectedLocation ==
-                                          HomeDiscoveryProvider
-                                              .allLocationsLabel &&
-                                      !widget.filters.isNearYou
-                                  ? AppColors.brandPrimary
-                                  : colors.outline.withValues(alpha: 0.15),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.public_rounded,
-                                size: 16,
-                                color: AppColors.brandPrimary,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'All New Zealand',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.brandPrimary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: isSearching
-                ? searchResults.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No locations match "$_searchQuery"',
-                          style: TextStyle(color: colors.onSurfaceVariant),
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: searchResults.length,
-                        separatorBuilder: (ctx, i) => const Divider(height: 1),
-                        itemBuilder: (ctx, i) {
-                          final res = searchResults[i];
-                          final target = res['suburb']!.isNotEmpty
-                              ? res['suburb']!
-                              : res['region']!;
-                          final isSelected = widget.filters.selectedLocation
-                                      .toLowerCase() ==
-                                  target.toLowerCase() &&
-                              !widget.filters.isNearYou;
-                          final count = _getItemCount(target);
-                          return ListTile(
-                            key: Key('home-location-$target'),
-                            dense: true,
-                            leading: Icon(
-                              res['type'] == 'Region'
-                                  ? Icons.map_outlined
-                                  : Icons.location_on_outlined,
-                              size: 18,
-                              color: isSelected
-                                  ? AppColors.brandPrimary
-                                  : colors.onSurfaceVariant,
-                            ),
-                            title: Text(res['display']!),
-                            subtitle: Text(
-                              count != null
-                                  ? '${res['type']!} • $count ${count == 1 ? 'item' : 'items'}'
-                                  : res['type']!,
-                            ),
-                            trailing: isSelected
-                                ? const Icon(
-                                    Icons.check,
-                                    color: AppColors.brandPrimary,
-                                    size: 18,
-                                  )
-                                : null,
-                            onTap: () => _selectLocation(target),
-                          );
-                        },
-                      )
-                : Row(
+                  const SizedBox(height: 12),
+                  Row(
                     children: [
-                      SizedBox(
-                        width: 135,
-                        child: Container(
-                          color: isDark
-                              ? colors.surfaceContainerHighest.withValues(
-                                  alpha: 0.2,
-                                )
-                              : colors.surfaceContainerHighest.withValues(
-                                  alpha: 0.3,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Select Location',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Explore listings across New Zealand regions',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    decoration: InputDecoration(
+                      hintText:
+                          'Search region or suburb (e.g. CBD, Newmarket, Dunedin)...',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: colors.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: isDark
+                          ? colors.surfaceContainerHighest.withValues(
+                              alpha: 0.3,
+                            )
+                          : colors.surfaceContainerHighest.withValues(
+                              alpha: 0.5,
+                            ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          key: const Key('home-near-you-option'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            widget.onUseCurrentLocation();
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF0C2B1D)
+                                  : const Color(0xFFECFDF5),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFF10B981,
+                                ).withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.my_location_rounded,
+                                  size: 16,
+                                  color: Color(0xFF059669),
                                 ),
-                          child: ListView.builder(
-                            itemCount: NzLocations.regions.length,
-                            itemBuilder: (ctx, i) {
-                              final reg = NzLocations.regions[i];
-                              final isCurrent = reg.name == _selectedRegion;
-                              return InkWell(
-                                onTap: () => setState(
-                                  () => _selectedRegion = reg.name,
-                                ),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 13,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isCurrent
-                                        ? (isDark
-                                            ? colors.surface
-                                            : Colors.white)
-                                        : Colors.transparent,
-                                    border: Border(
-                                      left: BorderSide(
-                                        color: isCurrent
-                                            ? AppColors.brandPrimary
-                                            : Colors.transparent,
-                                        width: 3.5,
-                                      ),
-                                    ),
-                                  ),
+                                const SizedBox(width: 6),
+                                Expanded(
                                   child: Text(
-                                    reg.name,
+                                    'Current Location',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: isCurrent
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      color: isCurrent
-                                          ? AppColors.brandPrimary
-                                          : colors.onSurface.withValues(
-                                              alpha: 0.85,
-                                            ),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark
+                                          ? const Color(0xFF6EE7B7)
+                                          : const Color(0xFF047857),
                                     ),
                                   ),
                                 ),
-                              );
-                            },
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      const VerticalDivider(width: 1),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: ListView(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          children: [
-                            ListTile(
-                              key: Key('home-location-$_selectedRegion'),
-                              dense: true,
-                              leading: const Icon(
-                                Icons.travel_explore_rounded,
-                                size: 18,
-                                color: AppColors.brandPrimary,
-                              ),
-                              title: Text(
-                                'All $_selectedRegion',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              trailing: widget.filters.selectedLocation
-                                              .toLowerCase() ==
-                                          _selectedRegion.toLowerCase() &&
-                                      !widget.filters.isNearYou
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: AppColors.brandPrimary,
-                                      size: 18,
-                                    )
-                                  : null,
-                              onTap: () => _selectLocation(_selectedRegion),
+                        child: InkWell(
+                          key: const Key('home-location-All NZ'),
+                          onTap: () => _selectLocation(
+                            HomeDiscoveryProvider.allLocationsLabel,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
                             ),
-                            const Divider(height: 1),
-                            for (final suburb in activeSuburbs)
-                              Builder(
-                                builder: (ctx) {
-                                  final count = _getItemCount(suburb);
-                                  final isSelected = widget
-                                              .filters.selectedLocation
-                                              .toLowerCase() ==
-                                          suburb.toLowerCase() &&
-                                      !widget.filters.isNearYou;
-                                  return ListTile(
-                                    key: Key('home-location-$suburb'),
-                                    dense: true,
-                                    leading: const Icon(
-                                      Icons.place_outlined,
-                                      size: 17,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? colors.surfaceContainerHighest.withValues(
+                                      alpha: 0.4,
+                                    )
+                                  : colors.surfaceContainerHighest.withValues(
+                                      alpha: 0.6,
                                     ),
-                                    title: Text(suburb),
-                                    subtitle: count != null
-                                        ? Text(
-                                            '$count ${count == 1 ? 'item' : 'items'}',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: colors.onSurfaceVariant,
-                                            ),
-                                          )
-                                        : null,
-                                    trailing: isSelected
-                                        ? const Icon(
-                                            Icons.check,
-                                            color: AppColors.brandPrimary,
-                                            size: 18,
-                                          )
-                                        : null,
-                                    onTap: () => _selectLocation(suburb),
-                                  );
-                                },
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color:
+                                    widget.filters.selectedLocation ==
+                                            HomeDiscoveryProvider
+                                                .allLocationsLabel &&
+                                        !widget.filters.isNearYou
+                                    ? AppColors.brandPrimary
+                                    : colors.outline.withValues(alpha: 0.15),
                               ),
-                          ],
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.public_rounded,
+                                  size: 16,
+                                  color: AppColors.brandPrimary,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'All New Zealand',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.brandPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
-          ),
-        ],
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: isSearching
+                  ? searchResults.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No locations match "$_searchQuery"',
+                              style: TextStyle(color: colors.onSurfaceVariant),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: searchResults.length,
+                            separatorBuilder: (ctx, i) =>
+                                const Divider(height: 1),
+                            itemBuilder: (ctx, i) {
+                              final res = searchResults[i];
+                              final target = res['suburb']!.isNotEmpty
+                                  ? res['suburb']!
+                                  : res['region']!;
+                              final isSelected =
+                                  widget.filters.selectedLocation
+                                          .toLowerCase() ==
+                                      target.toLowerCase() &&
+                                  !widget.filters.isNearYou;
+                              final count = _getItemCount(target);
+                              return ListTile(
+                                key: Key('home-location-$target'),
+                                dense: true,
+                                leading: Icon(
+                                  res['type'] == 'Region'
+                                      ? Icons.map_outlined
+                                      : Icons.location_on_outlined,
+                                  size: 18,
+                                  color: isSelected
+                                      ? AppColors.brandPrimary
+                                      : colors.onSurfaceVariant,
+                                ),
+                                title: Text(res['display']!),
+                                subtitle: Text(
+                                  count != null
+                                      ? '${res['type']!} • $count ${count == 1 ? 'item' : 'items'}'
+                                      : res['type']!,
+                                ),
+                                trailing: isSelected
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: AppColors.brandPrimary,
+                                        size: 18,
+                                      )
+                                    : null,
+                                onTap: () => _selectLocation(target),
+                              );
+                            },
+                          )
+                  : Row(
+                      children: [
+                        SizedBox(
+                          width: 135,
+                          child: Container(
+                            color: isDark
+                                ? colors.surfaceContainerHighest.withValues(
+                                    alpha: 0.2,
+                                  )
+                                : colors.surfaceContainerHighest.withValues(
+                                    alpha: 0.3,
+                                  ),
+                            child: ListView.builder(
+                              itemCount: NzLocations.regions.length,
+                              itemBuilder: (ctx, i) {
+                                final reg = NzLocations.regions[i];
+                                final isCurrent = reg.name == _selectedRegion;
+                                return InkWell(
+                                  onTap: () => setState(
+                                    () => _selectedRegion = reg.name,
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 13,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isCurrent
+                                          ? (isDark
+                                                ? colors.surface
+                                                : Colors.white)
+                                          : Colors.transparent,
+                                      border: Border(
+                                        left: BorderSide(
+                                          color: isCurrent
+                                              ? AppColors.brandPrimary
+                                              : Colors.transparent,
+                                          width: 3.5,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      reg.name,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: isCurrent
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: isCurrent
+                                            ? AppColors.brandPrimary
+                                            : colors.onSurface.withValues(
+                                                alpha: 0.85,
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(
+                          child: ListView(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            children: [
+                              ListTile(
+                                key: Key('home-location-$_selectedRegion'),
+                                dense: true,
+                                leading: const Icon(
+                                  Icons.travel_explore_rounded,
+                                  size: 18,
+                                  color: AppColors.brandPrimary,
+                                ),
+                                title: Text(
+                                  'All $_selectedRegion',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                trailing:
+                                    widget.filters.selectedLocation
+                                                .toLowerCase() ==
+                                            _selectedRegion.toLowerCase() &&
+                                        !widget.filters.isNearYou
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: AppColors.brandPrimary,
+                                        size: 18,
+                                      )
+                                    : null,
+                                onTap: () => _selectLocation(_selectedRegion),
+                              ),
+                              const Divider(height: 1),
+                              for (final suburb in activeSuburbs)
+                                Builder(
+                                  builder: (ctx) {
+                                    final count = _getItemCount(suburb);
+                                    final isSelected =
+                                        widget.filters.selectedLocation
+                                                .toLowerCase() ==
+                                            suburb.toLowerCase() &&
+                                        !widget.filters.isNearYou;
+                                    return ListTile(
+                                      key: Key('home-location-$suburb'),
+                                      dense: true,
+                                      leading: const Icon(
+                                        Icons.place_outlined,
+                                        size: 17,
+                                      ),
+                                      title: Text(suburb),
+                                      subtitle: count != null
+                                          ? Text(
+                                              '$count ${count == 1 ? 'item' : 'items'}',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: colors.onSurfaceVariant,
+                                              ),
+                                            )
+                                          : null,
+                                      trailing: isSelected
+                                          ? const Icon(
+                                              Icons.check,
+                                              color: AppColors.brandPrimary,
+                                              size: 18,
+                                            )
+                                          : null,
+                                      onTap: () => _selectLocation(suburb),
+                                    );
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
   }
 }

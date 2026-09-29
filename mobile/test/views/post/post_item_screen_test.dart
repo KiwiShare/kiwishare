@@ -120,6 +120,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('listing placeholders use the muted grey style', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(buildTestApp(onCancel: () {}));
+
+    const expectedHintColor = Color(0xFF94A3B8);
+    for (final key in [
+      const Key('post_title_field'),
+      const Key('post_description_field'),
+      const Key('post_price_field'),
+    ]) {
+      final textField = tester.widget<TextField>(
+        find.descendant(of: find.byKey(key), matching: find.byType(TextField)),
+      );
+      expect(textField.decoration?.hintStyle?.color, expectedHintColor);
+    }
+
+    final categoryDecorator = tester.widget<InputDecorator>(
+      find.descendant(
+        of: find.byKey(const Key('post_category_field')),
+        matching: find.byType(InputDecorator),
+      ),
+    );
+    expect(categoryDecorator.decoration.hintStyle?.color, expectedHintColor);
+  });
+
   testWidgets('photo area opens gallery and shows the selected image', (
     tester,
   ) async {
@@ -157,6 +186,32 @@ void main() {
     await tester.tap(find.byKey(const Key('post_photo_delete_0')));
     await tester.pump();
     expect(find.text('0/10'), findsOneWidget);
+  });
+
+  testWidgets('camera photo is decoded and shown before publishing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final imagePicker = FakeListingImagePicker(
+      cameraPhoto: testPhoto('camera-capture.jpeg'),
+    );
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, imagePicker: imagePicker),
+    );
+
+    await tester.tap(find.byKey(const Key('post_add_photos_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('post_take_photo_option')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1/10'), findsOneWidget);
+    expect(find.byKey(const Key('post_hero_image_card')), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('restores a photo returned by Android lost-data recovery', (
@@ -589,6 +644,8 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(helpFinder, findsOneWidget);
+      await tester.ensureVisible(helpFinder);
+      await tester.pumpAndSettle();
 
       await tester.tap(helpFinder);
       await tester.pumpAndSettle();

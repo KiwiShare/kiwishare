@@ -2,6 +2,8 @@ export interface UserProfile {
   id: string;
   _id?: string;
   email: string;
+  username?: string | null;
+  needsUsername?: boolean;
   displayName: string;
   avatarUrl?: string | null;
   role?: 'admin' | 'user';
@@ -108,6 +110,19 @@ export interface AdminOrderStats {
   }>;
 }
 
+export interface AdminReport {
+  id: string;
+  reporterId: string | null;
+  targetType: 'user' | 'listing' | 'general';
+  targetId: string | null;
+  contextType: 'profile' | 'listing' | 'chat' | 'transaction' | 'general';
+  contextId: string | null;
+  reason: string;
+  details: string;
+  status: 'pending' | 'reviewed' | 'dismissed';
+  createdAt: string;
+}
+
 export interface AdminStats {
   totalUsers: number;
   totalItems: number;
@@ -179,7 +194,7 @@ export interface ChatMessage {
  * Falls back to relative '/api' for Vite dev proxy.
  */
 export function getApiBaseUrl(): string {
-  const envUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '') as string;
+  const envUrl = (import.meta.env?.VITE_API_URL || import.meta.env?.VITE_API_BASE_URL || '') as string;
   if (envUrl && envUrl.trim() !== '') {
     const clean = envUrl.trim().replace(/\/+$/, '');
     return clean.endsWith('/api') ? clean : `${clean}/api`;
@@ -257,6 +272,12 @@ export const authApi = {
 
   getMe: () =>
     apiRequest<{ status: string; user: UserProfile }>('/users/me'),
+
+  updateMe: (body: { username?: string }) =>
+    apiRequest<{ status: string; user: UserProfile }>('/users/me', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
 };
 
 // Category APIs
@@ -400,6 +421,22 @@ export const itemsApi = {
 export const adminApi = {
   getStats: () =>
     apiRequest<{ status: string; stats: AdminStats }>('/admin/stats'),
+
+  getReports: (params?: { status?: string; targetType?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.targetType) query.set('targetType', params.targetType);
+    const qStr = query.toString();
+    return apiRequest<{ status: string; count: number; reports: AdminReport[] }>(
+      `/admin/reports${qStr ? `?${qStr}` : ''}`
+    );
+  },
+
+  updateReportStatus: (id: string, status: 'pending' | 'reviewed' | 'dismissed') =>
+    apiRequest<{ status: string; message: string; report: { id: string; status: string } }>(
+      `/admin/reports/${id}/status`,
+      { method: 'PATCH', body: JSON.stringify({ status }) }
+    ),
 
   getUsers: (params?: { search?: string; role?: string; status?: string }) => {
     const query = new URLSearchParams();
@@ -573,6 +610,10 @@ export interface OrderItem {
   role: 'buying' | 'selling';
   itemId: string;
   isPaid?: boolean;
+  isMeetupConfirmed?: boolean;
+  isHandoverReady?: boolean;
+  paidAt?: string | null;
+  itemAmountNzd?: string;
   buyerFeeAmountNzd?: string;
   buyerTotalAmountNzd?: string;
   refundedAt?: string | null;
@@ -630,23 +671,57 @@ export const ordersApi = {
 };
 
 export const paymentsApi = {
-  createIntent: (orderId: string) =>
-    apiRequest<{
-      status: string;
-      clientSecret?: string;
-      paymentIntentId: string;
-      amountNzd: string;
-      itemAmountNzd: string;
-      buyerFeeNzd: string;
-    }>('/payments/create-intent', {
+  createIntent: async (orderId: string) => {
+    const response = await apiRequest<any>('/payments/create-intent', {
       method: 'POST',
       body: JSON.stringify({ orderId }),
-    }),
-  confirm: (orderId: string, paymentIntentId: string) =>
-    apiRequest<{ status: string; order: OrderItem; paymentStatus: string }>('/payments/confirm', {
+    });
+
+    if (response.isFree) {
+      return {
+        status: response.status as string,
+        isFree: true,
+        paymentIntentId: '',
+        clientSecret: undefined,
+        amountNzd: response.totalAmountNzd || '0.00',
+        itemAmountNzd: '0.00',
+        buyerFeeNzd: '0.00',
+      };
+    }
+
+    const data = response.data || response;
+    return {
+      status: response.status as string,
+      isFree: false,
+      paymentIntentId: String(data.paymentIntentId || ''),
+      clientSecret: data.clientSecret as string | undefined,
+      amountNzd: (Number(data.amountCents || 0) / 100).toFixed(2),
+      itemAmountNzd: (Number(data.itemAmountCents || 0) / 100).toFixed(2),
+      buyerFeeNzd: (Number(data.buyerFeeCents || 0) / 100).toFixed(2),
+    };
+  },
+
+  createPaymentMethod: (body: {
+    cardNumber: string;
+    expMonth: number;
+    expYear: number;
+    cvc: string;
+  }) =>
+    apiRequest<{ status: string; paymentMethodId: string }>('/payments/payment-methods', {
       method: 'POST',
-      body: JSON.stringify({ orderId, paymentIntentId }),
+      body: JSON.stringify(body),
     }),
+
+  confirm: async (orderId: string, paymentIntentId: string, paymentMethodId?: string) => {
+    const response = await apiRequest<any>('/payments/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ orderId, paymentIntentId, paymentMethodId }),
+    });
+    return {
+      status: response.status as string,
+      data: response.data || response,
+    };
+  },
 };
 
 export const meetupsApi = {
@@ -657,8 +732,8 @@ export const meetupsApi = {
       qrToken?: string | null;
       isUnlocked?: boolean;
     }>(`/meetups/${orderId}`),
-  propose: (orderId: string, body: { scheduledAt: string; locationName: string; latitude?: number; longitude?: number; note?: string }) =>
-    apiRequest<{ status: string; meetup: any }>(`/meetups/${orderId}/propose`, {
+  propose: (body: { itemId: string; conversationId?: string; scheduledAt: string; locationName: string; latitude?: number; longitude?: number; note?: string }) =>
+    apiRequest<{ status: string; meetup: any }>('/meetups/propose', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

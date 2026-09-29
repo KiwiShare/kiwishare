@@ -26,6 +26,7 @@ class ListingSuggestionInput {
     this.condition,
     this.location,
     this.imageBase64,
+    this.imageMimeType,
   });
 
   final String? title;
@@ -34,6 +35,7 @@ class ListingSuggestionInput {
   final String? condition;
   final String? location;
   final String? imageBase64;
+  final String? imageMimeType;
 
   Map<String, String> toJson() => {
     'title': ?_nonEmpty(title),
@@ -42,6 +44,7 @@ class ListingSuggestionInput {
     'condition': ?_nonEmpty(condition),
     'location': ?_nonEmpty(location),
     'imageBase64': ?_nonEmpty(imageBase64),
+    'imageMimeType': ?_nonEmpty(imageMimeType),
   };
 
   static String? _nonEmpty(String? value) {

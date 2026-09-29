@@ -383,8 +383,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
       return const _ChatMessageState(
         key: Key('chat_signed_out_state'),
         icon: Icons.lock_outline,
-        title: 'Sign in to view your chats',
-        message: 'Your conversations are kept private to your account.',
+        title: 'Please sign in to view your chats',
+        message: 'Your conversations will appear here after you sign in.',
       );
     }
 
@@ -516,6 +516,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   : chat.lastMessage,
               time: _conversationTime(chat.lastMessageAt),
               unreadCount: chat.unreadCount,
+              avatarUrl: chat.participantAvatarUrl,
               avatarStyle: chat.direction == ChatDirection.buying
                   ? ChatAvatarStyle.personWarm
                   : ChatAvatarStyle.item,
@@ -619,11 +620,26 @@ class _ChatHeader extends StatelessWidget {
       );
     }
 
+    final colors = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 12, 8),
+      padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(AppRadius.medium),
+            ),
+            child: Icon(
+              Icons.chat_bubble_rounded,
+              color: colors.primary,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
               'Chat',
@@ -632,7 +648,7 @@ class _ChatHeader extends StatelessWidget {
                 fontSize: 24,
                 fontWeight: FontWeight.w900,
                 letterSpacing: -0.6,
-                color: Theme.of(context).colorScheme.onSurface,
+                color: colors.onSurface,
               ),
             ),
           ),

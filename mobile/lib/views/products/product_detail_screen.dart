@@ -24,6 +24,7 @@ import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/edit_item_sheet.dart';
 import '../shared/widgets/share_bottom_sheet.dart';
+import 'widgets/product_location_map_sheet.dart';
 import '../../providers/order_provider.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -267,6 +268,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       return;
     }
 
+    final auth = context.read<AuthProvider?>();
+    final userId = widget.currentUserId ?? auth?.currentUser?.id;
+    final ownsListing =
+        userId != null &&
+        (userId == product.ownerId || userId == product.seller?.id);
+    if (ownsListing) {
+      if (mounted) {
+        _showMessage('You can’t add your own listing to your Watchlist.');
+      }
+      return;
+    }
+
     WatchlistMutationResult result;
     try {
       result = await watchlist.toggleWatch(product.id, item: product);
@@ -342,6 +355,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             targetType: ReportTargetType.listing,
             targetId: product.id,
             targetLabel: product.title,
+            targetImageUrl: product.imageUrl,
             contextType: ReportContextType.listing,
             contextId: product.id,
             contextLabel: product.title,
@@ -396,6 +410,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Future<void> _editListing(ItemModel product) async {
+    if (product.status == ItemStatus.sold) {
+      await EditItemSheet.show(context, item: product);
+      return;
+    }
     final updated = await EditItemSheet.show(context, item: product);
     if (updated != null && mounted) {
       setState(() => _loadedItem = updated);
@@ -457,10 +475,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         (userId == product.ownerId ||
                             userId == product.seller?.id);
                     if (!ownsListing) return const SizedBox.shrink();
+                    final isSold = product.status == ItemStatus.sold;
                     return IconButton(
-                      tooltip: 'Edit listing',
-                      onPressed: () => _editListing(product),
-                      icon: const Icon(Icons.edit_outlined, size: 22),
+                      tooltip: isSold
+                          ? 'Sold listing locked — refund/cancel first'
+                          : 'Edit listing',
+                      onPressed: isSold ? null : () => _editListing(product),
+                      icon: Icon(
+                        isSold ? Icons.lock_outline : Icons.edit_outlined,
+                        size: 22,
+                      ),
                     );
                   },
                 ),
@@ -500,11 +524,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               builder: (context, watchlist, _) {
                 final chatProvider = _chatProvider;
                 if (chatProvider == null) {
+                  final auth = context.watch<AuthProvider?>();
+                  final userId = widget.currentUserId ?? auth?.currentUser?.id;
+                  final ownsListing =
+                      userId != null &&
+                      (userId == product.ownerId ||
+                          userId == product.seller?.id);
                   return _ProductActions(
                     product: product,
-                    watchlist: watchlist,
-                    onToggleWatch: () =>
-                        _requestWatchlistToggle(watchlist, product),
+                    ownsListing: ownsListing,
+                    onEditListing:
+                        ownsListing && product.status != ItemStatus.sold
+                        ? () => _editListing(product)
+                        : null,
                     messageSellerEnabled: false,
                     isStartingConversation: false,
                     onMessageSeller: null,
@@ -524,11 +556,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         product.status == ItemStatus.active && !ownsListing;
                     return _ProductActions(
                       product: product,
-                      watchlist: watchlist,
                       ownsListing: ownsListing,
-                      onEditListing: () => _editListing(product),
-                      onToggleWatch: () =>
-                          _requestWatchlistToggle(watchlist, product),
+                      onEditListing: product.status == ItemStatus.sold
+                          ? null
+                          : () => _editListing(product),
                       messageSellerEnabled: canMessage,
                       isStartingConversation: chatProvider
                           .isStartingConversation(product.id),
@@ -956,8 +987,10 @@ class _ProductHighlightsGrid extends StatelessWidget {
       required String label,
       required String value,
       required Color accentColor,
+      VoidCallback? onTap,
+      Key? tapKey,
     }) {
-      return Container(
+      final tile = Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: 12,
@@ -994,13 +1027,7 @@ class _ProductHighlightsGrid extends StatelessWidget {
                   width: 0.8,
                 ),
               ),
-              child: Center(
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: accentColor,
-                ),
-              ),
+              child: Center(child: Icon(icon, size: 20, color: accentColor)),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1031,7 +1058,26 @@ class _ProductHighlightsGrid extends StatelessWidget {
                 ],
               ),
             ),
+            if (onTap != null) ...[
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: colors.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
+            ],
           ],
+        ),
+      );
+      if (onTap == null) return tile;
+      return Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          key: tapKey,
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: tile,
         ),
       );
     }
@@ -1044,8 +1090,10 @@ class _ProductHighlightsGrid extends StatelessWidget {
               child: buildTile(
                 icon: Icons.near_me_rounded,
                 label: 'Location',
-                value: product.location,
+                value: product.displayLocation,
                 accentColor: const Color(0xFF0284C7),
+                onTap: () => showProductLocationMap(context, product),
+                tapKey: const Key('detail-location-map-button'),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -1155,162 +1203,169 @@ class _SellerProfileCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: isDark
-                    ? theme.colorScheme.primaryContainer
-                    : (seller.isStudentVerified
-                          ? const Color(0xFFDBEAFE)
-                          : theme.colorScheme.primaryContainer),
-                backgroundImage:
-                    seller.avatarUrl != null && seller.avatarUrl!.isNotEmpty
-                    ? NetworkImage(seller.avatarUrl!)
-                    : null,
-                child: seller.avatarUrl == null || seller.avatarUrl!.isEmpty
-                    ? Text(
-                        seller.displayName.isNotEmpty
-                            ? seller.displayName[0].toUpperCase()
-                            : 'K',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 18,
-                          color: isDark
-                              ? theme.colorScheme.onPrimaryContainer
-                              : (seller.isStudentVerified
-                                    ? const Color(0xFF1D4ED8)
-                                    : theme.colorScheme.primary),
-                        ),
-                      )
-                    : null,
-              ),
-              if (seller.isStudentVerified || seller.isVerified)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      seller.isStudentVerified ? Icons.school : Icons.verified,
-                      size: 12,
-                      color: const Color(0xFF2563EB),
-                    ),
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: isDark
+                        ? theme.colorScheme.primaryContainer
+                        : (seller.isStudentVerified
+                              ? const Color(0xFFDBEAFE)
+                              : theme.colorScheme.primaryContainer),
+                    backgroundImage:
+                        seller.avatarUrl != null && seller.avatarUrl!.isNotEmpty
+                        ? NetworkImage(seller.avatarUrl!)
+                        : null,
+                    child: seller.avatarUrl == null || seller.avatarUrl!.isEmpty
+                        ? Text(
+                            seller.displayName.isNotEmpty
+                                ? seller.displayName[0].toUpperCase()
+                                : 'K',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 18,
+                              color: isDark
+                                  ? theme.colorScheme.onPrimaryContainer
+                                  : (seller.isStudentVerified
+                                        ? const Color(0xFF1D4ED8)
+                                        : theme.colorScheme.primary),
+                            ),
+                          )
+                        : null,
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        seller.displayName,
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          color: theme.colorScheme.onSurface,
+                  if (seller.isStudentVerified || seller.isVerified)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          shape: BoxShape.circle,
                         ),
-                        overflow: TextOverflow.ellipsis,
+                        child: Icon(
+                          seller.isStudentVerified
+                              ? Icons.school
+                              : Icons.verified,
+                          size: 12,
+                          color: const Color(0xFF2563EB),
+                        ),
                       ),
                     ),
-                    if (seller.isStudentVerified) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: studentBadgeBg,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'Verified Student',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: studentTextColor,
+                ],
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            seller.displayName,
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        if (seller.isStudentVerified) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: studentBadgeBg,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Verified Student',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: studentTextColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      seller.isStudentVerified
+                          ? '${seller.studentInstitution ?? "University of Auckland"} Student'
+                          : 'Community Member',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: seller.isStudentVerified
+                            ? studentTextColor
+                            : theme.colorScheme.onSurface.withOpacity(0.65),
+                        fontWeight: seller.isStudentVerified
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
-                    ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  seller.isStudentVerified
-                      ? '${seller.studentInstitution ?? "University of Auckland"} Student'
-                      : 'Community Member',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: seller.isStudentVerified
-                        ? studentTextColor
-                        : theme.colorScheme.onSurface.withOpacity(0.65),
-                    fontWeight: seller.isStudentVerified
-                        ? FontWeight.w600
-                        : FontWeight.normal,
-                  ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? theme.colorScheme.primary.withOpacity(0.12)
-                  : theme.colorScheme.primaryContainer.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? theme.colorScheme.primary.withOpacity(0.12)
+                      : theme.colorScheme.primaryContainer.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.verified_user_outlined,
-                      size: 11,
-                      color: theme.colorScheme.primary,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.verified_user_outlined,
+                          size: 11,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Trust Score',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: theme.colorScheme.onSurface.withOpacity(
+                              0.65,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 3),
+                    const SizedBox(height: 2),
                     Text(
-                      'Trust Score',
+                      formatPublicTrustScore(seller.trustScore),
                       style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: theme.colorScheme.onSurface.withOpacity(0.65),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: theme.colorScheme.primary,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  formatPublicTrustScore(seller.trustScore),
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-    ),
-  ),
-);
+    );
   }
 }
 
@@ -1373,11 +1428,80 @@ class _KiwiShareCommunityCard extends StatelessWidget {
   }
 }
 
+class _FullScreenProductGallery extends StatefulWidget {
+  const _FullScreenProductGallery({
+    required this.images,
+    required this.initialIndex,
+  });
+
+  final List<String> images;
+  final int initialIndex;
+
+  @override
+  State<_FullScreenProductGallery> createState() =>
+      _FullScreenProductGalleryState();
+}
+
+class _FullScreenProductGalleryState extends State<_FullScreenProductGallery> {
+  late final PageController _controller;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+    _controller = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          '${_index + 1} / ${widget.images.length}',
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      body: PageView.builder(
+        key: const Key('detail-fullscreen-gallery'),
+        controller: _controller,
+        itemCount: widget.images.length,
+        onPageChanged: (index) => setState(() => _index = index),
+        itemBuilder: (context, index) {
+          return InteractiveViewer(
+            minScale: 1,
+            maxScale: 4,
+            child: Center(
+              child: Image.network(
+                widget.images[index],
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const Icon(
+                  Icons.image_not_supported_outlined,
+                  color: Colors.white54,
+                  size: 64,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _ProductActions extends StatelessWidget {
   const _ProductActions({
     required this.product,
-    required this.watchlist,
-    required this.onToggleWatch,
     required this.messageSellerEnabled,
     required this.isStartingConversation,
     required this.onMessageSeller,
@@ -1389,8 +1513,6 @@ class _ProductActions extends StatelessWidget {
   });
 
   final ItemModel product;
-  final WatchlistProvider watchlist;
-  final VoidCallback onToggleWatch;
   final bool messageSellerEnabled;
   final bool isStartingConversation;
   final VoidCallback? onMessageSeller;
@@ -1403,7 +1525,6 @@ class _ProductActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isWatched = watchlist.isWatched(product.id);
     final useVerticalLayout = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
 
     final editButton = FilledButton.icon(
@@ -1418,8 +1539,28 @@ class _ProductActions extends StatelessWidget {
       onPressed: onEditListing,
       icon: const Icon(Icons.edit_outlined),
       label: Text(
-        product.status != ItemStatus.active ? 'Re-list / Edit' : 'Edit Listing',
+        product.status == ItemStatus.delisted
+            ? 'Re-list / Edit'
+            : 'Edit Listing',
         style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+    );
+
+    final soldLockedButton = FilledButton.icon(
+      key: const Key('detail-sold-listing-locked-button'),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 50),
+        backgroundColor: theme.colorScheme.surfaceContainerHighest,
+        foregroundColor: theme.colorScheme.onSurfaceVariant,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
+      ),
+      onPressed: null,
+      icon: const Icon(Icons.lock_outline),
+      label: Text(
+        'Sold — refund/cancel first',
+        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
       ),
     );
 
@@ -1441,53 +1582,6 @@ class _ProductActions extends StatelessWidget {
       icon: Icon(
         Icons.handshake_outlined,
         color: onScheduleMeetup != null ? theme.colorScheme.primary : null,
-      ),
-    );
-
-    final watchButton = OutlinedButton.icon(
-      key: const Key('detail-watch-action-button'),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 50),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.medium),
-        ),
-        side: BorderSide(
-          color: isWatched
-              ? const Color(0xFFEF4444)
-              : theme.colorScheme.outline.withOpacity(0.5),
-        ),
-        backgroundColor: isWatched
-            ? theme.brightness == Brightness.dark
-                  ? const Color(0xFF3A1D22)
-                  : const Color(0xFFFFF1F2)
-            : theme.brightness == Brightness.dark
-            ? theme.colorScheme.primaryContainer.withOpacity(0.42)
-            : AppColors.surfaceMuted,
-        foregroundColor: isWatched
-            ? const Color(0xFFEF4444)
-            : theme.colorScheme.onSurface,
-      ),
-      onPressed: onToggleWatch,
-      icon: Icon(
-        isWatched ? Icons.favorite : Icons.favorite_border,
-        size: 18,
-        color: isWatched
-            ? const Color(0xFFEF4444)
-            : theme.colorScheme.onSurface,
-      ),
-      label: Text(
-        isWatched ? 'Watchlisted' : 'Watchlist',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        softWrap: false,
-        style: GoogleFonts.inter(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: isWatched
-              ? const Color(0xFFEF4444)
-              : theme.colorScheme.onSurface,
-        ),
       ),
     );
 
@@ -1559,8 +1653,10 @@ class _ProductActions extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (ownsListing && onEditListing != null) ...[
-                    editButton,
+                  if (ownsListing) ...[
+                    product.status == ItemStatus.sold
+                        ? soldLockedButton
+                        : editButton,
                     const SizedBox(height: AppSpacing.sm),
                   ],
                   if (!ownsListing && onBuyNow != null) ...[
@@ -1568,22 +1664,17 @@ class _ProductActions extends StatelessWidget {
                       children: [
                         messageButton,
                         const SizedBox(width: AppSpacing.sm),
-                        Expanded(child: watchButton),
-                        const SizedBox(width: AppSpacing.sm),
                         Expanded(child: buyNowButton),
                       ],
                     ),
                   ] else ...[
-                    Row(
-                      children: [
-                        if (onScheduleMeetup != null) ...[
-                          meetupButton,
-                          const SizedBox(width: AppSpacing.sm),
-                        ],
-                        Expanded(child: watchButton),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
+                    if (onScheduleMeetup != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: meetupButton,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
                     if (messageSellerEnabled)
                       Row(
                         children: [
@@ -1605,34 +1696,41 @@ class _ProductActions extends StatelessWidget {
               )
             : Row(
                 children: [
-                  if (ownsListing && onEditListing != null) ...[
+                  if (ownsListing) ...[
                     IconButton.filledTonal(
-                      key: const Key('detail-edit-listing-button'),
-                      tooltip: 'Edit listing',
+                      key: Key(
+                        product.status == ItemStatus.sold
+                            ? 'detail-sold-listing-locked-button'
+                            : 'detail-edit-listing-button',
+                      ),
+                      tooltip: product.status == ItemStatus.sold
+                          ? 'Sold — refund/cancel first'
+                          : 'Edit listing',
                       style: IconButton.styleFrom(
                         minimumSize: const Size(50, 50),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppRadius.medium),
                         ),
                       ),
-                      onPressed: onEditListing,
-                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: product.status == ItemStatus.sold
+                          ? null
+                          : onEditListing,
+                      icon: Icon(
+                        product.status == ItemStatus.sold
+                            ? Icons.lock_outline
+                            : Icons.edit_outlined,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                   ] else if (onScheduleMeetup != null) ...[
                     meetupButton,
                     const SizedBox(width: AppSpacing.sm),
                   ],
-                  // For non-owner: show message icon on left + equal sized Watchlist & Buy Now buttons on right
                   if (!ownsListing && onBuyNow != null) ...[
                     messageButton,
                     const SizedBox(width: AppSpacing.sm),
-                    Expanded(child: watchButton),
-                    const SizedBox(width: AppSpacing.sm),
                     Expanded(child: buyNowButton),
                   ] else ...[
-                    Expanded(flex: 3, child: watchButton),
-                    const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       flex: 5,
                       child: FilledButton.icon(
@@ -1737,18 +1835,34 @@ class _ProductImageGallery extends StatelessWidget {
             onPageChanged: onPageChanged,
             itemCount: images.length,
             itemBuilder: (context, index) {
-              return ColoredBox(
-                color: isDark
-                    ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.3)
-                    : AppColors.surfaceMuted,
-                child: Image.network(
-                  images[index],
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Center(
-                    child: Icon(
-                      Icons.image_not_supported_outlined,
-                      size: 56,
-                      color: theme.colorScheme.primary.withOpacity(0.4),
+              return GestureDetector(
+                key: Key('detail-image-$index'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => _FullScreenProductGallery(
+                        images: images,
+                        initialIndex: index,
+                      ),
+                    ),
+                  );
+                },
+                child: ColoredBox(
+                  color: isDark
+                      ? theme.colorScheme.surfaceContainerHighest.withOpacity(
+                          0.3,
+                        )
+                      : AppColors.surfaceMuted,
+                  child: Image.network(
+                    images[index],
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Center(
+                      child: Icon(
+                        Icons.image_not_supported_outlined,
+                        size: 56,
+                        color: theme.colorScheme.primary.withOpacity(0.4),
+                      ),
                     ),
                   ),
                 ),

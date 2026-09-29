@@ -54,6 +54,7 @@ class WatchlistProvider extends ChangeNotifier {
   bool get isUpdatingPreference => _isUpdatingPreference;
   String? get preferenceError => _preferenceError;
   int get count => _watchedItemIds.length;
+  bool get isAuthenticated => _authToken != null && _authToken!.isNotEmpty;
 
   void updateAuthToken(String? token) {
     if (_authToken == token) return;

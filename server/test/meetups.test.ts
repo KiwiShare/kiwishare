@@ -77,6 +77,85 @@ describe('Meetup Scheduling & QR Code API', () => {
     await mongoServer.stop();
   });
 
+  describe('Paid-first meetup state machine regression', () => {
+    it('reuses the paid order instead of creating a second unpaid order', async () => {
+      const item = await Item.create({
+        title: 'Paid-first test item',
+        description: 'Regression fixture',
+        price: 4200,
+        category: 'electronics',
+        condition: 'good',
+        status: 'active',
+        ownerId: sellerId,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        location: 'Auckland Central'
+      });
+      const paidItemId = item._id.toString();
+
+      const convRes = await request(app.callback())
+        .post('/api/conversations')
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({ itemId: paidItemId });
+      const paidConversationId = convRes.body.conversation.id;
+
+      const orderRes = await request(app.callback())
+        .post('/api/orders')
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({ itemId: paidItemId });
+      expect(orderRes.status).toBe(201);
+      const paidOrderId = orderRes.body.order.id;
+
+      await Order.findByIdAndUpdate(paidOrderId, {
+        $set: { paidAt: new Date(), status: 'paid' }
+      });
+      await Item.findByIdAndUpdate(paidItemId, { status: 'sold' });
+
+      const totalBefore = await Order.countDocuments({ itemId: item._id });
+
+      const proposed = await request(app.callback())
+        .post('/api/meetups/propose')
+        .set('Authorization', `Bearer ${buyerToken}`)
+        .send({
+          itemId: paidItemId,
+          conversationId: paidConversationId,
+          scheduledAt: new Date(Date.now() + 86400000).toISOString(),
+          locationName: 'Kate Edger Commons'
+        });
+
+      expect(proposed.status).toBe(200);
+      expect(proposed.body.meetup.id).toBe(paidOrderId);
+      expect(proposed.body.meetup.isPaid).toBe(true);
+      expect(proposed.body.meetup.isMeetupConfirmed).toBe(false);
+      expect(proposed.body.meetup.isHandoverReady).toBe(false);
+      expect(proposed.body.meetup.qrToken).toBeNull();
+      expect(await Order.countDocuments({ itemId: item._id })).toBe(totalBefore);
+
+      const afterProposal = await Order.findById(paidOrderId);
+      expect(afterProposal?.status).toBe('paid');
+      expect(afterProposal?.meeting?.proposalStatus).toBe('proposed');
+
+      const accepted = await request(app.callback())
+        .post(`/api/meetups/${paidOrderId}/accept`)
+        .set('Authorization', `Bearer ${sellerToken}`);
+
+      expect(accepted.status).toBe(200);
+      expect(accepted.body.meetup.isPaid).toBe(true);
+      expect(accepted.body.meetup.isMeetupConfirmed).toBe(true);
+      expect(accepted.body.meetup.isHandoverReady).toBe(true);
+      expect(accepted.body.meetup.qrToken).toMatch(/^QR_HANDOVER_TOKEN_/);
+
+      const finalOrder = await Order.findById(paidOrderId);
+      expect(finalOrder?.status).toBe('meeting_scheduled');
+      expect(finalOrder?.meeting?.proposalStatus).toBe('confirmed');
+
+      const activeQr = await QrCode.findOne({
+        orderId: paidOrderId,
+        status: 'active'
+      });
+      expect(activeQr?.tokenHash).toBe(accepted.body.meetup.qrToken);
+    });
+  });
+
   describe('Location Chat Messages (Bug #1 Fix)', () => {
     it('sends a location message with name and coordinates', async () => {
       const res = await request(app.callback())
@@ -196,7 +275,7 @@ describe('Meetup Scheduling & QR Code API', () => {
       ).toBe(actualUnread);
     });
 
-    it('accepts the proposed meetup by seller and generates QR handover token', async () => {
+    it('accepts an unpaid meetup but keeps handover QR locked', async () => {
       const res = await request(app.callback())
         .post(`/api/meetups/${createdOrderId}/accept`)
         .set('Authorization', `Bearer ${sellerToken}`);
@@ -204,19 +283,28 @@ describe('Meetup Scheduling & QR Code API', () => {
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
       expect(res.body.meetup.proposalStatus).toBe('confirmed');
-      expect(res.body.meetup.qrToken).toBeTruthy();
-      expect(res.body.meetup.qrToken).toMatch(/^QR_HANDOVER_TOKEN_/);
+      expect(res.body.meetup.isPaid).toBe(false);
+      expect(res.body.meetup.isMeetupConfirmed).toBe(true);
+      expect(res.body.meetup.isHandoverReady).toBe(false);
+      expect(res.body.meetup.qrToken).toBeNull();
 
-      // Verify QR Code document exists and is active
-      const qrDoc = await QrCode.findOne({ orderId: createdOrderId });
-      expect(qrDoc).toBeDefined();
-      expect(qrDoc?.status).toBe('active');
-      expect(qrDoc?.tokenHash).toBe(res.body.meetup.qrToken);
+      // Unpaid meetup confirmation must not create an active handover QR.
+      const qrDoc = await QrCode.findOne({
+        orderId: createdOrderId,
+        status: 'active'
+      });
+      expect(qrDoc).toBeNull();
 
-      // Verify Order status
+      // Meetup is confirmed, but the order stays pending until payment succeeds.
       const orderDoc = await Order.findById(createdOrderId);
-      expect(orderDoc?.status).toBe('meeting_scheduled');
+      expect(orderDoc?.status).toBe('pending_payment');
       expect(orderDoc?.meeting?.proposalStatus).toBe('confirmed');
+
+      const directConfirm = await request(app.callback())
+        .post(`/api/meetups/${createdOrderId}/confirm-handover`)
+        .set('Authorization', `Bearer ${buyerToken}`);
+      expect(directConfirm.status).toBe(400);
+      expect(directConfirm.body.message).toContain('paid');
     });
 
     it('retrieves user meetups via GET /api/meetups/my', async () => {
@@ -232,7 +320,9 @@ describe('Meetup Scheduling & QR Code API', () => {
       const found = res.body.meetups.find((m: any) => m.id === createdOrderId);
       expect(found).toBeDefined();
       expect(found.proposalStatus).toBe('confirmed');
-      expect(found.qrToken).toBeTruthy();
+      expect(found.isPaid).toBe(false);
+      expect(found.isHandoverReady).toBe(false);
+      expect(found.qrToken).toBeNull();
     });
 
     it('retrieves single meetup details via GET /api/meetups/:orderId', async () => {
@@ -243,7 +333,8 @@ describe('Meetup Scheduling & QR Code API', () => {
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
       expect(res.body.meetup.id).toBe(createdOrderId);
-      expect(res.body.meetup.qrToken).toMatch(/^QR_HANDOVER_TOKEN_/);
+      expect(res.body.meetup.isHandoverReady).toBe(false);
+      expect(res.body.meetup.qrToken).toBeNull();
       expect(res.body.meetup.locationName).toBe('Auckland University Library');
     });
 
@@ -272,9 +363,9 @@ describe('Meetup Scheduling & QR Code API', () => {
       const orderDoc = await Order.findById(createdOrderId);
       expect(orderDoc?.meeting?.proposalStatus).toBe('declined');
 
-      // Active QR codes are cancelled
+      // This flow never unlocked a QR because payment was still pending.
       const qrDoc = await QrCode.findOne({ orderId: createdOrderId });
-      expect(qrDoc?.status).toBe('cancelled');
+      expect(qrDoc).toBeNull();
     });
   });
 });

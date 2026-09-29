@@ -1,14 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../../models/item_model.dart';
-import '../../../providers/auth_provider.dart';
-import '../../../providers/favorites_provider.dart';
-import '../../../providers/watchlist_provider.dart';
 import '../../../services/notification_permission_coordinator.dart';
 import '../../../theme/app_theme.dart';
+import '../../shared/widgets/watchlist_heart_button.dart';
 
 class HomeProductPreviewCard extends StatelessWidget {
   final ItemModel item;
@@ -24,37 +19,14 @@ class HomeProductPreviewCard extends StatelessWidget {
     this.permissionCoordinator,
   });
 
-  Future<void> _toggleFavorite(
-    BuildContext context,
-    FavoritesProvider favorites,
-  ) async {
-    WatchlistMutationResult result;
-    try {
-      result = await favorites.toggleFavorite(item.id);
-    } catch (error) {
-      debugPrint('Watchlist update failed: $error');
-      return;
-    }
-    if (!context.mounted || result != WatchlistMutationResult.added) return;
-    await WidgetsBinding.instance.endOfFrame;
-    if (!context.mounted) return;
-    await offerContextualNotificationPermission(
-      context,
-      coordinator: permissionCoordinator,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider?>(context, listen: true);
-    final isLoggedIn = auth == null || auth.isLoggedIn;
-    final favorites = context.watch<FavoritesProvider>();
-    final isFavorite = favorites.isFavorite(item.id);
+    final colors = Theme.of(context).colorScheme;
     return Material(
       key: const Key('home-product-preview-card'),
-      color: AppColors.surface,
+      color: colors.surfaceContainerLow,
       elevation: 3,
-      shadowColor: AppColors.textPrimary.withValues(alpha: 0.16),
+      shadowColor: Colors.black.withValues(alpha: 0.24),
       borderRadius: BorderRadius.circular(AppRadius.large),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -63,25 +35,44 @@ class HomeProductPreviewCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: colors.outlineVariant),
             borderRadius: BorderRadius.circular(AppRadius.large),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.small),
-                child: SizedBox(
-                  width: 88,
-                  height: 88,
-                  child: Image.network(
-                    item.imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const ColoredBox(
-                      color: AppColors.surfaceMuted,
-                      child: Icon(Icons.image_not_supported_outlined),
+              SizedBox(
+                width: 88,
+                height: 88,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.small),
+                      child: Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => ColoredBox(
+                          color: colors.surfaceContainerHighest,
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    Positioned(
+                      top: 5,
+                      right: 5,
+                      child: WatchlistHeartButton(
+                        key: const Key('home-preview-favorite-button'),
+                        item: item,
+                        permissionCoordinator: permissionCoordinator,
+                        diameter: 28,
+                        iconSize: 15,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
@@ -98,22 +89,22 @@ class HomeProductPreviewCard extends StatelessWidget {
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       '\$${item.priceNzd} NZD',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppColors.textBrand,
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleMedium?.copyWith(color: colors.primary),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.location_on_outlined,
                           size: 16,
-                          color: AppColors.textSecondary,
+                          color: colors.onSurfaceVariant,
                         ),
                         const SizedBox(width: AppSpacing.xs),
                         Expanded(
                           child: Text(
-                            item.location,
+                            item.displayLocation,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.labelSmall,
@@ -141,21 +132,6 @@ class HomeProductPreviewCard extends StatelessWidget {
                     onPressed: onClose,
                     icon: const Icon(Icons.close),
                   ),
-                  if (isLoggedIn)
-                    IconButton(
-                      key: const Key('home-preview-favorite-button'),
-                      tooltip: isFavorite
-                          ? 'Remove from saved items'
-                          : 'Save item',
-                      onPressed: () =>
-                          unawaited(_toggleFavorite(context, favorites)),
-                      icon: Icon(
-                        isFavorite ? Icons.favorite : Icons.favorite_border,
-                        color: isFavorite
-                            ? AppColors.error
-                            : AppColors.brandPrimary,
-                      ),
-                    ),
                 ],
               ),
             ],

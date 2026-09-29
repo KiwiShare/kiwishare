@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/chat_message_model.dart';
@@ -259,6 +260,107 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                 ),
                 const SizedBox(height: 6),
 
+                if (widget.meetup.latitude != null &&
+                    widget.meetup.longitude != null) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      key: Key('meetup_map_${widget.meetup.orderId}'),
+                      height: 112,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: GoogleMap(
+                                initialCameraPosition: CameraPosition(
+                                  target: LatLng(
+                                    widget.meetup.latitude!,
+                                    widget.meetup.longitude!,
+                                  ),
+                                  zoom: 15,
+                                ),
+                                markers: {
+                                  Marker(
+                                    markerId: MarkerId(
+                                      'meetup-${widget.meetup.orderId}',
+                                    ),
+                                    position: LatLng(
+                                      widget.meetup.latitude!,
+                                      widget.meetup.longitude!,
+                                    ),
+                                  ),
+                                },
+                                mapType: MapType.normal,
+                                compassEnabled: false,
+                                mapToolbarEnabled: false,
+                                myLocationEnabled: false,
+                                myLocationButtonEnabled: false,
+                                zoomControlsEnabled: false,
+                                liteModeEnabled: true,
+                              ),
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                key: Key(
+                                  'meetup_map_open_${widget.meetup.orderId}',
+                                ),
+                                onTap: () {
+                                  MapLauncherService.instance
+                                      .showNavigationSheet(
+                                        context: context,
+                                        locationName:
+                                            widget.meetup.locationName,
+                                        latitude: widget.meetup.latitude,
+                                        longitude: widget.meetup.longitude,
+                                      );
+                                },
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 8,
+                            bottom: 8,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: colors.surface.withValues(alpha: 0.92),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.navigation_rounded,
+                                      size: 12,
+                                      color: AppColors.brandPrimary,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Open map',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
                 // Location with navigation launcher
                 InkWell(
                   key: Key('meetup_location_nav_${widget.meetup.orderId}'),
@@ -514,7 +616,9 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                             width: double.infinity,
                             height: 38,
                             child: FilledButton.icon(
-                              key: Key('view_qr_button_${widget.meetup.orderId}'),
+                              key: Key(
+                                'view_qr_button_${widget.meetup.orderId}',
+                              ),
                               onPressed: () {
                                 context.push('/orders');
                               },

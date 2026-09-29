@@ -11,6 +11,11 @@ import Refund from '../models/Refund';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import { resolveOrderEffectivePriceCents } from './payments';
 import { createStripeRefund } from '../services/stripeService';
+import {
+  isHandoverReady,
+  isMeetupConfirmed,
+  isOrderPaid
+} from '../services/orderFlowState';
 
 const router = new Router({ prefix: '/orders' });
 router.use(authenticateToken);
@@ -39,6 +44,9 @@ function formatOrder(order: any, userId: string) {
     id: objectId(order),
     orderNumber: order.orderNumber,
     status: order.status,
+    isPaid: isOrderPaid(order),
+    isMeetupConfirmed: isMeetupConfirmed(order),
+    isHandoverReady: isHandoverReady(order),
     role: isBuyer ? 'buying' : 'selling',
     itemId: objectId(order.itemId),
     item: {
@@ -440,7 +448,12 @@ router.post('/:orderId/refund', async (ctx: Context) => {
       payment.refundedAmount = order.buyerTotalAmount || order.itemAmount || 0;
       await payment.save();
     } catch (err: any) {
-      console.warn('[Orders] Stripe refund notice:', err.message);
+      ctx.status = 502;
+      ctx.body = {
+        status: 'error',
+        message: err.message || 'Stripe refund failed. The order remains paid and the listing remains sold.'
+      };
+      return;
     }
   }
 

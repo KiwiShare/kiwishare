@@ -261,6 +261,36 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.user.displayName).toBe('Updated User Name');
   });
 
+  test('PATCH /api/users/me - persists public profile cover image', async () => {
+    const coverUser = {
+      email: `cover_${Date.now()}@kiwishare.co.nz`,
+      password: 'password123',
+      displayName: 'Cover Test User'
+    };
+    const register = await request(app.callback())
+      .post('/api/auth/register')
+      .set('x-client-platform', 'mobile_ios')
+      .send(coverUser);
+    expect(register.status).toBe(201);
+
+    const coverToken = register.body.token;
+    const coverUserId = register.body.user.id;
+    const coverImageUrl = 'https://cdn.example.test/profile-cover.jpg';
+    const update = await request(app.callback())
+      .patch('/api/users/me')
+      .set('Authorization', `Bearer ${coverToken}`)
+      .send({ coverImageUrl });
+
+    expect(update.status).toBe(200);
+    expect(update.body.user.coverImageUrl).toBe(coverImageUrl);
+
+    const publicProfile = await request(app.callback()).get(
+      `/api/users/${coverUserId}/public-profile`
+    );
+    expect(publicProfile.status).toBe(200);
+    expect(publicProfile.body.user.coverImageUrl).toBe(coverImageUrl);
+  });
+
   test('GET /api/usedItems - returns used items array', async () => {
     const res = await request(app.callback())
       .get('/api/usedItems');
@@ -917,29 +947,25 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
       await confirmationBlocker;
     });
     await confirmationBlockerStarted;
-    const confirmationsBefore = await Message.countDocuments({
+    const confirmationMessageFilter = {
       conversationId,
-      'meetup.proposalStatus': 'confirmed'
-    });
+      type: 'meetup',
+      text: /^✅ Meetup confirmed:/
+    };
+    const confirmationsBefore = await Message.countDocuments(confirmationMessageFilter);
     const confirmation = request(app.callback())
       .post(`/api/meetups/${meetup.body.meetup.id}/accept`)
       .set('Authorization', `Bearer ${seller.body.token}`)
       .then((response) => response);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(
-      await Message.countDocuments({
-        conversationId,
-        'meetup.proposalStatus': 'confirmed'
-      })
+      await Message.countDocuments(confirmationMessageFilter)
     ).toBe(confirmationsBefore);
     releaseConfirmationBlocker();
     expect((await confirmation).status).toBe(200);
     await blockedConfirmationWork;
     expect(
-      await Message.countDocuments({
-        conversationId,
-        'meetup.proposalStatus': 'confirmed'
-      })
+      await Message.countDocuments(confirmationMessageFilter)
     ).toBe(confirmationsBefore + 1);
 
     const sequence: string[] = [];

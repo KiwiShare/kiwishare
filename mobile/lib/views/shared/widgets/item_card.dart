@@ -1,59 +1,39 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 
 import '../../../models/item_model.dart';
-import '../../../providers/providers.dart';
 import '../../../services/notification_permission_coordinator.dart';
+import '../../../widgets/resilient_network_image.dart';
+import 'watchlist_heart_button.dart';
 
 class ItemCard extends StatelessWidget {
   final ItemModel item;
   final VoidCallback? onTap;
   final NotificationPermissionCoordinator? permissionCoordinator;
+  final bool compact;
 
   const ItemCard({
     super.key,
     required this.item,
     this.onTap,
     this.permissionCoordinator,
+    this.compact = false,
   });
-
-  Future<void> _toggleFavorite(
-    BuildContext context,
-    FavoritesProvider favorites,
-  ) async {
-    WatchlistMutationResult result;
-    try {
-      result = await favorites.toggleFavorite(item.id);
-    } catch (error) {
-      debugPrint('Watchlist update failed: $error');
-      return;
-    }
-    if (!context.mounted || result != WatchlistMutationResult.added) return;
-    await WidgetsBinding.instance.endOfFrame;
-    if (!context.mounted) return;
-    await offerContextualNotificationPermission(
-      context,
-      coordinator: permissionCoordinator,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final auth = Provider.of<AuthProvider?>(context, listen: true);
-    final isLoggedIn = auth == null || auth.isLoggedIn;
-    final favorites = context.watch<FavoritesProvider>();
-    final isFavorite = favorites.isFavorite(item.id);
+
+    if (compact) {
+      return _buildCompactCard(context, colors: colors, isDark: isDark);
+    }
 
     return Semantics(
       button: onTap != null,
       label:
-          '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.location}, category: ${item.category}',
+          '${item.title}, price: \$${item.priceNzd} NZD, approximate location: ${item.displayLocation}, category: ${item.category}',
       child: Container(
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E222A) : Colors.white,
@@ -98,27 +78,37 @@ class ItemCard extends StatelessWidget {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: isDark
-                                ? [const Color(0xFF282E39), const Color(0xFF1F242D)]
-                                : [const Color(0xFFF3F4F6), const Color(0xFFE5E7EB)],
+                                ? [
+                                    const Color(0xFF282E39),
+                                    const Color(0xFF1F242D),
+                                  ]
+                                : [
+                                    const Color(0xFFF3F4F6),
+                                    const Color(0xFFE5E7EB),
+                                  ],
                           ),
                         ),
                         child: item.imageUrl.isNotEmpty
-                            ? Image.network(
-                                item.imageUrl,
+                            ? ResilientNetworkImage(
+                                url: item.imageUrl,
+                                logicalCacheWidth: 220,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
                                     Center(
-                                  child: Icon(
-                                    Icons.image_not_supported_outlined,
-                                    color: colors.onSurfaceVariant.withOpacity(0.4),
-                                    size: 28,
-                                  ),
-                                ),
+                                      child: Icon(
+                                        Icons.image_not_supported_outlined,
+                                        color: colors.onSurfaceVariant
+                                            .withOpacity(0.4),
+                                        size: 28,
+                                      ),
+                                    ),
                               )
                             : Center(
                                 child: Icon(
                                   Icons.image_outlined,
-                                  color: colors.onSurfaceVariant.withOpacity(0.4),
+                                  color: colors.onSurfaceVariant.withOpacity(
+                                    0.4,
+                                  ),
                                   size: 28,
                                 ),
                               ),
@@ -213,7 +203,9 @@ class ItemCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFD97706).withOpacity(0.4),
+                                  color: const Color(
+                                    0xFFD97706,
+                                  ).withOpacity(0.4),
                                   blurRadius: 6,
                                   offset: const Offset(0, 2),
                                 ),
@@ -243,48 +235,14 @@ class ItemCard extends StatelessWidget {
                         ),
 
                       // Top Right: Favorite Button
-                      if (isLoggedIn)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 4,
-                                ),
-                              ],
-                            ),
-                            child: Material(
-                              color: const Color(0x73000000),
-                              shape: CircleBorder(
-                                side: BorderSide(
-                                  color: Colors.white.withOpacity(0.25),
-                                  width: 0.8,
-                                ),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: InkWell(
-                                onTap: () =>
-                                    unawaited(_toggleFavorite(context, favorites)),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: Icon(
-                                    isFavorite
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
-                                    size: 15.5,
-                                    color: isFavorite
-                                        ? const Color(0xFFEF4444)
-                                        : Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: WatchlistHeartButton(
+                          item: item,
+                          permissionCoordinator: permissionCoordinator,
                         ),
+                      ),
 
                       // Bottom Left: Category & Condition Glass Pill
                       Positioned(
@@ -379,7 +337,10 @@ class ItemCard extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFF10B981), Color(0xFF059669)],
+                                  colors: [
+                                    Color(0xFF10B981),
+                                    Color(0xFF059669),
+                                  ],
                                 ),
                                 borderRadius: BorderRadius.circular(5),
                               ),
@@ -428,23 +389,6 @@ class ItemCard extends StatelessWidget {
                               ),
                             ),
                           ],
-                          if (item.watchlistCount > 0) ...[
-                            const Spacer(),
-                            const Icon(
-                              Icons.favorite,
-                              size: 11,
-                              color: Color(0xFFEF4444),
-                            ),
-                            const SizedBox(width: 2.5),
-                            Text(
-                              '${item.watchlistCount}',
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFFEF4444),
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -460,7 +404,7 @@ class ItemCard extends StatelessWidget {
                           const SizedBox(width: 2.5),
                           Expanded(
                             child: Text(
-                              item.location,
+                              item.displayLocation,
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,
@@ -499,8 +443,8 @@ class ItemCard extends StatelessWidget {
                                 item.seller?.isStudentVerified == true
                                 ? const Color(0xFFDBEAFE)
                                 : (isDark
-                                    ? const Color(0xFF374151)
-                                    : const Color(0xFFF1F5F9)),
+                                      ? const Color(0xFF374151)
+                                      : const Color(0xFFF1F5F9)),
                             backgroundImage:
                                 item.seller?.avatarUrl != null &&
                                     item.seller!.avatarUrl!.isNotEmpty
@@ -511,7 +455,7 @@ class ItemCard extends StatelessWidget {
                                     item.seller!.avatarUrl!.isEmpty
                                 ? Text(
                                     (item.seller?.displayName.isNotEmpty ==
-                                             true)
+                                            true)
                                         ? item.seller!.displayName[0]
                                               .toUpperCase()
                                         : 'K',
@@ -522,8 +466,8 @@ class ItemCard extends StatelessWidget {
                                           item.seller?.isStudentVerified == true
                                           ? const Color(0xFF1D4ED8)
                                           : (isDark
-                                              ? Colors.white70
-                                              : const Color(0xFF475569)),
+                                                ? Colors.white70
+                                                : const Color(0xFF475569)),
                                     ),
                                   )
                                 : null,
@@ -579,12 +523,16 @@ class ItemCard extends StatelessWidget {
                                   ),
                                   decoration: BoxDecoration(
                                     color: isDark
-                                        ? const Color(0xFF064E3B).withOpacity(0.4)
+                                        ? const Color(
+                                            0xFF064E3B,
+                                          ).withOpacity(0.4)
                                         : const Color(0xFFECFDF5),
                                     borderRadius: BorderRadius.circular(5),
                                     border: Border.all(
                                       color: isDark
-                                          ? const Color(0xFF059669).withOpacity(0.4)
+                                          ? const Color(
+                                              0xFF059669,
+                                            ).withOpacity(0.4)
                                           : const Color(0xFFA7F3D0),
                                       width: 0.8,
                                     ),
@@ -620,12 +568,16 @@ class ItemCard extends StatelessWidget {
                                   ),
                                   decoration: BoxDecoration(
                                     color: isDark
-                                        ? const Color(0xFF1E3A8A).withOpacity(0.4)
+                                        ? const Color(
+                                            0xFF1E3A8A,
+                                          ).withOpacity(0.4)
                                         : const Color(0xFFEFF6FF),
                                     borderRadius: BorderRadius.circular(5),
                                     border: Border.all(
                                       color: isDark
-                                          ? const Color(0xFF2563EB).withOpacity(0.4)
+                                          ? const Color(
+                                              0xFF2563EB,
+                                            ).withOpacity(0.4)
                                           : const Color(0xFFBFDBFE),
                                       width: 0.8,
                                     ),
@@ -665,6 +617,153 @@ class ItemCard extends StatelessWidget {
     );
   }
 
+  Widget _buildCompactCard(
+    BuildContext context, {
+    required ColorScheme colors,
+    required bool isDark,
+  }) {
+    final sellerName = item.seller?.displayName.trim().isNotEmpty == true
+        ? item.seller!.displayName.trim()
+        : 'Kiwi Seller';
+    final category = _formatLabel(item.category);
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1, 2);
+    final contentFlex = textScale > 1.3 ? 7 : 5;
+
+    return Semantics(
+      button: onTap != null,
+      label:
+          '${item.title}, ${item.priceNzd} NZD, $category, sold by $sellerName, ${item.displayLocation}',
+      child: Material(
+        color: isDark ? const Color(0xFF1E222A) : Colors.white,
+        elevation: 0,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.08)
+                    : const Color(0xFFE5E7EB),
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 6,
+                  child: Stack(
+                    key: Key('compact-item-image-${item.id}'),
+                    fit: StackFit.expand,
+                    children: [
+                      item.imageUrl.isNotEmpty
+                          ? ResilientNetworkImage(
+                              url: item.imageUrl,
+                              logicalCacheWidth: 220,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => ColoredBox(
+                                color: colors.surfaceContainerHighest,
+                                child: const Icon(Icons.image_outlined),
+                              ),
+                            )
+                          : ColoredBox(
+                              color: colors.surfaceContainerHighest,
+                              child: const Icon(Icons.image_outlined),
+                            ),
+                      if (item.status != ItemStatus.active)
+                        Positioned(
+                          left: 7,
+                          top: 7,
+                          child: _CompactPill(
+                            label: item.status == ItemStatus.reserved
+                                ? 'Reserved'
+                                : 'Sold',
+                            dark: true,
+                          ),
+                        ),
+                      Positioned(
+                        right: 5,
+                        top: 5,
+                        child: WatchlistHeartButton(
+                          item: item,
+                          permissionCoordinator: permissionCoordinator,
+                          diameter: 28,
+                          iconSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  flex: contentFlex,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.onSurface,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              item.isFree ? 'FREE' : '\$${item.priceNzd}',
+                              style: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
+                                color: item.isFree
+                                    ? const Color(0xFF059669)
+                                    : colors.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        _CompactMetaRow(
+                          icon: Icons.person_outline_rounded,
+                          text: sellerName,
+                          trailing: item.seller?.isStudentVerified == true
+                              ? const Icon(
+                                  Icons.verified,
+                                  size: 12,
+                                  color: Color(0xFF2563EB),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(height: 3),
+                        _CompactMetaRow(
+                          icon: Icons.location_on_outlined,
+                          text: item.displayLocation,
+                        ),
+                        const Spacer(),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _CompactPill(label: category, dark: false),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   String _formatCategoryCondition(String category, String? condition) {
     final cat = _formatLabel(category);
     if (condition == null || condition.trim().isEmpty) return cat;
@@ -682,5 +781,72 @@ class ItemCard extends StatelessWidget {
           return word[0].toUpperCase() + word.substring(1).toLowerCase();
         })
         .join(' ');
+  }
+}
+
+class _CompactMetaRow extends StatelessWidget {
+  const _CompactMetaRow({
+    required this.icon,
+    required this.text,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(icon, size: 12, color: colors.onSurfaceVariant),
+        const SizedBox(width: 3),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 3), trailing!],
+      ],
+    );
+  }
+}
+
+class _CompactPill extends StatelessWidget {
+  const _CompactPill({required this.label, required this.dark});
+
+  final String label;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: dark
+            ? Colors.black.withOpacity(0.58)
+            : colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.inter(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: dark ? Colors.white : colors.onSurfaceVariant,
+        ),
+      ),
+    );
   }
 }

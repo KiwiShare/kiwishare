@@ -15,6 +15,8 @@ import '../../services/listing_suggestion_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/campus_locations.dart';
 
+const TextStyle _postPlaceholderStyle = TextStyle(color: Color(0xFF94A3B8));
+
 class PostItemScreen extends StatefulWidget {
   final VoidCallback onCancel;
   final VoidCallback? onPostItem;
@@ -614,9 +616,11 @@ class _PostItemScreenState extends State<PostItemScreen> {
     );
 
     String? photoBase64;
+    String? photoMimeType;
     if (_photos.isNotEmpty) {
       try {
         photoBase64 = base64Encode(_photos.first.bytes);
+        photoMimeType = _photoContentType(_photos.first.file);
       } catch (_) {}
     }
 
@@ -631,6 +635,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
           condition: _condition,
           location: _location?.label,
           imageBase64: photoBase64,
+          imageMimeType: photoMimeType,
         ),
       );
       if (!mounted) return;
@@ -862,6 +867,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                               ),
                               decoration: const InputDecoration(
                                 hintText: 'e.g. Solid Wood Desk',
+                                hintStyle: _postPlaceholderStyle,
                               ),
                               validator: _requiredTextValidator,
                             ),
@@ -894,6 +900,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                                       decoration: const InputDecoration(
                                         hintText:
                                             'Describe your item, condition, and details...',
+                                        hintStyle: _postPlaceholderStyle,
                                         alignLabelWithHint: true,
                                         contentPadding: EdgeInsets.fromLTRB(
                                           14,
@@ -970,7 +977,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                                 ),
                                 const SizedBox(height: AppSpacing.xs),
                                 Text(
-                                  'Your entered listing details, but not photos, are sent to our AI provider. AI can make mistakes, so review every suggestion.',
+                                  'Your listing details and first photo are sent to our AI provider to create the draft. AI can make mistakes, so review every suggestion.',
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
                                         fontSize: 11,
@@ -1022,6 +1029,7 @@ class _PostItemScreenState extends State<PostItemScreen> {
                           decoration: const InputDecoration(
                             prefixText: '\$ ',
                             hintText: 'e.g. 120',
+                            hintStyle: _postPlaceholderStyle,
                           ),
                           validator: _priceValidator,
                         ),
@@ -2283,6 +2291,7 @@ class _CurrentLocationFormFieldState extends State<_CurrentLocationFormField> {
                     decoration: const InputDecoration(
                       labelText: 'Suburb or city',
                       hintText: 'e.g. Auckland Central',
+                      hintStyle: _postPlaceholderStyle,
                     ),
                     onChanged: (value) {
                       setSheetState(() => location = value.trim());
@@ -2324,7 +2333,6 @@ class _CurrentLocationFormFieldState extends State<_CurrentLocationFormField> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Direct Autocomplete location input
             Autocomplete<String>(
               initialValue: TextEditingValue(text: widget.value?.label ?? ''),
               optionsBuilder: (TextEditingValue textVal) {
@@ -2355,10 +2363,68 @@ class _CurrentLocationFormFieldState extends State<_CurrentLocationFormField> {
                       focusNode: focusNode,
                       textCapitalization: TextCapitalization.words,
                       decoration: InputDecoration(
-                        labelText: 'Location / Campus / Suburb',
-                        hintText: 'Type campus or suburb (e.g. UoA, Newmarket)',
+                        labelText: 'Location',
+                        hintText: 'Campus, suburb or city',
+                        hintStyle: _postPlaceholderStyle,
                         prefixIcon: const Icon(Icons.location_on_outlined),
                         errorText: field.errorText,
+                        suffixIconConstraints: const BoxConstraints(
+                          minWidth: 88,
+                          minHeight: 48,
+                        ),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              key: const Key('post_location_field'),
+                              tooltip: 'Use my location',
+                              onPressed: widget.isLocating
+                                  ? null
+                                  : () async {
+                                      final location = await widget.onLocate();
+                                      if (location == null ||
+                                          !context.mounted) {
+                                        return;
+                                      }
+                                      textEditingController.text =
+                                          location.label;
+                                      _textController.text = location.label;
+                                      field.didChange(location);
+                                      widget.onChanged(location);
+                                    },
+                              icon: widget.isLocating
+                                  ? const SizedBox.square(
+                                      dimension: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.my_location_rounded,
+                                      size: 19,
+                                    ),
+                            ),
+                            IconButton(
+                              key: const Key('post_manual_location_button'),
+                              tooltip: 'Popular areas',
+                              onPressed: () async {
+                                final label = await _requestManualLocation(
+                                  context,
+                                );
+                                if (label == null || !context.mounted) return;
+                                textEditingController.text = label;
+                                _textController.text = label;
+                                final location = ListingLocation(label: label);
+                                field.didChange(location);
+                                widget.onChanged(location);
+                              },
+                              icon: const Icon(
+                                Icons.expand_more_rounded,
+                                size: 22,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       onChanged: (val) {
                         final trimmed = val.trim();
@@ -2371,54 +2437,6 @@ class _CurrentLocationFormFieldState extends State<_CurrentLocationFormField> {
                       },
                     );
                   },
-            ),
-            const SizedBox(height: 6),
-            // 2. Action buttons: "Find my location" button (GPS) + popular areas sheet
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                OutlinedButton.icon(
-                  key: const Key('post_location_field'),
-                  onPressed: widget.isLocating
-                      ? null
-                      : () async {
-                          final location = await widget.onLocate();
-                          if (location == null || !context.mounted) return;
-                          _textController.text = location.label;
-                          field.didChange(location);
-                          widget.onChanged(location);
-                        },
-                  icon: widget.isLocating
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.my_location_rounded, size: 15),
-                  label: Text(
-                    widget.isLocating
-                        ? 'Finding location…'
-                        : 'Find my location (GPS)',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-                TextButton(
-                  key: const Key('post_manual_location_button'),
-                  onPressed: () async {
-                    final label = await _requestManualLocation(context);
-                    if (label == null || !context.mounted) return;
-                    _textController.text = label;
-                    final location = ListingLocation(label: label);
-                    field.didChange(location);
-                    widget.onChanged(location);
-                  },
-                  child: const Text(
-                    'Popular areas',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
             ),
           ],
         );
@@ -2487,6 +2505,7 @@ class _MobileSelectionFormField extends StatelessWidget {
               isEmpty: field.value == null,
               decoration: InputDecoration(
                 hintText: hintText,
+                hintStyle: _postPlaceholderStyle,
                 errorText: field.errorText,
                 suffixIcon: const Icon(Icons.chevron_right_rounded),
               ),

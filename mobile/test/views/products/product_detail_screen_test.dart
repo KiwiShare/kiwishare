@@ -13,6 +13,7 @@ import 'package:kiwishare/services/notification_permission_coordinator.dart';
 import 'package:kiwishare/services/push_notification_service.dart';
 import 'package:kiwishare/theme/app_theme.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
+import 'package:kiwishare/views/profile/report_screen.dart';
 import 'package:provider/provider.dart';
 
 import 'package:kiwishare/repositories/item_repository.dart';
@@ -79,6 +80,78 @@ final _detailItem = ItemModel(
 );
 
 void main() {
+  testWidgets('product images open a swipeable fullscreen gallery', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final item = _detailItem.copyWith(
+      images: const [
+        'https://example.com/one.jpg',
+        'https://example.com/two.jpg',
+      ],
+    );
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: item,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('detail-image-0')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('detail-fullscreen-gallery')), findsOneWidget);
+    expect(find.text('1 / 2'), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const Key('detail-fullscreen-gallery')),
+      const Offset(-600, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 / 2'), findsOneWidget);
+  });
+
+  testWidgets('listing location opens an embedded Google Map', (tester) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: _detailItem,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final locationButton = find
+        .byKey(const Key('detail-location-map-button'))
+        .first;
+    await tester.scrollUntilVisible(
+      locationButton,
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(locationButton);
+    await tester.tap(locationButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Listing location'), findsOneWidget);
+    expect(find.byKey(const Key('product-location-map')), findsOneWidget);
+    expect(find.text('Directions'), findsOneWidget);
+  });
+
   testWidgets('ProductDetailScreen caps public seller trust display at 200+', (
     tester,
   ) async {
@@ -146,15 +219,15 @@ void main() {
     // 1. Initial State: not watched
     expect(find.text('Eco 4-Person Camping Tent'), findsWidgets);
     expect(find.text('\$95 NZD'), findsOneWidget);
-    expect(find.text('Watchlist'), findsOneWidget);
+    expect(find.byKey(const Key('detail-watch-action-button')), findsNothing);
     expect(provider.isWatched('64f000000000000000000001'), isFalse);
 
-    // 2. Tap bottom "Watch Item" button
-    await tester.tap(find.byKey(const Key('detail-watch-action-button')));
+    // 2. Use the AppBar heart to add the item.
+    await tester.tap(find.byKey(const Key('detail-favorite-button')));
     await tester.pumpAndSettle();
 
-    // 3. Status changes to "Watchlisted"
-    expect(find.text('Watchlisted'), findsOneWidget);
+    // 3. Watchlist state updates without a duplicate bottom action.
+    expect(find.byKey(const Key('detail-watch-action-button')), findsNothing);
     expect(provider.isWatched('64f000000000000000000001'), isTrue);
     expect(
       provider.watchlistItems.any((i) => i.id == '64f000000000000000000001'),
@@ -162,14 +235,46 @@ void main() {
     );
     expect(permissionController.statusCalls, 1);
 
-    // 4. Tap AppBar bookmark button to unwatch
+    // 4. Tap AppBar heart button again to unwatch
     await tester.tap(find.byKey(const Key('detail-favorite-button')));
     await tester.pumpAndSettle();
 
-    // 5. The label reverts to "Watchlist"
-    expect(find.text('Watchlist'), findsOneWidget);
+    // 5. Bottom Watchlist action remains absent.
+    expect(find.byKey(const Key('detail-watch-action-button')), findsNothing);
     expect(provider.isWatched('64f000000000000000000001'), isFalse);
     expect(permissionController.statusCalls, 1);
+  });
+
+  testWidgets('own listing shows a friendly Watchlist message', (tester) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final provider = WatchlistProvider(
+      repository: TestWatchlistRepository(),
+      initialToken: 'seller-token',
+    );
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: _detailItem,
+        watchlistProvider: provider,
+        authToken: 'seller-token',
+        currentUserId: _detailItem.ownerId,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('detail-watch-action-button')), findsNothing);
+    await tester.tap(find.byKey(const Key('detail-favorite-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('You can’t add your own listing to your Watchlist.'),
+      findsOneWidget,
+    );
+    expect(provider.isWatched(_detailItem.id), isFalse);
   });
 
   testWidgets('failed Watchlist add does not offer notification permission', (
@@ -197,7 +302,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('detail-watch-action-button')));
+    await tester.tap(find.byKey(const Key('detail-favorite-button')));
     await tester.pumpAndSettle();
 
     expect(provider.isWatched(_detailItem.id), isFalse);
@@ -226,7 +331,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('detail-watch-action-button')));
+    await tester.tap(find.byKey(const Key('detail-favorite-button')));
     await tester.pumpAndSettle();
 
     expect(permissionController.statusCalls, 0);
@@ -258,7 +363,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('detail-watch-action-button')));
+      await tester.tap(find.byKey(const Key('detail-favorite-button')));
       await tester.pump();
       await tester.pumpWidget(const MaterialApp(home: Text('Different route')));
       repository.addCompleter.complete(true);
@@ -295,13 +400,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('detail-watch-action-button')));
+      await tester.tap(find.byKey(const Key('detail-favorite-button')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('notification-rationale-enable')));
       await tester.pumpAndSettle();
 
       expect(provider.isWatched(_detailItem.id), isTrue);
-      expect(find.text('Watchlisted'), findsOneWidget);
+      expect(find.byKey(const Key('detail-watch-action-button')), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -341,6 +446,8 @@ void main() {
     await tester.tap(reportButton);
     await tester.pumpAndSettle();
 
+    final reportScreen = tester.widget<ReportScreen>(find.byType(ReportScreen));
+    expect(reportScreen.reportContext.targetImageUrl, _detailItem.imageUrl);
     expect(find.text('Report listing'), findsWidgets);
     expect(find.text(_detailItem.title), findsWidgets);
     expect(find.text('What happened?'), findsOneWidget);
@@ -442,6 +549,44 @@ void main() {
     expect(repository.createCalls, 0);
   });
 
+  testWidgets('sold owner listing is locked from editing', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final soldItem = ItemModel(
+      id: _detailItem.id,
+      title: _detailItem.title,
+      priceNzd: _detailItem.priceNzd,
+      location: _detailItem.location,
+      imageUrl: _detailItem.imageUrl,
+      isSustainable: _detailItem.isSustainable,
+      category: _detailItem.category,
+      description: _detailItem.description,
+      status: ItemStatus.sold,
+      ownerId: _detailItem.ownerId,
+    );
+
+    await tester.pumpWidget(
+      _productDetailApp(
+        item: soldItem,
+        watchlistProvider: WatchlistProvider(
+          repository: TestWatchlistRepository(),
+        ),
+        currentUserId: soldItem.ownerId,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('detail-sold-listing-locked-button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('detail-edit-listing-button')), findsNothing);
+    expect(find.byTooltip('Sold — refund/cancel first'), findsOneWidget);
+  });
+
   testWidgets('Message seller explains a recoverable service failure', (
     tester,
   ) async {
@@ -494,7 +639,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Watchlist'), findsOneWidget);
+    expect(find.byKey(const Key('detail-watch-action-button')), findsNothing);
     expect(
       find.byKey(const Key('detail-message-seller-button')),
       findsOneWidget,

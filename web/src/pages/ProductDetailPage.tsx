@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { itemsApi, chatApi, UsedItem } from '../api/client';
 import { useWatchlist } from '../context/WatchlistContext';
@@ -38,23 +38,42 @@ export const ProductDetailPage: React.FC = () => {
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
-  useEffect(() => {
+  const refreshItem = useCallback(async (silent = false) => {
     if (!id) return;
-    setLoading(true);
-    itemsApi
-      .getItemById(id)
-      .then((res: any) => {
-        const product = res.item || res;
-        setItem(product);
-        setWatchlistCount(product.watchlistCount ?? product.favouriteCount ?? 0);
-      })
-      .catch((err) => {
+    if (!silent) setLoading(true);
+    try {
+      const res = await itemsApi.getItemById(id);
+      const product = res.item || res;
+      setItem(product);
+      setWatchlistCount(product.watchlistCount ?? product.favouriteCount ?? 0);
+      setError(null);
+    } catch (err: any) {
+      if (!silent) {
         setError(err.message || 'Item not found');
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+      }
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    void refreshItem(false);
+
+    // Keep displayed price/status aligned with backend changes while this page is open.
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshItem(true);
+      }
+    }, 5000);
+
+    const refreshOnFocus = () => void refreshItem(true);
+    window.addEventListener('focus', refreshOnFocus);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, [refreshItem]);
 
   if (loading) {
     return (
@@ -522,25 +541,42 @@ export const ProductDetailPage: React.FC = () => {
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
             {isOwner ? (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="btn btn-primary"
-                style={{
-                  flex: 1,
-                  padding: '16px 24px',
-                  borderRadius: 'var(--radius-full)',
-                  fontSize: '1rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  background: 'linear-gradient(135deg, var(--primary-600), var(--primary-700))',
-                  boxShadow: 'var(--shadow-primary)'
-                }}
-              >
-                <Edit3 size={18} />
-                <span>Edit Listing</span>
-              </button>
+              item.status === 'sold' ? (
+                <div
+                  style={{
+                    flex: 1,
+                    padding: '14px 18px',
+                    borderRadius: 'var(--radius-lg)',
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    color: '#475569',
+                    fontSize: '0.88rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  SOLD — listing is locked. Refund/cancel the transaction before editing or relisting.
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="btn btn-primary"
+                  style={{
+                    flex: 1,
+                    padding: '16px 24px',
+                    borderRadius: 'var(--radius-full)',
+                    fontSize: '1rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    background: 'linear-gradient(135deg, var(--primary-600), var(--primary-700))',
+                    boxShadow: 'var(--shadow-primary)'
+                  }}
+                >
+                  <Edit3 size={18} />
+                  <span>Edit Listing</span>
+                </button>
+              )
             ) : (
               <button
                 onClick={handleClaim}

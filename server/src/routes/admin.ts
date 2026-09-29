@@ -4,6 +4,7 @@ import Item from '../models/Item';
 import User from '../models/User';
 import Watchlist from '../models/Watchlist';
 import Order from '../models/Order';
+import Report, { REPORT_STATUSES } from '../models/Report';
 import { authenticateToken } from '../middleware/auth';
 import { formatItem } from './usedItems';
 import { sendAdminItemNotification } from '../services/adminNotification';
@@ -617,6 +618,58 @@ router.put('/admin/settings/fees', authenticateToken, requireAdmin, async (ctx) 
     status: 'success',
     message: 'Platform fee settings updated successfully.',
     data: updated
+  };
+});
+
+
+router.get('/admin/reports', authenticateToken, requireAdmin, async (ctx) => {
+  const { status, targetType } = ctx.query;
+  const filter: any = {};
+  if (status && status !== 'all') filter.status = status;
+  if (targetType && targetType !== 'all') filter.targetType = targetType;
+
+  const reports = await Report.find(filter).sort({ createdAt: -1 }).limit(500);
+  ctx.body = {
+    status: 'success',
+    count: reports.length,
+    reports: reports.map((report: any) => ({
+      id: report._id.toString(),
+      reporterId: report.reporterId?.toString() || null,
+      targetType: report.targetType,
+      targetId: report.targetId?.toString() || null,
+      contextType: report.contextType,
+      contextId: report.contextId?.toString() || null,
+      reason: report.reason,
+      details: report.details,
+      status: report.status,
+      createdAt: report.createdAt
+    }))
+  };
+});
+
+router.patch('/admin/reports/:id/status', authenticateToken, requireAdmin, async (ctx) => {
+  const { id } = ctx.params;
+  const { status } = ctx.request.body as { status?: string };
+  if (!status || !REPORT_STATUSES.includes(status as any)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Invalid report status.' };
+    return;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    ctx.status = 400;
+    ctx.body = { status: 'error', message: 'Invalid report ID.' };
+    return;
+  }
+  const report = await Report.findByIdAndUpdate(id, { status }, { new: true });
+  if (!report) {
+    ctx.status = 404;
+    ctx.body = { status: 'error', message: 'Report not found.' };
+    return;
+  }
+  ctx.body = {
+    status: 'success',
+    message: status === 'reviewed' ? 'Report approved.' : 'Report status updated.',
+    report: { id: report._id.toString(), status: report.status }
   };
 });
 

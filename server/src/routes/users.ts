@@ -32,8 +32,11 @@ router.get('/users/me', authenticateToken, async (ctx) => {
     user: {
       id: user._id.toString(),
       email: user.email,
+      username: user.username,
+      needsUsername: !user.username || !user.username.trim(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      coverImageUrl: user.coverImageUrl || null,
       bio: user.bio || '',
       role: user.role || 'user',
       trustScore: user.trustScore,
@@ -56,8 +59,14 @@ router.get('/users/me', authenticateToken, async (ctx) => {
 // PATCH /users/me - Update authenticated user profile
 router.patch('/users/me', authenticateToken, async (ctx) => {
   const userId = ctx.state.user.id;
-  const { displayName, avatarUrl, bio } = ctx.request.body as any;
+  const { username, displayName, avatarUrl, coverImageUrl, bio } = ctx.request.body as any;
 
+  if (username !== undefined && (typeof username !== 'string' ||
+    !/^[a-zA-Z0-9_]{3,24}$/.test(username.trim()))) {
+    ctx.status = 400;
+    ctx.body = { message: 'Username must be 3-24 characters using only letters, numbers, or underscores.' };
+    return;
+  }
   if (displayName !== undefined && (typeof displayName !== 'string' ||
     displayName.trim().length < 2 || displayName.trim().length > 30)) {
     ctx.status = 400;
@@ -84,6 +93,20 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
     }
   }
 
+  if (coverImageUrl !== undefined && coverImageUrl !== null && coverImageUrl !== "") {
+    let valid = false;
+    if (typeof coverImageUrl === "string" && coverImageUrl.length <= 2048) {
+      try {
+        const url = new URL(coverImageUrl);
+        valid = ["https:", "http:"].includes(url.protocol) && !url.username && !url.password;
+      } catch { /* Reject malformed URLs. */ }
+    }
+    if (!valid) {
+      ctx.status = 400;
+      ctx.body = { message: "Profile background must be an HTTP image URL or null." };
+      return;
+    }
+  }
   const user = mongoose.Types.ObjectId.isValid(userId)
     ? await User.findById(userId)
     : await User.findOne({ id: userId });
@@ -94,8 +117,23 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
     return;
   }
 
+  if (username !== undefined) {
+    const normalizedUsername = username.trim().toLowerCase();
+    const existingUsername = await User.findOne({
+      username: normalizedUsername,
+      _id: { $ne: user._id }
+    });
+    if (existingUsername) {
+      ctx.status = 409;
+      ctx.body = { message: 'That username is already taken.' };
+      return;
+    }
+    user.username = normalizedUsername;
+    if (!user.displayName?.trim()) user.displayName = username.trim();
+  }
   if (displayName !== undefined) user.displayName = displayName.trim();
   if (avatarUrl !== undefined) user.avatarUrl = avatarUrl || null;
+  if (coverImageUrl !== undefined) user.coverImageUrl = coverImageUrl || null;
   if (bio !== undefined) user.bio = typeof bio === 'string' ? bio.trim() : '';
 
   await user.save();
@@ -106,11 +144,26 @@ router.patch('/users/me', authenticateToken, async (ctx) => {
     user: {
       id: user._id.toString(),
       email: user.email,
+      username: user.username,
+      needsUsername: !user.username || !user.username.trim(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      coverImageUrl: user.coverImageUrl || null,
       bio: user.bio || '',
+      role: user.role || 'user',
       trustScore: user.trustScore,
-      isVerified: user.isVerified
+      isVerified: user.isVerified,
+      isStudentVerified: Boolean(user.isStudentVerified),
+      studentInstitution: user.studentInstitution || null,
+      studentEmail: user.studentEmail || null,
+      kiwiGold: user.kiwiGold ?? 100,
+      isVip: Boolean(user.isVip && (!user.vipExpiresAt || new Date(user.vipExpiresAt) > new Date())),
+      vipExpiresAt: user.vipExpiresAt || null,
+      vipAutoRenew: user.vipAutoRenew ?? true,
+      authProvider: user.authProvider,
+      registrationPlatform: user.registrationPlatform,
+      lastUsedPlatform: user.lastUsedPlatform,
+      lastActiveAt: user.lastActiveAt
     }
   };
 });
@@ -135,7 +188,7 @@ router.patch('/users/me/password', authenticateToken, async (ctx) => {
     ? await User.findById(userId).select('+passwordHash')
     : await User.findOne({ id: userId }).select('+passwordHash');
 
-  if (!user || user.authProvider !== 'email_password' || !user.passwordHash) {
+  if (!user || !user.passwordHash) {
     ctx.status = 400;
     ctx.body = { message: 'Password changes are unavailable for this account.' };
     return;
@@ -364,9 +417,44 @@ router.post('/users/student-verification/verify-otp', authenticateToken, async (
   otp.used = true;
   await otp.save();
 
-  const user = mongoose.Types.ObjectId.isValid(userId)
-    ? await User.findById(userId)
-    : await User.findOne({ id: userId });
+  const userFilter = mongoose.Types.ObjectId.isValid(userId)
+    ? { _id: new mongoose.Types.ObjectId(userId) }
+    : { id: userId };
+
+  // The conditional update makes the first verification transition the sole
+  // reward opportunity, even when two valid OTP requests race concurrently.
+  // A student bonus is capped at 200, but existing scores above 200 are never
+  // reduced; transaction rewards and administrator adjustments are separate.
+  let user = await User.findOneAndUpdate(
+    { ...userFilter, isStudentVerified: { $ne: true } },
+    [
+      {
+        $set: {
+          isStudentVerified: true,
+          studentInstitution: institution,
+          studentEmail: normalizedEmail,
+          trustScore: {
+            $let: {
+              vars: { currentScore: { $ifNull: ['$trustScore', 100] } },
+              in: {
+                $cond: [
+                  { $gte: ['$$currentScore', 200] },
+                  '$$currentScore',
+                  { $min: [200, { $add: ['$$currentScore', 15] }] }
+                ]
+              }
+            }
+          }
+        }
+      }
+    ],
+    { new: true }
+  );
+
+  const alreadyVerified = !user;
+  if (!user) {
+    user = await User.findOne(userFilter);
+  }
 
   if (!user) {
     ctx.status = 404;
@@ -374,11 +462,13 @@ router.post('/users/student-verification/verify-otp', authenticateToken, async (
     return;
   }
 
-  user.isStudentVerified = true;
-  user.studentInstitution = institution;
-  user.studentEmail = normalizedEmail;
-  user.trustScore = Math.min(200, Math.max(0, (user.trustScore || 100) + 15));
-  await user.save();
+  // Already-verified accounts may confirm/update their institution details,
+  // but cannot receive the one-time score bonus again.
+  if (alreadyVerified && user.isStudentVerified) {
+    user.studentInstitution = institution;
+    user.studentEmail = normalizedEmail;
+    await user.save();
+  }
 
   ctx.status = 200;
   ctx.body = {
@@ -436,6 +526,7 @@ router.get('/users/:id/public-profile', async (ctx) => {
       id: user._id.toString(),
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
+      coverImageUrl: user.coverImageUrl || null,
       bio: user.bio || '',
       location: {
         city: user.location?.city || 'Auckland',

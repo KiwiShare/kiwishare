@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 Widget _watchlistApp({
   required WatchlistRepository repository,
   ValueChanged<ItemModel>? onOpenItem,
-  String? token,
+  String? token = 'test-token',
   NotificationPreferencesRepository? preferencesRepository,
   TextScaler textScaler = TextScaler.noScaling,
 }) {
@@ -63,6 +63,18 @@ final _testItem2 = ItemModel(
 );
 
 void main() {
+  testWidgets('Watchlist shows a sign-in state when logged out', (
+    tester,
+  ) async {
+    final repo = _RecoveringWatchlistRepository();
+    await tester.pumpWidget(_watchlistApp(repository: repo, token: null));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Please sign in to view your Watchlist'), findsOneWidget);
+    expect(find.text('Could not load your Watchlist.'), findsNothing);
+    expect(repo.shouldFail, isTrue);
+  });
+
   testWidgets('Watchlist displays empty state when no items are watched', (
     tester,
   ) async {
@@ -74,6 +86,10 @@ void main() {
     expect(find.text('0 items'), findsOneWidget);
     expect(find.text('Your watchlist is empty'), findsOneWidget);
     expect(find.byKey(const Key('watchlist-explore-button')), findsOneWidget);
+    expect(find.byIcon(Icons.favorite), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.byIcon(Icons.bookmark), findsNothing);
+    expect(find.byIcon(Icons.bookmark_outline), findsNothing);
   });
 
   testWidgets('Watchlist renders watched items and allows removing an item', (
@@ -100,6 +116,8 @@ void main() {
     expect(find.text('Vintage Oak Armchair'), findsOneWidget);
     expect(find.text('\$120 NZD'), findsOneWidget);
     expect(find.text('Reserved'), findsOneWidget);
+    expect(find.byIcon(Icons.favorite), findsNWidgets(3));
+    expect(find.byIcon(Icons.bookmark_remove_outlined), findsNothing);
 
     // 3. Tap card opens item details
     await tester.tap(find.text('Monstera Deliciosa'));
@@ -227,24 +245,25 @@ void main() {
     expect(chairTop, lessThan(plantTop));
   });
 
-  testWidgets('Price alerts setting is not rendered on WatchlistScreen (moved to Profile Settings)', (
-    tester,
-  ) async {
-    final preferences = _PreferenceRepository(true);
-    await tester.pumpWidget(
-      _watchlistApp(
-        repository: TestWatchlistRepository(),
-        token: 'account-token',
-        preferencesRepository: preferences,
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'Price alerts setting is not rendered on WatchlistScreen (moved to Profile Settings)',
+    (tester) async {
+      final preferences = _PreferenceRepository(true);
+      await tester.pumpWidget(
+        _watchlistApp(
+          repository: TestWatchlistRepository(),
+          token: 'account-token',
+          preferencesRepository: preferences,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const Key('watchlist-price-alerts-switch')),
-      findsNothing,
-    );
-  });
+      expect(
+        find.byKey(const Key('watchlist-price-alerts-switch')),
+        findsNothing,
+      );
+    },
+  );
 }
 
 class _RecoveringWatchlistRepository extends TestWatchlistRepository {

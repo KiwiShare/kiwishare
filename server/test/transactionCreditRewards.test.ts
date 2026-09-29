@@ -45,6 +45,7 @@ describe('transaction completion credit rewards', () => {
     expiresAt?: Date;
     missingSeller?: boolean;
     sameParticipant?: boolean;
+    paid?: boolean;
   } = {}) {
     const buyer = await User.create({
       email: `buyer-${new mongoose.Types.ObjectId()}@example.com`,
@@ -84,6 +85,7 @@ describe('transaction completion credit rewards', () => {
       itemAmount: 1000,
       buyerTotalAmount: 1000,
       sellerReceiveAmount: 1000,
+      ...(options.paid === false ? {} : { paidAt: new Date(Date.now() - 1000) }),
       meeting: {
         scheduledAt: new Date(Date.now() + 60000),
         locationName: 'Auckland',
@@ -151,6 +153,7 @@ describe('transaction completion credit rewards', () => {
       itemId: item._id, buyerId: first.buyer._id, sellerId: first.seller!._id,
       status: 'meeting_scheduled', itemSnapshot: { title: item.title }, currency: 'NZD',
       itemAmount: 2000, buyerTotalAmount: 2000, sellerReceiveAmount: 2000,
+      paidAt: new Date(Date.now() - 1000),
       meeting: { scheduledAt: new Date(), locationName: 'Auckland', proposalStatus: 'confirmed' }
     });
     const secondCode = `QR_HANDOVER_TOKEN_${order._id}_${new mongoose.Types.ObjectId()}`;
@@ -185,6 +188,7 @@ describe('transaction completion credit rewards', () => {
 
   it.each([
     ['pending order', { orderStatus: 'pending_payment' }, 409],
+    ['unpaid confirmed order', { paid: false }, 409],
     ['cancelled order', { orderStatus: 'cancelled' }, 409],
     ['unconfirmed meetup', { proposalStatus: 'proposed' }, 409],
     ['cancelled QR', { qrStatus: 'cancelled' }, 400],
@@ -212,6 +216,19 @@ describe('transaction completion credit rewards', () => {
     await claim(tokenFor(data.buyer.id), data.claimCode).expect(409);
     expect((await User.findById(data.buyer.id))?.trustScore).toBe(100);
     expect((await User.findById(data.seller!.id))?.trustScore).toBe(100);
+  });
+
+  it('allows a paid listing already reserved as sold to complete via QR', async () => {
+    const data = await fixture();
+    await Item.findByIdAndUpdate(data.item.id, { status: 'sold' });
+
+    const response = await claim(tokenFor(data.buyer.id), data.claimCode);
+
+    expect(response.status).toBe(200);
+    expect(response.body.completion.creditAwarded).toBe(true);
+    const transferred = await Item.findById(data.item.id);
+    expect(transferred?.ownerId).toBe(data.buyer.id);
+    expect(transferred?.sellerId?.toString()).toBe(data.buyer.id);
   });
 
   it('rejects the seller scanning the valid buyer QR without awarding credit', async () => {

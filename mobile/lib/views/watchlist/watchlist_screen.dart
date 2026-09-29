@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/item_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/watchlist_provider.dart';
 import '../../theme/app_theme.dart';
 
@@ -25,6 +26,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final watchlist = context.read<WatchlistProvider>();
+      final token = context.read<AuthProvider?>()?.jwtToken;
+      final signedIn =
+          (token != null && token.isNotEmpty) || watchlist.isAuthenticated;
+      if (!signedIn) return;
       watchlist.loadWatchlist();
       watchlist.loadNotificationPreference();
     });
@@ -68,6 +73,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   @override
   Widget build(BuildContext context) {
     final watchlist = context.watch<WatchlistProvider>();
+    final token = context.watch<AuthProvider?>()?.jwtToken;
+    final signedIn =
+        (token != null && token.isNotEmpty) || watchlist.isAuthenticated;
     final items = watchlist.watchlistItems;
 
     final query = _searchController.text.trim().toLowerCase();
@@ -93,7 +101,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () => watchlist.loadWatchlist(forceRefresh: true),
+          onRefresh: signedIn
+              ? () => watchlist.loadWatchlist(forceRefresh: true)
+              : () async {},
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
@@ -103,7 +113,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     AppSpacing.lg,
                     AppSpacing.lg,
                     AppSpacing.lg,
-                    AppSpacing.sm,
+                    AppSpacing.lg,
                   ),
                   child: _WatchlistHeader(
                     itemCount: items.length,
@@ -253,7 +263,12 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     ),
                   ),
                 ),
-              if (watchlist.isLoading && items.isEmpty)
+              if (!signedIn)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _SignedOutWatchlistView(),
+                )
+              else if (watchlist.isLoading && items.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -330,6 +345,33 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   }
 }
 
+class _SignedOutWatchlistView extends StatelessWidget {
+  const _SignedOutWatchlistView();
+
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Padding(
+      padding: EdgeInsets.all(AppSpacing.xxl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: 48),
+          SizedBox(height: AppSpacing.md),
+          Text(
+            'Please sign in to view your Watchlist',
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: AppSpacing.sm),
+          Text(
+            'Your saved items will appear here after you sign in.',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _WatchlistErrorView extends StatelessWidget {
   const _WatchlistErrorView({required this.onRetry});
 
@@ -367,20 +409,14 @@ class _WatchlistHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final iconBg = isDark
-        ? const Color(0xFF163228)
-        : AppColors.brandPrimaryContainer;
-    final iconColor = isDark ? const Color(0xFF92D4B3) : AppColors.brandPrimary;
+    final iconBg = isDark ? const Color(0xFF351D22) : const Color(0xFFFEE2E2);
+    const iconColor = Color(0xFFEF4444);
     final countBg = isDark
         ? const Color(0xFF1C2C26)
         : AppColors.brandSecondaryContainer;
     final countColor = isDark
         ? const Color(0xFF92D4B3)
         : AppColors.brandPrimaryAlt;
-    final subtextColor = isDark
-        ? const Color(0xFF94A3B8)
-        : AppColors.textSecondary;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -397,7 +433,7 @@ class _WatchlistHeader extends StatelessWidget {
                     color: iconBg,
                     borderRadius: BorderRadius.circular(AppRadius.medium),
                   ),
-                  child: Icon(Icons.bookmark, color: iconColor, size: 24),
+                  child: const Icon(Icons.favorite, color: iconColor, size: 23),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Text(
@@ -430,13 +466,6 @@ class _WatchlistHeader extends StatelessWidget {
               ),
             ),
           ],
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Keep track of pre-loved items you love and watch for updates',
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: subtextColor),
         ),
       ],
     );
@@ -622,9 +651,9 @@ class _WatchlistCard extends StatelessWidget {
                 IconButton(
                   key: Key('watchlist-remove-${item.id}'),
                   icon: const Icon(
-                    Icons.bookmark_remove_outlined,
-                    color: AppColors.error,
-                    size: 22,
+                    Icons.favorite,
+                    color: Color(0xFFEF4444),
+                    size: 21,
                   ),
                   tooltip: 'Remove from Watchlist',
                   onPressed: onRemove,
@@ -686,6 +715,7 @@ class _EmptyWatchlistView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xxl),
@@ -696,13 +726,13 @@ class _EmptyWatchlistView extends StatelessWidget {
               width: 96,
               height: 96,
               decoration: BoxDecoration(
-                color: AppColors.brandPrimaryContainer.withValues(alpha: 0.5),
+                color: colors.primaryContainer,
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.bookmark_outline,
+                Icons.favorite_border,
                 size: 48,
-                color: AppColors.brandPrimary,
+                color: Color(0xFFEF4444),
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
@@ -718,15 +748,15 @@ class _EmptyWatchlistView extends StatelessWidget {
               'Discover eco-friendly pre-loved items and tap the Watch button to keep track of them here.',
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.xxl),
             ElevatedButton.icon(
               key: const Key('watchlist-explore-button'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandPrimary,
-                foregroundColor: Colors.white,
+                backgroundColor: colors.primary,
+                foregroundColor: colors.onPrimary,
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.xl,
                   vertical: AppSpacing.md,
@@ -801,6 +831,7 @@ class _NoMatchingWatchlistView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xxl),
@@ -810,14 +841,14 @@ class _NoMatchingWatchlistView extends StatelessWidget {
             Container(
               width: 80,
               height: 80,
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceMuted,
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.search_off_outlined,
                 size: 40,
-                color: AppColors.textSecondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -833,7 +864,7 @@ class _NoMatchingWatchlistView extends StatelessWidget {
               'Try adjusting your search terms or filter selection.',
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.lg),

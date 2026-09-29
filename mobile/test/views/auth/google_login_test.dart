@@ -76,8 +76,10 @@ class MockGoogleUserRepository implements UserRepository {
   @override
   Future<UserModel> updateProfile({
     required String token,
+    String? username,
     String? displayName,
     String? avatarUrl,
+    String? coverImageUrl,
     String? bio,
   }) async => const UserModel(
     id: 'test_id',
@@ -88,16 +90,20 @@ class MockGoogleUserRepository implements UserRepository {
   );
 
   @override
-  Future<UserModel> updateBio(String bio, {required String token}) async => const UserModel(
-    id: 'test_id',
-    displayName: 'Test',
-    trustScore: 100,
-    kiwiGold: 100,
-    isVerified: true,
-  );
+  Future<UserModel> updateBio(String bio, {required String token}) async =>
+      const UserModel(
+        id: 'test_id',
+        displayName: 'Test',
+        trustScore: 100,
+        kiwiGold: 100,
+        isVerified: true,
+      );
 
   @override
-  Future<PublicProfileModel> fetchPublicProfile(String userId, {String? token}) async => const PublicProfileModel(
+  Future<PublicProfileModel> fetchPublicProfile(
+    String userId, {
+    String? token,
+  }) async => const PublicProfileModel(
     id: 'test_id',
     displayName: 'Test',
     bio: '',
@@ -114,10 +120,17 @@ class MockGoogleUserRepository implements UserRepository {
   );
 
   @override
-  Future<List<ItemModel>> fetchUserPublicItems(String userId, {String status = 'active', String? token}) async => [];
+  Future<List<ItemModel>> fetchUserPublicItems(
+    String userId, {
+    String status = 'active',
+    String? token,
+  }) async => [];
 
   @override
-  Future<List<PublicReviewModel>> fetchUserPublicReviews(String userId, {String? token}) async => [];
+  Future<List<PublicReviewModel>> fetchUserPublicReviews(
+    String userId, {
+    String? token,
+  }) async => [];
 
   @override
   Future<void> submitReview({
@@ -155,68 +168,77 @@ class MockGoogleUserRepository implements UserRepository {
 
 void main() {
   group('Google Login View and UserModel Tests', () {
-    test('UserModel default constructor and JSON serialization assign 100 KiwiGold and 100 Trust Score', () {
-      const user = UserModel(
-        id: 'u1',
-        displayName: 'Sam',
-        trustScore: 100,
-        isVerified: true,
-      );
+    test(
+      'UserModel default constructor and JSON serialization assign 100 KiwiGold and 100 Trust Score',
+      () {
+        const user = UserModel(
+          id: 'u1',
+          displayName: 'Sam',
+          trustScore: 100,
+          isVerified: true,
+        );
 
-      expect(user.kiwiGold, equals(100));
-      expect(user.trustScore, equals(100));
+        expect(user.kiwiGold, equals(100));
+        expect(user.trustScore, equals(100));
 
-      final json = user.toJson();
-      expect(json['kiwiGold'], equals(100));
-      expect(json['trustScore'], equals(100));
+        final json = user.toJson();
+        expect(json['kiwiGold'], equals(100));
+        expect(json['trustScore'], equals(100));
 
-      final parsed = UserModel.fromJson({
-        'id': 'u2',
-        'displayName': 'Alex',
-        'isVerified': true,
-      });
-      expect(parsed.kiwiGold, equals(100));
-      expect(parsed.trustScore, equals(100));
-    });
+        final parsed = UserModel.fromJson({
+          'id': 'u2',
+          'displayName': 'Alex',
+          'isVerified': true,
+        });
+        expect(parsed.kiwiGold, equals(100));
+        expect(parsed.trustScore, equals(100));
+      },
+    );
 
-    testWidgets('Google Sign-In button renders with proper label in login mode', (tester) async {
-      final fakeRepo = MockGoogleUserRepository();
-      final authProvider = AuthProvider(userRepository: fakeRepo);
+    testWidgets(
+      'Google Sign-In button renders with proper label in login mode',
+      (tester) async {
+        final fakeRepo = MockGoogleUserRepository();
+        final authProvider = AuthProvider(userRepository: fakeRepo);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ChangeNotifierProvider.value(
-              value: authProvider,
-              child: const LoginView(isSignUp: false),
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ChangeNotifierProvider.value(
+                value: authProvider,
+                child: const LoginView(isSignUp: false),
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      final googleButton = find.byKey(const Key('google_sign_in_button'));
-      expect(googleButton, findsOneWidget);
-      expect(find.text('Sign in with Google'), findsOneWidget);
-    });
+        final googleButton = find.byKey(const Key('google_sign_in_button'));
+        expect(googleButton, findsOneWidget);
+        expect(find.text('Sign in with Google'), findsOneWidget);
+      },
+    );
 
-    testWidgets('Google Sign-In button renders with proper label in signup mode', (tester) async {
-      final fakeRepo = MockGoogleUserRepository();
-      final authProvider = AuthProvider(userRepository: fakeRepo);
+    testWidgets(
+      'Google Sign-In button renders with proper label in signup mode',
+      (tester) async {
+        final fakeRepo = MockGoogleUserRepository();
+        final authProvider = AuthProvider(userRepository: fakeRepo);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ChangeNotifierProvider.value(
-              value: authProvider,
-              child: const LoginView(isSignUp: true),
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ChangeNotifierProvider.value(
+                value: authProvider,
+                child: const LoginView(isSignUp: true),
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      final googleButton = find.byKey(const Key('google_sign_in_button'));
-      expect(googleButton, findsOneWidget);
-      expect(find.text('Sign up with Google'), findsOneWidget);
-    });
+        final googleButton = find.byKey(const Key('google_sign_in_button'));
+        expect(googleButton, findsOneWidget);
+        expect(find.text('Sign up with Google'), findsOneWidget);
+      },
+    );
   });
 }

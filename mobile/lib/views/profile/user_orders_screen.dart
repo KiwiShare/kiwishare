@@ -122,7 +122,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
               ),
             ),
           ),
-          const Divider(height: 1, color: AppColors.divider),
+          const Divider(height: 1),
 
           // Order Lists
           Expanded(
@@ -157,6 +157,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
     required String value,
   }) {
     final isSelected = _selectedStatusFilter == value;
+    final colors = Theme.of(context).colorScheme;
     return ChoiceChip(
       key: key,
       label: Text(
@@ -164,7 +165,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: isSelected ? Colors.white : AppColors.textPrimary,
+          color: isSelected ? colors.onPrimaryContainer : colors.onSurface,
         ),
       ),
       selected: isSelected,
@@ -175,17 +176,15 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
           });
         }
       },
-      backgroundColor: AppColors.surfaceMuted,
-      selectedColor: AppColors.brandPrimary,
-      checkmarkColor: Colors.white,
+      backgroundColor: colors.surfaceContainerLow,
+      selectedColor: colors.primaryContainer,
+      checkmarkColor: colors.onPrimaryContainer,
       showCheckmark: false,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      side: BorderSide.none,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isSelected ? AppColors.brandPrimary : AppColors.border,
-        ),
+        borderRadius: BorderRadius.circular(AppRadius.full),
       ),
     );
   }
@@ -265,7 +264,6 @@ class _OrderItemCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     final isCompleted = order.isCompleted;
-    final isInProgress = order.isInProgress;
     final isPaid = order.isPaid;
 
     // Status Badge colors: green for completed, emerald for paid & awaiting pickup, amber for to-pay, red for cancelled
@@ -290,24 +288,17 @@ class _OrderItemCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.medium),
-        side: BorderSide(
-          color: isPaid
-              ? (isDark ? const Color(0xFF059669) : const Color(0xFF10B981))
-              : isInProgress
-              ? (isDark ? const Color(0xFF0284C7) : const Color(0xFF38BDF8))
-              : colors.outline.withValues(alpha: 0.2),
-          width: isPaid || isInProgress ? 1.2 : 1,
-        ),
-      ),
+      color: isDark ? colors.surfaceContainerLow : colors.surface,
+      surfaceTintColor: Colors.transparent,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.medium),
+        borderRadius: BorderRadius.circular(18),
         onTap: () {
           context.push('/items/${order.itemId}');
         },
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -396,10 +387,9 @@ class _OrderItemCard extends StatelessWidget {
                           '\$${order.item.priceNzd} NZD',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.brandPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colors.onSurface,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -428,15 +418,10 @@ class _OrderItemCard extends StatelessWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF192520)
-                        : const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isDark
-                          ? const Color(0xFF274337)
-                          : const Color(0xFFBBF7D0),
+                    color: colors.surfaceContainerHighest.withValues(
+                      alpha: isDark ? 0.55 : 0.72,
                     ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
@@ -529,12 +514,10 @@ class _OrderItemCard extends StatelessWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFFF59E0B),
-                      width: 1,
-                    ),
+                    color: const Color(
+                      0xFFFEF3C7,
+                    ).withValues(alpha: isDark ? 0.16 : 0.72),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
@@ -574,8 +557,9 @@ class _OrderItemCard extends StatelessWidget {
                   children: [
                     // Pay Now — only for buyers with pending payment that is not yet paid
                     if (order.isBuying &&
-                        order.status == 'pending_payment' &&
-                        !isPaid)
+                        !isPaid &&
+                        !isCompleted &&
+                        !order.isCancelled)
                       FilledButton.icon(
                         key: Key('pay_now_btn_${order.id}'),
                         style: FilledButton.styleFrom(
@@ -612,12 +596,12 @@ class _OrderItemCard extends StatelessWidget {
 
                     // Invoice button for paid or completed orders
                     if (isPaid || isCompleted)
-                      OutlinedButton.icon(
+                      TextButton.icon(
                         key: Key('invoice_btn_${order.id}'),
-                        style: OutlinedButton.styleFrom(
+                        style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
-                            vertical: 6,
+                            vertical: 8,
                           ),
                           visualDensity: VisualDensity.compact,
                         ),
@@ -644,14 +628,13 @@ class _OrderItemCard extends StatelessWidget {
                                         .difference(order.paidAt!)
                                         .inHours >=
                                     48)))
-                      OutlinedButton.icon(
+                      TextButton.icon(
                         key: Key('refund_btn_${order.id}'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFDC2626),
-                          side: const BorderSide(color: Color(0xFFFCA5A5)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: colors.error,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
-                            vertical: 6,
+                            vertical: 8,
                           ),
                           visualDensity: VisualDensity.compact,
                         ),
@@ -667,12 +650,12 @@ class _OrderItemCard extends StatelessWidget {
                         ),
                       ),
 
-                    if ((isInProgress || isPaid) && !order.isRefunded)
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
+                    if (order.isHandoverReady)
+                      FilledButton.tonalIcon(
+                        style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
+                            horizontal: 12,
+                            vertical: 8,
                           ),
                           visualDensity: VisualDensity.compact,
                         ),
@@ -685,11 +668,11 @@ class _OrderItemCard extends StatelessWidget {
                           style: TextStyle(fontSize: 12),
                         ),
                       ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
+                    FilledButton.tonalIcon(
+                      style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
+                          horizontal: 12,
+                          vertical: 8,
                         ),
                         visualDensity: VisualDensity.compact,
                       ),

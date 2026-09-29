@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kiwishare/main.dart';
@@ -12,6 +12,8 @@ import 'package:kiwishare/widgets/kiwishare_logo.dart';
 import 'package:kiwishare/views/home/home_screen.dart';
 import 'package:kiwishare/views/home/widgets/home_product_map.dart';
 import 'package:kiwishare/views/products/product_detail_screen.dart';
+import 'package:kiwishare/views/shared/widgets/watchlist_heart_button.dart';
+import 'package:kiwishare/views/shared/widgets/item_card.dart';
 import 'package:provider/provider.dart';
 
 import 'package:kiwishare/repositories/watchlist_repository.dart';
@@ -25,11 +27,13 @@ class _TestWatchlistRepository implements WatchlistRepository {
     _ids.add(itemId);
     return true;
   }
+
   @override
   Future<bool> removeFromWatchlist(String itemId, {String? token}) async {
     _ids.remove(itemId);
     return true;
   }
+
   @override
   Future<Set<String>> fetchWatchedItemIds({String? token}) async => _ids;
   @override
@@ -63,16 +67,21 @@ Widget _homeApp({
   ProductLocationService? locationService,
   HomeDiscoveryProvider? discovery,
   bool autoLocate = false,
+  ThemeMode themeMode = ThemeMode.light,
 }) => MultiProvider(
   providers: [
     ChangeNotifierProvider.value(value: discovery ?? HomeDiscoveryProvider()),
-    ChangeNotifierProvider(create: (_) => FavoritesProvider(repository: _TestWatchlistRepository())),
+    ChangeNotifierProvider(
+      create: (_) => FavoritesProvider(repository: _TestWatchlistRepository()),
+    ),
     ChangeNotifierProvider(
       create: (_) => ListingProvider(itemRepository: TestItemRepository()),
     ),
   ],
   child: MaterialApp(
     theme: buildKiwiShareTheme(),
+    darkTheme: buildKiwiShareDarkTheme(),
+    themeMode: themeMode,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: textScaler),
       child: child!,
@@ -172,16 +181,16 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('home-products-map')), findsOneWidget);
-    final map = tester.widget<FlutterMap>(
+    final map = tester.widget<GoogleMap>(
       find.byKey(const Key('home-products-map')),
     );
-    expect(map.options.minZoom, HomeProductMap.minimumZoom);
-    expect(map.options.maxZoom, HomeProductMap.maximumZoom);
-    expect(map.options.cameraConstraint, isA<ContainCameraCenter>());
-    final tiles = tester.widget<TileLayer>(find.byType(TileLayer));
-    expect(tiles.urlTemplate, HomeProductMap.tileUrl);
-    expect(tiles.urlTemplate, contains('openstreetmap'));
-    expect(find.byKey(const Key('home-product-marker-item_1')), findsOneWidget);
+    expect(map.minMaxZoomPreference.minZoom, HomeProductMap.minimumZoom);
+    expect(map.minMaxZoomPreference.maxZoom, HomeProductMap.maximumZoom);
+    expect(map.mapType, MapType.normal);
+    expect(
+      map.markers.any((marker) => marker.markerId.value == 'product-item_1'),
+      isTrue,
+    );
     expect(find.byKey(const Key('home-map-locate-me')), findsOneWidget);
   });
 
@@ -195,21 +204,21 @@ void main() {
     await tester.tap(find.byKey(const Key('home-near-you-option')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Near you'), findsOneWidget);
-    expect(find.text('(Auckland)'), findsOneWidget);
-    expect(find.byKey(const Key('home-products-map')), findsOneWidget);
+    expect(find.text('Auckland'), findsWidgets);
+    expect(find.text('Near you'), findsNothing);
+    expect(find.byKey(const Key('home-products-map')), findsNothing);
     expect(find.text('2 items'), findsOneWidget);
-    expect(find.byKey(const Key('home-product-marker-item_1')), findsOneWidget);
-    expect(find.byKey(const Key('home-product-marker-item_6')), findsOneWidget);
   });
 
-  testWidgets('autoLocate detects current GPS city on launch', (tester) async {
-    await _loadHome(tester, _homeApp(autoLocate: true));
+  testWidgets('Home launch defaults to Auckland without requesting GPS', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Near you'), findsOneWidget);
-    expect(find.text('(Auckland)'), findsOneWidget);
-    expect(find.text('2 items'), findsOneWidget);
+    expect(find.text('Auckland CBD'), findsWidgets);
+    expect(find.text('Near you'), findsNothing);
+    expect(find.byKey(const Key('home-products-map')), findsNothing);
   });
 
   testWidgets('denied location keeps conventional Home browsing available', (
@@ -414,6 +423,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Home product cards do not keep excess vertical whitespace', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
+
+    final compactCards = find.byWidgetPredicate(
+      (widget) => widget is ItemCard && widget.compact,
+    );
+    expect(compactCards, findsWidgets);
+    expect(tester.getSize(compactCards.first).height, 196);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Home cards and section headings keep their geometry in dark mode',
+    (tester) async {
+      await _loadHome(tester, _homeApp());
+      final compactCards = find.byWidgetPredicate(
+        (widget) => widget is ItemCard && widget.compact,
+      );
+      final lightCardHeight = tester.getSize(compactCards.first).height;
+      final lightHeadingHeight = tester
+          .getSize(find.text('Recommended for You'))
+          .height;
+
+      await _loadHome(tester, _homeApp(themeMode: ThemeMode.dark));
+      final darkCardHeight = tester.getSize(compactCards.first).height;
+      final darkHeadingHeight = tester
+          .getSize(find.text('Recommended for You'))
+          .height;
+
+      expect(darkCardHeight, lightCardHeight);
+      expect(darkHeadingHeight, lightHeadingHeight);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'Home displays bold KiwiShare header, category icons, jumbo carousel, and recommendations',
     (tester) async {
@@ -434,17 +480,112 @@ void main() {
 
       // 3. Featured Highlights Jumbo Carousel
       expect(find.text('Featured Highlights'), findsOneWidget);
-      expect(find.text('HOT PICK'), findsWidgets);
+      expect(find.text('Featured'), findsWidgets);
 
       // 4. Recommended for You Section
       expect(find.text('Recommended for You'), findsOneWidget);
       expect(find.text('Top 10'), findsOneWidget);
+      expect(
+        tester.getSize(find.text('Featured Highlights')).height,
+        tester.getSize(find.text('Recommended for You')).height,
+      );
 
       // 5. Open item by tapping recommended card
       await tester.tap(find.text('Monstera Plant').first);
       await tester.pump();
       expect(openedItem, isNotNull);
       expect(openedItem!.title, 'Monstera Plant');
+    },
+  );
+
+  testWidgets('Featured Highlights auto-advances and supports manual paging', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
+
+    expect(find.byKey(const Key('home-featured-carousel')), findsOneWidget);
+    expect(find.text('1/5'), findsOneWidget);
+    expect(find.byKey(const Key('home-featured-dot-0')), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('2/5'), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const Key('home-featured-carousel')),
+      const Offset(-500, 0),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('3/5'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('every Home product card family exposes a heart control', (
+    tester,
+  ) async {
+    await _loadHome(tester, _homeApp());
+
+    final featuredHeart = find.byKey(const Key('home-featured-heart-item_1'));
+    final recommendedHeart = find.byKey(
+      const Key('home-recommended-heart-item_1'),
+    );
+    final gridCard = find.byKey(const Key('home-grid-card-item_1'));
+
+    expect(featuredHeart, findsOneWidget);
+    expect(recommendedHeart, findsOneWidget);
+    expect(gridCard, findsOneWidget);
+    expect(
+      find.descendant(
+        of: gridCard,
+        matching: find.byType(WatchlistHeartButton),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: featuredHeart,
+        matching: find.byIcon(Icons.favorite_border),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(recommendedHeart);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .element(recommendedHeart)
+          .read<FavoritesProvider>()
+          .isFavorite('item_1'),
+      isTrue,
+    );
+    expect(
+      find.descendant(
+        of: recommendedHeart,
+        matching: find.byIcon(Icons.favorite),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'heart controls and Home headings keep identical theme geometry',
+    (tester) async {
+      await _loadHome(tester, _homeApp());
+      final lightHeartSize = tester.getSize(
+        find.byKey(const Key('home-recommended-heart-item_1')),
+      );
+      final lightHeadingSize = tester.getSize(find.text('Recommended for You'));
+
+      await _loadHome(tester, _homeApp(themeMode: ThemeMode.dark));
+      final darkHeartSize = tester.getSize(
+        find.byKey(const Key('home-recommended-heart-item_1')),
+      );
+      final darkHeadingSize = tester.getSize(find.text('Recommended for You'));
+
+      expect(darkHeartSize, lightHeartSize);
+      expect(darkHeadingSize, lightHeadingSize);
+      expect(tester.takeException(), isNull);
     },
   );
 }

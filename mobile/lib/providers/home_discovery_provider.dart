@@ -82,7 +82,10 @@ class HomeDiscoveryProvider extends ChangeNotifier {
     category: _selectedCategory == allCategoriesLabel
         ? null
         : _selectedCategory,
-    location: _selectedLocation == allLocationsLabel || _isNearYou || _isDefaultLocation
+    location:
+        _selectedLocation == allLocationsLabel ||
+            _isNearYou ||
+            _isDefaultLocation
         ? null
         : _selectedLocation,
     minimumPrice: _minimumPrice,
@@ -95,12 +98,9 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   );
 
   int get activeFilterCount => [
-    _query.isNotEmpty,
-    _selectedCategory != allCategoriesLabel,
-    _selectedLocation != allLocationsLabel && !_isDefaultLocation,
     _selectedPriceRange != HomePriceRange.any,
     _sustainableOnly,
-    _isNearYou,
+    _selectedSort != HomeProductSort.recommended,
   ].where((active) => active).length;
 
   void applyOptions(DiscoveryOptionsModel options) {

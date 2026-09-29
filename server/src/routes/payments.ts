@@ -5,11 +5,13 @@ import Item from '../models/Item';
 import User from '../models/User';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
+import Payment from '../models/Payment';
 import { authenticateToken } from '../middleware/auth';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import {
   createStripePaymentIntent,
   confirmStripePaymentIntent,
+  retrieveStripePaymentIntent,
   getOrCreateStripeCustomer,
   listCustomerCards,
   attachCustomerCard,
@@ -18,6 +20,7 @@ import {
 } from '../services/stripeService';
 import { ensureOrderMeetupQr } from './meetups';
 import { notifyPaymentPendingMeetup } from '../services/pushNotification';
+import { isMeetupConfirmed, statusAfterPayment } from '../services/orderFlowState';
 
 const router = new Router();
 
@@ -110,10 +113,12 @@ router.post('/payments/create-intent', authenticateToken, async (ctx) => {
   order.sellerReceiveAmount = effectivePriceCents;
   await order.save();
 
-  // If item is completely free, auto-mark paid
+  // If item is completely free, auto-mark paid and lock the listing from other buyers.
   if (totalCents === 0) {
     order.paidAt = new Date();
+    order.status = statusAfterPayment(order);
     await order.save();
+    await Item.findByIdAndUpdate(order.itemId, { status: 'sold' });
     const qrToken = await ensureOrderMeetupQr(order);
     ctx.body = {
       status: 'success',
@@ -145,6 +150,28 @@ router.post('/payments/create-intent', authenticateToken, async (ctx) => {
       customerId,
       description: `KiwiShare: ${order.itemSnapshot?.title || 'Campus Item'} (${order.orderNumber})`
     });
+
+    const environment = (process.env.STRIPE_PAYMENT_API_KEY || '').startsWith('sk_live_')
+      ? 'live'
+      : 'test';
+    await Payment.findOneAndUpdate(
+      { stripePaymentIntentId: intent.paymentIntentId },
+      {
+        $set: {
+          orderId: order._id,
+          buyerId: order.buyerId,
+          provider: 'stripe',
+          environment,
+          amount: totalCents,
+          currency: 'NZD',
+          status: 'pending'
+        },
+        $setOnInsert: {
+          idempotencyKey: `payment_${order._id.toString()}_${intent.paymentIntentId}`
+        }
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
 
     ctx.body = {
       status: 'success',
@@ -195,6 +222,8 @@ router.post('/payments/confirm', authenticateToken, async (ctx) => {
   }
 
   if (order.paidAt) {
+    order.status = statusAfterPayment(order);
+    await order.save();
     const qrToken = await ensureOrderMeetupQr(order);
     ctx.body = {
       status: 'success',
@@ -230,24 +259,123 @@ router.post('/payments/confirm', authenticateToken, async (ctx) => {
     }
   }
 
-  // If paymentIntentId is provided, confirm via Stripe service
-  if (paymentIntentId) {
-    try {
-      await confirmStripePaymentIntent(paymentIntentId, paymentMethodId);
-    } catch (err: any) {
-      // In sandbox/testing, allow gracefully if intent is already succeeded or requires capture
-      if (!err.message?.includes('status of succeeded') && !err.message?.includes('already been confirmed')) {
-        console.warn('[Payments] Stripe confirmation note:', err.message);
-      }
+  const effectivePriceCents = await resolveOrderEffectivePriceCents(order);
+  const feeSettings = await getPlatformFeeSettings();
+  const buyerFeeCents = effectivePriceCents > 0
+    ? Math.max(
+        feeSettings.minFeeCents,
+        Math.round(effectivePriceCents * (feeSettings.buyerFeePercent / 100))
+      )
+    : 0;
+  const expectedTotalCents = effectivePriceCents + buyerFeeCents;
+
+  if (expectedTotalCents > 0) {
+    if (!paymentIntentId || typeof paymentIntentId !== 'string') {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A Stripe PaymentIntent is required for paid orders.'
+      };
+      return;
     }
+
+    if (!paymentMethodId || typeof paymentMethodId !== 'string') {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: 'A payment method is required before the order can be marked paid.'
+      };
+      return;
+    }
+
+    let verifiedIntent;
+    try {
+      try {
+        await confirmStripePaymentIntent(paymentIntentId, paymentMethodId);
+      } catch (confirmError: any) {
+        // A network retry can reach us after Stripe already completed the charge.
+        // Retrieve the intent and verify it instead of trusting an error string.
+        const existingIntent = await retrieveStripePaymentIntent(paymentIntentId);
+        if (existingIntent.status !== 'succeeded') {
+          throw confirmError;
+        }
+      }
+      verifiedIntent = await retrieveStripePaymentIntent(paymentIntentId);
+    } catch (err: any) {
+      ctx.status = 402;
+      ctx.body = {
+        status: 'error',
+        message: err.message || 'Payment was not completed by Stripe.'
+      };
+      return;
+    }
+
+    if (verifiedIntent.status !== 'succeeded') {
+      ctx.status = 402;
+      ctx.body = {
+        status: 'error',
+        message: `Payment is not complete (Stripe status: ${verifiedIntent.status}).`
+      };
+      return;
+    }
+
+    if (verifiedIntent.amountCents !== expectedTotalCents) {
+      ctx.status = 409;
+      ctx.body = {
+        status: 'error',
+        message: 'The listing price changed. Please refresh checkout and pay the updated amount.'
+      };
+      return;
+    }
+
+    if (
+      verifiedIntent.metadata.orderId &&
+      verifiedIntent.metadata.orderId !== order._id.toString()
+    ) {
+      ctx.status = 409;
+      ctx.body = {
+        status: 'error',
+        message: 'Payment intent does not belong to this order.'
+      };
+      return;
+    }
+  }
+
+  // Persist the exact price that was verified at payment time.
+  order.itemAmount = effectivePriceCents;
+  order.buyerFeeAmount = buyerFeeCents;
+  order.buyerTotalAmount = expectedTotalCents;
+  order.sellerReceiveAmount = effectivePriceCents;
+
+  if (expectedTotalCents > 0 && paymentIntentId) {
+    const environment = (process.env.STRIPE_PAYMENT_API_KEY || '').startsWith('sk_live_')
+      ? 'live'
+      : 'test';
+    await Payment.findOneAndUpdate(
+      { stripePaymentIntentId: paymentIntentId },
+      {
+        $set: {
+          orderId: order._id,
+          buyerId: order.buyerId,
+          provider: 'stripe',
+          environment,
+          amount: expectedTotalCents,
+          currency: 'NZD',
+          status: 'succeeded',
+          paidAt: new Date()
+        },
+        $setOnInsert: {
+          idempotencyKey: `payment_${order._id.toString()}_${paymentIntentId}`
+        }
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
   }
 
   // Mark order as paid. Only transition to meeting_scheduled if meeting was already agreed.
   order.paidAt = new Date();
-  const isMeetupAgreed =
-    order.meeting?.proposalStatus === 'confirmed' ||
-    order.meeting?.proposalStatus === 'accepted';
-  order.status = isMeetupAgreed ? 'meeting_scheduled' : 'paid';
+  const isMeetupAgreed = isMeetupConfirmed(order);
+  order.status = statusAfterPayment(order);
   await order.save();
 
   // Immediately delist item and set to sold to prevent concurrent purchases

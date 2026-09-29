@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/item_model.dart';
@@ -8,6 +9,7 @@ import '../../models/public_profile_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../repositories/user_repository.dart';
+import '../../services/r2_upload_service.dart';
 import '../products/product_detail_screen.dart';
 import '../shared/widgets/item_card.dart';
 import '../../widgets/vip_crown_icon.dart';
@@ -16,10 +18,7 @@ import '../../utils/trust_score.dart';
 class PublicProfileScreen extends StatefulWidget {
   final String userId;
 
-  const PublicProfileScreen({
-    super.key,
-    required this.userId,
-  });
+  const PublicProfileScreen({super.key, required this.userId});
 
   @override
   State<PublicProfileScreen> createState() => _PublicProfileScreenState();
@@ -35,6 +34,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
   List<ItemModel> _soldItems = [];
   List<PublicReviewModel> _reviews = [];
   bool _isChatStarting = false;
+  bool _coverBusy = false;
 
   @override
   void initState() {
@@ -85,7 +85,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
     try {
       final results = await Future.wait([
         repo.fetchPublicProfile(widget.userId, token: token),
-        repo.fetchUserPublicItems(widget.userId, status: 'active', token: token),
+        repo.fetchUserPublicItems(
+          widget.userId,
+          status: 'active',
+          token: token,
+        ),
         repo.fetchUserPublicItems(widget.userId, status: 'sold', token: token),
         repo.fetchUserPublicReviews(widget.userId, token: token),
       ]);
@@ -104,6 +108,57 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
         _errorMessage = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _editCoverImage() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.jwtToken;
+    if (token == null || _coverBusy) return;
+
+    final photo = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (photo == null || !mounted || auth.jwtToken != token) return;
+
+    setState(() => _coverBusy = true);
+    try {
+      final bytes = await photo.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+        throw StateError('Choose an image smaller than 8 MB.');
+      }
+      final url = await R2UploadService().uploadImage(
+        bytes: bytes,
+        fileName: photo.name,
+        contentType:
+            photo.mimeType ??
+            (photo.name.toLowerCase().endsWith('.png')
+                ? 'image/png'
+                : 'image/jpeg'),
+        authToken: token,
+      );
+      if (auth.jwtToken != token) return;
+      await auth.updateCoverImage(url);
+      await _loadAll();
+    } catch (error) {
+      if (mounted) {
+        final isServerMismatch = error.toString().contains(
+          'Profile background was not saved',
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isServerMismatch
+                  ? 'Profile background is not supported by the current server version yet.'
+                  : 'Could not save profile background. Try another image.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _coverBusy = false);
     }
   }
 
@@ -138,7 +193,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                   children: [
                     const Text(
                       'Edit Bio / Signature',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close),
@@ -161,7 +219,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                   maxLines: 3,
                   autofocus: true,
                   decoration: InputDecoration(
-                    hintText: 'e.g. UoA 3rd year student. Moving sale near campus! Fast response.',
+                    hintText:
+                        'e.g. UoA 3rd year student. Moving sale near campus! Fast response.',
                     filled: true,
                     fillColor: isDark ? Colors.grey[900] : Colors.grey[100],
                     border: OutlineInputBorder(
@@ -182,7 +241,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                             setSheetState(() => isSaving = true);
                             try {
                               await auth.updateBio(text);
-                              if (sheetContext.mounted) Navigator.pop(sheetContext);
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
                               await _loadAll();
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -247,7 +308,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
     if (_activeItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('This user has no active listings available to start chat.'),
+          content: Text(
+            'This user has no active listings available to start chat.',
+          ),
         ),
       );
       return;
@@ -285,27 +348,21 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final currentUserId = context.watch<AuthProvider>().currentUser?.id;
-    final isOwnProfile = currentUserId != null && currentUserId == widget.userId;
+    final isOwnProfile =
+        currentUserId != null && currentUserId == widget.userId;
 
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Member Profile'),
-          elevation: 0,
-        ),
+        appBar: AppBar(title: const Text('Member Profile'), elevation: 0),
         body: const Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF059669),
-          ),
+          child: CircularProgressIndicator(color: Color(0xFF059669)),
         ),
       );
     }
 
     if (_errorMessage != null || _profile == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Member Profile'),
-        ),
+        appBar: AppBar(title: const Text('Member Profile')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -338,15 +395,36 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
     final p = _profile!;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F1713) : const Color(0xFFF7F8F7),
+      backgroundColor: isDark
+          ? const Color(0xFF0F1713)
+          : const Color(0xFFF7F8F7),
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           // ── App Bar & Hero Header ──
           SliverAppBar(
-            expandedHeight: 330,
+            expandedHeight: 240,
             pinned: true,
             elevation: 0,
-            backgroundColor: isDark ? const Color(0xFF13221C) : const Color(0xFF059669),
+            backgroundColor: isDark
+                ? const Color(0xFF13221C)
+                : const Color(0xFF059669),
+            actions: [
+              if (isOwnProfile)
+                IconButton(
+                  key: const Key('public-profile-cover-edit-button'),
+                  tooltip: 'Change cover',
+                  onPressed: _coverBusy ? null : _editCoverImage,
+                  icon: _coverBusy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.photo_camera_back_outlined),
+                ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: _HeroProfileHeader(
                 profile: p,
@@ -392,8 +470,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                 indicatorColor: const Color(0xFF059669),
                 indicatorWeight: 3,
                 labelColor: isDark ? Colors.white : const Color(0xFF059669),
-                unselectedLabelColor: isDark ? Colors.grey[400] : Colors.grey[600],
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                unselectedLabelColor: isDark
+                    ? Colors.grey[400]
+                    : Colors.grey[600],
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
                 tabs: [
                   Tab(text: 'Selling (${_activeItems.length})'),
                   Tab(text: 'Reviews (${_reviews.length})'),
@@ -408,13 +491,20 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
           controller: _tabController,
           children: [
             // Tab 1: Selling Items
-            _buildItemsGrid(_activeItems, emptyLabel: 'No items currently on sale'),
+            _buildItemsGrid(
+              _activeItems,
+              emptyLabel: 'No items currently on sale',
+            ),
 
             // Tab 2: Reviews
             _buildReviewsList(_reviews),
 
             // Tab 3: Sold Items
-            _buildItemsGrid(_soldItems, isSoldTab: true, emptyLabel: 'No sold items yet'),
+            _buildItemsGrid(
+              _soldItems,
+              isSoldTab: true,
+              emptyLabel: 'No sold items yet',
+            ),
           ],
         ),
       ),
@@ -455,7 +545,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                           : const Icon(Icons.chat_bubble_outline_rounded),
                       label: Text(
                         'Chat with ${p.displayName.split(' ').first}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                   ),
@@ -473,22 +566,26 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
   }) {
     if (items.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                isSoldTab ? Icons.shopping_bag_outlined : Icons.inventory_2_outlined,
-                size: 54,
-                color: Colors.grey[400],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                emptyLabel,
-                style: TextStyle(color: Colors.grey[500], fontSize: 15),
-              ),
-            ],
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isSoldTab
+                      ? Icons.shopping_bag_outlined
+                      : Icons.inventory_2_outlined,
+                  size: 54,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  emptyLabel,
+                  style: TextStyle(color: Colors.grey[500], fontSize: 15),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -512,7 +609,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute<void>(
-                  builder: (_) => ProductDetailScreen(itemId: item.id, item: item),
+                  builder: (_) =>
+                      ProductDetailScreen(itemId: item.id, item: item),
                 ),
               ),
             ),
@@ -521,7 +619,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
                 top: 8,
                 left: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.75),
                     borderRadius: BorderRadius.circular(6),
@@ -551,7 +652,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.rate_review_outlined, size: 54, color: Colors.grey[400]),
+              Icon(
+                Icons.rate_review_outlined,
+                size: 54,
+                color: Colors.grey[400],
+              ),
               const SizedBox(height: 12),
               Text(
                 'No transaction reviews yet',
@@ -595,17 +700,24 @@ class _HeroProfileHeader extends StatelessWidget {
         : profile.displayName.trim()[0].toUpperCase();
 
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF047857),
-            Color(0xFF065F46),
-          ],
+          colors: [Color(0xFF047857), Color(0xFF065F46)],
         ),
+        image: profile.coverImageUrl?.trim().isNotEmpty == true
+            ? DecorationImage(
+                image: NetworkImage(profile.coverImageUrl!),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  Colors.black.withOpacity(0.28),
+                  BlendMode.darken,
+                ),
+              )
+            : null,
       ),
-      padding: const EdgeInsets.fromLTRB(20, 80, 20, 16),
+      padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.end,
@@ -614,41 +726,35 @@ class _HeroProfileHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Avatar with VIP Golden Ring
-              Stack(
-                alignment: Alignment.center,
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 74,
-                    height: 74,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: isVip
-                          ? const LinearGradient(
-                              colors: [Color(0xFFFFDF00), Color(0xFFF59E0B), Color(0xFFFF9900)],
-                            )
-                          : null,
-                      border: isVip
-                          ? Border.all(color: const Color(0xFFFFDF00), width: 3)
-                          : Border.all(color: Colors.white, width: 2.5),
-                    ),
-                    child: ClipOval(
-                      child: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
-                          ? Image.network(
-                              profile.avatarUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => _fallbackAvatar(initial),
-                            )
-                          : _fallbackAvatar(initial),
-                    ),
-                  ),
-                  if (isVip)
-                    Positioned(
-                      top: -10,
-                      right: -6,
-                      child: VipCrownIcon(size: 24),
-                    ),
-                ],
+              Container(
+                width: 74,
+                height: 74,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: isVip
+                      ? const LinearGradient(
+                          colors: [
+                            Color(0xFFFFDF00),
+                            Color(0xFFF59E0B),
+                            Color(0xFFFF9900),
+                          ],
+                        )
+                      : null,
+                  border: isVip
+                      ? Border.all(color: const Color(0xFFFFDF00), width: 3)
+                      : Border.all(color: Colors.white, width: 2.5),
+                ),
+                child: ClipOval(
+                  child:
+                      profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
+                      ? Image.network(
+                          profile.avatarUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              _fallbackAvatar(initial),
+                        )
+                      : _fallbackAvatar(initial),
+                ),
               ),
               const SizedBox(width: 14),
 
@@ -674,7 +780,10 @@ class _HeroProfileHeader extends StatelessWidget {
                         if (isVip) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
                                 colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
@@ -707,7 +816,10 @@ class _HeroProfileHeader extends StatelessWidget {
                       children: [
                         if (profile.isStudentVerified)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(6),
@@ -715,10 +827,15 @@ class _HeroProfileHeader extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.school, size: 11, color: Colors.white),
+                                const Icon(
+                                  Icons.school,
+                                  size: 11,
+                                  color: Colors.white,
+                                ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  profile.studentInstitution ?? 'Verified Student',
+                                  profile.studentInstitution ??
+                                      'Verified Student',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 11,
@@ -729,7 +846,10 @@ class _HeroProfileHeader extends StatelessWidget {
                             ),
                           ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.18),
                             borderRadius: BorderRadius.circular(6),
@@ -737,11 +857,18 @@ class _HeroProfileHeader extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.location_on_rounded, size: 11, color: Colors.white),
+                              const Icon(
+                                Icons.location_on_rounded,
+                                size: 11,
+                                color: Colors.white,
+                              ),
                               const SizedBox(width: 2),
                               Text(
                                 profile.locationDescription,
-                                style: const TextStyle(color: Colors.white, fontSize: 11),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
                               ),
                             ],
                           ),
@@ -768,26 +895,38 @@ class _HeroProfileHeader extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white70, size: 14),
+                  const Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    color: Colors.white70,
+                    size: 14,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       profile.bio.isNotEmpty
                           ? profile.bio
                           : (isOwnProfile
-                              ? 'Tap to add your signature / bio...'
-                              : 'This user hasn\'t set a bio yet.'),
+                                ? 'Tap to add your signature / bio...'
+                                : 'This user hasn\'t set a bio yet.'),
                       style: TextStyle(
-                        color: profile.bio.isNotEmpty ? Colors.white : Colors.white60,
+                        color: profile.bio.isNotEmpty
+                            ? Colors.white
+                            : Colors.white60,
                         fontSize: 12,
-                        fontStyle: profile.bio.isNotEmpty ? FontStyle.normal : FontStyle.italic,
+                        fontStyle: profile.bio.isNotEmpty
+                            ? FontStyle.normal
+                            : FontStyle.italic,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (isOwnProfile)
-                    const Icon(Icons.edit_outlined, color: Colors.white70, size: 14),
+                    const Icon(
+                      Icons.edit_outlined,
+                      color: Colors.white70,
+                      size: 14,
+                    ),
                 ],
               ),
             ),
@@ -897,7 +1036,10 @@ class _ZhimaTrustScoreCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark ? info.darkBg : info.lightBg,
                     borderRadius: BorderRadius.circular(12),
@@ -918,27 +1060,30 @@ class _ZhimaTrustScoreCard extends StatelessWidget {
                 ),
               ],
             ),
-          const SizedBox(height: 10),
-          Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[200]),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _PerkItem(
-                icon: Icons.badge_outlined,
-                label: isVerified ? 'ID Verified' : 'Standard Member',
-                isHighlight: isVerified,
-              ),
-              _PerkItem(
-                icon: Icons.school_outlined,
-                label: isStudentVerified ? 'NZ Student' : 'Community',
-                isHighlight: isStudentVerified,
-              ),
-              _PerkItem(
-                icon: Icons.star_rounded,
-                label: '$rating Rating',
-                isHighlight: rating >= 4.5,
-              ),
+            const SizedBox(height: 10),
+            Divider(
+              height: 1,
+              color: isDark ? Colors.grey[800] : Colors.grey[200],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _PerkItem(
+                  icon: Icons.badge_outlined,
+                  label: isVerified ? 'ID Verified' : 'Standard Member',
+                  isHighlight: isVerified,
+                ),
+                _PerkItem(
+                  icon: Icons.school_outlined,
+                  label: isStudentVerified ? 'NZ Student' : 'Community',
+                  isHighlight: isStudentVerified,
+                ),
+                _PerkItem(
+                  icon: Icons.star_rounded,
+                  label: '$rating Rating',
+                  isHighlight: rating >= 4.5,
+                ),
                 const _PerkItem(
                   icon: Icons.handshake_outlined,
                   label: 'Safe Handover',
@@ -967,7 +1112,9 @@ class _PerkItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeColor = isHighlight ? const Color(0xFF059669) : Colors.grey[500];
+    final activeColor = isHighlight
+        ? const Color(0xFF059669)
+        : Colors.grey[500];
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1053,11 +1200,7 @@ class _StatCol extends StatelessWidget {
   final String label;
   final Color? numberColor;
 
-  const _StatCol({
-    required this.number,
-    required this.label,
-    this.numberColor,
-  });
+  const _StatCol({required this.number, required this.label, this.numberColor});
 
   @override
   Widget build(BuildContext context) {
@@ -1124,7 +1267,9 @@ class _XianyuReviewCard extends StatelessWidget {
                     : null,
                 child: review.reviewerAvatarUrl == null
                     ? Text(
-                        review.reviewerName.isNotEmpty ? review.reviewerName[0] : 'K',
+                        review.reviewerName.isNotEmpty
+                            ? review.reviewerName[0]
+                            : 'K',
                         style: const TextStyle(
                           color: Color(0xFF059669),
                           fontWeight: FontWeight.bold,
@@ -1150,7 +1295,10 @@ class _XianyuReviewCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: isBuyer
                                 ? Colors.blue.withOpacity(0.12)
@@ -1162,7 +1310,9 @@ class _XianyuReviewCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: isBuyer ? Colors.blue[700] : Colors.orange[800],
+                              color: isBuyer
+                                  ? Colors.blue[700]
+                                  : Colors.orange[800],
                             ),
                           ),
                         ),
@@ -1173,7 +1323,9 @@ class _XianyuReviewCard extends StatelessWidget {
                       children: List.generate(
                         5,
                         (i) => Icon(
-                          i < review.rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                          i < review.rating
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
                           size: 13,
                           color: const Color(0xFFF59E0B),
                         ),
@@ -1209,19 +1361,26 @@ class _XianyuReviewCard extends StatelessWidget {
               runSpacing: 4,
               children: review.tags.map((tag) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark ? Colors.grey[800] : const Color(0xFFF0FDF4),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: isDark ? Colors.transparent : const Color(0xFFDCFCE7),
+                      color: isDark
+                          ? Colors.transparent
+                          : const Color(0xFFDCFCE7),
                     ),
                   ),
                   child: Text(
                     tag,
                     style: TextStyle(
                       fontSize: 11,
-                      color: isDark ? Colors.green[300] : const Color(0xFF15803D),
+                      color: isDark
+                          ? Colors.green[300]
+                          : const Color(0xFF15803D),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -1241,7 +1400,11 @@ class _XianyuReviewCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.shopping_bag_outlined, size: 14, color: Colors.grey),
+                  const Icon(
+                    Icons.shopping_bag_outlined,
+                    size: 14,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -1277,7 +1440,11 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => tabBar.preferredSize.height;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       color: isDark ? const Color(0xFF0F1713) : const Color(0xFFF7F8F7),
       child: tabBar,
