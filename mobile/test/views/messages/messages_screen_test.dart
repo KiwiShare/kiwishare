@@ -196,6 +196,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('chat_signed_out_state')), findsOneWidget);
+    expect(
+      find.byKey(const Key('guest_sign_in_kiwi_illustration')),
+      findsOneWidget,
+    );
+    expect(find.text('Please sign in'), findsOneWidget);
+    expect(
+      find.text(
+        'Sign in to view your chats and Watchlist, and keep your KiwiShare activity together.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('guest_sign_in_button')), findsOneWidget);
     expect(signedOutRepository.conversationFetches, 0);
 
     final emptyRepository = FakeChatRepository();
