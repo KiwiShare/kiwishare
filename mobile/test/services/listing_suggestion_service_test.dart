@@ -13,6 +13,7 @@ void main() {
     'category': 'Furniture',
     'condition': 'Good',
     'priceNzd': '120',
+    'attributes': {'material': 'Oak'},
   };
 
   test('sends trimmed authenticated context and parses a suggestion', () async {
@@ -49,6 +50,84 @@ void main() {
     });
     expect(suggestion.title, validSuggestion['title']);
     expect(suggestion.priceNzd, '120');
+  });
+
+  test(
+    'retries against an older server when a new category is not allowed',
+    () async {
+      final requests = <Map<String, dynamic>>[];
+      final service = RestListingSuggestionService(
+        client: MockClient((request) async {
+          final body = Map<String, dynamic>.from(
+            jsonDecode(request.body) as Map,
+          );
+          requests.add(body);
+          if (requests.length == 1) {
+            return http.Response(
+              jsonEncode({
+                'status': 'error',
+                'message': 'Category is not allowed.',
+              }),
+              400,
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'status': 'success',
+              'suggestion': {
+                'title': '2018 Toyota Corolla Hybrid',
+                'description': 'Used hatchback with light signs of use.',
+                'category': 'Other',
+                'condition': 'Good',
+                'priceNzd': '16800',
+              },
+            }),
+            200,
+          );
+        }),
+      );
+
+      final suggestion = await service.suggest(
+        authToken: 'valid-token',
+        input: const ListingSuggestionInput(
+          title: 'Toyota Corolla',
+          category: 'Cars & Vehicles',
+          condition: 'Good',
+          attributes: {'make': 'Toyota', 'model': 'Corolla', 'year': '2018'},
+        ),
+      );
+
+      expect(requests, hasLength(2));
+      expect(requests.first['category'], 'Cars & Vehicles');
+      expect(requests.first['attributes'], isA<Map>());
+      expect(requests.last.containsKey('category'), isFalse);
+      expect(requests.last.containsKey('attributes'), isFalse);
+      expect(suggestion.category, 'Cars & Vehicles');
+      expect(suggestion.title, '2018 Toyota Corolla Hybrid');
+      expect(suggestion.attributes, isEmpty);
+    },
+  );
+
+  test('parses category-specific vehicle attributes from AI output', () {
+    final suggestion = ListingSuggestion.fromJson({
+      'title': '2018 Toyota Corolla Hybrid',
+      'description': 'Used Corolla. Review details before listing.',
+      'category': 'Cars & Vehicles',
+      'condition': 'Good',
+      'priceNzd': '15900',
+      'attributes': {
+        'make': 'Toyota',
+        'model': 'Corolla',
+        'year': '2018',
+        'fuelType': 'Hybrid',
+        'mileageKm': '85000',
+        'unknownField': 'ignored',
+      },
+    });
+
+    expect(suggestion.attributes['make'], 'Toyota');
+    expect(suggestion.attributes['mileageKm'], '85000');
+    expect(suggestion.attributes.containsKey('unknownField'), isFalse);
   });
 
   test('rejects malformed and adversarial suggestion responses', () async {

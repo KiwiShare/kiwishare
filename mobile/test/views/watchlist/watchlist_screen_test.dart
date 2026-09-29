@@ -70,7 +70,19 @@ void main() {
     await tester.pumpWidget(_watchlistApp(repository: repo, token: null));
     await tester.pumpAndSettle();
 
-    expect(find.text('Please sign in to view your Watchlist'), findsOneWidget);
+    expect(find.byKey(const Key('watchlist_signed_out_state')), findsOneWidget);
+    expect(
+      find.byKey(const Key('guest_sign_in_kiwi_illustration')),
+      findsOneWidget,
+    );
+    expect(find.text('Please sign in'), findsOneWidget);
+    expect(
+      find.text(
+        'Sign in to view your chats and Watchlist, and keep your KiwiShare activity together.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('guest_sign_in_button')), findsOneWidget);
     expect(find.text('Could not load your Watchlist.'), findsNothing);
     expect(repo.shouldFail, isTrue);
   });

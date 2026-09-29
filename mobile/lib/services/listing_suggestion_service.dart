@@ -4,17 +4,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import '../models/listing_category_config.dart';
 
-const listingSuggestionCategories = <String>[
-  'Furniture',
-  'Electronics',
-  'Books',
-  'Home',
-  'Sports',
-  'Kids',
-  'Fashion',
-  'Other',
-];
+final listingSuggestionCategories = listingCategoryNames;
 
 const listingSuggestionConditions = <String>['New', 'Like new', 'Good', 'Fair'];
 
@@ -27,6 +19,7 @@ class ListingSuggestionInput {
     this.location,
     this.imageBase64,
     this.imageMimeType,
+    this.attributes = const {},
   });
 
   final String? title;
@@ -36,8 +29,9 @@ class ListingSuggestionInput {
   final String? location;
   final String? imageBase64;
   final String? imageMimeType;
+  final Map<String, String> attributes;
 
-  Map<String, String> toJson() => {
+  Map<String, Object> toJson() => {
     'title': ?_nonEmpty(title),
     'description': ?_nonEmpty(description),
     'category': ?_nonEmpty(category),
@@ -45,6 +39,7 @@ class ListingSuggestionInput {
     'location': ?_nonEmpty(location),
     'imageBase64': ?_nonEmpty(imageBase64),
     'imageMimeType': ?_nonEmpty(imageMimeType),
+    if (attributes.isNotEmpty) 'attributes': attributes,
   };
 
   static String? _nonEmpty(String? value) {
@@ -60,6 +55,7 @@ class ListingSuggestion {
     required this.category,
     required this.condition,
     required this.priceNzd,
+    this.attributes = const {},
   });
 
   final String title;
@@ -67,6 +63,7 @@ class ListingSuggestion {
   final String category;
   final String condition;
   final String priceNzd;
+  final Map<String, String> attributes;
 
   factory ListingSuggestion.fromJson(Map<String, dynamic> json) {
     final title = _requiredText(json['title'], 'title', 120);
@@ -92,12 +89,34 @@ class ListingSuggestion {
         'The server returned an invalid AI suggestion.',
       );
     }
+
+    final attributes = <String, String>{};
+    final definition = listingCategoryDefinition(category);
+    final allowedKeys = {
+      for (final field
+          in definition?.attributes ?? const <ListingAttributeField>[])
+        field.key,
+    };
+    final rawAttributes = json['attributes'];
+    if (rawAttributes is Map) {
+      for (final entry in rawAttributes.entries) {
+        final key = entry.key.toString();
+        final value = entry.value?.toString().trim() ?? '';
+        if (allowedKeys.contains(key) &&
+            value.isNotEmpty &&
+            value.length <= 120) {
+          attributes[key] = value;
+        }
+      }
+    }
+
     return ListingSuggestion(
       title: title,
       description: description,
       category: category,
       condition: condition,
       priceNzd: priceNzd,
+      attributes: attributes,
     );
   }
 
@@ -179,24 +198,42 @@ class RestListingSuggestionService implements ListingSuggestionService {
     }
 
     late http.Response response;
+    var usedCategoryCompatibilityFallback = false;
     try {
-      response = await _client
-          .post(
-            Uri.parse('${ApiConfig.baseUrl}/api/listing-suggestions'),
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $authToken',
-              'x-client-platform': 'mobile',
-            },
-            body: jsonEncode(input.toJson()),
-          )
-          .timeout(timeout);
+      response = await _postSuggestion(
+        payload: input.toJson(),
+        authToken: authToken,
+      );
+
+      // Production can briefly lag behind a mobile rollout that introduces a
+      // new listing category. Older servers reject the new category before
+      // Gemini is called. Retry without the category so AI Help Me Write still
+      // produces title/description/condition/price, then preserve the category
+      // the seller explicitly selected on the client.
+      final firstData = _decodeObject(response.body);
+      final serverMessage = firstData?['message'];
+      final categoryRejected =
+          response.statusCode == 400 &&
+          serverMessage is String &&
+          serverMessage.trim().toLowerCase() == 'category is not allowed.';
+      if (categoryRejected &&
+          input.category != null &&
+          input.category!.trim().isNotEmpty) {
+        final fallbackPayload = Map<String, Object>.from(input.toJson())
+          ..remove('category')
+          ..remove('attributes');
+        response = await _postSuggestion(
+          payload: fallbackPayload,
+          authToken: authToken,
+        );
+        usedCategoryCompatibilityFallback = true;
+      }
     } on TimeoutException {
       throw const ListingSuggestionException(
         'AI suggestions took too long. Please try again.',
       );
-    } catch (_) {
+    } catch (error) {
+      if (error is ListingSuggestionException) rethrow;
       throw const ListingSuggestionException(
         'AI suggestions could not be reached. Please try again.',
       );
@@ -221,7 +258,40 @@ class RestListingSuggestionService implements ListingSuggestionService {
         'The server returned an invalid AI suggestion.',
       );
     }
-    return ListingSuggestion.fromJson(Map<String, dynamic>.from(suggestion));
+    final parsed = ListingSuggestion.fromJson(
+      Map<String, dynamic>.from(suggestion),
+    );
+    if (usedCategoryCompatibilityFallback &&
+        input.category != null &&
+        listingSuggestionCategories.contains(input.category)) {
+      return ListingSuggestion(
+        title: parsed.title,
+        description: parsed.description,
+        category: input.category!,
+        condition: parsed.condition,
+        priceNzd: parsed.priceNzd,
+        attributes: const {},
+      );
+    }
+    return parsed;
+  }
+
+  Future<http.Response> _postSuggestion({
+    required Map<String, Object> payload,
+    required String authToken,
+  }) {
+    return _client
+        .post(
+          Uri.parse('${ApiConfig.baseUrl}/api/listing-suggestions'),
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $authToken',
+            'x-client-platform': 'mobile',
+          },
+          body: jsonEncode(payload),
+        )
+        .timeout(timeout);
   }
 
   Map<String, dynamic>? _decodeObject(String body) {

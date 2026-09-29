@@ -585,6 +585,27 @@ describe('KiwiShare Backend REST Gateway Tests', () => {
     expect(res.body.item.description).toBe('Updated discount description');
   });
 
+  test('PATCH /api/usedItems/:id - updates ordered listing photos', async () => {
+    const first = 'https://images.unsplash.com/photo-1503376780353-7e6692767b70';
+    const second = 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7';
+
+    const res = await request(app.callback())
+      .patch(`/api/usedItems/${createdItemId}`)
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        images: [
+          { url: first, thumbnailUrl: first, sortOrder: 0 },
+          { url: second, thumbnailUrl: second, sortOrder: 1 }
+        ]
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.item.imageUrl).toBe(first);
+    expect(res.body.item.images).toHaveLength(2);
+    expect(res.body.item.images[0].url).toBe(first);
+    expect(res.body.item.images[1].url).toBe(second);
+  });
+
   test('GET /api/users/me/usedItems - returns user created items', async () => {
     const res = await request(app.callback())
       .get('/api/users/me/usedItems')

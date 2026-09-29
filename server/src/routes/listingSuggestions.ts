@@ -36,6 +36,24 @@ function optionalText(
   return text || undefined;
 }
 
+function optionalAttributes(value: unknown): Record<string, string> | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new SuggestionInputError('Attributes must be an object.');
+  }
+  const result: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw !== 'string' && typeof raw !== 'number') continue;
+    const text = String(raw).trim();
+    if (!text) continue;
+    if (key.length > 50 || text.length > 120) {
+      throw new SuggestionInputError('An attribute is too long.');
+    }
+    result[key] = text;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 function parseInput(body: unknown): ListingSuggestionInput {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new SuggestionInputError('Listing details are required.');
@@ -48,6 +66,7 @@ function parseInput(body: unknown): ListingSuggestionInput {
   const location = optionalText(record.location, 'Location', 120);
   const imageBase64 = optionalText(record.imageBase64, 'Image', 10_000_000);
   const imageMimeType = optionalText(record.imageMimeType, 'Image type', 80);
+  const attributes = optionalAttributes(record.attributes);
   if (
     imageMimeType &&
     !['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'].includes(
@@ -76,7 +95,8 @@ function parseInput(body: unknown): ListingSuggestionInput {
     ...(condition ? { condition: condition as ListingCondition } : {}),
     ...(location ? { location } : {}),
     ...(imageBase64 ? { imageBase64 } : {}),
-    ...(imageMimeType ? { imageMimeType: imageMimeType.toLowerCase() } : {})
+    ...(imageMimeType ? { imageMimeType: imageMimeType.toLowerCase() } : {}),
+    ...(attributes ? { attributes } : {})
   };
 }
 

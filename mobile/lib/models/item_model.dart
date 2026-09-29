@@ -62,6 +62,7 @@ class ItemModel {
   final ItemStatus status;
   final String description;
   final String? condition;
+  final Map<String, String> attributes;
   final String ownerId;
   final SellerInfo? seller;
   final double? latitude;
@@ -82,6 +83,7 @@ class ItemModel {
     required this.status,
     this.description = '',
     this.condition,
+    this.attributes = const {},
     this.ownerId = '',
     this.seller,
     this.latitude,
@@ -136,6 +138,7 @@ class ItemModel {
     ItemStatus? status,
     String? description,
     String? condition,
+    Map<String, String>? attributes,
     String? ownerId,
     double? latitude,
     double? longitude,
@@ -155,6 +158,7 @@ class ItemModel {
       status: status ?? this.status,
       description: description ?? this.description,
       condition: condition ?? this.condition,
+      attributes: attributes ?? this.attributes,
       ownerId: ownerId ?? this.ownerId,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
@@ -178,6 +182,7 @@ class ItemModel {
       'status': status.name,
       'description': description,
       'condition': condition,
+      'attributes': attributes,
       'ownerId': ownerId,
       'seller': seller?.toMap(),
       'latitude': latitude,
@@ -219,6 +224,18 @@ class ItemModel {
       parsedPromotedAt = DateTime.tryParse(map['promotedAt'].toString());
     }
 
+    final attributes = <String, String>{};
+    final rawAttributes = map['attributes'];
+    if (rawAttributes is Map) {
+      for (final entry in rawAttributes.entries) {
+        final key = entry.key.toString().trim();
+        final value = entry.value?.toString().trim() ?? '';
+        if (key.isNotEmpty && value.isNotEmpty) {
+          attributes[key] = value;
+        }
+      }
+    }
+
     return ItemModel(
       id: (map['id'] ?? map['_id'] ?? '').toString(),
       title: (map['title'] ?? '').toString(),
@@ -233,6 +250,7 @@ class ItemModel {
       status: _parseStatus(map['status']),
       description: (map['description'] ?? '').toString(),
       condition: map['condition']?.toString(),
+      attributes: attributes,
       ownerId: (map['ownerId'] ?? '').toString(),
       seller: sellerInfo,
       latitude: _asDouble(map['latitude']),
@@ -263,6 +281,7 @@ class ItemModel {
         other.status == status &&
         other.description == description &&
         other.condition == condition &&
+        _stringMapEquals(other.attributes, attributes) &&
         other.ownerId == ownerId &&
         other.latitude == latitude &&
         other.longitude == longitude &&
@@ -282,6 +301,7 @@ class ItemModel {
       status,
       description,
       condition,
+      _stringMapHash(attributes),
       ownerId,
       latitude,
       longitude,
@@ -293,6 +313,20 @@ class ItemModel {
   String toString() {
     return 'ItemModel(id: $id, title: $title, priceNzd: $priceNzd, location: $location, category: $category, status: $status, watchlistCount: $watchlistCount)';
   }
+}
+
+int _stringMapHash(Map<String, String> value) {
+  final keys = value.keys.toList()..sort();
+  return Object.hashAll(keys.map((key) => Object.hash(key, value[key])));
+}
+
+bool _stringMapEquals(Map<String, String> a, Map<String, String> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (final entry in a.entries) {
+    if (b[entry.key] != entry.value) return false;
+  }
+  return true;
 }
 
 int _asInt(dynamic value) {

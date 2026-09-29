@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../models/listing_category_config.dart';
 import '../../../providers/providers.dart';
 
 class CategoryPickerSheet extends StatelessWidget {
@@ -11,13 +12,7 @@ class CategoryPickerSheet extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final searchProvider = Provider.of<SearchProvider>(context);
     final activeCategory = searchProvider.selectedCategory;
-    final categories = [
-      'All NZ',
-      'Camping',
-      'Plants',
-      'Furniture',
-      'Transport',
-    ];
+    final categories = ['All NZ', ...listingCategoryNames];
 
     return SafeArea(
       child: Padding(

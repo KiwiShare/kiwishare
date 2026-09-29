@@ -9,6 +9,7 @@ import '../../utils/trust_score.dart';
 import '../../models/chat_conversation_model.dart';
 import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
+import '../../models/listing_category_config.dart';
 import '../../models/report_draft.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
@@ -971,6 +972,36 @@ Widget _buildEcoBadge(BuildContext context) {
   );
 }
 
+String _formatListingAttributeDisplay(
+  String category,
+  String key,
+  String value,
+  String? unit,
+) {
+  final field = listingAttributeField(category, key);
+  if (field?.type == ListingAttributeInputType.date) {
+    final parsed = DateTime.tryParse(value);
+    if (parsed != null) {
+      const months = <String>[
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${parsed.day} ${months[parsed.month - 1]} ${parsed.year}';
+    }
+  }
+  return unit == null ? value : '$value $unit';
+}
+
 class _ProductHighlightsGrid extends StatelessWidget {
   final ItemModel product;
 
@@ -981,6 +1012,35 @@ class _ProductHighlightsGrid extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+
+    final definition = listingCategoryDefinition(product.category);
+    final attributeEntries =
+        <({String key, String label, String value, String? unit})>[];
+    for (final field
+        in definition?.attributes ?? const <ListingAttributeField>[]) {
+      final value = product.attributes[field.key]?.trim();
+      if (value == null || value.isEmpty) continue;
+      attributeEntries.add((
+        key: field.key,
+        label: field.label,
+        value: value,
+        unit: field.unit,
+      ));
+    }
+    final knownKeys = {
+      for (final field
+          in definition?.attributes ?? const <ListingAttributeField>[])
+        field.key,
+    };
+    for (final entry in product.attributes.entries) {
+      if (knownKeys.contains(entry.key) || entry.value.trim().isEmpty) continue;
+      attributeEntries.add((
+        key: entry.key,
+        label: entry.key,
+        value: entry.value.trim(),
+        unit: null,
+      ));
+    }
 
     Widget buildTile({
       required IconData icon,
@@ -1135,6 +1195,49 @@ class _ProductHighlightsGrid extends StatelessWidget {
             ),
           ],
         ),
+        if (attributeEntries.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              product.category == 'Cars & Vehicles'
+                  ? 'Vehicle details'
+                  : '${product.category} details',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = (constraints.maxWidth - AppSpacing.sm) / 2;
+              return Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final entry in attributeEntries)
+                    SizedBox(
+                      width: width,
+                      child: buildTile(
+                        icon: product.category == 'Cars & Vehicles'
+                            ? Icons.directions_car_outlined
+                            : Icons.tune_rounded,
+                        label: entry.label,
+                        value: _formatListingAttributeDisplay(
+                          product.category,
+                          entry.key,
+                          entry.value,
+                          entry.unit,
+                        ),
+                        accentColor: const Color(0xFF0F766E),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
       ],
     );
   }
