@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwishare/models/item_model.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
 import 'package:kiwishare/providers/favorites_provider.dart';
+import 'package:kiwishare/providers/watchlist_provider.dart';
 import 'package:kiwishare/repositories/user_repository.dart';
 import 'package:kiwishare/repositories/watchlist_repository.dart';
 import 'package:kiwishare/views/shared/widgets/watchlist_heart_button.dart';
