@@ -921,12 +921,11 @@ void main() {
       // into the viewport. The detail page now includes dedicated specs and
       // location sections above recommendations.
       final similarItem = find.byKey(const Key('similar-item-item_4'));
-      await tester.scrollUntilVisible(
-        similarItem,
-        350,
-        scrollable: find.byType(Scrollable).first,
+      await tester.drag(
+        find.byKey(const Key('product-detail-scroll')),
+        const Offset(0, -700),
       );
-      await tester.ensureVisible(similarItem);
+      await tester.pumpAndSettle();
       await tester.tap(similarItem);
       await tester.pumpAndSettle();
 

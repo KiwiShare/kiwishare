@@ -580,6 +580,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   : null,
             )
           : ListView(
+              key: const Key('product-detail-scroll'),
               padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
               children: [
                 // Multi-Image Gallery
