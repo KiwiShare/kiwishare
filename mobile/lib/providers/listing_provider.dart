@@ -86,7 +86,11 @@ class ListingProvider extends ChangeNotifier {
   }) async {
     final repository = itemRepository;
     if (repository is RestItemRepository) {
-      return repository.fetchSearchSuggestions(query, limit: limit);
+      try {
+        return await repository.fetchSearchSuggestions(query, limit: limit);
+      } catch (_) {
+        // Keep search suggestions working during staggered mobile/backend rollouts.
+      }
     }
 
     final items = await repository.fetchDiscoveryItems(
