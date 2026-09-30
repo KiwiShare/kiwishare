@@ -37,6 +37,9 @@ graph TD
         FirebaseAuth[Firebase Auth & Google OAuth Verification]
         R2[(Cloudflare R2 - Object Storage)]
         FCM[Firebase Cloud Messaging - Push Notifications]
+        Stripe[Stripe - Payments and Refunds]
+        Gemini[Google Gemini - Listing Assistance]
+        Resend[Resend or SMTP - Transactional Email]
     end
 
     Browser -->|HTTPS| CFWorker
@@ -59,18 +62,25 @@ graph TD
     AuthRouter -.->|Token Verification| FirebaseAuth
     MobileApp -.->|Uploads through presigned S3-compatible URLs| R2
     KoaApp -.->|Trigger Push Messages| FCM
+    KoaApp -.->|Payment verification and refunds| Stripe
+    KoaApp -.->|AI listing assistance| Gemini
+    KoaApp -.->|Transactional email| Resend
 ```
 
 ### Component Roles & Responsibilities
 
-* **Flutter Mobile App (`mobile/`)**: Cross-platform consumer application providing native experiences for used item discovery, keyword/category filtering, user trust scoring, and QR-based handover transactions.
-* **React Web App (`web/`) + Cloudflare Worker**: The Vite production bundle is deployed as Worker static assets behind `kiwishare.online` and `www.kiwishare.online`. The Worker terminates the web request at Cloudflare's edge, serves frontend assets, and uses single-page-application fallback routing for React Router paths. Web API calls remain decoupled and target the Render-hosted Koa service.
+* **Flutter Mobile App (`mobile/`)**: Cross-platform consumer application covering full-screen search and suggestions, recommendation-driven discovery, item-linked rich chat, Google Maps/location flows, Safe Pay, meetup coordination, wallet/payment methods, native deep-link handling, Trust Score and QR-based handover.
+* **React Web App (`web/`) + Cloudflare Worker**: The Vite production bundle is deployed as Worker static assets behind `kiwishare.online` and `www.kiwishare.online`. The Worker serves SPA assets and history fallback routes, including public share handoff pages under `/s/:itemId`. Those pages attempt the native `kiwishare://` product deep link on mobile and otherwise offer store/install options plus a direct web-product fallback. Web API calls remain decoupled and target the Render-hosted Koa service.
 * **Koa.js Dedicated RESTful Backend (`server/`)**: Full-featured Node.js / Koa.js application server hosted on Render. Exposes structured RESTful API resources (`/api/usedItems`, `/api/auth`, `/api/users`, `/api/transactions`) with centralized middleware for JWT authentication, request logging, CORS, and unified error handling.
-* **MongoDB Database**: Core document database storing structured data models (Users, Used Items / Listings, Orders, OTP records, Transactions, Messages, and Audit Logs) with geospatial indexing (`2dsphere`) for location queries.
+* **MongoDB Database**: Core document database storing Users, Listings, Orders, Payments, OTP records, Messages, Reviews, Reports, Watchlists, Notification History, QR credentials and Audit Logs, with geospatial indexing for location queries.
 * **Supporting Services**:
   - **Cloudflare R2**: S3-compatible object storage for listing and chat media, using backend-generated presigned upload URLs and configured public asset URLs.
   - **Google OAuth / Firebase Auth**: Identity verification tokens.
-  - **Resend / SMTP**: Transactional email verification codes for passwordless login.
+  - **Firebase Cloud Messaging / APNs**: Push delivery for chat, meetup, order and watchlist events.
+  - **Firebase Remote Config**: Operational feature/configuration control for supported mobile behaviour.
+  - **Stripe**: PaymentIntents, saved customer payment methods and refund verification for Safe Pay.
+  - **Google Gemini**: Server-side AI assistance for seller-authored listing content.
+  - **Resend / SMTP**: Transactional verification and marketplace-event email delivery.
 
 ---
 
@@ -158,9 +168,10 @@ To deliver a premium mobile experience that stands apart from standard responsiv
 | **Voice Note Recording & Playback** | `record`, `just_audio` | Hardware microphone capture for voice messaging in chat threads, coupled with streaming playback and visual audio timeline. |
 | **QR Code Scanner & Generator** | `mobile_scanner`, `qr_flutter` | Real-time camera barcode scanner for buyer and high-contrast dynamic QR display for seller to complete in-person handovers. |
 | **GPS Location & Geocoding** | `geolocator`, `geocoding` | Precision GPS location querying and reverse-geocoding to New Zealand suburbs (e.g., Ponsonby, Newmarket, Te Aro) for distance-based sorting. |
-| **Interactive Vector Mapping** | `flutter_map`, `latlong2` | Embedded OpenStreetMap tiles displaying meetup locations and item pickup zones with interactive panning and markers. |
+| **Native Google Maps** | `google_maps_flutter` | Embedded Google Maps surfaces connect marketplace discovery, item location and meetup context, with markers and hand-off to directions where appropriate. |
 | **Push Notifications** | `firebase_messaging` | Native APNs/FCM background device notification channels alerting users to incoming buyer messages and meetup status updates. |
 | **Cloud Remote Config** | `firebase_remote_config` | Dynamic over-the-air feature flag toggling and operational configuration without requiring app store resubmissions. |
+| **Native Product Deep Links** | iOS URL schemes + Android browsable intent filters | `kiwishare:///items/:itemId` routes an installed app directly to the shared product while the public `/s/:itemId` page handles non-installed users. |
 
 ---
 
@@ -200,3 +211,33 @@ sequenceDiagram
 The QR claim endpoint is one supported order-completion path. It requires an active, unexpired QR code and the authenticated Order buyer, cross-checks the QR → Order → Item → participant relationships, and commits Order completion, QR consumption, Item transfer, completion metadata, and both +5 Trust Score increments in one required MongoDB transaction. An authorized retry of an already-completed order does not award credit again.
 
 The application also exposes `POST /api/meetups/:orderId/confirm-handover`. The buyer and seller can each confirm through the meetup UI; after both confirmations, that handler completes the Order, consumes active QR records, transfers the Item, and increments both Trust Scores. Unlike the QR claim endpoint, this route does not require the buyer to scan a QR code, and its writes are currently sequential rather than part of one MongoDB transaction. Order reads such as `GET /api/orders/my` do not award credit. This distinction is important: both completion paths currently award credit, but their transaction and concurrency guarantees are not equivalent.
+
+---
+
+## 5. Marketplace Feedback Loops & Event-Driven Services
+
+KiwiShare's product features share state rather than behaving as isolated modules:
+
+- **Recommendation loop:** watchlist categories and keywords, user proximity, favourites, views, freshness, sustainability and condition contribute to a transparent weighted recommendation score.
+- **Notification loop:** price-drop events use deduplicated notification history, daily caps, push and email delivery; price increases and nearby/category-relevant listings use preference-aware push alerts.
+- **Trust loop:** eligible completed exchanges update Trust Score and unlock transaction-bound review opportunities.
+- **Monetisation loop:** KiwiGold and VIP promotion state influence featured/discovery placement while promoted inventory remains explicitly identifiable.
+- **Transaction loop:** payment, meetup and handover state are owned by the backend; both Flutter and React render the same derived readiness flags and next actions.
+- **Sharing loop:** public `/s/:itemId` links preserve a path from external sharing back to the exact product, either through the native app deep link or the React product page.
+
+This coupling is deliberate: an action in one stage of the marketplace creates verified signals for the next stage instead of leaving discovery, chat, payment and reputation as separate silos.
+
+## 6. Payment, Membership & Marketplace Operations
+
+- **Safe Pay:** Stripe PaymentIntents are created and verified server-side; the client does not get to declare a paid order by itself. Payment records are idempotent and carry refund/dispute status.
+- **Wallet / saved cards:** Stripe customer/payment-method state is exposed through the profile wallet UI for checkout and saved-card management.
+- **Seller release:** completion state records when funds become eligible for seller release after handover conditions are satisfied. Product copy should describe this as an **escrow-style application workflow**, not claim that KiwiShare is a regulated escrow institution or that a real segregated escrow account is implemented.
+- **KiwiGold:** platform credits can be spent to promote an eligible listing.
+- **VIP membership:** monthly membership state includes expiry and auto-renew controls and can grant unlimited listing promotions.
+- **Admin operations:** the React administration surface provides marketplace analytics plus user, listing and category controls so the system has an operational/governance plane in addition to consumer clients.
+
+## 7. Search, Recommendations & Sharing
+
+- **Search-as-you-type:** the current production path is server-backed deterministic autocomplete over active marketplace data. It is fast and explainable; the repository also carries a Remote Config flag for a future AI/semantic-search experiment, but the current suggestion endpoint should not be presented as model-generated AI.
+- **Recommendations:** the recommendation endpoint is a weighted ranking engine, not a black-box ML model. It combines watchlist/category affinity, keyword affinity, geographic proximity, engagement, freshness, sustainability and condition.
+- **Share handoff:** the canonical external share surface is the short public `/s/:itemId` route. On supported mobile browsers it attempts `kiwishare:///items/:itemId`; if the app is unavailable, the page offers install destinations and **Continue on web**.
