@@ -12,9 +12,9 @@ The React/Vite application in `web/` is deployed to the Cloudflare Worker `kiwis
 - `https://kiwishare.online`
 - `https://www.kiwishare.online`
 
-The Worker serves the generated `web/dist` assets from Cloudflare's edge. `not_found_handling = "single-page-application"` ensures browser-history routes such as `/products/:id`, `/orders/:orderId`, and other React Router paths resolve to `index.html` instead of returning a hosting-layer 404.
+The Worker serves the generated `web/dist` assets from Cloudflare's edge. `not_found_handling = "single-page-application"` ensures browser-history routes such as `/products/:id`, `/orders/:orderId`, `/s/:itemId`, and other React Router paths resolve to `index.html` instead of returning a hosting-layer 404. The `/s/:itemId` route is the branded external-share handoff: it attempts the native `kiwishare:///items/:itemId` deep link on mobile and otherwise offers store/install destinations plus **Continue on web**.
 
-The web bundle is built with `VITE_API_URL=https://kiwishare.onrender.com/api`, so this migration changes only web hosting. The Koa API and Flutter remote-backend configuration remain on Render.
+The web bundle is built with `VITE_API_URL=https://kiwishare.onrender.com/api`, so this migration changes only web hosting. The Koa API and Flutter remote-backend configuration remain on Render. The share landing also reads optional `VITE_IOS_APP_URL` and `VITE_ANDROID_APP_URL` values; until final store listing URLs exist, the code falls back to KiwiShare search destinations in the corresponding stores.
 
 Deployment configuration lives in the repository root:
 
