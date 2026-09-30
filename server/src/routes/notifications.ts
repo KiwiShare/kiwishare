@@ -112,11 +112,15 @@ router.get('/preferences', authenticateToken, async (ctx: Context) => {
     status: 'success',
     preferences: {
       watchlistPriceDrop:
-        user?.notificationPreferences?.watchlistPriceDrop ?? true,
-      watchlistPriceChange:
-        user?.notificationPreferences?.watchlistPriceChange ??
         user?.notificationPreferences?.watchlistPriceDrop ??
+        user?.notificationPreferences?.watchlistPriceChange ??
         true,
+      watchlistPriceChange:
+        user?.notificationPreferences?.watchlistPriceDrop ??
+        user?.notificationPreferences?.watchlistPriceChange ??
+        true,
+      watchlistPriceIncrease:
+        user?.notificationPreferences?.watchlistPriceIncrease ?? false,
       watchlistNearbyCategory:
         user?.notificationPreferences?.watchlistNearbyCategory ?? false
     }
@@ -134,11 +138,13 @@ router.patch('/preferences', authenticateToken, async (ctx: Context) => {
   const body = ctx.request.body as {
     watchlistPriceDrop?: unknown;
     watchlistPriceChange?: unknown;
+    watchlistPriceIncrease?: unknown;
     watchlistNearbyCategory?: unknown;
   };
   const supplied = [
     ['watchlistPriceDrop', body.watchlistPriceDrop],
     ['watchlistPriceChange', body.watchlistPriceChange],
+    ['watchlistPriceIncrease', body.watchlistPriceIncrease],
     ['watchlistNearbyCategory', body.watchlistNearbyCategory]
   ] as const;
   const provided = supplied.filter(([, value]) => value !== undefined);
@@ -162,15 +168,19 @@ router.patch('/preferences', authenticateToken, async (ctx: Context) => {
   }
 
   const setFields: Record<string, boolean> = {};
-  const priceChange =
-    typeof body.watchlistPriceChange === 'boolean'
-      ? body.watchlistPriceChange
-      : typeof body.watchlistPriceDrop === 'boolean'
-        ? body.watchlistPriceDrop
+  const priceDrop =
+    typeof body.watchlistPriceDrop === 'boolean'
+      ? body.watchlistPriceDrop
+      : typeof body.watchlistPriceChange === 'boolean'
+        ? body.watchlistPriceChange
         : undefined;
-  if (priceChange !== undefined) {
-    setFields['notificationPreferences.watchlistPriceChange'] = priceChange;
-    setFields['notificationPreferences.watchlistPriceDrop'] = priceChange;
+  if (priceDrop !== undefined) {
+    setFields['notificationPreferences.watchlistPriceDrop'] = priceDrop;
+    setFields['notificationPreferences.watchlistPriceChange'] = priceDrop;
+  }
+  if (typeof body.watchlistPriceIncrease === 'boolean') {
+    setFields['notificationPreferences.watchlistPriceIncrease'] =
+      body.watchlistPriceIncrease;
   }
   if (typeof body.watchlistNearbyCategory === 'boolean') {
     setFields['notificationPreferences.watchlistNearbyCategory'] =
@@ -194,11 +204,15 @@ router.patch('/preferences', authenticateToken, async (ctx: Context) => {
     status: 'success',
     preferences: {
       watchlistPriceDrop:
-        updatedUser?.notificationPreferences?.watchlistPriceDrop ?? true,
-      watchlistPriceChange:
-        updatedUser?.notificationPreferences?.watchlistPriceChange ??
         updatedUser?.notificationPreferences?.watchlistPriceDrop ??
+        updatedUser?.notificationPreferences?.watchlistPriceChange ??
         true,
+      watchlistPriceChange:
+        updatedUser?.notificationPreferences?.watchlistPriceDrop ??
+        updatedUser?.notificationPreferences?.watchlistPriceChange ??
+        true,
+      watchlistPriceIncrease:
+        updatedUser?.notificationPreferences?.watchlistPriceIncrease ?? false,
       watchlistNearbyCategory:
         updatedUser?.notificationPreferences?.watchlistNearbyCategory ?? false
     }

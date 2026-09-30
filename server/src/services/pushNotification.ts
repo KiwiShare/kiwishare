@@ -686,14 +686,13 @@ export async function notifyWatchlistPriceDrop(
           continue;
         }
 
-        const priceChangePreference =
-          user.notificationPreferences?.watchlistPriceChange;
-        const legacyPriceDropPreference =
+        const priceDropPreference =
           user.notificationPreferences?.watchlistPriceDrop;
-        if (
-          priceChangePreference === false ||
-          legacyPriceDropPreference === false
-        ) {
+        const legacyPriceChangePreference =
+          user.notificationPreferences?.watchlistPriceChange;
+        const priceDropEnabled =
+          priceDropPreference ?? legacyPriceChangePreference ?? true;
+        if (!priceDropEnabled) {
           try {
             await NotificationHistory.create({
               userId,
