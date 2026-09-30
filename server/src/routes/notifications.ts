@@ -112,7 +112,13 @@ router.get('/preferences', authenticateToken, async (ctx: Context) => {
     status: 'success',
     preferences: {
       watchlistPriceDrop:
-        user?.notificationPreferences?.watchlistPriceDrop ?? true
+        user?.notificationPreferences?.watchlistPriceDrop ?? true,
+      watchlistPriceChange:
+        user?.notificationPreferences?.watchlistPriceChange ??
+        user?.notificationPreferences?.watchlistPriceDrop ??
+        true,
+      watchlistNearbyCategory:
+        user?.notificationPreferences?.watchlistNearbyCategory ?? false
     }
   };
 });
@@ -125,23 +131,55 @@ router.patch('/preferences', authenticateToken, async (ctx: Context) => {
     return;
   }
 
-  const body = ctx.request.body as { watchlistPriceDrop?: unknown };
-  if (typeof body.watchlistPriceDrop !== 'boolean') {
+  const body = ctx.request.body as {
+    watchlistPriceDrop?: unknown;
+    watchlistPriceChange?: unknown;
+    watchlistNearbyCategory?: unknown;
+  };
+  const supplied = [
+    ['watchlistPriceDrop', body.watchlistPriceDrop],
+    ['watchlistPriceChange', body.watchlistPriceChange],
+    ['watchlistNearbyCategory', body.watchlistNearbyCategory]
+  ] as const;
+  const provided = supplied.filter(([, value]) => value !== undefined);
+  if (provided.length === 0) {
     ctx.status = 400;
     ctx.body = {
       status: 'error',
-      message: 'watchlistPriceDrop must be a boolean value.'
+      message: 'At least one notification preference is required.'
     };
     return;
+  }
+  for (const [key, value] of provided) {
+    if (typeof value !== 'boolean') {
+      ctx.status = 400;
+      ctx.body = {
+        status: 'error',
+        message: key + ' must be a boolean value.'
+      };
+      return;
+    }
+  }
+
+  const setFields: Record<string, boolean> = {};
+  const priceChange =
+    typeof body.watchlistPriceChange === 'boolean'
+      ? body.watchlistPriceChange
+      : typeof body.watchlistPriceDrop === 'boolean'
+        ? body.watchlistPriceDrop
+        : undefined;
+  if (priceChange !== undefined) {
+    setFields['notificationPreferences.watchlistPriceChange'] = priceChange;
+    setFields['notificationPreferences.watchlistPriceDrop'] = priceChange;
+  }
+  if (typeof body.watchlistNearbyCategory === 'boolean') {
+    setFields['notificationPreferences.watchlistNearbyCategory'] =
+      body.watchlistNearbyCategory;
   }
 
   const updatedUser = await User.findByIdAndUpdate(
     userId,
-    {
-      $set: {
-        'notificationPreferences.watchlistPriceDrop': body.watchlistPriceDrop
-      }
-    },
+    { $set: setFields },
     { new: true }
   ).select('notificationPreferences');
 
@@ -156,7 +194,13 @@ router.patch('/preferences', authenticateToken, async (ctx: Context) => {
     status: 'success',
     preferences: {
       watchlistPriceDrop:
-        updatedUser?.notificationPreferences?.watchlistPriceDrop ?? true
+        updatedUser?.notificationPreferences?.watchlistPriceDrop ?? true,
+      watchlistPriceChange:
+        updatedUser?.notificationPreferences?.watchlistPriceChange ??
+        updatedUser?.notificationPreferences?.watchlistPriceDrop ??
+        true,
+      watchlistNearbyCategory:
+        updatedUser?.notificationPreferences?.watchlistNearbyCategory ?? false
     }
   };
 });

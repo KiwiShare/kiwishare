@@ -24,6 +24,14 @@ class KiwiShareNotificationPermissionDialog extends StatelessWidget {
       key: NotificationPermissionDialogKeys.enable,
       autofocus: true,
       style: FilledButton.styleFrom(
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        disabledBackgroundColor: theme.colorScheme.onSurface.withValues(
+          alpha: 0.12,
+        ),
+        disabledForegroundColor: theme.colorScheme.onSurface.withValues(
+          alpha: 0.38,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.medium),
         ),
@@ -33,7 +41,13 @@ class KiwiShareNotificationPermissionDialog extends StatelessWidget {
         ),
       ),
       onPressed: () => Navigator.of(context).pop(true),
-      child: Text('Enable notifications', style: theme.textTheme.labelLarge),
+      child: Text(
+        'Enable notifications',
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: theme.colorScheme.onPrimary,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
 
     final dismissButton = TextButton(
@@ -46,7 +60,13 @@ class KiwiShareNotificationPermissionDialog extends StatelessWidget {
         ),
       ),
       onPressed: () => Navigator.of(context).pop(false),
-      child: Text('Not now', style: theme.textTheme.labelLarge),
+      child: Text(
+        'Not now',
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
 
     return Dialog(
@@ -88,12 +108,15 @@ class KiwiShareNotificationPermissionDialog extends StatelessWidget {
                     'Stay updated',
                     key: NotificationPermissionDialogKeys.title,
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium,
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      color: theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Enable notifications to receive new messages and saved-item price-drop alerts.',
+                  'Enable notifications for new messages, saved-item price changes, and nearby watchlist matches.',
                   key: NotificationPermissionDialogKeys.message,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(

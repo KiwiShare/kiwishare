@@ -327,7 +327,7 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
       expect(await PushDevice.countDocuments({ token: deviceToken })).toBe(1);
     });
 
-    it('GET & PATCH /api/notifications/preferences manages watchlist opt-out', async () => {
+    it('GET & PATCH /api/notifications/preferences manages watchlist alerts', async () => {
       const user = await User.create({
         email: 'prefs@test.com',
         displayName: 'Prefs User',
@@ -340,17 +340,26 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
         .set('Authorization', `Bearer ${token}`);
       expect(getRes.status).toBe(200);
       expect(getRes.body.preferences.watchlistPriceDrop).toBe(true);
+      expect(getRes.body.preferences.watchlistPriceChange).toBe(true);
+      expect(getRes.body.preferences.watchlistNearbyCategory).toBe(false);
 
       const patchRes = await request(app.callback())
         .patch('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`)
-        .send({ watchlistPriceDrop: false });
+        .send({
+          watchlistPriceChange: false,
+          watchlistNearbyCategory: true
+        });
 
       expect(patchRes.status).toBe(200);
       expect(patchRes.body.preferences.watchlistPriceDrop).toBe(false);
+      expect(patchRes.body.preferences.watchlistPriceChange).toBe(false);
+      expect(patchRes.body.preferences.watchlistNearbyCategory).toBe(true);
 
       const updatedUser = await User.findById(user._id);
       expect(updatedUser?.notificationPreferences?.watchlistPriceDrop).toBe(false);
+      expect(updatedUser?.notificationPreferences?.watchlistPriceChange).toBe(false);
+      expect(updatedUser?.notificationPreferences?.watchlistNearbyCategory).toBe(true);
     });
   });
 

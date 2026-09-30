@@ -58,7 +58,7 @@ final _testItem2 = ItemModel(
   isSustainable: false,
   category: 'Furniture',
   description: 'Mid-century armchair',
-  status: ItemStatus.reserved,
+  status: ItemStatus.sold,
   ownerId: 'seller_2',
 );
 
@@ -78,7 +78,7 @@ void main() {
     expect(find.text('Please sign in'), findsOneWidget);
     expect(
       find.text(
-        'Sign in to view your chats and Watchlist, and keep your KiwiShare activity together.',
+        'Sign in to view your chats and watchlist, and keep your KiwiShare activity together.',
       ),
       findsOneWidget,
     );
@@ -127,7 +127,7 @@ void main() {
     expect(find.text('\$35 NZD'), findsOneWidget);
     expect(find.text('Vintage Oak Armchair'), findsOneWidget);
     expect(find.text('\$120 NZD'), findsOneWidget);
-    expect(find.text('Reserved'), findsOneWidget);
+    expect(find.text('Sold'), findsOneWidget);
     expect(find.byIcon(Icons.favorite), findsNWidgets(3));
     expect(find.byIcon(Icons.bookmark_remove_outlined), findsNothing);
 
@@ -203,7 +203,7 @@ void main() {
     await tester.pumpWidget(_watchlistApp(repository: repo));
     await tester.pumpAndSettle();
 
-    // Tap "Available" chip (_testItem1 is active, _testItem2 is reserved)
+    // Tap "Available" tab (_testItem1 is active, _testItem2 is sold)
     await tester.tap(find.byKey(const Key('watchlist-filter-available')));
     await tester.pumpAndSettle();
 
@@ -211,8 +211,10 @@ void main() {
     expect(find.text('Vintage Oak Armchair'), findsNothing);
     expect(find.text('1 of 2'), findsOneWidget);
 
-    // Tap "Reserved" chip
-    await tester.tap(find.byKey(const Key('watchlist-filter-reserved')));
+    expect(find.byKey(const Key('watchlist-filter-reserved')), findsNothing);
+
+    // Tap "Sold" tab
+    await tester.tap(find.byKey(const Key('watchlist-filter-sold')));
     await tester.pumpAndSettle();
 
     expect(find.text('Monstera Deliciosa'), findsNothing);
@@ -257,25 +259,41 @@ void main() {
     expect(chairTop, lessThan(plantTop));
   });
 
-  testWidgets(
-    'Price alerts setting is not rendered on WatchlistScreen (moved to Profile Settings)',
-    (tester) async {
-      final preferences = _PreferenceRepository(true);
-      await tester.pumpWidget(
-        _watchlistApp(
-          repository: TestWatchlistRepository(),
-          token: 'account-token',
-          preferencesRepository: preferences,
+  testWidgets('Watchlist exposes price and nearby alert settings', (
+    tester,
+  ) async {
+    final preferences = _PreferenceRepository(true, nearbySaved: false);
+    await tester.pumpWidget(
+      _watchlistApp(
+        repository: TestWatchlistRepository(
+          initialIds: {'item_plant_1'},
+          initialItems: [_testItem1],
         ),
-      );
-      await tester.pumpAndSettle();
+        token: 'account-token',
+        preferencesRepository: preferences,
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const Key('watchlist-price-alerts-switch')),
-        findsNothing,
-      );
-    },
-  );
+    await tester.tap(find.byKey(const Key('watchlist-alert-settings-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Watchlist alerts'), findsOneWidget);
+    expect(
+      find.byKey(const Key('watchlist-price-change-alert-switch')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('watchlist-nearby-category-alert-switch')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('watchlist-nearby-category-alert-switch')),
+    );
+    await tester.pumpAndSettle();
+    expect(preferences.nearbySaved, isTrue);
+  });
 }
 
 class _RecoveringWatchlistRepository extends TestWatchlistRepository {
@@ -294,10 +312,14 @@ class _RecoveringWatchlistRepository extends TestWatchlistRepository {
   }
 }
 
-class _PreferenceRepository implements NotificationPreferencesRepository {
-  _PreferenceRepository(this.saved);
+class _PreferenceRepository
+    implements
+        NotificationPreferencesRepository,
+        ExtendedNotificationPreferencesRepository {
+  _PreferenceRepository(this.saved, {this.nearbySaved = false});
 
   bool saved;
+  bool nearbySaved;
 
   @override
   Future<bool> fetchWatchlistPriceDrop({required String token}) async => saved;
@@ -309,5 +331,29 @@ class _PreferenceRepository implements NotificationPreferencesRepository {
   }) async {
     saved = enabled;
     return true;
+  }
+
+  @override
+  Future<WatchlistNotificationPreferences> fetchWatchlistPreferences({
+    required String token,
+  }) async {
+    return WatchlistNotificationPreferences(
+      priceChanges: saved,
+      nearbyCategory: nearbySaved,
+    );
+  }
+
+  @override
+  Future<WatchlistNotificationPreferences> updateWatchlistPreferences({
+    required String token,
+    bool? priceChanges,
+    bool? nearbyCategory,
+  }) async {
+    if (priceChanges != null) saved = priceChanges;
+    if (nearbyCategory != null) nearbySaved = nearbyCategory;
+    return WatchlistNotificationPreferences(
+      priceChanges: saved,
+      nearbyCategory: nearbySaved,
+    );
   }
 }

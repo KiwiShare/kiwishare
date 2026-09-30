@@ -9,6 +9,7 @@ import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/product_location_service.dart';
+import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/resilient_network_image.dart';
 import '../../widgets/kiwishare_logo.dart';
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _searchController;
   late final ProductLocationService _locationService;
   late HomeDiscoveryProvider _discovery;
+  late RecommendationService _recommendations;
   Future<List<ItemModel>>? _itemsFuture;
   Future<List<ItemModel>>? _featuredFuture;
   Future<List<ItemModel>>? _recommendedFuture;
@@ -60,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.didChangeDependencies();
     if (_initialized) return;
     final listingProvider = context.read<ListingProvider>();
+    _recommendations = RecommendationService(listingProvider.itemRepository);
     _discovery = context.read<HomeDiscoveryProvider>();
     _searchController.text = _discovery.query;
     _lastRequestedQuery = _discovery.discoveryQuery;
@@ -67,8 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _itemsFuture = listingProvider.getDiscoveryItems(
       query: _discovery.discoveryQuery,
     );
-    _featuredFuture = listingProvider.getFeaturedItems(limit: 10);
-    _recommendedFuture = listingProvider.getRecommendedItems(
+    _featuredFuture = _recommendations.featured(limit: 10);
+    _recommendedFuture = _recommendations.forYou(
       limit: 10,
       latitude: _discovery.userLatitude,
       longitude: _discovery.userLongitude,
@@ -155,11 +158,11 @@ class _HomeScreenState extends State<HomeScreen> {
         query: query,
         forceRefresh: true,
       );
-      _featuredFuture = listingProvider.getFeaturedItems(
+      _featuredFuture = _recommendations.featured(
         limit: 10,
         forceRefresh: true,
       );
-      _recommendedFuture = listingProvider.getRecommendedItems(
+      _recommendedFuture = _recommendations.forYou(
         limit: 10,
         latitude: _discovery.userLatitude,
         longitude: _discovery.userLongitude,
@@ -315,22 +318,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     onRetry: () => _loadDiscoveryOptions(forceRefresh: true),
                   )
                 else
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final category in filters.categories) ...[
-                          _HomeCategoryChip(
-                            key: Key('home-category-${category.value}'),
-                            label: category.value,
-                            selected:
-                                filters.selectedCategory == category.value,
-                            onTap: () => filters.toggleCategory(category.value),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                        ],
-                      ],
-                    ),
+                  _ResponsiveCategoryFilterBar(
+                    categories: filters.categories,
+                    selectedCategory: filters.selectedCategory,
+                    onSelected: filters.toggleCategory,
                   ),
                 const SizedBox(height: AppSpacing.lg),
                 FutureBuilder<List<ItemModel>>(
@@ -553,6 +544,103 @@ class _HomeHeader extends StatelessWidget {
   }
 }
 
+class _ResponsiveCategoryFilterBar extends StatefulWidget {
+  const _ResponsiveCategoryFilterBar({
+    required this.categories,
+    required this.selectedCategory,
+    required this.onSelected,
+  });
+
+  final List<DiscoveryCategoryOption> categories;
+  final String selectedCategory;
+  final ValueChanged<String> onSelected;
+
+  @override
+  State<_ResponsiveCategoryFilterBar> createState() =>
+      _ResponsiveCategoryFilterBarState();
+}
+
+class _ResponsiveCategoryFilterBarState
+    extends State<_ResponsiveCategoryFilterBar> {
+  bool _expanded = false;
+
+  List<DiscoveryCategoryOption> _visibleCategories(int limit) {
+    final categories = widget.categories;
+    if (_expanded || categories.length <= limit) return categories;
+
+    final visible = categories.take(limit).toList(growable: true);
+    final selectedIndex = categories.indexWhere(
+      (category) => category.value == widget.selectedCategory,
+    );
+    if (selectedIndex >= limit && visible.isNotEmpty) {
+      visible[visible.length - 1] = categories[selectedIndex];
+    }
+    return visible;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final limit = constraints.maxWidth < 390
+            ? 3
+            : constraints.maxWidth < 560
+            ? 4
+            : constraints.maxWidth < 760
+            ? 5
+            : 6;
+        final visible = _visibleCategories(limit);
+        final canExpand = widget.categories.length > limit;
+
+        return AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          child: Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              for (final category in visible)
+                _HomeCategoryChip(
+                  key: Key('home-category-${category.value}'),
+                  label: category.value,
+                  selected: widget.selectedCategory == category.value,
+                  onTap: () => widget.onSelected(category.value),
+                ),
+              if (canExpand)
+                ActionChip(
+                  key: const Key('home-category-expand-button'),
+                  avatar: Icon(
+                    _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 17,
+                    color: colors.primary,
+                  ),
+                  label: Text(_expanded ? 'Less' : 'More'),
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  backgroundColor: colors.primaryContainer.withValues(
+                    alpha: 0.45,
+                  ),
+                  side: BorderSide(
+                    color: colors.primary.withValues(alpha: 0.28),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.full),
+                  ),
+                  labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _HomeCategoryChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -738,6 +826,49 @@ class _HomeJumboCarouselState extends State<_HomeJumboCarousel> {
   }
 }
 
+class _HomeHeroBadge extends StatelessWidget {
+  const _HomeHeroBadge({
+    required this.icon,
+    required this.label,
+    required this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: iconColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HomeJumboCard extends StatelessWidget {
   final ItemModel item;
   final VoidCallback onTap;
@@ -806,104 +937,30 @@ class _HomeJumboCard extends StatelessWidget {
                 Positioned(
                   top: AppSpacing.sm,
                   left: AppSpacing.sm,
-                  right: 46,
-                  child: Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: 4,
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                          vertical: AppSpacing.xs,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.62),
-                          borderRadius: BorderRadius.circular(AppRadius.full),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.local_fire_department,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 2),
-                            Text(
-                              'Featured',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ],
-                        ),
+                      const _HomeHeroBadge(
+                        icon: Icons.local_fire_department,
+                        label: 'Featured',
+                        iconColor: Colors.white,
                       ),
-                      if (item.isSustainable)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: AppSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(AppRadius.full),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.eco,
-                                size: 14,
-                                color: Color(0xFF86EFAC),
-                              ),
-                              SizedBox(width: 2),
-                              Text(
-                                'ECO',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
-                          ),
+                      if (item.isSustainable) ...[
+                        const SizedBox(height: 5),
+                        const _HomeHeroBadge(
+                          icon: Icons.eco,
+                          label: 'Eco',
+                          iconColor: Color(0xFF86EFAC),
                         ),
-                      if (item.seller?.isStudentVerified == true)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: AppSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(AppRadius.full),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.verified,
-                                size: 14,
-                                color: Color(0xFF93C5FD),
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                'STUDENT VERIFIED',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
+                      ],
+                      if (item.seller?.isStudentVerified == true) ...[
+                        const SizedBox(height: 5),
+                        const _HomeHeroBadge(
+                          icon: Icons.verified,
+                          label: 'Student verified',
+                          iconColor: Color(0xFF93C5FD),
                         ),
+                      ],
                     ],
                   ),
                 ),

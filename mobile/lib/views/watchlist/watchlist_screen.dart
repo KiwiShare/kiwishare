@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/watchlist_provider.dart';
+import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../shared/widgets/guest_sign_in_state.dart';
 
@@ -55,6 +58,16 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       _searchController.clear();
       _selectedStatus = null;
     });
+  }
+
+  void _showAlertSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) => const _WatchlistAlertsSheet(),
+    );
   }
 
   Future<void> _removeItem(WatchlistProvider watchlist, String itemId) async {
@@ -127,6 +140,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   child: _WatchlistHeader(
                     itemCount: items.length,
                     filteredCount: isFiltered ? filteredItems.length : null,
+                    alertsEnabled:
+                        watchlist.watchlistPriceChangeEnabled == true ||
+                        watchlist.watchlistNearbyCategoryEnabled == true,
+                    onAlertsTap: _showAlertSettings,
                   ),
                 ),
               ),
@@ -204,68 +221,18 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                           },
                         ),
                         const SizedBox(height: AppSpacing.sm),
-                        // Status Filter Chips
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _StatusFilterChip(
-                                key: const Key('watchlist-filter-all'),
-                                label: 'All',
-                                isSelected: _selectedStatus == null,
-                                count: items.length,
-                                onSelected: () {
-                                  setState(() => _selectedStatus = null);
-                                },
-                              ),
-                              const SizedBox(width: AppSpacing.xs),
-                              _StatusFilterChip(
-                                key: const Key('watchlist-filter-available'),
-                                label: 'Available',
-                                isSelected:
-                                    _selectedStatus == ItemStatus.active,
-                                count: items
-                                    .where((i) => i.status == ItemStatus.active)
-                                    .length,
-                                onSelected: () {
-                                  setState(
-                                    () => _selectedStatus = ItemStatus.active,
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: AppSpacing.xs),
-                              _StatusFilterChip(
-                                key: const Key('watchlist-filter-reserved'),
-                                label: 'Reserved',
-                                isSelected:
-                                    _selectedStatus == ItemStatus.reserved,
-                                count: items
-                                    .where(
-                                      (i) => i.status == ItemStatus.reserved,
-                                    )
-                                    .length,
-                                onSelected: () {
-                                  setState(
-                                    () => _selectedStatus = ItemStatus.reserved,
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: AppSpacing.xs),
-                              _StatusFilterChip(
-                                key: const Key('watchlist-filter-sold'),
-                                label: 'Sold',
-                                isSelected: _selectedStatus == ItemStatus.sold,
-                                count: items
-                                    .where((i) => i.status == ItemStatus.sold)
-                                    .length,
-                                onSelected: () {
-                                  setState(
-                                    () => _selectedStatus = ItemStatus.sold,
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
+                        _WatchlistStatusTabs(
+                          selected: _selectedStatus,
+                          allCount: items.length,
+                          availableCount: items
+                              .where((item) => item.status == ItemStatus.active)
+                              .length,
+                          soldCount: items
+                              .where((item) => item.status == ItemStatus.sold)
+                              .length,
+                          onChanged: (status) {
+                            setState(() => _selectedStatus = status);
+                          },
                         ),
                         const SizedBox(height: AppSpacing.xs),
                       ],
@@ -379,8 +346,15 @@ class _WatchlistErrorView extends StatelessWidget {
 class _WatchlistHeader extends StatelessWidget {
   final int itemCount;
   final int? filteredCount;
+  final bool alertsEnabled;
+  final VoidCallback onAlertsTap;
 
-  const _WatchlistHeader({required this.itemCount, this.filteredCount});
+  const _WatchlistHeader({
+    required this.itemCount,
+    this.filteredCount,
+    required this.alertsEnabled,
+    required this.onAlertsTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -423,24 +397,40 @@ class _WatchlistHeader extends StatelessWidget {
                 ),
               ],
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.xs,
-              ),
-              decoration: BoxDecoration(
-                color: countBg,
-                borderRadius: BorderRadius.circular(AppRadius.full),
-              ),
-              child: Text(
-                filteredCount != null
-                    ? '$filteredCount of $itemCount'
-                    : '$itemCount items',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: countColor,
-                  fontWeight: FontWeight.w800,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton.filledTonal(
+                  key: const Key('watchlist-alert-settings-button'),
+                  tooltip: 'Watchlist alerts',
+                  onPressed: onAlertsTap,
+                  icon: Badge(
+                    isLabelVisible: alertsEnabled,
+                    smallSize: 7,
+                    child: const Icon(Icons.notifications_outlined, size: 20),
+                  ),
                 ),
-              ),
+                const SizedBox(width: AppSpacing.xs),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: countBg,
+                    borderRadius: BorderRadius.circular(AppRadius.full),
+                  ),
+                  child: Text(
+                    filteredCount != null
+                        ? '$filteredCount of $itemCount'
+                        : '$itemCount items',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: countColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -757,46 +747,283 @@ class _EmptyWatchlistView extends StatelessWidget {
   }
 }
 
-class _StatusFilterChip extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final int count;
-  final VoidCallback onSelected;
-
-  const _StatusFilterChip({
-    super.key,
-    required this.label,
-    required this.isSelected,
-    required this.count,
-    required this.onSelected,
+class _WatchlistStatusTabs extends StatelessWidget {
+  const _WatchlistStatusTabs({
+    required this.selected,
+    required this.allCount,
+    required this.availableCount,
+    required this.soldCount,
+    required this.onChanged,
   });
+
+  final ItemStatus? selected;
+  final int allCount;
+  final int availableCount;
+  final int soldCount;
+  final ValueChanged<ItemStatus?> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return FilterChip(
-      selected: isSelected,
-      label: Text(
-        '$label ($count)',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      labelStyle: TextStyle(
-        fontSize: 12,
-        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-        color: isSelected ? colors.onPrimaryContainer : colors.onSurface,
-      ),
-      selectedColor: colors.primaryContainer,
-      backgroundColor: colors.surface,
-      side: BorderSide(
-        color: isSelected ? colors.primary : colors.outline,
-        width: isSelected ? 1.5 : 1,
-      ),
-      shape: RoundedRectangleBorder(
+
+    Widget tab({
+      required Key key,
+      required String label,
+      required int count,
+      required ItemStatus? value,
+      required IconData icon,
+    }) {
+      final active = selected == value;
+      return Expanded(
+        child: Material(
+          key: key,
+          color: active ? colors.primaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          child: InkWell(
+            onTap: () => onChanged(value),
+            borderRadius: BorderRadius.circular(AppRadius.full),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xs,
+                vertical: 9,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 15,
+                    color: active
+                        ? colors.onPrimaryContainer
+                        : colors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      '$label $count',
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: active
+                            ? colors.onPrimaryContainer
+                            : colors.onSurfaceVariant,
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      key: const Key('watchlist-status-tabs'),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.4)),
       ),
-      showCheckmark: false,
-      onSelected: (_) => onSelected(),
+      child: Row(
+        children: [
+          tab(
+            key: const Key('watchlist-filter-all'),
+            label: 'All',
+            count: allCount,
+            value: null,
+            icon: Icons.grid_view_rounded,
+          ),
+          tab(
+            key: const Key('watchlist-filter-available'),
+            label: 'Available',
+            count: availableCount,
+            value: ItemStatus.active,
+            icon: Icons.check_circle_outline_rounded,
+          ),
+          tab(
+            key: const Key('watchlist-filter-sold'),
+            label: 'Sold',
+            count: soldCount,
+            value: ItemStatus.sold,
+            icon: Icons.sell_outlined,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WatchlistAlertsSheet extends StatelessWidget {
+  const _WatchlistAlertsSheet();
+
+  Future<void> _setPriceAlerts(
+    BuildContext context,
+    WatchlistProvider watchlist,
+    bool enabled,
+  ) async {
+    final saved = await watchlist.updatePriceChangePreference(enabled);
+    if (!context.mounted || !saved || !enabled) return;
+    await offerContextualNotificationPermission(context);
+  }
+
+  Future<void> _setNearbyAlerts(
+    BuildContext context,
+    WatchlistProvider watchlist,
+    bool enabled,
+  ) async {
+    final saved = await watchlist.updateNearbyCategoryPreference(enabled);
+    if (!context.mounted || !saved || !enabled) return;
+    await offerContextualNotificationPermission(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final watchlist = context.watch<WatchlistProvider>();
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final busy =
+        watchlist.isLoadingPreference || watchlist.isUpdatingPreference;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.sm,
+        AppSpacing.lg,
+        AppSpacing.xl,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(
+                  Icons.notifications_active_outlined,
+                  color: colors.primary,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Watchlist alerts',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      'Choose the marketplace changes worth interrupting you for.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          _WatchlistAlertOption(
+            key: const Key('watchlist-price-change-alert-switch'),
+            icon: Icons.trending_up_rounded,
+            title: 'Price changes',
+            description:
+                'Notify me when a saved item gets cheaper or more expensive.',
+            value: watchlist.watchlistPriceChangeEnabled ?? true,
+            enabled: !busy,
+            onChanged: (value) =>
+                unawaited(_setPriceAlerts(context, watchlist, value)),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _WatchlistAlertOption(
+            key: const Key('watchlist-nearby-category-alert-switch'),
+            icon: Icons.near_me_outlined,
+            title: 'Nearby matches',
+            description:
+                'Notify me when a nearby listing appears in a category I watch.',
+            value: watchlist.watchlistNearbyCategoryEnabled ?? false,
+            enabled: !busy,
+            onChanged: (value) =>
+                unawaited(_setNearbyAlerts(context, watchlist, value)),
+          ),
+          if (busy) ...[
+            const SizedBox(height: AppSpacing.md),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
+          if (watchlist.preferenceError != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              watchlist.preferenceError!,
+              style: theme.textTheme.bodySmall?.copyWith(color: colors.error),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'System notification permission must also be enabled on this device.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WatchlistAlertOption extends StatelessWidget {
+  const _WatchlistAlertOption({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final bool value;
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Material(
+      color: colors.surfaceContainerHighest.withValues(alpha: 0.38),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SwitchListTile.adaptive(
+        value: value,
+        onChanged: enabled ? onChanged : null,
+        secondary: Icon(icon, color: colors.primary),
+        title: Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(description),
+      ),
     );
   }
 }

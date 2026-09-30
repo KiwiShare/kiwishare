@@ -1094,27 +1094,39 @@ class _PostItemScreenState extends State<PostItemScreen> {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xl),
-                    _PublishStartCard(
-                      key: const Key('post_start_category_button'),
-                      icon: Icons.category_outlined,
-                      title: 'Choose a category',
-                      subtitle:
-                          'Pick what you are selling and fill in a form designed for that category.',
-                      buttonLabel: 'Choose category',
-                      onTap: _startCategoryFlow,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _PublishStartCard(
-                      key: const Key('post_start_ai_button'),
-                      icon: Icons.auto_awesome_rounded,
-                      title: 'AI list it for me',
-                      subtitle:
-                          'Take a photo or choose one from your library. AI will identify the category, prefill the draft, then open the tailored form for review.',
-                      buttonLabel: _isGeneratingSuggestion
-                          ? 'Identifying item…'
-                          : 'Start with a photo',
-                      loading: _isGeneratingSuggestion || _isPickingPhotos,
-                      onTap: _startAiFlow,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _PublishStartCard(
+                            key: const Key('post_start_category_button'),
+                            icon: Icons.dashboard_customize_rounded,
+                            accentColor: const Color(0xFF0F766E),
+                            title: 'Choose a category',
+                            subtitle:
+                                'Pick a category and use its tailored selling form.',
+                            buttonLabel: 'Choose',
+                            onTap: _startCategoryFlow,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: _PublishStartCard(
+                            key: const Key('post_start_ai_button'),
+                            icon: Icons.auto_awesome_rounded,
+                            accentColor: const Color(0xFF7C3AED),
+                            title: 'AI list it for me',
+                            subtitle:
+                                'Take or choose a photo. AI identifies it and prepares the right form.',
+                            buttonLabel: _isGeneratingSuggestion
+                                ? 'Identifying…'
+                                : 'Use AI',
+                            loading:
+                                _isGeneratingSuggestion || _isPickingPhotos,
+                            onTap: _startAiFlow,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1628,6 +1640,7 @@ class _PublishStartCard extends StatelessWidget {
   const _PublishStartCard({
     super.key,
     required this.icon,
+    required this.accentColor,
     required this.title,
     required this.subtitle,
     required this.buttonLabel,
@@ -1636,6 +1649,7 @@ class _PublishStartCard extends StatelessWidget {
   });
 
   final IconData icon;
+  final Color accentColor;
   final String title;
   final String subtitle;
   final String buttonLabel;
@@ -1646,7 +1660,10 @@ class _PublishStartCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Material(
-      color: colors.surface,
+      color: Color.alphaBlend(
+        accentColor.withValues(alpha: 0.045),
+        colors.surface,
+      ),
       borderRadius: BorderRadius.circular(AppRadius.large),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.large),
@@ -1655,9 +1672,7 @@ class _PublishStartCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadius.large),
-            border: Border.all(
-              color: colors.outlineVariant.withValues(alpha: 0.65),
-            ),
+            border: Border.all(color: accentColor.withValues(alpha: 0.24)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1666,10 +1681,10 @@ class _PublishStartCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: colors.primaryContainer,
+                  color: accentColor.withValues(alpha: 0.13),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: colors.primary),
+                child: Icon(icon, color: accentColor),
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
@@ -1690,15 +1705,26 @@ class _PublishStartCard extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: accentColor,
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: loading ? null : () => onTap(),
                   icon: loading
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : Icon(icon, size: 18),
-                  label: Text(buttonLabel),
+                  label: Text(
+                    buttonLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
