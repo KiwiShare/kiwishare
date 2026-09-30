@@ -9,6 +9,7 @@ import 'package:kiwishare/services/notification_permission_coordinator.dart';
 import 'package:kiwishare/views/profile/notification_settings_screen.dart';
 import 'package:kiwishare/views/profile/profile_screen.dart';
 import 'package:kiwishare/views/profile/public_profile_screen.dart';
+import 'package:kiwishare/views/profile/settings_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -51,7 +52,7 @@ void main() {
     expect(find.text('Watchlist destination'), findsOneWidget);
   });
 
-  testWidgets('signed-in Profile opens notification recovery from Preferences', (
+  testWidgets('signed-in Profile opens notification recovery from Settings', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({
@@ -78,11 +79,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Notifications'), 100);
-    expect(find.text('Notifications'), findsOneWidget);
-    await tester.ensureVisible(find.text('Notifications'));
+    await tester.tap(find.byKey(const Key('profile-settings-button')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('System Notification Permissions'),
+      200,
+    );
+    await tester.ensureVisible(find.text('System Notification Permissions'));
     await tester.pump();
-    await tester.tap(find.text('Notifications'));
+    await tester.tap(find.text('System Notification Permissions'));
     await tester.pumpAndSettle();
     expect(find.byType(NotificationSettingsScreen), findsOneWidget);
   });
@@ -129,9 +135,8 @@ void main() {
     expect(find.text('Sold'), findsOneWidget);
     expect(find.text('Wallet'), findsOneWidget);
 
-    // Verify preference & safety sections
-    await tester.scrollUntilVisible(find.text('Appearance'), 100);
-    expect(find.text('Appearance'), findsOneWidget);
+    // Profile keeps marketplace and safety content; account preferences live in Settings.
+    expect(find.text('Appearance'), findsNothing);
     await tester.scrollUntilVisible(find.text('Report a safety issue'), 100);
     expect(find.text('Safety & support'), findsOneWidget);
     expect(find.text('My reports'), findsOneWidget);
@@ -228,43 +233,46 @@ void main() {
     expect(find.text('NZ Student Verification'), findsNothing);
   });
 
-  testWidgets('Account & security exposes photo, nickname, and password', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({
-      'jwt_token': 'restored-token',
-      'current_user':
-          '{"id":"user-1","displayName":"Riley","username":"riley","trustScore":95,"isVerified":true,"authProvider":"email_password"}',
-    });
-    final auth = AuthProvider(userRepository: MockUserRepository());
+  testWidgets(
+    'Account & security lives in Settings without username decoration',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'jwt_token': 'restored-token',
+        'current_user':
+            '{"id":"user-1","displayName":"Riley","username":"riley","trustScore":95,"isVerified":true,"authProvider":"email_password"}',
+      });
+      final auth = AuthProvider(userRepository: MockUserRepository());
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: auth),
-          ChangeNotifierProvider(create: (_) => ThemeProvider()),
-          Provider<NotificationPermissionCoordinator>.value(
-            value: NotificationPermissionCoordinator(
-              permissionController: null,
-              storage: _Storage(),
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider(create: (_) => ThemeProvider()),
+            Provider<NotificationPermissionCoordinator>.value(
+              value: NotificationPermissionCoordinator(
+                permissionController: null,
+                storage: _Storage(),
+              ),
             ),
-          ),
-        ],
-        child: const MaterialApp(home: ProfileScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+          ],
+          child: const MaterialApp(home: ProfileScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Profile photo'), 100);
-    expect(find.text('Profile photo'), findsOneWidget);
-    expect(find.text('Username'), findsOneWidget);
-    expect(find.text('@riley'), findsOneWidget);
-    expect(find.text('Change password'), findsOneWidget);
-  });
+      expect(find.text('Profile photo'), findsNothing);
+      await tester.tap(find.byKey(const Key('profile-settings-button')));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(find.text('Profile Photo'), findsOneWidget);
+      expect(find.text('Username'), findsOneWidget);
+      expect(find.text('riley'), findsOneWidget);
+      expect(find.text('@riley'), findsNothing);
+      expect(find.text('Change Password'), findsOneWidget);
+    },
+  );
 
-  testWidgets('password dialog supports visibility toggles and success message', (
-    tester,
-  ) async {
+  testWidgets('password dialog works from Settings', (tester) async {
     SharedPreferences.setMockInitialValues({
       'jwt_token': 'restored-token',
       'current_user':
@@ -289,22 +297,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Change password'), 100);
-    await tester.ensureVisible(find.text('Change password'));
-    await tester.pump();
-    await tester.tap(find.text('Change password'));
+    await tester.tap(find.byKey(const Key('profile-settings-button')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Change Password'), 120);
+    await tester.tap(find.text('Change Password'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Change password'), findsWidgets);
-    expect(find.byTooltip('Show current password'), findsOneWidget);
-    await tester.tap(find.byTooltip('Show current password'));
-    await tester.pump();
-    expect(find.byTooltip('Hide current password'), findsOneWidget);
-
+    expect(find.text('Change Password'), findsWidgets);
     await tester.enterText(find.byType(TextFormField).at(0), 'old-password');
     await tester.enterText(find.byType(TextFormField).at(1), 'new-password');
     await tester.enterText(find.byType(TextFormField).at(2), 'new-password');
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Change'));
     await tester.pumpAndSettle();
 
     expect(find.text('Password changed successfully.'), findsOneWidget);

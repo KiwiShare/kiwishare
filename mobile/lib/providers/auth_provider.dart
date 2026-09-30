@@ -362,6 +362,7 @@ class AuthProvider extends ChangeNotifier {
     final updated = await userRepository.updateProfile(
       token: token,
       username: username,
+      displayName: username,
     );
     await _storeProfile(token, updated);
   }

@@ -58,16 +58,20 @@ void main() {
     expect(find.byKey(const Key('home-location-button')), findsOneWidget);
     expect(find.byIcon(Icons.notifications_outlined), findsNothing);
     expect(find.textContaining('Kia ora'), findsNothing);
-    expect(find.byKey(const Key('home-category-selector')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('home-category-selector')));
+    await tester.ensureVisible(find.byKey(const Key('home-filter-button')));
+    expect(find.byKey(const Key('home-filter-button')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('home-filter-button')));
     await tester.pumpAndSettle();
-    for (final category
-        in testCatalogItems.map((item) => item.category).toSet()) {
-      expect(find.byKey(Key('home-category-$category')), findsOneWidget);
-    }
+    expect(find.byKey(const Key('home-filter-category')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('home-category-Plants')));
+    await tester.tap(find.byKey(const Key('home-filter-category')));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Plants').last);
+    tester
+        .widget<FilledButton>(find.byKey(const Key('home-apply-filters')))
+        .onPressed!();
+    await tester.pumpAndSettle();
+
     final productCard = find.descendant(
       of: find.byType(GridView),
       matching: find.widgetWithText(ItemCard, 'Monstera Plant'),

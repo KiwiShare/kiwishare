@@ -30,51 +30,11 @@ import '../profile/payment_methods_screen.dart';
 import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/review_bottom_sheet.dart';
+import '../orders/widgets/order_lifecycle_panel.dart';
 import 'widgets/location_bubble.dart';
 import 'widgets/location_picker_sheet.dart';
 import 'widgets/meetup_card_bubble.dart';
 import 'widgets/schedule_meetup_sheet.dart';
-
-class _ChatStatusFact extends StatelessWidget {
-  const _ChatStatusFact({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 220),
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-      decoration: BoxDecoration(
-        color: colors.surface.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: colors.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: colors.onSurfaceVariant),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colors.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 enum _ChatConversationAction { reportUser }
 
@@ -1326,8 +1286,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     required bool isCompleted,
     OrderModel? order,
     ChatMeetupPayload? meetup,
+    String? primaryLabel,
+    IconData? primaryIcon,
+    Key? primaryKey,
+    VoidCallback? primaryAction,
+    String? secondaryLabel,
+    VoidCallback? secondaryAction,
   }) {
     final colors = Theme.of(context).colorScheme;
+    final orderId = order?.id ?? meetup?.orderId ?? '';
     final orderNumber = (order?.orderNumber ?? meetup?.orderId ?? '').trim();
     final amount =
         (order?.itemAmountNzd ??
@@ -1335,198 +1302,89 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 _activeItem?.priceNzd ??
                 '')
             .trim();
-    final location = meetup?.locationName.trim() ?? '';
-    final scheduledAt = meetup?.scheduledAt;
+    final location =
+        (order?.meeting?.locationName ?? meetup?.locationName ?? '').trim();
+    final scheduledAt = order?.meeting?.scheduledAt ?? meetup?.scheduledAt;
+    final latitude = order?.meeting?.latitude ?? meetup?.latitude;
+    final longitude = order?.meeting?.longitude ?? meetup?.longitude;
 
-    Widget milestone({
-      required IconData icon,
-      required String label,
-      required bool complete,
-    }) {
-      return Expanded(
-        child: Column(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: complete
-                    ? colors.primaryContainer
-                    : colors.surfaceContainerHighest,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                complete ? Icons.check_rounded : icon,
-                size: 20,
-                color: complete ? colors.primary : colors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: complete ? colors.primary : colors.onSurfaceVariant,
-              ),
-            ),
-          ],
+    final actions = <Widget>[
+      if (primaryAction != null)
+        FilledButton.icon(
+          key: primaryKey,
+          onPressed: primaryAction,
+          icon: Icon(primaryIcon ?? Icons.arrow_forward_rounded, size: 18),
+          label: Text(primaryLabel ?? 'Continue'),
         ),
-      );
-    }
-
-    Widget detailRow(IconData icon, String label, String value) {
-      if (value.trim().isEmpty) return const SizedBox.shrink();
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 19, color: colors.onSurfaceVariant),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 76,
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                value,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
+      if (secondaryAction != null)
+        FilledButton.tonal(
+          onPressed: secondaryAction,
+          child: Text(secondaryLabel ?? 'Open'),
         ),
-      );
-    }
+      if (orderId.isNotEmpty)
+        OutlinedButton.icon(
+          key: const Key('chat_transaction_view_order'),
+          onPressed: () {
+            Navigator.of(context).pop();
+            context.push('/orders/$orderId', extra: order);
+          },
+          icon: const Icon(Icons.receipt_long_outlined, size: 18),
+          label: const Text('Open order'),
+        ),
+    ];
 
     return showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
+      useRootNavigator: true,
       isScrollControlled: true,
+      showDragHandle: true,
       backgroundColor: colors.surface,
-      builder: (sheetContext) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: Theme.of(
-                  sheetContext,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                subtitle,
-                style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
-                  color: colors.onSurfaceVariant,
-                  height: 1.4,
+      barrierColor: colors.scrim.withValues(alpha: 0.14),
+      clipBehavior: Clip.antiAlias,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 0.86,
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(
+                    sheetContext,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
                 ),
-              ),
-              const SizedBox(height: 22),
-              Row(
-                children: [
-                  milestone(
-                    icon: Icons.payments_outlined,
-                    label: 'Payment',
-                    complete: isPaid,
+                const SizedBox(height: 5),
+                Text(
+                  subtitle,
+                  style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    height: 1.4,
                   ),
-                  Container(
-                    width: 34,
-                    height: 2,
-                    color: (isPaid && hasMeetup)
-                        ? colors.primary
-                        : colors.outlineVariant,
-                  ),
-                  milestone(
-                    icon: Icons.handshake_outlined,
-                    label: 'Meetup',
-                    complete: hasMeetup,
-                  ),
-                  Container(
-                    width: 34,
-                    height: 2,
-                    color: isCompleted ? colors.primary : colors.outlineVariant,
-                  ),
-                  milestone(
-                    icon: Icons.inventory_2_outlined,
-                    label: 'Handover',
-                    complete: isCompleted,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: Column(
-                  children: [
-                    detailRow(
-                      Icons.receipt_long_outlined,
-                      'Order',
-                      orderNumber.isEmpty ? '' : '#$orderNumber',
-                    ),
-                    detailRow(
-                      Icons.sell_outlined,
-                      'Item',
-                      widget.conversation.itemTitle,
-                    ),
-                    detailRow(
-                      Icons.payments_outlined,
-                      'Price',
-                      amount.isEmpty ? '' : '\$$amount NZD',
-                    ),
-                    detailRow(
-                      Icons.verified_outlined,
-                      'Payment',
-                      isPaid ? 'Paid' : 'Payment required',
-                    ),
-                    if (scheduledAt != null)
-                      detailRow(
-                        Icons.event_outlined,
-                        'When',
-                        _formatMeetupDateTime(sheetContext, scheduledAt),
-                      ),
-                    detailRow(Icons.place_outlined, 'Where', location),
-                    detailRow(
-                      Icons.local_shipping_outlined,
-                      'Handover',
-                      isCompleted
-                          ? 'Completed'
-                          : hasMeetup && isPaid
-                          ? 'Ready for meetup'
-                          : 'Pending',
-                    ),
-                  ],
+                const SizedBox(height: 22),
+                OrderLifecyclePanel(
+                  orderId: orderNumber.isEmpty ? orderId : orderNumber,
+                  itemTitle: widget.conversation.itemTitle,
+                  amountNzd: amount,
+                  isPaid: isPaid,
+                  isMeetupConfirmed: hasMeetup,
+                  isCompleted: isCompleted,
+                  scheduledAt: scheduledAt,
+                  locationName: location,
+                  latitude: latitude,
+                  longitude: longitude,
+                  counterpartyName: widget.conversation.participantName,
+                  statusLabel: title,
+                  itemImageUrl: widget.conversation.itemImageUrl,
+                  actions: actions.isEmpty
+                      ? null
+                      : Wrap(spacing: 8, runSpacing: 8, children: actions),
                 ),
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.tonalIcon(
-                  key: const Key('chat_transaction_view_orders'),
-                  onPressed: () {
-                    Navigator.of(sheetContext).pop();
-                    context.push('/orders');
-                  },
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  label: const Text('View orders'),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1552,39 +1410,27 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   }) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final location = meetup?.locationName.trim() ?? '';
-    final scheduledAt = meetup?.scheduledAt;
-    final orderNumber = (order?.orderNumber ?? meetup?.orderId ?? '').trim();
-
-    final quickFacts = <Widget>[
-      if (scheduledAt != null)
-        _ChatStatusFact(
-          icon: Icons.event_outlined,
-          text: _formatMeetupDateTime(context, scheduledAt),
-        ),
-      if (location.isNotEmpty)
-        _ChatStatusFact(icon: Icons.place_outlined, text: location),
-      if (orderNumber.isNotEmpty)
-        _ChatStatusFact(
-          icon: Icons.receipt_long_outlined,
-          text: '#$orderNumber',
-        ),
-    ];
+    final scheduledAt = order?.meeting?.scheduledAt ?? meetup?.scheduledAt;
+    final location =
+        (order?.meeting?.locationName ?? meetup?.locationName ?? '').trim();
+    final summary = [
+      if (scheduledAt != null) _formatMeetupDateTime(context, scheduledAt),
+      if (location.isNotEmpty) location,
+    ].join(' · ');
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
       child: Material(
-        color: isDark
-            ? Color.alphaBlend(
-                accent.withValues(alpha: 0.14),
-                colors.surfaceContainer,
-              )
-            : Color.alphaBlend(accent.withValues(alpha: 0.08), colors.surface),
-        borderRadius: BorderRadius.circular(18),
+        color: Color.alphaBlend(
+          accent.withValues(
+            alpha: theme.brightness == Brightness.dark ? 0.12 : 0.06,
+          ),
+          colors.surface,
+        ),
+        borderRadius: BorderRadius.circular(16),
         child: InkWell(
           key: const Key('chat_transaction_status_card'),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           onTap: () => _showTransactionStatusSheet(
             title: title,
             subtitle: subtitle,
@@ -1593,89 +1439,57 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             isCompleted: isCompleted,
             order: order,
             meetup: meetup,
+            primaryLabel: primaryLabel,
+            primaryIcon: primaryIcon,
+            primaryKey: primaryKey,
+            primaryAction: primaryAction,
+            secondaryLabel: secondaryLabel,
+            secondaryAction: secondaryAction,
           ),
           child: Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: accent.withValues(alpha: 0.28)),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: accent.withValues(alpha: 0.24)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(icon, size: 21, color: accent),
-                    ),
-                    const SizedBox(width: 11),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: colors.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            subtitle,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colors.onSurfaceVariant,
-                              height: 1.35,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.chevron_right_rounded, size: 21, color: accent),
-                  ],
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(icon, size: 19, color: accent),
                 ),
-                if (quickFacts.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Wrap(spacing: 8, runSpacing: 7, children: quickFacts),
-                ],
-                if (primaryAction != null || secondaryAction != null) ...[
-                  const SizedBox(height: 12),
-                  Row(
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (primaryAction != null)
-                        Expanded(
-                          child: FilledButton.icon(
-                            key: primaryKey,
-                            onPressed: primaryAction,
-                            icon: Icon(
-                              primaryIcon ?? Icons.arrow_forward_rounded,
-                              size: 17,
-                            ),
-                            label: Text(primaryLabel ?? 'Continue'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: accent,
-                              foregroundColor: Colors.white,
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ),
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
                         ),
-                      if (primaryAction != null && secondaryAction != null)
-                        const SizedBox(width: 8),
-                      if (secondaryAction != null)
-                        TextButton(
-                          onPressed: secondaryAction,
-                          child: Text(secondaryLabel ?? 'Open'),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        summary.isNotEmpty ? summary : subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
                         ),
+                      ),
                     ],
                   ),
-                ],
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.expand_more_rounded, size: 22, color: accent),
               ],
             ),
           ),

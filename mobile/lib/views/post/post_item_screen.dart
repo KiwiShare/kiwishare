@@ -27,6 +27,7 @@ class PostItemScreen extends StatefulWidget {
   final ListingSuggestionService? suggestionService;
   final String? authToken;
   final String? initialCategory;
+  final bool startWithAi;
 
   const PostItemScreen({
     super.key,
@@ -38,6 +39,7 @@ class PostItemScreen extends StatefulWidget {
     this.suggestionService,
     this.authToken,
     this.initialCategory,
+    this.startWithAi = false,
   });
 
   @override
@@ -77,14 +79,17 @@ class _PostItemScreenState extends State<PostItemScreen> {
     _category = listingCategoryNames.contains(widget.initialCategory)
         ? widget.initialCategory
         : null;
-    _flowStarted = _category != null;
+    _flowStarted = _category != null || widget.startWithAi;
     _imagePicker = widget.imagePicker ?? DeviceListingImagePicker();
     _locationService = widget.locationService ?? DeviceListingLocationService();
     _publishService = widget.publishService ?? RestListingPublishService();
     _suggestionService =
         widget.suggestionService ?? RestListingSuggestionService();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _recoverLostPhotos();
+      await _recoverLostPhotos();
+      if (mounted && widget.startWithAi && _category == null) {
+        await _startAiFlow();
+      }
     });
   }
 
@@ -171,7 +176,15 @@ class _PostItemScreenState extends State<PostItemScreen> {
       backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (context) => const _PhotoSourceSheet(),
     );
-    if (source == null || !mounted) return;
+    if (source == null || !mounted) {
+      if (mounted &&
+          widget.startWithAi &&
+          _category == null &&
+          _photos.isEmpty) {
+        widget.onCancel();
+      }
+      return;
+    }
 
     final before = _photos.length;
     await _pickPhotos(source);

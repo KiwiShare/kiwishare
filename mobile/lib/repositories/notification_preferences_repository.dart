@@ -118,6 +118,19 @@ class RestNotificationPreferencesRepository
       body: jsonEncode(payload),
     );
     if (response.statusCode != 200) {
+      if (nearbyCategory != null && response.statusCode == 400) {
+        Map<String, dynamic>? errorBody;
+        try {
+          errorBody = jsonDecode(response.body) as Map<String, dynamic>?;
+        } catch (_) {}
+        final message = errorBody?['message']?.toString() ?? '';
+        if (message.contains('watchlistPriceDrop') ||
+            message.contains('notification preference')) {
+          throw const NotificationPreferencesUnsupportedException(
+            'Nearby-category alerts require the latest KiwiShare server.',
+          );
+        }
+      }
       throw const NotificationPreferencesException();
     }
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -127,4 +140,14 @@ class RestNotificationPreferencesRepository
 
 class NotificationPreferencesException implements Exception {
   const NotificationPreferencesException();
+}
+
+class NotificationPreferencesUnsupportedException
+    extends NotificationPreferencesException {
+  const NotificationPreferencesUnsupportedException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

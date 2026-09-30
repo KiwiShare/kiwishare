@@ -237,6 +237,36 @@ class RestItemRepository implements ItemRepository {
     return DiscoveryOptionsModel.fromJson(data);
   }
 
+  Future<List<String>> fetchSearchSuggestions(
+    String query, {
+    int limit = 12,
+  }) async {
+    final uri =
+        Uri.parse(
+          '${ApiConfig.baseUrl}/api/usedItems/search-suggestions',
+        ).replace(
+          queryParameters: {
+            if (query.trim().isNotEmpty) 'query': query.trim(),
+            'limit': limit.clamp(1, 20).toString(),
+          },
+        );
+    final response = await _client.get(
+      uri,
+      headers: {'Accept': 'application/json'},
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch search suggestions from server.');
+    }
+    final data = jsonDecode(response.body);
+    if (data is! Map<String, dynamic> || data['suggestions'] is! List) {
+      throw const FormatException('Invalid search suggestions response.');
+    }
+    return (data['suggestions'] as List)
+        .map((value) => value.toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
   @override
   Future<List<ItemModel>> fetchDiscoveryItems(DiscoveryQuery query) async {
     final uri = Uri.parse(

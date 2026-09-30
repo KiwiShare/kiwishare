@@ -318,6 +318,12 @@ class WatchlistProvider extends ChangeNotifier {
       _watchlistPriceDropEnabled = saved.priceChanges;
       _watchlistNearbyCategoryEnabled = saved.nearbyCategory;
       return true;
+    } on NotificationPreferencesUnsupportedException catch (error) {
+      if (_isCurrentSession(token, generation)) {
+        _watchlistNearbyCategoryEnabled = previous;
+        _preferenceError = error.message;
+      }
+      return false;
     } catch (_) {
       if (_isCurrentSession(token, generation)) {
         _watchlistNearbyCategoryEnabled = previous;

@@ -11,11 +11,13 @@ class ShareService {
 
   static const ShareService instance = ShareService();
 
-  /// Generates the canonical web URL for an item
+  /// Generates the canonical public web URL for an item.
+  ///
+  /// This intentionally uses the website route instead of the API origin.
+  /// Native deep links can be added later without changing the shared URL.
   String getItemShareUrl(String itemId) {
-    // If ApiConfig.baseUrl is a custom public URL, use that, otherwise default to public website
-    final base = ApiConfig.remoteBaseUrl.replaceAll(RegExp(r'/+$'), '');
-    return '$base/items/$itemId';
+    final encodedId = Uri.encodeComponent(itemId.trim());
+    return '${ApiConfig.webBaseUrl}/products/$encodedId';
   }
 
   /// Generates standard share text for an item

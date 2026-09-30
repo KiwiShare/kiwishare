@@ -18,6 +18,7 @@ class HomeFilterSheet extends StatefulWidget {
 }
 
 class _HomeFilterSheetState extends State<HomeFilterSheet> {
+  late String _category;
   late HomeProductSort _sort;
   late HomePriceRange _priceRange;
   late bool _sustainableOnly;
@@ -27,6 +28,7 @@ class _HomeFilterSheetState extends State<HomeFilterSheet> {
   @override
   void initState() {
     super.initState();
+    _category = widget.filters.selectedCategory;
     _sort = widget.filters.selectedSort;
     _priceRange = widget.filters.selectedPriceRange;
     _sustainableOnly = widget.filters.sustainableOnly;
@@ -88,6 +90,7 @@ class _HomeFilterSheetState extends State<HomeFilterSheet> {
       return;
     }
 
+    widget.filters.setCategory(_category);
     widget.filters.setSort(_sort);
     if (_priceRange == HomePriceRange.custom) {
       widget.filters.setCustomPriceRange(minimum: minimum, maximum: maximum);
@@ -133,6 +136,32 @@ class _HomeFilterSheetState extends State<HomeFilterSheet> {
                 ),
                 TextButton(onPressed: _reset, child: const Text('Reset')),
               ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text('Category', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            DropdownButtonFormField<String>(
+              key: const Key('home-filter-category'),
+              value: _category,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.category_outlined),
+              ),
+              items: [
+                const DropdownMenuItem<String>(
+                  value: HomeDiscoveryProvider.allCategoriesLabel,
+                  child: Text('All categories'),
+                ),
+                for (final category in widget.filters.categories)
+                  DropdownMenuItem<String>(
+                    value: category.value,
+                    child: Text(category.value),
+                  ),
+              ],
+              onChanged: (value) => setState(
+                () => _category =
+                    value ?? HomeDiscoveryProvider.allCategoriesLabel,
+              ),
             ),
             const SizedBox(height: AppSpacing.lg),
             Text('Sort by', style: Theme.of(context).textTheme.titleMedium),

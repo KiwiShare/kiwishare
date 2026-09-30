@@ -37,6 +37,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
   late final ProductLocationService _locationService;
   late HomeDiscoveryProvider _discovery;
   late RecommendationService _recommendations;
@@ -44,8 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<List<ItemModel>>? _featuredFuture;
   Future<List<ItemModel>>? _recommendedFuture;
   Timer? _filterDebounce;
-  Object? _optionsError;
-  bool _optionsLoading = true;
   DiscoveryQuery? _lastRequestedQuery;
   bool _initialized = false;
   bool _autoLocated = false;
@@ -54,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+    _searchFocusNode = FocusNode()..addListener(_handleSearchFocusChanged);
     _locationService = widget.locationService ?? DeviceProductLocationService();
   }
 
@@ -101,34 +101,30 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _handleSearchFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     _filterDebounce?.cancel();
     if (_initialized) _discovery.removeListener(_onDiscoveryChanged);
+    _searchFocusNode
+      ..removeListener(_handleSearchFocusChanged)
+      ..dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _loadDiscoveryOptions({bool forceRefresh = false}) async {
-    if (mounted) {
-      setState(() {
-        _optionsLoading = true;
-        _optionsError = null;
-      });
-    }
     try {
       final options = await context.read<ListingProvider>().getDiscoveryOptions(
         forceRefresh: forceRefresh,
       );
       if (!mounted) return;
       _discovery.applyOptions(options);
-      setState(() => _optionsLoading = false);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _optionsLoading = false;
-        _optionsError = error;
-      });
+    } catch (_) {
+      // Discovery remains usable with the local category defaults.
     }
   }
 
@@ -185,11 +181,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     context.push('/items/${item.id}', extra: item);
-  }
-
-  void _clearSearch() {
-    _searchController.clear();
-    context.read<HomeDiscoveryProvider>().setQuery('');
   }
 
   void _resetFilters() {
@@ -274,55 +265,27 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextField(
                   key: const Key('home-search-field'),
                   controller: _searchController,
-                  onChanged: filters.setQuery,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Search by item name or category',
-                    prefixIcon: const Icon(
+                  focusNode: _searchFocusNode,
+                  readOnly: true,
+                  showCursor: false,
+                  onTap: () {
+                    final query = _searchController.text.trim();
+                    context.push(
+                      Uri(
+                        path: '/search',
+                        queryParameters: query.isEmpty ? null : {'q': query},
+                      ).toString(),
+                    );
+                  },
+                  decoration: const InputDecoration(
+                    hintText: 'Search all KiwiShare',
+                    prefixIcon: Icon(
                       Icons.search,
                       color: AppColors.brandPrimary,
                     ),
-                    suffixIconConstraints: const BoxConstraints(minWidth: 48),
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_searchController.text.isNotEmpty)
-                          IconButton(
-                            tooltip: 'Clear search',
-                            onPressed: _clearSearch,
-                            icon: const Icon(Icons.close),
-                          ),
-                        IconButton(
-                          key: const Key('home-filter-button'),
-                          tooltip: 'Sort and filter products',
-                          onPressed: _showFilters,
-                          color: AppColors.brandPrimary,
-                          icon: Badge(
-                            isLabelVisible: filters.activeFilterCount > 0,
-                            label: Text('${filters.activeFilterCount}'),
-                            child: const Icon(Icons.tune),
-                          ),
-                        ),
-                      ],
-                    ),
+                    suffixIcon: Icon(Icons.chevron_right_rounded),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                if (_optionsLoading)
-                  const LinearProgressIndicator(
-                    key: Key('home-discovery-options-loading'),
-                    minHeight: 2,
-                  )
-                else if (_optionsError != null)
-                  _DiscoveryOptionsError(
-                    onRetry: () => _loadDiscoveryOptions(forceRefresh: true),
-                  )
-                else
-                  _HomeCategorySelector(
-                    categories: filters.categories,
-                    selectedCategory: filters.selectedCategory,
-                    onSelected: filters.toggleCategory,
-                  ),
                 const SizedBox(height: AppSpacing.lg),
                 FutureBuilder<List<ItemModel>>(
                   future: _featuredFuture,
@@ -388,77 +351,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-
-IconData _getCategoryIcon(String category) {
-  final normalized = category.toLowerCase().trim();
-  if (normalized.contains('furnitur') ||
-      normalized.contains('chair') ||
-      normalized.contains('table') ||
-      normalized.contains('desk')) {
-    return Icons.chair_outlined;
-  }
-  if (normalized.contains('plant') ||
-      normalized.contains('garden') ||
-      normalized.contains('flower') ||
-      normalized.contains('tree')) {
-    return Icons.yard_outlined;
-  }
-  if (normalized.contains('camp') ||
-      normalized.contains('outdoor') ||
-      normalized.contains('tent') ||
-      normalized.contains('hike')) {
-    return Icons.forest_outlined;
-  }
-  if (normalized.contains('elect') ||
-      normalized.contains('device') ||
-      normalized.contains('phone') ||
-      normalized.contains('tech') ||
-      normalized.contains('comput')) {
-    return Icons.devices_outlined;
-  }
-  if (normalized.contains('transp') ||
-      normalized.contains('bike') ||
-      normalized.contains('car') ||
-      normalized.contains('vehicle') ||
-      normalized.contains('scooter')) {
-    return Icons.directions_car_outlined;
-  }
-  if (normalized.contains('book') ||
-      normalized.contains('read') ||
-      normalized.contains('manga')) {
-    return Icons.menu_book_outlined;
-  }
-  if (normalized.contains('home') ||
-      normalized.contains('kitchen') ||
-      normalized.contains('appliance')) {
-    return Icons.home_outlined;
-  }
-  if (normalized.contains('sport') ||
-      normalized.contains('fitness') ||
-      normalized.contains('ball')) {
-    return Icons.sports_basketball_outlined;
-  }
-  if (normalized.contains('kid') ||
-      normalized.contains('baby') ||
-      normalized.contains('toy')) {
-    return Icons.child_care_outlined;
-  }
-  if (normalized.contains('fashion') ||
-      normalized.contains('cloth') ||
-      normalized.contains('wear') ||
-      normalized.contains('shoe')) {
-    return Icons.checkroom_outlined;
-  }
-  if (normalized.contains('tool') ||
-      normalized.contains('diy') ||
-      normalized.contains('hardware')) {
-    return Icons.build_outlined;
-  }
-  if (normalized == 'all' || normalized == 'all nz') {
-    return Icons.explore_outlined;
-  }
-  return Icons.category_outlined;
 }
 
 class _HomeHeader extends StatelessWidget {
@@ -540,221 +432,6 @@ class _HomeHeader extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _HomeCategorySelector extends StatelessWidget {
-  const _HomeCategorySelector({
-    required this.categories,
-    required this.selectedCategory,
-    required this.onSelected,
-  });
-
-  final List<DiscoveryCategoryOption> categories;
-  final String selectedCategory;
-  final ValueChanged<String> onSelected;
-
-  Future<void> _openPicker(BuildContext context) async {
-    final colors = Theme.of(context).colorScheme;
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: colors.surface,
-      builder: (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(sheetContext).height * 0.68,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.sm,
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Browse by category',
-                        style: Theme.of(sheetContext).textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                    TextButton(
-                      key: const Key('home-category-all-button'),
-                      onPressed: () => Navigator.of(sheetContext).pop('All NZ'),
-                      child: const Text('All'),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    0,
-                    AppSpacing.md,
-                    AppSpacing.lg,
-                  ),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisExtent: 76,
-                    crossAxisSpacing: AppSpacing.sm,
-                    mainAxisSpacing: AppSpacing.sm,
-                  ),
-                  itemCount: categories.length,
-                  itemBuilder: (context, index) {
-                    final category = categories[index];
-                    final isSelected = category.value == selectedCategory;
-                    return Material(
-                      color: isSelected
-                          ? colors.primaryContainer
-                          : colors.surfaceContainerHighest.withValues(
-                              alpha: 0.46,
-                            ),
-                      borderRadius: BorderRadius.circular(16),
-                      child: InkWell(
-                        key: Key('home-category-${category.value}'),
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () =>
-                            Navigator.of(sheetContext).pop(category.value),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 13,
-                            vertical: 11,
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 38,
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? colors.primary.withValues(alpha: 0.14)
-                                      : colors.surface,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  _getCategoryIcon(category.value),
-                                  size: 20,
-                                  color: isSelected
-                                      ? colors.primary
-                                      : colors.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  category.value == 'All NZ'
-                                      ? 'All categories'
-                                      : category.value,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(sheetContext)
-                                      .textTheme
-                                      .labelLarge
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w800,
-                                        color: isSelected
-                                            ? colors.onPrimaryContainer
-                                            : colors.onSurface,
-                                      ),
-                                ),
-                              ),
-                              if (isSelected)
-                                Icon(
-                                  Icons.check_circle_rounded,
-                                  size: 18,
-                                  color: colors.primary,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (selected != null && selected != selectedCategory) {
-      onSelected(selected);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final displayValue = selectedCategory == 'All NZ'
-        ? 'All categories'
-        : selectedCategory;
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Material(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.48),
-        borderRadius: BorderRadius.circular(AppRadius.full),
-        child: InkWell(
-          key: const Key('home-category-selector'),
-          onTap: () => _openPicker(context),
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: colors.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    _getCategoryIcon(selectedCategory),
-                    size: 16,
-                    color: colors.primary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Category',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 150),
-                  child: Text(
-                    displayValue,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: colors.onSurface,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 19,
-                  color: colors.primary,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1448,28 +1125,6 @@ class _RecommendedProductCard extends StatelessWidget {
   }
 }
 
-class _DiscoveryOptionsError extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _DiscoveryOptionsError({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(
-          child: Text('Categories and locations could not be loaded.'),
-        ),
-        TextButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh, size: 20),
-          label: const Text('Retry'),
-        ),
-      ],
-    );
-  }
-}
-
 class _HomeDiscoveryResults extends StatelessWidget {
   final List<ItemModel> products;
   final ItemModel? selectedItem;
@@ -1523,6 +1178,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
               ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
             OutlinedButton.icon(
+              key: const Key('home-filter-button'),
               onPressed: onShowFilters,
               icon: const Icon(Icons.tune, size: 18),
               label: Text(

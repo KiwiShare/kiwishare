@@ -113,7 +113,7 @@ void main() {
       expect(provider.activeFilterCount, 0);
     });
 
-    test('activeFilterCount only tracks sort and filter modal options', () {
+    test('activeFilterCount tracks category and sort/filter options', () {
       final provider = HomeDiscoveryProvider()..applyOptions(_options);
       expect(provider.activeFilterCount, 0);
 
@@ -125,18 +125,19 @@ void main() {
         longitude: 174.76,
       );
       provider.setQuery('table');
-      provider.toggleCategory('Furniture');
       expect(provider.activeFilterCount, 0);
+      provider.toggleCategory('Furniture');
+      expect(provider.activeFilterCount, 1);
 
       // Setting Sort & filter sheet options increments count
       provider.setSort(HomeProductSort.priceLowToHigh);
-      expect(provider.activeFilterCount, 1);
-
-      provider.setPriceRange(HomePriceRange.under25);
       expect(provider.activeFilterCount, 2);
 
-      provider.setSustainableOnly(true);
+      provider.setPriceRange(HomePriceRange.under25);
       expect(provider.activeFilterCount, 3);
+
+      provider.setSustainableOnly(true);
+      expect(provider.activeFilterCount, 4);
 
       provider.resetFilters();
       expect(provider.activeFilterCount, 0);
