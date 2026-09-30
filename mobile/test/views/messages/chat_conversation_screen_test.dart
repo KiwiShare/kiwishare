@@ -518,19 +518,19 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Auckland Central Library'), findsWidgets);
-      expect(find.text('#ORD-READY'), findsOneWidget);
+      expect(find.text('#ORD-READY'), findsNothing);
 
       await tester.tap(find.byKey(const Key('chat_transaction_status_card')));
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const Key('chat_transaction_view_orders')),
+        find.byKey(const Key('chat_transaction_view_order')),
         findsOneWidget,
       );
       expect(find.text('Auckland Central Library'), findsWidgets);
-      expect(find.text('#ORD-READY'), findsWidgets);
+      expect(find.text('#ORD-READY'), findsOneWidget);
       expect(find.text(r'$60.00 NZD'), findsOneWidget);
-      expect(find.text('Ready for meetup'), findsOneWidget);
+      expect(find.text('Ready for handover'), findsWidgets);
     },
   );
 
@@ -1736,6 +1736,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.tap(find.byKey(const Key('chat_transaction_status_card')));
+      await tester.pumpAndSettle();
+
       final reviewBtn = find.byKey(const Key('chat_order_leave_review_btn'));
       expect(reviewBtn, findsOneWidget);
       await tester.tap(reviewBtn);
@@ -1775,6 +1778,9 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_transaction_status_card')));
     await tester.pumpAndSettle();
 
     expect(find.text('Wallet'), findsOneWidget);

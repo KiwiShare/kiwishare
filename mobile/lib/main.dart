@@ -17,10 +17,12 @@ import 'views/messages/chat_conversation_screen.dart';
 import 'views/profile/profile_screen.dart';
 import 'views/profile/user_meetups_screen.dart';
 import 'views/profile/user_orders_screen.dart';
+import 'views/orders/order_detail_screen.dart';
 import 'views/meetups/meetup_qr_screen.dart';
 import 'views/auth/login_view.dart';
 import 'views/products/product_detail_screen.dart';
 import 'models/item_model.dart';
+import 'models/order_model.dart';
 import 'navigation/app_route_observer.dart';
 
 // State and Repositories
@@ -144,6 +146,18 @@ final GoRouter _router = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/orders',
       builder: (context, state) => const UserOrdersScreen(),
+      routes: [
+        GoRoute(
+          path: ':orderId',
+          builder: (context, state) {
+            final orderId = state.pathParameters['orderId'] ?? '';
+            final initial = state.extra is OrderModel
+                ? state.extra as OrderModel
+                : null;
+            return OrderDetailScreen(orderId: orderId, initialOrder: initial);
+          },
+        ),
+      ],
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,

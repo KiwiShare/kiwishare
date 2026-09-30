@@ -59,6 +59,28 @@ class OrderProvider extends ChangeNotifier {
     }
   }
 
+  Future<OrderModel> loadOrderDetails({
+    required String orderId,
+    String? token,
+  }) async {
+    final authToken = token ?? _authToken;
+    if (authToken == null || authToken.isEmpty) {
+      throw const OrderRepositoryException('Authentication required.');
+    }
+    final order = await repository.fetchOrderDetails(
+      orderId: orderId,
+      token: authToken,
+    );
+    final existing = _orders.indexWhere((item) => item.id == order.id);
+    if (existing >= 0) {
+      _orders[existing] = order;
+    } else {
+      _orders.insert(0, order);
+    }
+    notifyListeners();
+    return order;
+  }
+
   Future<OrderModel> createOrGetOrder({
     required String itemId,
     required String token,

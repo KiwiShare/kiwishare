@@ -37,6 +37,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
   late final ProductLocationService _locationService;
   late HomeDiscoveryProvider _discovery;
   late RecommendationService _recommendations;
@@ -54,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+    _searchFocusNode = FocusNode()..addListener(_handleSearchFocusChanged);
     _locationService = widget.locationService ?? DeviceProductLocationService();
   }
 
@@ -101,10 +103,17 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _handleSearchFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     _filterDebounce?.cancel();
     if (_initialized) _discovery.removeListener(_onDiscoveryChanged);
+    _searchFocusNode
+      ..removeListener(_handleSearchFocusChanged)
+      ..dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -271,58 +280,107 @@ class _HomeScreenState extends State<HomeScreen> {
                   onChooseLocation: _showLocationPicker,
                 ),
                 const SizedBox(height: AppSpacing.md),
-                TextField(
-                  key: const Key('home-search-field'),
-                  controller: _searchController,
-                  onChanged: filters.setQuery,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Search by item name or category',
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      color: AppColors.brandPrimary,
-                    ),
-                    suffixIconConstraints: const BoxConstraints(minWidth: 48),
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_searchController.text.isNotEmpty)
-                          IconButton(
-                            tooltip: 'Clear search',
-                            onPressed: _clearSearch,
-                            icon: const Icon(Icons.close),
-                          ),
-                        IconButton(
-                          key: const Key('home-filter-button'),
-                          tooltip: 'Sort and filter products',
-                          onPressed: _showFilters,
-                          color: AppColors.brandPrimary,
-                          icon: Badge(
-                            isLabelVisible: filters.activeFilterCount > 0,
-                            label: Text('${filters.activeFilterCount}'),
-                            child: const Icon(Icons.tune),
+                Row(
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 240),
+                      curve: Curves.easeOutCubic,
+                      width: _searchFocusNode.hasFocus ? 0 : 132,
+                      margin: EdgeInsets.only(
+                        right: _searchFocusNode.hasFocus ? 0 : AppSpacing.sm,
+                      ),
+                      child: ClipRect(
+                        child: SizedBox(
+                          height: 48,
+                          child: OverflowBox(
+                            alignment: Alignment.centerLeft,
+                            minWidth: 132,
+                            maxWidth: 132,
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 150),
+                              opacity: _searchFocusNode.hasFocus ? 0 : 1,
+                              child: _optionsLoading
+                                  ? const SizedBox(
+                                      height: 48,
+                                      child: Center(
+                                        child: SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : _optionsError != null
+                                  ? IconButton.filledTonal(
+                                      key: const Key(
+                                        'home-category-options-retry',
+                                      ),
+                                      tooltip: 'Retry categories',
+                                      onPressed: () => _loadDiscoveryOptions(
+                                        forceRefresh: true,
+                                      ),
+                                      icon: const Icon(Icons.refresh_rounded),
+                                    )
+                                  : _HomeCategorySelector(
+                                      categories: filters.categories,
+                                      selectedCategory:
+                                          filters.selectedCategory,
+                                      onSelected: filters.toggleCategory,
+                                    ),
+                            ),
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                    Expanded(
+                      child: TextField(
+                        key: const Key('home-search-field'),
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        onChanged: (value) {
+                          filters.setQuery(value);
+                          setState(() {});
+                        },
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: _searchFocusNode.hasFocus
+                              ? 'Search all KiwiShare'
+                              : 'Search all items',
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: AppColors.brandPrimary,
+                          ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 48,
+                          ),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_searchController.text.isNotEmpty)
+                                IconButton(
+                                  tooltip: 'Clear search',
+                                  onPressed: _clearSearch,
+                                  icon: const Icon(Icons.close),
+                                ),
+                              IconButton(
+                                key: const Key('home-filter-button'),
+                                tooltip: 'Sort and filter products',
+                                onPressed: _showFilters,
+                                color: AppColors.brandPrimary,
+                                icon: Badge(
+                                  isLabelVisible: filters.activeFilterCount > 0,
+                                  label: Text('${filters.activeFilterCount}'),
+                                  child: const Icon(Icons.tune),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: AppSpacing.md),
-                if (_optionsLoading)
-                  const LinearProgressIndicator(
-                    key: Key('home-discovery-options-loading'),
-                    minHeight: 2,
-                  )
-                else if (_optionsError != null)
-                  _DiscoveryOptionsError(
-                    onRetry: () => _loadDiscoveryOptions(forceRefresh: true),
-                  )
-                else
-                  _HomeCategorySelector(
-                    categories: filters.categories,
-                    selectedCategory: filters.selectedCategory,
-                    onSelected: filters.toggleCategory,
-                  ),
                 const SizedBox(height: AppSpacing.lg),
                 FutureBuilder<List<ItemModel>>(
                   future: _featuredFuture,
@@ -693,7 +751,7 @@ class _HomeCategorySelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final displayValue = selectedCategory == 'All NZ'
-        ? 'All categories'
+        ? 'Category'
         : selectedCategory;
 
     return Align(
@@ -706,7 +764,7 @@ class _HomeCategorySelector extends StatelessWidget {
           onTap: () => _openPicker(context),
           borderRadius: BorderRadius.circular(AppRadius.full),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+            padding: const EdgeInsets.fromLTRB(9, 8, 8, 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -723,17 +781,8 @@ class _HomeCategorySelector extends StatelessWidget {
                     color: colors.primary,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Category',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 150),
+                const SizedBox(width: 7),
+                Expanded(
                   child: Text(
                     displayValue,
                     maxLines: 1,
@@ -744,7 +793,7 @@ class _HomeCategorySelector extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 3),
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
                   size: 19,
@@ -1444,28 +1493,6 @@ class _RecommendedProductCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _DiscoveryOptionsError extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _DiscoveryOptionsError({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(
-          child: Text('Categories and locations could not be loaded.'),
-        ),
-        TextButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh, size: 20),
-          label: const Text('Retry'),
-        ),
-      ],
     );
   }
 }
