@@ -56,5 +56,9 @@ jobs:
       - name: Run unit and widget tests
         run: flutter test
 
+      # A push to pre already verifies the exact SHA with a release APK build.
+      # Skip the duplicate build on the long-lived pre -> main promotion PR;
+      # feature PRs still build release APKs before they can enter pre.
       - name: Verify Android release build
+        if: ${{ github.event_name != 'pull_request' || github.head_ref != 'pre' }}
         run: flutter build apk --release --no-pub
