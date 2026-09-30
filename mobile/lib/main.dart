@@ -22,6 +22,7 @@ import 'views/meetups/meetup_qr_screen.dart';
 import 'views/auth/login_view.dart';
 import 'views/products/product_detail_screen.dart';
 import 'models/item_model.dart';
+import 'models/listing_category_config.dart';
 import 'models/order_model.dart';
 import 'navigation/app_route_observer.dart';
 
@@ -86,6 +87,8 @@ final GoRouter _router = GoRouter(
           builder: (context, state) => PostItemScreen(
             onCancel: () => context.go('/home'),
             onPostItem: () => context.go('/home'),
+            initialCategory: state.uri.queryParameters['category'],
+            startWithAi: state.uri.queryParameters['mode'] == 'ai',
           ),
         ),
         GoRoute(
@@ -653,6 +656,80 @@ class _KiwiShareAppState extends State<KiwiShareApp> {
   }
 }
 
+class _PostEntryChoice extends StatelessWidget {
+  const _PostEntryChoice({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 108,
+      width: double.infinity,
+      child: Material(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: colors.primaryContainer,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: colors.onPrimaryContainer),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class KiwiShareShell extends StatelessWidget {
   final Widget child;
 
@@ -694,7 +771,9 @@ class KiwiShareShell extends StatelessWidget {
                   onLoginSuccess: () {
                     Navigator.of(sheetContext).pop();
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (shellContext.mounted) shellContext.go('/post');
+                      if (shellContext.mounted) {
+                        _showPostStartDeck(shellContext);
+                      }
                     });
                   },
                 ),
@@ -703,6 +782,127 @@ class KiwiShareShell extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _showPostStartDeck(BuildContext shellContext) async {
+    final choice = await showModalBottomSheet<String>(
+      context: shellContext,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final colors = Theme.of(sheetContext).colorScheme;
+        return Container(
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 20),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 18),
+                  decoration: BoxDecoration(
+                    color: colors.outlineVariant,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              Text(
+                'List an item',
+                style: Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Start with a category, or let AI prepare the form from a photo.',
+                style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _PostEntryChoice(
+                key: const Key('post-entry-category'),
+                icon: Icons.dashboard_customize_rounded,
+                title: 'Choose a category',
+                subtitle: 'Use a tailored form for the item you are listing.',
+                onTap: () => Navigator.pop(sheetContext, 'category'),
+              ),
+              const SizedBox(height: 10),
+              _PostEntryChoice(
+                key: const Key('post-entry-ai'),
+                icon: Icons.auto_awesome_rounded,
+                title: 'AI list it for me',
+                subtitle:
+                    'Take or choose a photo and let AI prepare the listing.',
+                onTap: () => Navigator.pop(sheetContext, 'ai'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (choice == null || !shellContext.mounted) return;
+    if (choice == 'ai') {
+      shellContext.go('/post?mode=ai');
+      return;
+    }
+
+    final category = await showModalBottomSheet<String>(
+      context: shellContext,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'What are you listing?',
+                  style: Theme.of(
+                    sheetContext,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: listingCategoryNames.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final value = listingCategoryNames[index];
+                  return ListTile(
+                    key: Key('post-entry-category-$value'),
+                    title: Text(value),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.pop(sheetContext, value),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (category == null || !shellContext.mounted) return;
+    shellContext.go(
+      Uri(path: '/post', queryParameters: {'category': category}).toString(),
     );
   }
 
@@ -752,7 +952,7 @@ class KiwiShareShell extends StatelessWidget {
                 context.go('/watchlist');
                 break;
               case 2:
-                context.go('/post');
+                _showPostStartDeck(context);
                 break;
               case 3:
                 context.go('/messages');

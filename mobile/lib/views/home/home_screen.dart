@@ -45,8 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<List<ItemModel>>? _featuredFuture;
   Future<List<ItemModel>>? _recommendedFuture;
   Timer? _filterDebounce;
-  Object? _optionsError;
-  bool _optionsLoading = true;
   DiscoveryQuery? _lastRequestedQuery;
   bool _initialized = false;
   bool _autoLocated = false;
@@ -119,25 +117,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadDiscoveryOptions({bool forceRefresh = false}) async {
-    if (mounted) {
-      setState(() {
-        _optionsLoading = true;
-        _optionsError = null;
-      });
-    }
     try {
       final options = await context.read<ListingProvider>().getDiscoveryOptions(
         forceRefresh: forceRefresh,
       );
       if (!mounted) return;
       _discovery.applyOptions(options);
-      setState(() => _optionsLoading = false);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _optionsLoading = false;
-        _optionsError = error;
-      });
+    } catch (_) {
+      // Discovery remains usable with the local category defaults.
     }
   }
 
@@ -280,106 +267,31 @@ class _HomeScreenState extends State<HomeScreen> {
                   onChooseLocation: _showLocationPicker,
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Row(
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 240),
-                      curve: Curves.easeOutCubic,
-                      width: _searchFocusNode.hasFocus ? 0 : 132,
-                      margin: EdgeInsets.only(
-                        right: _searchFocusNode.hasFocus ? 0 : AppSpacing.sm,
-                      ),
-                      child: ClipRect(
-                        child: SizedBox(
-                          height: 48,
-                          child: OverflowBox(
-                            alignment: Alignment.centerLeft,
-                            minWidth: 132,
-                            maxWidth: 132,
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 150),
-                              opacity: _searchFocusNode.hasFocus ? 0 : 1,
-                              child: _optionsLoading
-                                  ? const SizedBox(
-                                      height: 48,
-                                      child: Center(
-                                        child: SizedBox.square(
-                                          dimension: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : _optionsError != null
-                                  ? IconButton.filledTonal(
-                                      key: const Key(
-                                        'home-category-options-retry',
-                                      ),
-                                      tooltip: 'Retry categories',
-                                      onPressed: () => _loadDiscoveryOptions(
-                                        forceRefresh: true,
-                                      ),
-                                      icon: const Icon(Icons.refresh_rounded),
-                                    )
-                                  : _HomeCategorySelector(
-                                      categories: filters.categories,
-                                      selectedCategory:
-                                          filters.selectedCategory,
-                                      onSelected: filters.toggleCategory,
-                                    ),
-                            ),
-                          ),
-                        ),
-                      ),
+                TextField(
+                  key: const Key('home-search-field'),
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  onChanged: (value) {
+                    filters.setQuery(value);
+                    setState(() {});
+                  },
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: _searchFocusNode.hasFocus
+                        ? 'Search all KiwiShare'
+                        : 'Search all items',
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: AppColors.brandPrimary,
                     ),
-                    Expanded(
-                      child: TextField(
-                        key: const Key('home-search-field'),
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        onChanged: (value) {
-                          filters.setQuery(value);
-                          setState(() {});
-                        },
-                        textInputAction: TextInputAction.search,
-                        decoration: InputDecoration(
-                          hintText: _searchFocusNode.hasFocus
-                              ? 'Search all KiwiShare'
-                              : 'Search all items',
-                          prefixIcon: const Icon(
-                            Icons.search,
-                            color: AppColors.brandPrimary,
-                          ),
-                          suffixIconConstraints: const BoxConstraints(
-                            minWidth: 48,
-                          ),
-                          suffixIcon: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (_searchController.text.isNotEmpty)
-                                IconButton(
-                                  tooltip: 'Clear search',
-                                  onPressed: _clearSearch,
-                                  icon: const Icon(Icons.close),
-                                ),
-                              IconButton(
-                                key: const Key('home-filter-button'),
-                                tooltip: 'Sort and filter products',
-                                onPressed: _showFilters,
-                                color: AppColors.brandPrimary,
-                                icon: Badge(
-                                  isLabelVisible: filters.activeFilterCount > 0,
-                                  label: Text('${filters.activeFilterCount}'),
-                                  child: const Icon(Icons.tune),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: _clearSearch,
+                            icon: const Icon(Icons.close),
+                          )
+                        : null,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 FutureBuilder<List<ItemModel>>(
@@ -446,77 +358,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-
-IconData _getCategoryIcon(String category) {
-  final normalized = category.toLowerCase().trim();
-  if (normalized.contains('furnitur') ||
-      normalized.contains('chair') ||
-      normalized.contains('table') ||
-      normalized.contains('desk')) {
-    return Icons.chair_outlined;
-  }
-  if (normalized.contains('plant') ||
-      normalized.contains('garden') ||
-      normalized.contains('flower') ||
-      normalized.contains('tree')) {
-    return Icons.yard_outlined;
-  }
-  if (normalized.contains('camp') ||
-      normalized.contains('outdoor') ||
-      normalized.contains('tent') ||
-      normalized.contains('hike')) {
-    return Icons.forest_outlined;
-  }
-  if (normalized.contains('elect') ||
-      normalized.contains('device') ||
-      normalized.contains('phone') ||
-      normalized.contains('tech') ||
-      normalized.contains('comput')) {
-    return Icons.devices_outlined;
-  }
-  if (normalized.contains('transp') ||
-      normalized.contains('bike') ||
-      normalized.contains('car') ||
-      normalized.contains('vehicle') ||
-      normalized.contains('scooter')) {
-    return Icons.directions_car_outlined;
-  }
-  if (normalized.contains('book') ||
-      normalized.contains('read') ||
-      normalized.contains('manga')) {
-    return Icons.menu_book_outlined;
-  }
-  if (normalized.contains('home') ||
-      normalized.contains('kitchen') ||
-      normalized.contains('appliance')) {
-    return Icons.home_outlined;
-  }
-  if (normalized.contains('sport') ||
-      normalized.contains('fitness') ||
-      normalized.contains('ball')) {
-    return Icons.sports_basketball_outlined;
-  }
-  if (normalized.contains('kid') ||
-      normalized.contains('baby') ||
-      normalized.contains('toy')) {
-    return Icons.child_care_outlined;
-  }
-  if (normalized.contains('fashion') ||
-      normalized.contains('cloth') ||
-      normalized.contains('wear') ||
-      normalized.contains('shoe')) {
-    return Icons.checkroom_outlined;
-  }
-  if (normalized.contains('tool') ||
-      normalized.contains('diy') ||
-      normalized.contains('hardware')) {
-    return Icons.build_outlined;
-  }
-  if (normalized == 'all' || normalized == 'all nz') {
-    return Icons.explore_outlined;
-  }
-  return Icons.category_outlined;
 }
 
 class _HomeHeader extends StatelessWidget {
@@ -598,212 +439,6 @@ class _HomeHeader extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _HomeCategorySelector extends StatelessWidget {
-  const _HomeCategorySelector({
-    required this.categories,
-    required this.selectedCategory,
-    required this.onSelected,
-  });
-
-  final List<DiscoveryCategoryOption> categories;
-  final String selectedCategory;
-  final ValueChanged<String> onSelected;
-
-  Future<void> _openPicker(BuildContext context) async {
-    final colors = Theme.of(context).colorScheme;
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: colors.surface,
-      builder: (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(sheetContext).height * 0.68,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.sm,
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Browse by category',
-                        style: Theme.of(sheetContext).textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                    TextButton(
-                      key: const Key('home-category-all-button'),
-                      onPressed: () => Navigator.of(sheetContext).pop('All NZ'),
-                      child: const Text('All'),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    0,
-                    AppSpacing.md,
-                    AppSpacing.lg,
-                  ),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisExtent: 76,
-                    crossAxisSpacing: AppSpacing.sm,
-                    mainAxisSpacing: AppSpacing.sm,
-                  ),
-                  itemCount: categories.length,
-                  itemBuilder: (context, index) {
-                    final category = categories[index];
-                    final isSelected = category.value == selectedCategory;
-                    return Material(
-                      color: isSelected
-                          ? colors.primaryContainer
-                          : colors.surfaceContainerHighest.withValues(
-                              alpha: 0.46,
-                            ),
-                      borderRadius: BorderRadius.circular(16),
-                      child: InkWell(
-                        key: Key('home-category-${category.value}'),
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () =>
-                            Navigator.of(sheetContext).pop(category.value),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 13,
-                            vertical: 11,
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 38,
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? colors.primary.withValues(alpha: 0.14)
-                                      : colors.surface,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  _getCategoryIcon(category.value),
-                                  size: 20,
-                                  color: isSelected
-                                      ? colors.primary
-                                      : colors.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  category.value == 'All NZ'
-                                      ? 'All categories'
-                                      : category.value,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(sheetContext)
-                                      .textTheme
-                                      .labelLarge
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w800,
-                                        color: isSelected
-                                            ? colors.onPrimaryContainer
-                                            : colors.onSurface,
-                                      ),
-                                ),
-                              ),
-                              if (isSelected)
-                                Icon(
-                                  Icons.check_circle_rounded,
-                                  size: 18,
-                                  color: colors.primary,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (selected != null && selected != selectedCategory) {
-      onSelected(selected);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final displayValue = selectedCategory == 'All NZ'
-        ? 'Category'
-        : selectedCategory;
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Material(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.48),
-        borderRadius: BorderRadius.circular(AppRadius.full),
-        child: InkWell(
-          key: const Key('home-category-selector'),
-          onTap: () => _openPicker(context),
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(9, 8, 8, 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: colors.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    _getCategoryIcon(selectedCategory),
-                    size: 16,
-                    color: colors.primary,
-                  ),
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    displayValue,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: colors.onSurface,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 3),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 19,
-                  color: colors.primary,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1550,6 +1185,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
               ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
             OutlinedButton.icon(
+              key: const Key('home-filter-button'),
               onPressed: onShowFilters,
               icon: const Icon(Icons.tune, size: 18),
               label: Text(

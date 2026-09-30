@@ -130,9 +130,16 @@ void main() {
     await _loadHome(tester, _homeApp());
 
     expect(find.text('7 items'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('home-category-selector')));
+    await tester.ensureVisible(find.byKey(const Key('home-filter-button')));
+    await tester.tap(find.byKey(const Key('home-filter-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('home-category-Plants')));
+    await tester.tap(find.byKey(const Key('home-filter-category')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Plants').last);
+    await tester.ensureVisible(find.byKey(const Key('home-apply-filters')));
+    tester
+        .widget<FilledButton>(find.byKey(const Key('home-apply-filters')))
+        .onPressed!();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
 
@@ -162,9 +169,14 @@ void main() {
     await tester.pump();
     expect(find.text('4 items'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('home-filter-button')));
     await tester.tap(find.byKey(const Key('home-filter-button')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('home-price-range-under25')),
+    );
     await tester.tap(find.byKey(const Key('home-price-range-under25')));
+
     await tester.tap(find.byKey(const Key('home-apply-filters')));
     await tester.pumpAndSettle();
 
@@ -315,10 +327,9 @@ void main() {
       find.byKey(const Key('home-search-field')),
       'monstera',
     );
-    await tester.tap(find.byKey(const Key('home-category-selector')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('home-category-Plants')));
+    discovery.setCategory('Plants');
     discovery.setView(HomeProductView.map);
+
     await tester.pump();
     discovery.selectPreview('item_1');
     await tester.pumpAndSettle();
@@ -422,7 +433,8 @@ void main() {
     await _loadHome(tester, _homeApp(textScaler: const TextScaler.linear(2)));
 
     expect(find.byKey(const Key('home-search-field')), findsOneWidget);
-    expect(find.byKey(const Key('home-category-selector')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('home-filter-button')));
+    expect(find.byKey(const Key('home-filter-button')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -476,14 +488,15 @@ void main() {
       expect(find.text('KiwiShare'), findsOneWidget);
       expect(find.text('Share & Reuse in NZ'), findsOneWidget);
 
-      // 2. Compact category selector opens the category grid.
-      expect(find.byKey(const Key('home-category-selector')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('home-category-selector')));
+      // 2. Category is part of the product section's sort/filter deck.
+      await tester.ensureVisible(find.byKey(const Key('home-filter-button')));
+      expect(find.byKey(const Key('home-filter-button')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('home-filter-button')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('home-category-Plants')), findsOneWidget);
-      expect(find.byIcon(Icons.yard_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.forest_outlined), findsOneWidget);
-      await tester.tap(find.byKey(const Key('home-category-all-button')));
+      expect(find.byKey(const Key('home-filter-category')), findsOneWidget);
+      expect(find.text('Category'), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('home-apply-filters')));
+      await tester.tap(find.byKey(const Key('home-apply-filters')));
       await tester.pumpAndSettle();
 
       // 3. Featured Highlights Jumbo Carousel
@@ -499,6 +512,7 @@ void main() {
       );
 
       // 5. Open item by tapping recommended card
+      await tester.ensureVisible(find.text('Monstera Plant').first);
       await tester.tap(find.text('Monstera Plant').first);
       await tester.pump();
       expect(openedItem, isNotNull);
