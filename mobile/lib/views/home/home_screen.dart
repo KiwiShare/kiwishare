@@ -318,7 +318,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onRetry: () => _loadDiscoveryOptions(forceRefresh: true),
                   )
                 else
-                  _ResponsiveCategoryFilterBar(
+                  _HomeCategorySelector(
                     categories: filters.categories,
                     selectedCategory: filters.selectedCategory,
                     onSelected: filters.toggleCategory,
@@ -544,8 +544,8 @@ class _HomeHeader extends StatelessWidget {
   }
 }
 
-class _ResponsiveCategoryFilterBar extends StatefulWidget {
-  const _ResponsiveCategoryFilterBar({
+class _HomeCategorySelector extends StatelessWidget {
+  const _HomeCategorySelector({
     required this.categories,
     required this.selectedCategory,
     required this.onSelected,
@@ -555,134 +555,205 @@ class _ResponsiveCategoryFilterBar extends StatefulWidget {
   final String selectedCategory;
   final ValueChanged<String> onSelected;
 
-  @override
-  State<_ResponsiveCategoryFilterBar> createState() =>
-      _ResponsiveCategoryFilterBarState();
-}
-
-class _ResponsiveCategoryFilterBarState
-    extends State<_ResponsiveCategoryFilterBar> {
-  bool _expanded = false;
-
-  List<DiscoveryCategoryOption> _visibleCategories(int limit) {
-    final categories = widget.categories;
-    if (_expanded || categories.length <= limit) return categories;
-
-    final visible = categories.take(limit).toList(growable: true);
-    final selectedIndex = categories.indexWhere(
-      (category) => category.value == widget.selectedCategory,
+  Future<void> _openPicker(BuildContext context) async {
+    final colors = Theme.of(context).colorScheme;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: colors.surface,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.68,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Browse by category',
+                        style: Theme.of(sheetContext).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    TextButton(
+                      key: const Key('home-category-all-button'),
+                      onPressed: () => Navigator.of(sheetContext).pop('All NZ'),
+                      child: const Text('All'),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    0,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                  ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisExtent: 76,
+                    crossAxisSpacing: AppSpacing.sm,
+                    mainAxisSpacing: AppSpacing.sm,
+                  ),
+                  itemCount: categories.length,
+                  itemBuilder: (context, index) {
+                    final category = categories[index];
+                    final isSelected = category.value == selectedCategory;
+                    return Material(
+                      color: isSelected
+                          ? colors.primaryContainer
+                          : colors.surfaceContainerHighest.withValues(
+                              alpha: 0.46,
+                            ),
+                      borderRadius: BorderRadius.circular(16),
+                      child: InkWell(
+                        key: Key('home-category-${category.value}'),
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () =>
+                            Navigator.of(sheetContext).pop(category.value),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 13,
+                            vertical: 11,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? colors.primary.withValues(alpha: 0.14)
+                                      : colors.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  _getCategoryIcon(category.value),
+                                  size: 20,
+                                  color: isSelected
+                                      ? colors.primary
+                                      : colors.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  category.value == 'All NZ'
+                                      ? 'All categories'
+                                      : category.value,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(sheetContext)
+                                      .textTheme
+                                      .labelLarge
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        color: isSelected
+                                            ? colors.onPrimaryContainer
+                                            : colors.onSurface,
+                                      ),
+                                ),
+                              ),
+                              if (isSelected)
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 18,
+                                  color: colors.primary,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
-    if (selectedIndex >= limit && visible.isNotEmpty) {
-      visible[visible.length - 1] = categories[selectedIndex];
+    if (selected != null && selected != selectedCategory) {
+      onSelected(selected);
     }
-    return visible;
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final limit = constraints.maxWidth < 390
-            ? 3
-            : constraints.maxWidth < 560
-            ? 4
-            : constraints.maxWidth < 760
-            ? 5
-            : 6;
-        final visible = _visibleCategories(limit);
-        final canExpand = widget.categories.length > limit;
+    final displayValue = selectedCategory == 'All NZ'
+        ? 'All categories'
+        : selectedCategory;
 
-        return AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          child: Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            children: [
-              for (final category in visible)
-                _HomeCategoryChip(
-                  key: Key('home-category-${category.value}'),
-                  label: category.value,
-                  selected: widget.selectedCategory == category.value,
-                  onTap: () => widget.onSelected(category.value),
-                ),
-              if (canExpand)
-                ActionChip(
-                  key: const Key('home-category-expand-button'),
-                  avatar: Icon(
-                    _expanded
-                        ? Icons.expand_less_rounded
-                        : Icons.expand_more_rounded,
-                    size: 17,
-                    color: colors.primary,
-                  ),
-                  label: Text(_expanded ? 'Less' : 'More'),
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                  backgroundColor: colors.primaryContainer.withValues(
-                    alpha: 0.45,
-                  ),
-                  side: BorderSide(
-                    color: colors.primary.withValues(alpha: 0.28),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.full),
-                  ),
-                  labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: colors.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _HomeCategoryChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _HomeCategoryChip({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final iconData = _getCategoryIcon(label);
-    return ChoiceChip(
-      avatar: Icon(
-        iconData,
-        size: 16,
-        color: selected ? colors.onPrimaryContainer : colors.onSurfaceVariant,
-      ),
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      selectedColor: colors.primaryContainer,
-      backgroundColor: isDark
-          ? colors.surfaceContainerHighest.withValues(alpha: 0.72)
-          : colors.surface,
-      side: BorderSide(
-        color: selected ? colors.primary : colors.outline,
-        width: selected ? 1.5 : 1.0,
-      ),
-      shape: RoundedRectangleBorder(
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.48),
         borderRadius: BorderRadius.circular(AppRadius.full),
-      ),
-      showCheckmark: false,
-      labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-        color: selected ? colors.onPrimaryContainer : colors.onSurface,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        child: InkWell(
+          key: const Key('home-category-selector'),
+          onTap: () => _openPicker(context),
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: colors.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _getCategoryIcon(selectedCategory),
+                    size: 16,
+                    color: colors.primary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Category',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: Text(
+                    displayValue,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: colors.onSurface,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 19,
+                  color: colors.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
