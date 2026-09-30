@@ -58,6 +58,9 @@ void main() {
     expect(find.byKey(const Key('home-location-button')), findsOneWidget);
     expect(find.byIcon(Icons.notifications_outlined), findsNothing);
     expect(find.textContaining('Kia ora'), findsNothing);
+    expect(find.byKey(const Key('home-category-selector')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('home-category-selector')));
+    await tester.pumpAndSettle();
     for (final category
         in testCatalogItems.map((item) => item.category).toSet()) {
       expect(find.byKey(Key('home-category-$category')), findsOneWidget);

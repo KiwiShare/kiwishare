@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../../utils/trust_score.dart';
 
 import '../../models/chat_conversation_model.dart';
-import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
 import '../../models/listing_category_config.dart';
 import '../../models/report_draft.dart';
@@ -17,6 +16,7 @@ import '../../providers/watchlist_provider.dart';
 import '../../repositories/chat_repository.dart';
 import '../../repositories/item_repository.dart';
 import '../../services/notification_permission_coordinator.dart';
+import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
 import '../auth/login_view.dart';
 import '../messages/widgets/schedule_meetup_sheet.dart';
@@ -25,7 +25,7 @@ import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/edit_item_sheet.dart';
 import '../shared/widgets/share_bottom_sheet.dart';
-import 'widgets/product_location_map_sheet.dart';
+import 'widgets/product_location_section.dart';
 import '../../providers/order_provider.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -39,6 +39,7 @@ class ProductDetailScreen extends StatefulWidget {
   final VoidCallback? onSignInRequired;
   final ValueChanged<ItemModel>? onSimilarItemTap;
   final NotificationPermissionCoordinator? permissionCoordinator;
+  final RecommendationService? recommendationService;
 
   const ProductDetailScreen({
     super.key,
@@ -52,6 +53,7 @@ class ProductDetailScreen extends StatefulWidget {
     this.onSignInRequired,
     this.onSimilarItemTap,
     this.permissionCoordinator,
+    this.recommendationService,
   });
 
   @override
@@ -141,35 +143,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           widget.itemRepository ??
           context.read<ItemRepository?>() ??
           RestItemRepository();
-
-      List<ItemModel> candidates = [];
-      if (currentItem.category.isNotEmpty) {
-        try {
-          candidates = await repo.fetchDiscoveryItems(
-            DiscoveryQuery(category: currentItem.category),
-          );
-        } catch (_) {}
-      }
-
-      var filtered = candidates
-          .where((item) => item.id != currentItem.id)
-          .toList();
-
-      if (filtered.length < 4) {
-        try {
-          final recommended = await repo.fetchRecommendedItems(limit: 6);
-          for (final rec in recommended) {
-            if (rec.id != currentItem.id &&
-                !filtered.any((item) => item.id == rec.id)) {
-              filtered.add(rec);
-            }
-          }
-        } catch (_) {}
-      }
-
+      final recommendations =
+          widget.recommendationService ?? RecommendationService(repo);
+      final items = await recommendations.similarTo(
+        currentItem,
+        limit: 6,
+        token: _authToken,
+      );
       if (!mounted) return;
       setState(() {
-        _similarItems = filtered.take(6).toList();
+        _similarItems = items;
         _isLoadingSimilar = false;
       });
     } catch (_) {
@@ -597,6 +580,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   : null,
             )
           : ListView(
+              key: const Key('product-detail-scroll'),
               padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
               children: [
                 // Multi-Image Gallery
@@ -737,8 +721,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         const SizedBox(height: AppSpacing.xl),
                       ],
 
-                      // Key Specifications / Info Grid
+                      // Core listing facts
                       _ProductHighlightsGrid(product: product),
+                      if (product.attributes.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.xl),
+                        _ProductCategoryDetailsSection(product: product),
+                      ],
+                      const SizedBox(height: AppSpacing.xl),
+                      ProductLocationSection(item: product),
                       const SizedBox(height: AppSpacing.xl),
 
                       // Description Section
@@ -1013,44 +1003,13 @@ class _ProductHighlightsGrid extends StatelessWidget {
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    final definition = listingCategoryDefinition(product.category);
-    final attributeEntries =
-        <({String key, String label, String value, String? unit})>[];
-    for (final field
-        in definition?.attributes ?? const <ListingAttributeField>[]) {
-      final value = product.attributes[field.key]?.trim();
-      if (value == null || value.isEmpty) continue;
-      attributeEntries.add((
-        key: field.key,
-        label: field.label,
-        value: value,
-        unit: field.unit,
-      ));
-    }
-    final knownKeys = {
-      for (final field
-          in definition?.attributes ?? const <ListingAttributeField>[])
-        field.key,
-    };
-    for (final entry in product.attributes.entries) {
-      if (knownKeys.contains(entry.key) || entry.value.trim().isEmpty) continue;
-      attributeEntries.add((
-        key: entry.key,
-        label: entry.key,
-        value: entry.value.trim(),
-        unit: null,
-      ));
-    }
-
-    Widget buildTile({
+    Widget tile({
       required IconData icon,
       required String label,
       required String value,
-      required Color accentColor,
-      VoidCallback? onTap,
-      Key? tapKey,
+      required Color accent,
     }) {
-      final tile = Container(
+      return Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: 12,
@@ -1058,21 +1017,11 @@ class _ProductHighlightsGrid extends StatelessWidget {
         decoration: BoxDecoration(
           color: isDark
               ? colors.surfaceContainerHighest.withValues(alpha: 0.28)
-              : Colors.white,
+              : colors.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isDark
-                ? colors.outline.withValues(alpha: 0.18)
-                : colors.outline.withValues(alpha: 0.12),
-            width: 1,
+            color: colors.outline.withValues(alpha: isDark ? 0.18 : 0.12),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.03),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: Row(
           children: [
@@ -1080,28 +1029,23 @@ class _ProductHighlightsGrid extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: isDark ? 0.22 : 0.12),
+                color: accent.withValues(alpha: isDark ? 0.22 : 0.12),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: accentColor.withValues(alpha: isDark ? 0.35 : 0.2),
-                  width: 0.8,
-                ),
               ),
-              child: Center(child: Icon(icon, size: 20, color: accentColor)),
+              child: Icon(icon, size: 20, color: accent),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     label.toUpperCase(),
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                      color: colors.onSurface.withValues(alpha: 0.5),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.45,
+                      color: colors.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1109,136 +1053,66 @@ class _ProductHighlightsGrid extends StatelessWidget {
                     value,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: colors.onSurface,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ],
               ),
             ),
-            if (onTap != null) ...[
-              const SizedBox(width: 4),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: colors.onSurfaceVariant.withValues(alpha: 0.6),
-              ),
-            ],
           ],
-        ),
-      );
-      if (onTap == null) return tile;
-      return Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          key: tapKey,
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: tile,
         ),
       );
     }
 
-    return Column(
-      children: [
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - AppSpacing.sm) / 2;
+        return Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
           children: [
-            Expanded(
-              child: buildTile(
-                icon: Icons.near_me_rounded,
-                label: 'Location',
-                value: product.displayLocation,
-                accentColor: const Color(0xFF0284C7),
-                onTap: () => showProductLocationMap(context, product),
-                tapKey: const Key('detail-location-map-button'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: buildTile(
+            SizedBox(
+              width: width,
+              child: tile(
                 icon: _getCategoryIcon(product.category),
                 label: 'Category',
                 value: product.category,
-                accentColor: const Color(0xFFEA580C),
+                accent: const Color(0xFFEA580C),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          children: [
-            Expanded(
-              child: buildTile(
+            SizedBox(
+              width: width,
+              child: tile(
                 icon: Icons.handshake_rounded,
                 label: 'Handover',
                 value: _statusLabel(product.status),
-                accentColor: const Color(0xFF059669),
+                accent: const Color(0xFF059669),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: buildTile(
+            SizedBox(
+              width: width,
+              child: tile(
+                icon: Icons.auto_awesome_rounded,
+                label: 'Condition',
+                value: _formatConditionLabel(product.condition),
+                accent: const Color(0xFF7C3AED),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: tile(
                 icon: product.isSustainable
                     ? Icons.eco_rounded
-                    : Icons.auto_awesome_rounded,
-                label: product.isSustainable ? 'Eco-Choice' : 'Condition',
-                value: product.isSustainable
-                    ? 'Pre-loved'
-                    : _formatConditionLabel(product.condition),
-                accentColor: product.isSustainable
-                    ? const Color(0xFF10B981)
-                    : const Color(0xFF7C3AED),
+                    : Icons.recycling_rounded,
+                label: 'Circularity',
+                value: product.isSustainable ? 'Eco choice' : 'Pre-loved',
+                accent: const Color(0xFF0F766E),
               ),
             ),
           ],
-        ),
-        if (attributeEntries.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.md),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              product.category == 'Cars & Vehicles'
-                  ? 'Vehicle details'
-                  : '${product.category} details',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final width = (constraints.maxWidth - AppSpacing.sm) / 2;
-              return Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: [
-                  for (final entry in attributeEntries)
-                    SizedBox(
-                      width: width,
-                      child: buildTile(
-                        icon: product.category == 'Cars & Vehicles'
-                            ? Icons.directions_car_outlined
-                            : Icons.tune_rounded,
-                        label: entry.label,
-                        value: _formatListingAttributeDisplay(
-                          product.category,
-                          entry.key,
-                          entry.value,
-                          entry.unit,
-                        ),
-                        accentColor: const Color(0xFF0F766E),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
-      ],
+        );
+      },
     );
   }
 
@@ -1247,9 +1121,256 @@ class _ProductHighlightsGrid extends StatelessWidget {
     return condition
         .trim()
         .split(RegExp(r'[_\s]+'))
-        .where((w) => w.isNotEmpty)
-        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .where((word) => word.isNotEmpty)
+        .map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase())
         .join(' ');
+  }
+}
+
+class _ProductCategoryDetailsSection extends StatelessWidget {
+  const _ProductCategoryDetailsSection({required this.product});
+
+  final ItemModel product;
+
+  @override
+  Widget build(BuildContext context) {
+    final definition = listingCategoryDefinition(product.category);
+    final entries =
+        <
+          ({
+            String key,
+            String label,
+            String value,
+            String? unit,
+            IconData icon,
+          })
+        >[];
+
+    for (final field
+        in definition?.attributes ?? const <ListingAttributeField>[]) {
+      final value = product.attributes[field.key]?.trim();
+      if (value == null || value.isEmpty) continue;
+      entries.add((
+        key: field.key,
+        label: field.label,
+        value: value,
+        unit: field.unit,
+        icon: _attributeIcon(field.key),
+      ));
+    }
+
+    final knownKeys = {
+      for (final field
+          in definition?.attributes ?? const <ListingAttributeField>[])
+        field.key,
+    };
+    for (final entry in product.attributes.entries) {
+      if (knownKeys.contains(entry.key) || entry.value.trim().isEmpty) continue;
+      entries.add((
+        key: entry.key,
+        label: _humanizeKey(entry.key),
+        value: entry.value.trim(),
+        unit: null,
+        icon: Icons.tune_rounded,
+      ));
+    }
+
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final title = product.category == 'Cars & Vehicles'
+        ? 'Vehicle details'
+        : '${product.category} details';
+
+    return Column(
+      key: const Key('detail-category-details-section'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: colors.primaryContainer.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                product.category == 'Cars & Vehicles'
+                    ? Icons.directions_car_filled_outlined
+                    : _getCategoryIcon(product.category),
+                color: colors.primary,
+                size: 21,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Seller-provided specifications for this ${product.category.toLowerCase()} listing.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerHighest.withValues(alpha: 0.28),
+            borderRadius: BorderRadius.circular(AppRadius.large),
+            border: Border.all(
+              color: colors.outlineVariant.withValues(alpha: 0.5),
+            ),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 620 ? 3 : 2;
+              final gap = AppSpacing.sm * (columns - 1);
+              final width = (constraints.maxWidth - gap) / columns;
+              return Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final entry in entries)
+                    SizedBox(
+                      width: width,
+                      child: _ProductSpecificationCell(
+                        icon: entry.icon,
+                        label: entry.label,
+                        value: _formatListingAttributeDisplay(
+                          product.category,
+                          entry.key,
+                          entry.value,
+                          entry.unit,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _humanizeKey(String key) {
+    return key
+        .replaceAllMapped(
+          RegExp(r'([a-z0-9])([A-Z])'),
+          (match) => '${match.group(1)} ${match.group(2)}',
+        )
+        .replaceAll('_', ' ')
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase() + part.substring(1).toLowerCase())
+        .join(' ');
+  }
+
+  static IconData _attributeIcon(String key) {
+    final normalized = key.toLowerCase();
+    if (normalized.contains('year') || normalized.contains('date')) {
+      return Icons.calendar_month_outlined;
+    }
+    if (normalized.contains('wof')) return Icons.fact_check_outlined;
+    if (normalized.contains('mileage')) return Icons.speed_outlined;
+    if (normalized.contains('fuel') || normalized.contains('energy')) {
+      return Icons.local_gas_station_outlined;
+    }
+    if (normalized.contains('transmission')) return Icons.settings_outlined;
+    if (normalized.contains('engine')) {
+      return Icons.precision_manufacturing_outlined;
+    }
+    if (normalized.contains('registration')) return Icons.pin_outlined;
+    if (normalized.contains('brand') || normalized.contains('make')) {
+      return Icons.sell_outlined;
+    }
+    if (normalized.contains('model')) return Icons.badge_outlined;
+    if (normalized.contains('size') || normalized.contains('dimension')) {
+      return Icons.straighten_outlined;
+    }
+    if (normalized.contains('storage')) return Icons.sd_storage_outlined;
+    if (normalized.contains('author') || normalized.contains('isbn')) {
+      return Icons.menu_book_outlined;
+    }
+    if (normalized.contains('material')) return Icons.texture_outlined;
+    if (normalized.contains('age')) return Icons.child_care_outlined;
+    return Icons.tune_rounded;
+  }
+}
+
+class _ProductSpecificationCell extends StatelessWidget {
+  const _ProductSpecificationCell({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 72),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: colors.surface.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: colors.primary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

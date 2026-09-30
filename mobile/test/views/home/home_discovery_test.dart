@@ -130,6 +130,8 @@ void main() {
     await _loadHome(tester, _homeApp());
 
     expect(find.text('7 items'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('home-category-selector')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('home-category-Plants')));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
@@ -313,9 +315,10 @@ void main() {
       find.byKey(const Key('home-search-field')),
       'monstera',
     );
+    await tester.tap(find.byKey(const Key('home-category-selector')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('home-category-Plants')));
-    await tester.ensureVisible(find.byKey(const Key('home-map-view-toggle')));
-    await tester.tap(find.byKey(const Key('home-map-view-toggle')));
+    discovery.setView(HomeProductView.map);
     await tester.pump();
     discovery.selectPreview('item_1');
     await tester.pumpAndSettle();
@@ -419,7 +422,7 @@ void main() {
     await _loadHome(tester, _homeApp(textScaler: const TextScaler.linear(2)));
 
     expect(find.byKey(const Key('home-search-field')), findsOneWidget);
-    expect(find.byKey(const Key('home-category-Camping')), findsOneWidget);
+    expect(find.byKey(const Key('home-category-selector')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -473,10 +476,15 @@ void main() {
       expect(find.text('KiwiShare'), findsOneWidget);
       expect(find.text('Share & Reuse in NZ'), findsOneWidget);
 
-      // 2. Category Chips with Icons
+      // 2. Compact category selector opens the category grid.
+      expect(find.byKey(const Key('home-category-selector')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('home-category-selector')));
+      await tester.pumpAndSettle();
       expect(find.byKey(const Key('home-category-Plants')), findsOneWidget);
       expect(find.byIcon(Icons.yard_outlined), findsOneWidget);
       expect(find.byIcon(Icons.forest_outlined), findsOneWidget);
+      await tester.tap(find.byKey(const Key('home-category-all-button')));
+      await tester.pumpAndSettle();
 
       // 3. Featured Highlights Jumbo Carousel
       expect(find.text('Featured Highlights'), findsOneWidget);

@@ -58,15 +58,33 @@ class WatchlistHeartButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final favorites = context.watch<FavoritesProvider>();
-    final isFavorite = favorites.isFavorite(item.id);
+    final auth = context.watch<AuthProvider?>();
+    final currentUserId = auth?.currentUser?.id.trim();
+    final sellerId = item.seller?.id.trim();
+    final ownerId = item.ownerId.trim();
+    final isOwnItem =
+        currentUserId != null &&
+        currentUserId.isNotEmpty &&
+        ((ownerId.isNotEmpty && ownerId == currentUserId) ||
+            (sellerId != null &&
+                sellerId.isNotEmpty &&
+                sellerId == currentUserId));
+    final isFavorite = !isOwnItem && favorites.isFavorite(item.id);
 
     return Semantics(
       button: true,
-      label: isFavorite
+      enabled: !isOwnItem,
+      label: isOwnItem
+          ? '${item.title} is your listing'
+          : isFavorite
           ? 'Remove ${item.title} from Watchlist'
           : 'Add ${item.title} to Watchlist',
       child: Tooltip(
-        message: isFavorite ? 'Remove from Watchlist' : 'Add to Watchlist',
+        message: isOwnItem
+            ? 'This is your listing'
+            : isFavorite
+            ? 'Remove from Watchlist'
+            : 'Add to Watchlist',
         child: SizedBox.square(
           dimension: diameter,
           child: Material(
@@ -76,12 +94,22 @@ class WatchlistHeartButton extends StatelessWidget {
             child: InkWell(
               key: Key('watchlist-heart-${item.id}'),
               customBorder: const CircleBorder(),
-              onTap: () => unawaited(_toggle(context, favorites)),
+              onTap: isOwnItem
+                  ? null
+                  : () => unawaited(_toggle(context, favorites)),
               child: Center(
                 child: Icon(
-                  isFavorite ? Icons.favorite : Icons.favorite_border,
+                  isOwnItem
+                      ? Icons.favorite_border_rounded
+                      : isFavorite
+                      ? Icons.favorite
+                      : Icons.favorite_border,
                   size: iconSize,
-                  color: isFavorite ? const Color(0xFFEF4444) : Colors.white,
+                  color: isOwnItem
+                      ? Colors.white54
+                      : isFavorite
+                      ? const Color(0xFFEF4444)
+                      : Colors.white,
                 ),
               ),
             ),

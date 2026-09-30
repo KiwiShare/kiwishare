@@ -96,6 +96,8 @@ class WatchlistPriceDropMessage {
     required this.oldPrice,
     required this.newPrice,
     this.itemTitle = 'Saved item',
+    this.type = 'watchlist_price_drop',
+    this.direction,
   });
 
   final String itemId;
@@ -103,11 +105,19 @@ class WatchlistPriceDropMessage {
   final String oldPrice;
   final String newPrice;
   final String itemTitle;
+  final String type;
+  final String? direction;
 
   String get notificationSummary {
     final title = itemTitle.trim().isEmpty ? 'Saved item' : itemTitle.trim();
+    if (type == 'watchlist_nearby_category') {
+      return '$title was just listed near you.';
+    }
     if (oldPrice.isEmpty || newPrice.isEmpty) {
-      return '$title has dropped in price.';
+      return '$title changed in price.';
+    }
+    if (direction == 'up') {
+      return '$title changed from \$$oldPrice to \$$newPrice';
     }
     return '$title dropped from \$$oldPrice to \$$newPrice';
   }
@@ -115,7 +125,12 @@ class WatchlistPriceDropMessage {
   static final RegExp _objectId = RegExp(r'^[0-9a-fA-F]{24}$');
 
   static WatchlistPriceDropMessage? fromData(Map<String, dynamic> data) {
-    if (data['type'] != 'watchlist_price_drop') return null;
+    final type = data['type']?.toString() ?? '';
+    if (type != 'watchlist_price_drop' &&
+        type != 'watchlist_price_change' &&
+        type != 'watchlist_nearby_category') {
+      return null;
+    }
     final itemId = data['itemId']?.toString().trim() ?? '';
     if (!_objectId.hasMatch(itemId)) return null;
     return WatchlistPriceDropMessage(
@@ -124,6 +139,8 @@ class WatchlistPriceDropMessage {
       oldPrice: data['oldPrice']?.toString().trim() ?? '',
       newPrice: data['newPrice']?.toString().trim() ?? '',
       itemTitle: data['itemTitle']?.toString().trim() ?? 'Saved item',
+      type: type,
+      direction: data['direction']?.toString().trim(),
     );
   }
 }

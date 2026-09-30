@@ -456,6 +456,85 @@ void main() {
   );
 
   testWidgets(
+    'confirmed paid meetup status card exposes complete transaction details',
+    (tester) async {
+      final repository = FakeChatRepository(
+        messages: {
+          'conversation-1': [
+            testMessage(
+              id: '464',
+              text: 'Meetup confirmed',
+              isMine: true,
+              type: 'meetup',
+              meetup: ChatMeetupPayload(
+                orderId: 'order-ready',
+                scheduledAt: DateTime.utc(2026, 10, 3, 2, 30),
+                locationName: 'Auckland Central Library',
+                proposalStatus: 'confirmed',
+                agreedPriceNzd: '60.00',
+              ),
+            ),
+          ],
+        },
+      );
+      final orderProvider = OrderProvider(
+        repository: _ConversationOrderRepository([
+          OrderModel(
+            id: 'order-ready',
+            orderNumber: 'ORD-READY',
+            status: 'paid',
+            role: 'buying',
+            itemId: 'item-conversation-1',
+            item: const OrderItemInfo(
+              id: 'item-conversation-1',
+              title: 'Ergonomic Office Chair',
+              priceNzd: '65.00',
+              imageUrl: '',
+            ),
+            counterparty: const OrderCounterparty(
+              id: 'participant-conversation-1',
+              displayName: 'Sophie M.',
+              role: 'seller',
+            ),
+            itemAmountNzd: '60.00',
+            createdAt: DateTime.utc(2026, 10, 1),
+            updatedAt: DateTime.utc(2026, 10, 1),
+          ),
+        ]),
+      );
+      await orderProvider.loadMyOrders('valid-token');
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<OrderProvider>.value(
+          value: orderProvider,
+          child: _buildSubject(repository: repository),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ready for handover'), findsOneWidget);
+      expect(
+        find.byKey(const Key('chat_transaction_status_card')),
+        findsOneWidget,
+      );
+      expect(find.text('Auckland Central Library'), findsWidgets);
+      expect(find.text('#ORD-READY'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('chat_transaction_status_card')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('chat_transaction_view_orders')),
+        findsOneWidget,
+      );
+      expect(find.text('Auckland Central Library'), findsWidgets);
+      expect(find.text('#ORD-READY'), findsWidgets);
+      expect(find.text(r'$60.00 NZD'), findsOneWidget);
+      expect(find.text('Ready for meetup'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'treats a meetup proposal as a proposal until the other person confirms it',
     (tester) async {
       final repository = FakeChatRepository(

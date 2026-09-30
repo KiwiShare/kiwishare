@@ -9,6 +9,7 @@ import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/product_location_service.dart';
+import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/resilient_network_image.dart';
 import '../../widgets/kiwishare_logo.dart';
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _searchController;
   late final ProductLocationService _locationService;
   late HomeDiscoveryProvider _discovery;
+  late RecommendationService _recommendations;
   Future<List<ItemModel>>? _itemsFuture;
   Future<List<ItemModel>>? _featuredFuture;
   Future<List<ItemModel>>? _recommendedFuture;
@@ -60,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.didChangeDependencies();
     if (_initialized) return;
     final listingProvider = context.read<ListingProvider>();
+    _recommendations = RecommendationService(listingProvider.itemRepository);
     _discovery = context.read<HomeDiscoveryProvider>();
     _searchController.text = _discovery.query;
     _lastRequestedQuery = _discovery.discoveryQuery;
@@ -67,8 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _itemsFuture = listingProvider.getDiscoveryItems(
       query: _discovery.discoveryQuery,
     );
-    _featuredFuture = listingProvider.getFeaturedItems(limit: 10);
-    _recommendedFuture = listingProvider.getRecommendedItems(
+    _featuredFuture = _recommendations.featured(limit: 10);
+    _recommendedFuture = _recommendations.forYou(
       limit: 10,
       latitude: _discovery.userLatitude,
       longitude: _discovery.userLongitude,
@@ -155,11 +158,11 @@ class _HomeScreenState extends State<HomeScreen> {
         query: query,
         forceRefresh: true,
       );
-      _featuredFuture = listingProvider.getFeaturedItems(
+      _featuredFuture = _recommendations.featured(
         limit: 10,
         forceRefresh: true,
       );
-      _recommendedFuture = listingProvider.getRecommendedItems(
+      _recommendedFuture = _recommendations.forYou(
         limit: 10,
         latitude: _discovery.userLatitude,
         longitude: _discovery.userLongitude,
@@ -315,22 +318,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     onRetry: () => _loadDiscoveryOptions(forceRefresh: true),
                   )
                 else
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final category in filters.categories) ...[
-                          _HomeCategoryChip(
-                            key: Key('home-category-${category.value}'),
-                            label: category.value,
-                            selected:
-                                filters.selectedCategory == category.value,
-                            onTap: () => filters.toggleCategory(category.value),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                        ],
-                      ],
-                    ),
+                  _HomeCategorySelector(
+                    categories: filters.categories,
+                    selectedCategory: filters.selectedCategory,
+                    onSelected: filters.toggleCategory,
                   ),
                 const SizedBox(height: AppSpacing.lg),
                 FutureBuilder<List<ItemModel>>(
@@ -553,48 +544,216 @@ class _HomeHeader extends StatelessWidget {
   }
 }
 
-class _HomeCategoryChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _HomeCategoryChip({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
+class _HomeCategorySelector extends StatelessWidget {
+  const _HomeCategorySelector({
+    required this.categories,
+    required this.selectedCategory,
+    required this.onSelected,
   });
+
+  final List<DiscoveryCategoryOption> categories;
+  final String selectedCategory;
+  final ValueChanged<String> onSelected;
+
+  Future<void> _openPicker(BuildContext context) async {
+    final colors = Theme.of(context).colorScheme;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: colors.surface,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.68,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Browse by category',
+                        style: Theme.of(sheetContext).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    TextButton(
+                      key: const Key('home-category-all-button'),
+                      onPressed: () => Navigator.of(sheetContext).pop('All NZ'),
+                      child: const Text('All'),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    0,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                  ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisExtent: 76,
+                    crossAxisSpacing: AppSpacing.sm,
+                    mainAxisSpacing: AppSpacing.sm,
+                  ),
+                  itemCount: categories.length,
+                  itemBuilder: (context, index) {
+                    final category = categories[index];
+                    final isSelected = category.value == selectedCategory;
+                    return Material(
+                      color: isSelected
+                          ? colors.primaryContainer
+                          : colors.surfaceContainerHighest.withValues(
+                              alpha: 0.46,
+                            ),
+                      borderRadius: BorderRadius.circular(16),
+                      child: InkWell(
+                        key: Key('home-category-${category.value}'),
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () =>
+                            Navigator.of(sheetContext).pop(category.value),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 13,
+                            vertical: 11,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? colors.primary.withValues(alpha: 0.14)
+                                      : colors.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  _getCategoryIcon(category.value),
+                                  size: 20,
+                                  color: isSelected
+                                      ? colors.primary
+                                      : colors.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  category.value == 'All NZ'
+                                      ? 'All categories'
+                                      : category.value,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(sheetContext)
+                                      .textTheme
+                                      .labelLarge
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        color: isSelected
+                                            ? colors.onPrimaryContainer
+                                            : colors.onSurface,
+                                      ),
+                                ),
+                              ),
+                              if (isSelected)
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 18,
+                                  color: colors.primary,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected != null && selected != selectedCategory) {
+      onSelected(selected);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final iconData = _getCategoryIcon(label);
-    return ChoiceChip(
-      avatar: Icon(
-        iconData,
-        size: 16,
-        color: selected ? colors.onPrimaryContainer : colors.onSurfaceVariant,
-      ),
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      selectedColor: colors.primaryContainer,
-      backgroundColor: isDark
-          ? colors.surfaceContainerHighest.withValues(alpha: 0.72)
-          : colors.surface,
-      side: BorderSide(
-        color: selected ? colors.primary : colors.outline,
-        width: selected ? 1.5 : 1.0,
-      ),
-      shape: RoundedRectangleBorder(
+    final colors = Theme.of(context).colorScheme;
+    final displayValue = selectedCategory == 'All NZ'
+        ? 'All categories'
+        : selectedCategory;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.48),
         borderRadius: BorderRadius.circular(AppRadius.full),
-      ),
-      showCheckmark: false,
-      labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-        color: selected ? colors.onPrimaryContainer : colors.onSurface,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        child: InkWell(
+          key: const Key('home-category-selector'),
+          onTap: () => _openPicker(context),
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: colors.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _getCategoryIcon(selectedCategory),
+                    size: 16,
+                    color: colors.primary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Category',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: Text(
+                    displayValue,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: colors.onSurface,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 19,
+                  color: colors.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -738,6 +897,49 @@ class _HomeJumboCarouselState extends State<_HomeJumboCarousel> {
   }
 }
 
+class _HomeHeroBadge extends StatelessWidget {
+  const _HomeHeroBadge({
+    required this.icon,
+    required this.label,
+    required this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: iconColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HomeJumboCard extends StatelessWidget {
   final ItemModel item;
   final VoidCallback onTap;
@@ -806,104 +1008,30 @@ class _HomeJumboCard extends StatelessWidget {
                 Positioned(
                   top: AppSpacing.sm,
                   left: AppSpacing.sm,
-                  right: 46,
-                  child: Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: 4,
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                          vertical: AppSpacing.xs,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.62),
-                          borderRadius: BorderRadius.circular(AppRadius.full),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.local_fire_department,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 2),
-                            Text(
-                              'Featured',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ],
-                        ),
+                      const _HomeHeroBadge(
+                        icon: Icons.local_fire_department,
+                        label: 'Featured',
+                        iconColor: Colors.white,
                       ),
-                      if (item.isSustainable)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: AppSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(AppRadius.full),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.eco,
-                                size: 14,
-                                color: Color(0xFF86EFAC),
-                              ),
-                              SizedBox(width: 2),
-                              Text(
-                                'ECO',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
-                          ),
+                      if (item.isSustainable) ...[
+                        const SizedBox(height: 5),
+                        const _HomeHeroBadge(
+                          icon: Icons.eco,
+                          label: 'Eco',
+                          iconColor: Color(0xFF86EFAC),
                         ),
-                      if (item.seller?.isStudentVerified == true)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: AppSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(AppRadius.full),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.verified,
-                                size: 14,
-                                color: Color(0xFF93C5FD),
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                'STUDENT VERIFIED',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
+                      ],
+                      if (item.seller?.isStudentVerified == true) ...[
+                        const SizedBox(height: 5),
+                        const _HomeHeroBadge(
+                          icon: Icons.verified,
+                          label: 'Student verified',
+                          iconColor: Color(0xFF93C5FD),
                         ),
+                      ],
                     ],
                   ),
                 ),

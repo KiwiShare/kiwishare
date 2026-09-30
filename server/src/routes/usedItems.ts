@@ -9,6 +9,10 @@ import Order from '../models/Order';
 import Conversation from '../models/Conversation';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import { notifyWatchlistPriceDrop } from '../services/pushNotification';
+import {
+  notifyNearbyCategoryWatchers,
+  notifyWatchlistPriceIncrease
+} from '../services/watchlistAlerts';
 import { sendAdminItemNotification } from '../services/adminNotification';
 import {
   ListingAttributeValidationError,
@@ -695,6 +699,13 @@ async function createUsedItemHandler(ctx: any) {
 
   await newItem.populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
 
+  notifyNearbyCategoryWatchers(newItem).catch((err) => {
+    console.warn(
+      '[Watchlist Alert] Nearby-category background dispatch warning:',
+      err instanceof Error ? err.message : err
+    );
+  });
+
   // If created by an admin and assigned to another user, send email & push notification
   if (callingUser.role === 'admin' && assignedSeller._id.toString() !== callingUser._id.toString()) {
     sendAdminItemNotification({
@@ -886,7 +897,8 @@ async function updateUsedItemHandler(ctx: any) {
   const newPriceCents = updatedItem.price;
   const newPriceNzd = updatedItem.priceNzd;
 
-  // Price drop detection: trigger notifications only if newPrice < oldPrice
+  // Watchlist price alerts cover both directions. Drops keep the established
+  // delivery/history path; increases use the lightweight watchlist alert path.
   if (newPriceCents < previousPriceCents) {
     // A fresh immutable identity represents this persisted price-change event.
     // It intentionally does not deduplicate by item/new price, because a later
@@ -902,6 +914,19 @@ async function updateUsedItemHandler(ctx: any) {
     }).catch((err) => {
       console.warn(
         '[Notification] Background price drop dispatch warning:',
+        err instanceof Error ? err.message : err
+      );
+    });
+  } else if (newPriceCents > previousPriceCents) {
+    notifyWatchlistPriceIncrease({
+      item: updatedItem,
+      oldPriceNzd: previousPriceNzd,
+      newPriceNzd,
+      oldPriceCents: previousPriceCents,
+      newPriceCents
+    }).catch((err) => {
+      console.warn(
+        '[Watchlist Alert] Background price increase dispatch warning:',
         err instanceof Error ? err.message : err
       );
     });

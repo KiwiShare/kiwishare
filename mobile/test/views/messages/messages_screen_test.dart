@@ -203,7 +203,7 @@ void main() {
     expect(find.text('Please sign in'), findsOneWidget);
     expect(
       find.text(
-        'Sign in to view your chats and Watchlist, and keep your KiwiShare activity together.',
+        'Sign in to view your chats and watchlist, and keep your KiwiShare activity together.',
       ),
       findsOneWidget,
     );
