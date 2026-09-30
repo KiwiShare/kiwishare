@@ -34,6 +34,16 @@
 				<string>com.googleusercontent.apps.353504132004-ljdbt8oa154268k63uk73gkeviacpfr1</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>app.kiwishare.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>kiwishare</string>
+			</array>
+		</dict>
 	</array>
 	<key>GIDClientID</key>
 	<string>353504132004-ljdbt8oa154268k63uk73gkeviacpfr1.apps.googleusercontent.com</string>

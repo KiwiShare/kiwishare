@@ -2,8 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:image_picker/image_picker.dart';
-import '../../services/r2_upload_service.dart';
 import '../../theme/app_theme.dart';
 
 import '../../models/user_model.dart';
@@ -17,7 +15,6 @@ import 'kiwigold_topup_sheet.dart';
 import 'my_reports_screen.dart';
 import 'payment_methods_screen.dart';
 import 'report_screen.dart';
-import 'notification_settings_screen.dart';
 import 'user_listings_screen.dart';
 import 'user_meetups_screen.dart';
 import 'user_orders_screen.dart';
@@ -39,7 +36,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   String? _loadedToken;
   String? _refreshError;
-  bool _avatarBusy = false;
 
   @override
   void didChangeDependencies() {
@@ -87,79 +83,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _editAvatar() async {
-    final auth = context.read<AuthProvider>();
-    final token = auth.jwtToken;
-    if (token == null || _avatarBusy) return;
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      builder: (sheet) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('Take a photo'),
-              onTap: () => Navigator.pop(sheet, 'camera'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose from photo library'),
-              onTap: () => Navigator.pop(sheet, 'photo'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: const Text('Use default avatar'),
-              onTap: () => Navigator.pop(sheet, 'default'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (choice == null || !mounted || auth.jwtToken != token) return;
-    setState(() => _avatarBusy = true);
-    try {
-      var url = '';
-      if (choice == 'photo' || choice == 'camera') {
-        final photo = await ImagePicker().pickImage(
-          source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
-          maxWidth: 1024,
-          imageQuality: 85,
-        );
-        if (photo == null) return;
-        final bytes = await photo.readAsBytes();
-        if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) {
-          throw StateError('Choose a photo smaller than 5 MB.');
-        }
-        if (auth.jwtToken != token) return;
-        url = await R2UploadService().uploadImage(
-          bytes: bytes,
-          fileName: photo.name,
-          contentType:
-              photo.mimeType ??
-              (photo.name.toLowerCase().endsWith('.png')
-                  ? 'image/png'
-                  : 'image/jpeg'),
-          authToken: token,
-        );
-      }
-      if (auth.jwtToken != token) return;
-      await auth.updateAvatar(url);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not save photo. Choose an image under 5 MB and try again.',
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _avatarBusy = false);
-    }
-  }
-
   Future<void> _showLogin(BuildContext context) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -193,40 +116,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     ),
   );
-
-  Future<void> _showChangePassword(BuildContext context) async {
-    final changed = await showDialog<bool>(
-      context: context,
-      builder: (_) => _ChangePasswordDialog(
-        onSave: ({required currentPassword, required newPassword}) =>
-            context.read<AuthProvider>().changePassword(
-              currentPassword: currentPassword,
-              newPassword: newPassword,
-            ),
-      ),
-    );
-    if (changed == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password changed successfully.')),
-      );
-    }
-  }
-
-  Future<void> _showOtpSetPassword(BuildContext context) async {
-    final changed = await showDialog<bool>(
-      context: context,
-      builder: (_) => const _OtpSetPasswordDialog(),
-    );
-    if (changed == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Password set. You can now sign in with your email and password.',
-          ),
-        ),
-      );
-    }
-  }
 
   Future<void> _editName(BuildContext context, UserModel user) async {
     final auth = context.read<AuthProvider>();
@@ -566,8 +455,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final canChangePassword =
-        user?.authProvider == null || user?.authProvider == 'email_password';
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -724,69 +611,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 14),
             ],
-            const _SectionHeader(title: 'Preferences'),
-            _SoftMenuContainer(
-              children: [
-                _ModernMenuTile(
-                  icon: Icons.palette_outlined,
-                  iconColor: const Color(0xFF6366F1),
-                  title: 'Appearance',
-                  subtitle: _themeLabel(
-                    context.watch<ThemeProvider>().themeMode,
-                  ),
-                  onTap: () => _showAppearance(context),
-                ),
-                if (signedIn)
-                  _ModernMenuTile(
-                    icon: Icons.notifications_active_outlined,
-                    iconColor: const Color(0xFFF59E0B),
-                    title: 'Notifications',
-                    subtitle: 'System permission and notification access',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => const NotificationSettingsScreen(),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (signedIn) ...[
-              const _SectionHeader(title: 'Account & security'),
-              _SoftMenuContainer(
-                children: [
-                  _ModernMenuTile(
-                    icon: Icons.portrait_rounded,
-                    iconColor: const Color(0xFFF43F5E),
-                    title: _avatarBusy ? 'Saving photo...' : 'Profile photo',
-                    subtitle: 'Photo and avatar',
-                    onTap: _editAvatar,
-                  ),
-                  _ModernMenuTile(
-                    icon: Icons.badge_outlined,
-                    iconColor: const Color(0xFF14B8A6),
-                    title: 'Username',
-                    subtitle: user.username?.trim().isNotEmpty == true
-                        ? '@${user.username}'
-                        : 'Set a username',
-                    onTap: () => _editName(context, user),
-                  ),
-                  _ModernMenuTile(
-                    icon: Icons.lock_outline,
-                    iconColor: const Color(0xFF0EA5E9),
-                    title: 'Change password',
-                    subtitle: canChangePassword
-                        ? 'Update your password'
-                        : 'Set a password using an email code',
-                    onTap: canChangePassword
-                        ? () => _showChangePassword(context)
-                        : () => _showOtpSetPassword(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
             const _SectionHeader(title: 'Safety & support'),
             _SoftMenuContainer(
               children: [
@@ -881,42 +705,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
-  static String _themeLabel(ThemeMode mode) => switch (mode) {
-    ThemeMode.system => 'Use device setting',
-    ThemeMode.light => 'Light',
-    ThemeMode.dark => 'Dark',
-  };
-
-  Future<void> _showAppearance(BuildContext context) async {
-    final provider = context.read<ThemeProvider>();
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: ThemeMode.values
-                .map(
-                  (mode) => RadioListTile<ThemeMode>(
-                    value: mode,
-                    groupValue: provider.themeMode,
-                    title: Text(_themeLabel(mode)),
-                    onChanged: (value) async {
-                      if (value == null) return;
-                      await provider.setThemeMode(value);
-                      if (sheetContext.mounted) Navigator.pop(sheetContext);
-                    },
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _ProfileHeader extends StatelessWidget {
@@ -934,9 +722,10 @@ class _ProfileHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final initial = user.displayName.trim().isEmpty
-        ? '?'
-        : user.displayName.trim()[0].toUpperCase();
+    final publicName = user.username?.trim().isNotEmpty == true
+        ? user.username!.trim()
+        : user.displayName.trim();
+    final initial = publicName.isEmpty ? '?' : publicName[0].toUpperCase();
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -1036,7 +825,7 @@ class _ProfileHeader extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            user.displayName,
+                            publicName,
                             style: theme.textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.3,
@@ -1874,7 +1663,6 @@ class _EditUsernameDialogState extends State<_EditUsernameDialog> {
           autocorrect: false,
           decoration: InputDecoration(
             labelText: 'Username',
-            prefixText: '@',
             helperText: '3-24 letters, numbers, or underscores',
             errorText: _failure,
           ),
@@ -1899,154 +1687,6 @@ class _EditUsernameDialogState extends State<_EditUsernameDialog> {
       ],
     );
   }
-}
-
-class _ChangePasswordDialog extends StatefulWidget {
-  const _ChangePasswordDialog({required this.onSave});
-  final Future<void> Function({
-    required String currentPassword,
-    required String newPassword,
-  })
-  onSave;
-
-  @override
-  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
-}
-
-class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _current = TextEditingController();
-  final _next = TextEditingController();
-  final _confirm = TextEditingController();
-  bool _saving = false;
-  bool _showCurrent = false;
-  bool _showNext = false;
-  bool _showConfirm = false;
-  String? _failure;
-
-  @override
-  void dispose() {
-    _current.dispose();
-    _next.dispose();
-    _confirm.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
-    try {
-      await widget.onSave(
-        currentPassword: _current.text,
-        newPassword: _next.text,
-      );
-      if (mounted) Navigator.pop(context, true);
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _failure = error.toString().replaceFirst('Exception: ', '');
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Change password'),
-    content: Form(
-      key: _formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextFormField(
-            controller: _current,
-            obscureText: !_showCurrent,
-            decoration: InputDecoration(
-              labelText: 'Current password',
-              suffixIcon: IconButton(
-                tooltip: _showCurrent
-                    ? 'Hide current password'
-                    : 'Show current password',
-                icon: Icon(
-                  _showCurrent
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                ),
-                onPressed: _saving
-                    ? null
-                    : () => setState(() => _showCurrent = !_showCurrent),
-              ),
-            ),
-            validator: (v) =>
-                v == null || v.isEmpty ? 'Enter your current password.' : null,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _next,
-            obscureText: !_showNext,
-            decoration: InputDecoration(
-              labelText: 'New password',
-              suffixIcon: IconButton(
-                tooltip: _showNext ? 'Hide new password' : 'Show new password',
-                icon: Icon(
-                  _showNext
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                ),
-                onPressed: _saving
-                    ? null
-                    : () => setState(() => _showNext = !_showNext),
-              ),
-            ),
-            validator: (v) =>
-                v == null || v.length < 8 ? 'Use at least 8 characters.' : null,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _confirm,
-            obscureText: !_showConfirm,
-            decoration: InputDecoration(
-              labelText: 'Confirm new password',
-              suffixIcon: IconButton(
-                tooltip: _showConfirm
-                    ? 'Hide password confirmation'
-                    : 'Show password confirmation',
-                icon: Icon(
-                  _showConfirm
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                ),
-                onPressed: _saving
-                    ? null
-                    : () => setState(() => _showConfirm = !_showConfirm),
-              ),
-            ),
-            validator: (v) =>
-                v != _next.text ? 'Passwords do not match.' : null,
-          ),
-          if (_failure != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _failure!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-        ],
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: _saving ? null : () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _saving ? null : _save,
-        child: _saving ? const Text('Saving...') : const Text('Save'),
-      ),
-    ],
-  );
 }
 
 class _KiwigoldVipBannerCard extends StatelessWidget {
@@ -2395,199 +2035,6 @@ class _VipPerkItem extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _OtpSetPasswordDialog extends StatefulWidget {
-  const _OtpSetPasswordDialog();
-
-  @override
-  State<_OtpSetPasswordDialog> createState() => _OtpSetPasswordDialogState();
-}
-
-class _OtpSetPasswordDialogState extends State<_OtpSetPasswordDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _email = TextEditingController();
-  final _code = TextEditingController();
-  final _next = TextEditingController();
-  final _confirm = TextEditingController();
-  bool _sending = false;
-  bool _saving = false;
-  bool _showPassword = false;
-  String? _failure;
-
-  @override
-  void dispose() {
-    _email.dispose();
-    _code.dispose();
-    _next.dispose();
-    _confirm.dispose();
-    super.dispose();
-  }
-
-  Future<void> _sendCode() async {
-    setState(() {
-      _sending = true;
-      _failure = null;
-    });
-    try {
-      final email = _email.text.trim();
-      if (!email.contains('@')) {
-        setState(() => _failure = 'Enter a valid email address.');
-        return;
-      }
-      await context.read<AuthProvider>().requestPasswordReset(email);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Reset code sent. If email delivery is not configured, read the code from the server log.',
-            ),
-          ),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _failure = error.toString().replaceFirst('Exception: ', '');
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _saving = true;
-      _failure = null;
-    });
-    try {
-      await context.read<AuthProvider>().resetPassword(
-        email: _email.text.trim(),
-        code: _code.text.trim(),
-        newPassword: _next.text,
-      );
-      if (mounted) Navigator.pop(context, true);
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _failure = error.toString().replaceFirst('Exception: ', '');
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return AlertDialog(
-      title: const Text('Set a password'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'We will send a verification code to the email below.',
-              style: TextStyle(color: colors.onSurfaceVariant),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Account email',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) => v == null || !v.contains('@')
-                  ? 'Enter a valid email address.'
-                  : null,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _code,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    decoration: const InputDecoration(
-                      labelText: 'Verification code',
-                      counterText: '',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) => v == null || v.trim().isEmpty
-                        ? 'Enter the code.'
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: TextButton(
-                    onPressed: _sending ? null : _sendCode,
-                    child: Text(_sending ? 'Sending…' : 'Send code'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _next,
-              obscureText: !_showPassword,
-              decoration: InputDecoration(
-                labelText: 'New password',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  tooltip: _showPassword ? 'Hide password' : 'Show password',
-                  icon: Icon(
-                    _showPassword
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                  ),
-                  onPressed: _saving
-                      ? null
-                      : () => setState(() => _showPassword = !_showPassword),
-                ),
-              ),
-              validator: (v) => v == null || v.length < 8
-                  ? 'Use at least 8 characters.'
-                  : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _confirm,
-              obscureText: !_showPassword,
-              decoration: const InputDecoration(
-                labelText: 'Confirm new password',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  v != _next.text ? 'Passwords do not match.' : null,
-            ),
-            if (_failure != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(_failure!, style: TextStyle(color: colors.error)),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: Text(_saving ? 'Saving…' : 'Save'),
         ),
       ],
     );

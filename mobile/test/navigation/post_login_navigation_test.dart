@@ -14,7 +14,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'opens Publish after signing in from the centre navigation action',
+    'opens the publish deck after signing in from the centre navigation action',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       tester.view.physicalSize = const Size(800, 900);
@@ -78,6 +78,23 @@ void main() {
         'password123',
       );
       await tester.tap(find.widgetWithText(ElevatedButton, 'Log In'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('List an item'), findsOneWidget);
+      final categoryChoice = find.byKey(const Key('post-entry-category'));
+      final aiChoice = find.byKey(const Key('post-entry-ai'));
+      expect(categoryChoice, findsOneWidget);
+      expect(aiChoice, findsOneWidget);
+      expect(
+        tester.getSize(categoryChoice).height,
+        tester.getSize(aiChoice).height,
+      );
+
+      await tester.tap(categoryChoice);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('post-entry-category-Electronics')),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('post_test_destination')), findsOneWidget);

@@ -44,6 +44,8 @@ export interface IUser extends Document {
   vipAutoRenew?: boolean;
   notificationPreferences?: {
     watchlistPriceDrop: boolean;
+    watchlistPriceChange: boolean;
+    watchlistNearbyCategory: boolean;
   };
   registrationPlatform: 'web' | 'mobile_ios' | 'mobile_android' | 'mobile' | 'unknown';
   lastUsedPlatform: 'web' | 'mobile_ios' | 'mobile_android' | 'mobile' | 'unknown';
@@ -96,7 +98,9 @@ const UserSchema = new Schema<IUser>(
     },
     deletedAt: { type: Date },
     notificationPreferences: {
-      watchlistPriceDrop: { type: Boolean, default: true }
+      watchlistPriceDrop: { type: Boolean, default: true },
+      watchlistPriceChange: { type: Boolean, default: true },
+      watchlistNearbyCategory: { type: Boolean, default: false }
     },
 
     // Compatibility fields

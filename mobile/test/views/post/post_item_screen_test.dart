@@ -126,7 +126,7 @@ void main() {
     expect(find.text('What are you selling?'), findsOneWidget);
 
     await tester.tap(
-      find.byKey(const Key('post_selection_option_Cars & Vehicles')),
+      find.byKey(const Key('post-entry-category-Cars & Vehicles')),
     );
     await tester.pumpAndSettle();
 

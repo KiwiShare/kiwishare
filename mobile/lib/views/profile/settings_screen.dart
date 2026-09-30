@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/watchlist_provider.dart';
 import '../../services/notification_permission_coordinator.dart';
+import '../../services/r2_upload_service.dart';
 import 'help_center_screen.dart';
 import 'notification_settings_screen.dart';
 import 'student_verification_sheet.dart';
+import 'student_verification_benefits_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -22,6 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _chatPushEnabled = true;
   bool _soundEnabled = true;
   bool _isLoadingPrefs = true;
+  bool _avatarBusy = false;
 
   @override
   void initState() {
@@ -235,27 +239,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
               isDark: isDark,
               children: [
                 _buildListTile(
-                  icon: Icons.person_outline,
-                  title: 'Display Name',
-                  subtitle: user.displayName,
+                  icon: Icons.portrait_rounded,
+                  title: _avatarBusy ? 'Saving photo...' : 'Profile Photo',
+                  subtitle: 'Photo and avatar',
                   trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () => _editDisplayName(context, user),
+                  onTap: _avatarBusy ? null : _editAvatar,
+                ),
+                _buildDivider(),
+                _buildListTile(
+                  icon: Icons.badge_outlined,
+                  title: 'Username',
+                  subtitle: user.username?.trim().isNotEmpty == true
+                      ? user.username!.trim()
+                      : user.displayName,
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => _editUsername(context, user),
                 ),
                 _buildDivider(),
                 _buildListTile(
                   icon: Icons.school_outlined,
                   title: 'Student Verification',
                   subtitle: user.isStudentVerified
-                      ? 'Verified (${user.studentInstitution ?? "NZ University"})'
+                      ? 'Verified · View benefits'
                       : 'Unverified · Verify to get 100 KiwiGold',
-                  trailing: user.isStudentVerified
-                      ? const Icon(
-                          Icons.check_circle,
-                          color: Color(0xFF059669),
-                          size: 20,
-                        )
-                      : const Icon(Icons.chevron_right, size: 20),
-                  onTap: () => showStudentVerificationSheet(context),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => user.isStudentVerified
+                      ? showStudentVerificationBenefitsSheet(context, user)
+                      : showStudentVerificationSheet(context),
                 ),
                 if (user.authProvider == null ||
                     user.authProvider == 'email_password') ...[
@@ -548,29 +558,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return const Divider(height: 1, indent: 56, endIndent: 16);
   }
 
-  Future<void> _editDisplayName(BuildContext context, UserModel user) async {
-    final controller = TextEditingController(text: user.displayName);
+  Future<void> _editAvatar() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.jwtToken;
+    if (token == null || _avatarBusy) return;
+
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(sheet, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from photo library'),
+              onTap: () => Navigator.pop(sheet, 'photo'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Use default avatar'),
+              onTap: () => Navigator.pop(sheet, 'default'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted || auth.jwtToken != token) return;
+
+    setState(() => _avatarBusy = true);
+    try {
+      var url = '';
+      if (choice == 'photo' || choice == 'camera') {
+        final photo = await ImagePicker().pickImage(
+          source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+          maxWidth: 1024,
+          imageQuality: 85,
+        );
+        if (photo == null) return;
+        final bytes = await photo.readAsBytes();
+        if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) {
+          throw StateError('Choose a photo smaller than 5 MB.');
+        }
+        if (auth.jwtToken != token) return;
+        url = await R2UploadService().uploadImage(
+          bytes: bytes,
+          fileName: photo.name,
+          contentType:
+              photo.mimeType ??
+              (photo.name.toLowerCase().endsWith('.png')
+                  ? 'image/png'
+                  : 'image/jpeg'),
+          authToken: token,
+        );
+      }
+      if (auth.jwtToken != token) return;
+      await auth.updateAvatar(url);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not save photo. Choose an image under 5 MB and try again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _avatarBusy = false);
+    }
+  }
+
+  Future<void> _editUsername(BuildContext context, UserModel user) async {
+    final controller = TextEditingController(
+      text: user.username?.trim().isNotEmpty == true
+          ? user.username!.trim()
+          : user.displayName.trim(),
+    );
     final formKey = GlobalKey<FormState>();
 
     final updated = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Edit Display Name'),
+        title: const Text('Edit Username'),
         content: Form(
           key: formKey,
           child: TextFormField(
             controller: controller,
             autofocus: true,
             decoration: const InputDecoration(
-              labelText: 'Name',
-              hintText: 'Enter your nickname',
+              labelText: 'Username',
+              hintText: 'samyao',
             ),
             validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Name cannot be empty';
-              }
-              if (value.trim().length > 30) {
-                return 'Max 30 characters';
+              final username = value?.trim() ?? '';
+              if (!RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(username)) {
+                return 'Use 3-24 letters, numbers, or underscores.';
               }
               return null;
             },
@@ -595,22 +682,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (updated == true && mounted) {
       try {
-        await context.read<AuthProvider>().updateDisplayName(
+        await context.read<AuthProvider>().updateUsername(
           controller.text.trim(),
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Display name updated successfully.')),
+            const SnackBar(content: Text('Username updated successfully.')),
           );
         }
       } catch (err) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not update name: $err')),
+            SnackBar(content: Text('Could not update username: $err')),
           );
         }
       }
     }
+    controller.dispose();
   }
 
   Future<void> _changePasswordDialog(BuildContext context) async {

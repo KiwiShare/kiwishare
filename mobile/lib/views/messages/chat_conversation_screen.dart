@@ -30,6 +30,7 @@ import '../profile/payment_methods_screen.dart';
 import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/review_bottom_sheet.dart';
+import '../orders/widgets/order_lifecycle_panel.dart';
 import 'widgets/location_bubble.dart';
 import 'widgets/location_picker_sheet.dart';
 import 'widgets/meetup_card_bubble.dart';
@@ -1266,11 +1267,238 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     );
   }
 
-  Widget _buildOrderFlowCard(BuildContext context) {
+  String _formatMeetupDateTime(BuildContext context, DateTime value) {
+    final local = value.toLocal();
+    final material = MaterialLocalizations.of(context);
+    final date = material.formatMediumDate(local);
+    final time = material.formatTimeOfDay(
+      TimeOfDay.fromDateTime(local),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+    return '$date · $time';
+  }
+
+  Future<void> _showTransactionStatusSheet({
+    required String title,
+    required String subtitle,
+    required bool isPaid,
+    required bool hasMeetup,
+    required bool isCompleted,
+    OrderModel? order,
+    ChatMeetupPayload? meetup,
+    String? primaryLabel,
+    IconData? primaryIcon,
+    Key? primaryKey,
+    VoidCallback? primaryAction,
+    String? secondaryLabel,
+    VoidCallback? secondaryAction,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final orderId = order?.id ?? meetup?.orderId ?? '';
+    final orderNumber = (order?.orderNumber ?? meetup?.orderId ?? '').trim();
+    final amount =
+        (order?.itemAmountNzd ??
+                meetup?.agreedPriceNzd ??
+                _activeItem?.priceNzd ??
+                '')
+            .trim();
+    final location =
+        (order?.meeting?.locationName ?? meetup?.locationName ?? '').trim();
+    final scheduledAt = order?.meeting?.scheduledAt ?? meetup?.scheduledAt;
+    final latitude = order?.meeting?.latitude ?? meetup?.latitude;
+    final longitude = order?.meeting?.longitude ?? meetup?.longitude;
+
+    final actions = <Widget>[
+      if (primaryAction != null)
+        FilledButton.icon(
+          key: primaryKey,
+          onPressed: primaryAction,
+          icon: Icon(primaryIcon ?? Icons.arrow_forward_rounded, size: 18),
+          label: Text(primaryLabel ?? 'Continue'),
+        ),
+      if (secondaryAction != null)
+        FilledButton.tonal(
+          onPressed: secondaryAction,
+          child: Text(secondaryLabel ?? 'Open'),
+        ),
+      if (orderId.isNotEmpty)
+        OutlinedButton.icon(
+          key: const Key('chat_transaction_view_order'),
+          onPressed: () {
+            Navigator.of(context).pop();
+            context.push('/orders/$orderId', extra: order);
+          },
+          icon: const Icon(Icons.receipt_long_outlined, size: 18),
+          label: const Text('Open order'),
+        ),
+    ];
+
+    return showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: colors.surface,
+      barrierColor: colors.scrim.withValues(alpha: 0.14),
+      clipBehavior: Clip.antiAlias,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 0.86,
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(
+                    sheetContext,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  subtitle,
+                  style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                OrderLifecyclePanel(
+                  orderId: orderNumber.isEmpty ? orderId : orderNumber,
+                  itemTitle: widget.conversation.itemTitle,
+                  amountNzd: amount,
+                  isPaid: isPaid,
+                  isMeetupConfirmed: hasMeetup,
+                  isCompleted: isCompleted,
+                  scheduledAt: scheduledAt,
+                  locationName: location,
+                  latitude: latitude,
+                  longitude: longitude,
+                  counterpartyName: widget.conversation.participantName,
+                  statusLabel: title,
+                  itemImageUrl: widget.conversation.itemImageUrl,
+                  actions: actions.isEmpty
+                      ? null
+                      : Wrap(spacing: 8, runSpacing: 8, children: actions),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _transactionStatusCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color accent,
+    required bool isPaid,
+    required bool hasMeetup,
+    required bool isCompleted,
+    OrderModel? order,
+    ChatMeetupPayload? meetup,
+    String? primaryLabel,
+    IconData? primaryIcon,
+    Key? primaryKey,
+    VoidCallback? primaryAction,
+    String? secondaryLabel,
+    VoidCallback? secondaryAction,
+  }) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final scheduledAt = order?.meeting?.scheduledAt ?? meetup?.scheduledAt;
+    final location =
+        (order?.meeting?.locationName ?? meetup?.locationName ?? '').trim();
+    final summary = [
+      if (scheduledAt != null) _formatMeetupDateTime(context, scheduledAt),
+      if (location.isNotEmpty) location,
+    ].join(' · ');
 
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
+      child: Material(
+        color: Color.alphaBlend(
+          accent.withValues(
+            alpha: theme.brightness == Brightness.dark ? 0.12 : 0.06,
+          ),
+          colors.surface,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          key: const Key('chat_transaction_status_card'),
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _showTransactionStatusSheet(
+            title: title,
+            subtitle: subtitle,
+            isPaid: isPaid,
+            hasMeetup: hasMeetup,
+            isCompleted: isCompleted,
+            order: order,
+            meetup: meetup,
+            primaryLabel: primaryLabel,
+            primaryIcon: primaryIcon,
+            primaryKey: primaryKey,
+            primaryAction: primaryAction,
+            secondaryLabel: secondaryLabel,
+            secondaryAction: secondaryAction,
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: accent.withValues(alpha: 0.24)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(icon, size: 19, color: accent),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        summary.isNotEmpty ? summary : subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.expand_more_rounded, size: 22, color: accent),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderFlowCard(BuildContext context) {
     final orders = _getOrderProvider(listen: true)?.orders ?? const [];
     final order = _orderForConversation(orders);
 
@@ -1288,7 +1516,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
 
     final isBuyer = widget.conversation.direction == ChatDirection.buying;
-
     final isPaid =
         _itemPaid ||
         (order != null && (order.isPaid || order.isCompleted)) ||
@@ -1312,476 +1539,105 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
               m.text.contains('[Transaction Completed]'),
         );
 
-    // If completed, show transaction complete & review card
     if (isCompleted) {
-      return Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF064E3B).withOpacity(0.35)
-              : const Color(0xFFECFDF5),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF059669), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.celebration_rounded,
-                  size: 18,
-                  color: Color(0xFF059669),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Transaction Completed & Funds Released!',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: isDark
-                          ? const Color(0xFF6EE7B7)
-                          : const Color(0xFF047857),
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.push('/orders'),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                  ),
-                  child: Text(
-                    'Order Info',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: colors.primary,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Handover is confirmed! Please take a moment to leave a review for the counterparty to help build trust.',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: isDark
-                    ? const Color(0xFFA7F3D0)
-                    : const Color(0xFF065F46),
-              ),
-            ),
-            if (!isBuyer) ...[
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E293B)
-                      : const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF3B82F6).withValues(alpha: 0.3)
-                        : const Color(0xFFBFDBFE),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.account_balance_wallet_rounded,
-                      size: 16,
-                      color: Color(0xFF2563EB),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Payout: Transferring to your saved card or bind one in Wallet.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? const Color(0xFF93C5FD)
-                              : const Color(0xFF1E40AF),
-                        ),
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => const PaymentMethodsScreen(),
-                        ),
-                      ),
-                      child: Text(
-                        'Wallet',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? const Color(0xFF60A5FA)
-                              : const Color(0xFF2563EB),
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-                  ],
+      return _transactionStatusCard(
+        title: 'Transaction completed',
+        subtitle:
+            'Handover is confirmed and the transaction is complete. Tap for the full status.',
+        icon: Icons.celebration_rounded,
+        accent: const Color(0xFF059669),
+        isPaid: true,
+        hasMeetup: hasMeetup,
+        isCompleted: true,
+        order: order,
+        meetup: meetup,
+        primaryLabel: 'Rate & review',
+        primaryIcon: Icons.star_rounded,
+        primaryKey: const Key('chat_order_leave_review_btn'),
+        primaryAction: () {
+          ReviewBottomSheet.show(
+            context,
+            targetUserId: _effectiveParticipantId,
+            targetName: widget.conversation.participantName,
+            targetAvatarUrl: widget.conversation.participantAvatarUrl,
+            orderId: order?.id,
+            itemId: widget.conversation.itemId,
+            itemTitle: widget.conversation.itemTitle,
+            itemImageUrl: widget.conversation.itemImageUrl,
+            role: isBuyer ? 'seller' : 'buyer',
+          );
+        },
+        secondaryLabel: isBuyer ? 'Orders' : 'Wallet',
+        secondaryAction: isBuyer
+            ? () => context.push('/orders')
+            : () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const PaymentMethodsScreen(),
                 ),
               ),
-            ],
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              height: 34,
-              child: FilledButton.icon(
-                key: const Key('chat_order_leave_review_btn'),
-                onPressed: () {
-                  final targetUserId = _effectiveParticipantId;
-                  final targetName = widget.conversation.participantName;
-                  final targetAvatar = widget.conversation.participantAvatarUrl;
-                  ReviewBottomSheet.show(
-                    context,
-                    targetUserId: targetUserId,
-                    targetName: targetName,
-                    targetAvatarUrl: targetAvatar,
-                    orderId: order?.id,
-                    itemId: widget.conversation.itemId,
-                    itemTitle: widget.conversation.itemTitle,
-                    itemImageUrl: widget.conversation.itemImageUrl,
-                    role: isBuyer ? 'seller' : 'buyer',
-                  );
-                },
-                icon: const Icon(
-                  Icons.star_rounded,
-                  size: 16,
-                  color: Colors.amber,
-                ),
-                label: Text(
-                  'Rate & Review ${widget.conversation.participantName}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF059669),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
       );
     }
 
-    // If no order exists and no meetup exists, don't show order card
     if (order == null && !hasMeetup && !_itemPaid) {
       return const SizedBox.shrink();
     }
-
-    // A pending order by itself is not an active transaction milestone.
-    // Do not imply that a meetup exists until one is confirmed.
     if (!isPaid && !hasMeetup) {
       return const SizedBox.shrink();
     }
 
-    // State 1: Paid, but meetup is not scheduled yet
     if (isPaid && !hasMeetup) {
-      return Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF2A1C0B) : const Color(0xFFFFFBEB),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDark ? const Color(0xFF854D0E) : const Color(0xFFFDE68A),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.schedule_send_rounded,
-                  size: 18,
-                  color: Color(0xFFD97706),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Payment Complete — Schedule Handover',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: isDark
-                          ? const Color(0xFFFCD34D)
-                          : const Color(0xFF92400E),
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.push('/orders'),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                  ),
-                  child: Text(
-                    'View Order',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: colors.primary,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Payment is held securely in KiwiShare escrow. Please agree on a meetup time and location for physical handover.',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: isDark
-                    ? const Color(0xFFFDE68A)
-                    : const Color(0xFF78350F),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              height: 34,
-              child: FilledButton.icon(
-                key: const Key('chat_order_schedule_meetup_btn'),
-                onPressed: _scheduleMeetup,
-                icon: const Icon(Icons.handshake_rounded, size: 16),
-                label: const Text(
-                  'Schedule Meetup',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFD97706),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+      return _transactionStatusCard(
+        title: 'Payment complete · arrange meetup',
+        subtitle:
+            'Payment is secured by KiwiShare. Agree on a time and place for handover.',
+        icon: Icons.schedule_send_rounded,
+        accent: const Color(0xFFD97706),
+        isPaid: true,
+        hasMeetup: false,
+        isCompleted: false,
+        order: order,
+        meetup: meetup,
+        primaryLabel: 'Schedule meetup',
+        primaryIcon: Icons.handshake_outlined,
+        primaryKey: const Key('chat_order_schedule_meetup_btn'),
+        primaryAction: _scheduleMeetup,
       );
     }
 
-    // State 2: Meetup scheduled, but payment is NOT yet completed
     if (!isPaid && hasMeetup) {
-      return Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF261D3B) : const Color(0xFFF5F3FF),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDark ? const Color(0xFF6D28D9) : const Color(0xFFDDD6FE),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.payment_rounded,
-                  size: 18,
-                  color: Color(0xFF7C3AED),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    isBuyer
-                        ? 'Meetup Scheduled — Payment Needed'
-                        : 'Meetup Scheduled — Awaiting Payment',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: isDark
-                          ? const Color(0xFFC4B5FD)
-                          : const Color(0xFF5B21B6),
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.push('/orders'),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                  ),
-                  child: Text(
-                    'Order Info',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: colors.primary,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              isBuyer
-                  ? 'Meetup set for ${meetup.locationName}. Please complete payment via KiwiShare to secure the deal.'
-                  : 'Meetup set for ${meetup.locationName}. Waiting for the buyer to complete payment before handover.',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: isDark
-                    ? const Color(0xFFDDD6FE)
-                    : const Color(0xFF4C1D95),
-              ),
-            ),
-            if (isBuyer) ...[
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                height: 34,
-                child: FilledButton.icon(
-                  key: const Key('chat_order_pay_now_btn'),
-                  onPressed: _buyerBuyNow,
-                  icon: const Icon(Icons.lock_outline_rounded, size: 16),
-                  label: const Text(
-                    'Pay Now with Safe Pay',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-                  ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF7C3AED),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
+      return _transactionStatusCard(
+        title: isBuyer
+            ? 'Meetup confirmed · payment needed'
+            : 'Meetup confirmed · awaiting payment',
+        subtitle: isBuyer
+            ? 'Your meetup is set. Complete payment before handover.'
+            : 'The meetup is set. The buyer still needs to complete payment.',
+        icon: Icons.payment_rounded,
+        accent: const Color(0xFF7C3AED),
+        isPaid: false,
+        hasMeetup: true,
+        isCompleted: false,
+        order: order,
+        meetup: meetup,
+        primaryLabel: isBuyer ? 'Pay now' : null,
+        primaryIcon: isBuyer ? Icons.lock_outline_rounded : null,
+        primaryKey: isBuyer ? const Key('chat_order_pay_now_btn') : null,
+        primaryAction: isBuyer ? _buyerBuyNow : null,
       );
     }
 
-    // State 3: Both Paid and Meetup Scheduled/Confirmed
-    return InkWell(
-      onTap: () => context.push('/orders'),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF064E3B).withValues(alpha: 0.35)
-              : const Color(0xFFECFDF5),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDark
-                ? const Color(0xFF059669)
-                : const Color(0xFF10B981).withValues(alpha: 0.4),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: const Color(0xFF059669).withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_circle_rounded,
-                size: 18,
-                color: Color(0xFF059669),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isMeetupConfirmed
-                        ? 'Meetup Confirmed & Paid'
-                        : 'Order in Progress',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: isDark
-                          ? const Color(0xFF6EE7B7)
-                          : const Color(0xFF065F46),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    hasMeetup
-                        ? 'Handover at ${meetup.locationName}. Tap to track order progress.'
-                        : 'Order is active. Tap to view progress.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark
-                          ? const Color(0xFFA7F3D0)
-                          : const Color(0xFF047857),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: Color(0xFF059669),
-            ),
-          ],
-        ),
-      ),
+    return _transactionStatusCard(
+      title: 'Ready for handover',
+      subtitle:
+          'Payment is complete and the meetup is confirmed. Tap to review all transaction details.',
+      icon: Icons.handshake_rounded,
+      accent: const Color(0xFF059669),
+      isPaid: true,
+      hasMeetup: true,
+      isCompleted: false,
+      order: order,
+      meetup: meetup,
     );
   }
 

@@ -295,7 +295,7 @@ class _OrderItemCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: () {
-          context.push('/items/${order.itemId}');
+          context.push('/orders/${order.id}', extra: order);
         },
         child: Padding(
           padding: const EdgeInsets.all(16),

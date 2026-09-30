@@ -13,19 +13,22 @@ import { RegisterPage } from './pages/RegisterPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { ChatPage } from './pages/ChatPage';
+import { ShareLinkLandingPage } from './pages/ShareLinkLandingPage';
 import './styles/index.css';
 
 const AppContent: React.FC = () => {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith('/chat');
+  const isShareLanding = location.pathname.startsWith('/s/');
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Navbar />
+      {!isShareLanding && <Navbar />}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
+          <Route path="/s/:id" element={<ShareLinkLandingPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:conversationId" element={<ChatPage />} />
@@ -38,7 +41,7 @@ const AppContent: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      {!isChatRoute && <Footer />}
+      {!isChatRoute && !isShareLanding && <Footer />}
     </div>
   );
 };

@@ -9,6 +9,10 @@ import Order from '../models/Order';
 import Conversation from '../models/Conversation';
 import { getPlatformFeeSettings } from '../models/PlatformSetting';
 import { notifyWatchlistPriceDrop } from '../services/pushNotification';
+import {
+  notifyNearbyCategoryWatchers,
+  notifyWatchlistPriceIncrease
+} from '../services/watchlistAlerts';
 import { sendAdminItemNotification } from '../services/adminNotification';
 import {
   ListingAttributeValidationError,
@@ -410,7 +414,9 @@ async function getUsedItemsHandler(ctx: any) {
 
   let itemQuery = Item.find(filter).populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
   const sortValue = queryText(sort);
-  if (sortValue === 'price_asc') {
+  if (sortValue === 'newest') {
+    itemQuery = itemQuery.sort({ isPromoted: -1, publishedAt: -1, createdAt: -1 });
+  } else if (sortValue === 'price_asc') {
     itemQuery = itemQuery.sort({ isPromoted: -1, price: 1, createdAt: -1 });
   } else if (sortValue === 'price_desc') {
     itemQuery = itemQuery.sort({ isPromoted: -1, price: -1, createdAt: -1 });
@@ -512,6 +518,89 @@ async function getDiscoveryOptionsHandler(ctx: any) {
       maximum: prices ? prices.maximum / 100 : null
     }
   };
+}
+
+// 1d. GET /usedItems/search-suggestions - Search-as-you-type across active listings
+async function getSearchSuggestionsHandler(ctx: any) {
+  const rawQuery = queryText(ctx.query.query);
+  const searchText = typeof rawQuery === 'string' ? rawQuery.trim() : '';
+  const parsedLimit = Number.parseInt(queryText(ctx.query.limit) || '12', 10);
+  const limit = Math.min(
+    Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 12, 1),
+    20
+  );
+
+  const filter: any = { status: 'active' };
+  if (searchText) {
+    const regex = new RegExp(escapeRegExp(searchText), 'i');
+    filter.$or = [
+      { title: regex },
+      { category: regex },
+      { description: regex },
+      { 'location.city': regex },
+      { 'location.suburb': regex }
+    ];
+  }
+
+  const items = await Item.find(filter)
+    .sort({
+      isPromoted: -1,
+      favouriteCount: -1,
+      viewCount: -1,
+      publishedAt: -1,
+      createdAt: -1
+    })
+    .limit(searchText ? 80 : 40)
+    .select('title category location')
+    .lean();
+
+  const suggestions: string[] = [];
+  const seen = new Set();
+  const add = (value: unknown) => {
+    const text = typeof value === 'string'
+      ? value.trim().replace(/\s+/g, ' ')
+      : '';
+    if (!text || text.length > 90) return;
+    if (
+      searchText
+      && !text.toLowerCase().includes(searchText.toLowerCase())
+    ) {
+      return;
+    }
+    const key = text.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    suggestions.push(text);
+  };
+
+  for (const item of items) {
+    add(item.title);
+    add(item.category);
+    add(item.location?.suburb);
+    add(item.location?.city);
+    if (suggestions.length >= limit) break;
+  }
+
+  if (suggestions.length < limit) {
+    const categoryFilter = searchText
+      ? {
+          isActive: true,
+          name: new RegExp(escapeRegExp(searchText), 'i')
+        }
+      : { isActive: true };
+    const categories = await Category.find(categoryFilter)
+      .sort({ sortOrder: 1, name: 1 })
+      .limit(limit)
+      .select('name')
+      .lean();
+    for (const category of categories) {
+      add(category.name);
+      if (suggestions.length >= limit) break;
+    }
+  }
+
+  ctx.status = 200;
+  ctx.body = { suggestions: suggestions.slice(0, limit) };
 }
 
 // 2. GET /usedItems/:id (and GET /listings/:id) - Get item by ID
@@ -694,6 +783,13 @@ async function createUsedItemHandler(ctx: any) {
   });
 
   await newItem.populate('sellerId', 'displayName email avatarUrl trustScore isVerified isStudentVerified studentInstitution role');
+
+  notifyNearbyCategoryWatchers(newItem).catch((err) => {
+    console.warn(
+      '[Watchlist Alert] Nearby-category background dispatch warning:',
+      err instanceof Error ? err.message : err
+    );
+  });
 
   // If created by an admin and assigned to another user, send email & push notification
   if (callingUser.role === 'admin' && assignedSeller._id.toString() !== callingUser._id.toString()) {
@@ -886,7 +982,8 @@ async function updateUsedItemHandler(ctx: any) {
   const newPriceCents = updatedItem.price;
   const newPriceNzd = updatedItem.priceNzd;
 
-  // Price drop detection: trigger notifications only if newPrice < oldPrice
+  // Watchlist price alerts cover both directions. Drops keep the established
+  // delivery/history path; increases use the lightweight watchlist alert path.
   if (newPriceCents < previousPriceCents) {
     // A fresh immutable identity represents this persisted price-change event.
     // It intentionally does not deduplicate by item/new price, because a later
@@ -902,6 +999,19 @@ async function updateUsedItemHandler(ctx: any) {
     }).catch((err) => {
       console.warn(
         '[Notification] Background price drop dispatch warning:',
+        err instanceof Error ? err.message : err
+      );
+    });
+  } else if (newPriceCents > previousPriceCents) {
+    notifyWatchlistPriceIncrease({
+      item: updatedItem,
+      oldPriceNzd: previousPriceNzd,
+      newPriceNzd,
+      oldPriceCents: previousPriceCents,
+      newPriceCents
+    }).catch((err) => {
+      console.warn(
+        '[Watchlist Alert] Background price increase dispatch warning:',
         err instanceof Error ? err.message : err
       );
     });
@@ -1301,6 +1411,7 @@ async function relistUsedItemHandler(ctx: any) {
 // Register RESTful routes under /usedItems
 router.get('/usedItems', getUsedItemsHandler);
 router.get('/usedItems/discovery-options', getDiscoveryOptionsHandler);
+router.get('/usedItems/search-suggestions', getSearchSuggestionsHandler);
 router.get('/usedItems/recommended', getRecommendedItemsHandler);
 router.get('/usedItems/featured', getFeaturedItemsHandler);
 router.get('/usedItems/:id', getUsedItemByIdHandler);

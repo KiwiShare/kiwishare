@@ -9,6 +9,7 @@ import '../../models/discovery_options_model.dart';
 import '../../models/item_model.dart';
 import '../../providers/providers.dart';
 import '../../services/product_location_service.dart';
+import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/resilient_network_image.dart';
 import '../../widgets/kiwishare_logo.dart';
@@ -36,14 +37,14 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
   late final ProductLocationService _locationService;
   late HomeDiscoveryProvider _discovery;
+  late RecommendationService _recommendations;
   Future<List<ItemModel>>? _itemsFuture;
   Future<List<ItemModel>>? _featuredFuture;
   Future<List<ItemModel>>? _recommendedFuture;
   Timer? _filterDebounce;
-  Object? _optionsError;
-  bool _optionsLoading = true;
   DiscoveryQuery? _lastRequestedQuery;
   bool _initialized = false;
   bool _autoLocated = false;
@@ -52,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+    _searchFocusNode = FocusNode()..addListener(_handleSearchFocusChanged);
     _locationService = widget.locationService ?? DeviceProductLocationService();
   }
 
@@ -60,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.didChangeDependencies();
     if (_initialized) return;
     final listingProvider = context.read<ListingProvider>();
+    _recommendations = RecommendationService(listingProvider.itemRepository);
     _discovery = context.read<HomeDiscoveryProvider>();
     _searchController.text = _discovery.query;
     _lastRequestedQuery = _discovery.discoveryQuery;
@@ -67,8 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _itemsFuture = listingProvider.getDiscoveryItems(
       query: _discovery.discoveryQuery,
     );
-    _featuredFuture = listingProvider.getFeaturedItems(limit: 10);
-    _recommendedFuture = listingProvider.getRecommendedItems(
+    _featuredFuture = _recommendations.featured(limit: 10);
+    _recommendedFuture = _recommendations.forYou(
       limit: 10,
       latitude: _discovery.userLatitude,
       longitude: _discovery.userLongitude,
@@ -98,34 +101,30 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _handleSearchFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     _filterDebounce?.cancel();
     if (_initialized) _discovery.removeListener(_onDiscoveryChanged);
+    _searchFocusNode
+      ..removeListener(_handleSearchFocusChanged)
+      ..dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _loadDiscoveryOptions({bool forceRefresh = false}) async {
-    if (mounted) {
-      setState(() {
-        _optionsLoading = true;
-        _optionsError = null;
-      });
-    }
     try {
       final options = await context.read<ListingProvider>().getDiscoveryOptions(
         forceRefresh: forceRefresh,
       );
       if (!mounted) return;
       _discovery.applyOptions(options);
-      setState(() => _optionsLoading = false);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _optionsLoading = false;
-        _optionsError = error;
-      });
+    } catch (_) {
+      // Discovery remains usable with the local category defaults.
     }
   }
 
@@ -155,11 +154,11 @@ class _HomeScreenState extends State<HomeScreen> {
         query: query,
         forceRefresh: true,
       );
-      _featuredFuture = listingProvider.getFeaturedItems(
+      _featuredFuture = _recommendations.featured(
         limit: 10,
         forceRefresh: true,
       );
-      _recommendedFuture = listingProvider.getRecommendedItems(
+      _recommendedFuture = _recommendations.forYou(
         limit: 10,
         latitude: _discovery.userLatitude,
         longitude: _discovery.userLongitude,
@@ -182,11 +181,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     context.push('/items/${item.id}', extra: item);
-  }
-
-  void _clearSearch() {
-    _searchController.clear();
-    context.read<HomeDiscoveryProvider>().setQuery('');
   }
 
   void _resetFilters() {
@@ -271,67 +265,27 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextField(
                   key: const Key('home-search-field'),
                   controller: _searchController,
-                  onChanged: filters.setQuery,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Search by item name or category',
-                    prefixIcon: const Icon(
+                  focusNode: _searchFocusNode,
+                  readOnly: true,
+                  showCursor: false,
+                  onTap: () {
+                    final query = _searchController.text.trim();
+                    context.push(
+                      Uri(
+                        path: '/search',
+                        queryParameters: query.isEmpty ? null : {'q': query},
+                      ).toString(),
+                    );
+                  },
+                  decoration: const InputDecoration(
+                    hintText: 'Search all KiwiShare',
+                    prefixIcon: Icon(
                       Icons.search,
                       color: AppColors.brandPrimary,
                     ),
-                    suffixIconConstraints: const BoxConstraints(minWidth: 48),
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_searchController.text.isNotEmpty)
-                          IconButton(
-                            tooltip: 'Clear search',
-                            onPressed: _clearSearch,
-                            icon: const Icon(Icons.close),
-                          ),
-                        IconButton(
-                          key: const Key('home-filter-button'),
-                          tooltip: 'Sort and filter products',
-                          onPressed: _showFilters,
-                          color: AppColors.brandPrimary,
-                          icon: Badge(
-                            isLabelVisible: filters.activeFilterCount > 0,
-                            label: Text('${filters.activeFilterCount}'),
-                            child: const Icon(Icons.tune),
-                          ),
-                        ),
-                      ],
-                    ),
+                    suffixIcon: Icon(Icons.chevron_right_rounded),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                if (_optionsLoading)
-                  const LinearProgressIndicator(
-                    key: Key('home-discovery-options-loading'),
-                    minHeight: 2,
-                  )
-                else if (_optionsError != null)
-                  _DiscoveryOptionsError(
-                    onRetry: () => _loadDiscoveryOptions(forceRefresh: true),
-                  )
-                else
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final category in filters.categories) ...[
-                          _HomeCategoryChip(
-                            key: Key('home-category-${category.value}'),
-                            label: category.value,
-                            selected:
-                                filters.selectedCategory == category.value,
-                            onTap: () => filters.toggleCategory(category.value),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                        ],
-                      ],
-                    ),
-                  ),
                 const SizedBox(height: AppSpacing.lg),
                 FutureBuilder<List<ItemModel>>(
                   future: _featuredFuture,
@@ -397,77 +351,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-
-IconData _getCategoryIcon(String category) {
-  final normalized = category.toLowerCase().trim();
-  if (normalized.contains('furnitur') ||
-      normalized.contains('chair') ||
-      normalized.contains('table') ||
-      normalized.contains('desk')) {
-    return Icons.chair_outlined;
-  }
-  if (normalized.contains('plant') ||
-      normalized.contains('garden') ||
-      normalized.contains('flower') ||
-      normalized.contains('tree')) {
-    return Icons.yard_outlined;
-  }
-  if (normalized.contains('camp') ||
-      normalized.contains('outdoor') ||
-      normalized.contains('tent') ||
-      normalized.contains('hike')) {
-    return Icons.forest_outlined;
-  }
-  if (normalized.contains('elect') ||
-      normalized.contains('device') ||
-      normalized.contains('phone') ||
-      normalized.contains('tech') ||
-      normalized.contains('comput')) {
-    return Icons.devices_outlined;
-  }
-  if (normalized.contains('transp') ||
-      normalized.contains('bike') ||
-      normalized.contains('car') ||
-      normalized.contains('vehicle') ||
-      normalized.contains('scooter')) {
-    return Icons.directions_car_outlined;
-  }
-  if (normalized.contains('book') ||
-      normalized.contains('read') ||
-      normalized.contains('manga')) {
-    return Icons.menu_book_outlined;
-  }
-  if (normalized.contains('home') ||
-      normalized.contains('kitchen') ||
-      normalized.contains('appliance')) {
-    return Icons.home_outlined;
-  }
-  if (normalized.contains('sport') ||
-      normalized.contains('fitness') ||
-      normalized.contains('ball')) {
-    return Icons.sports_basketball_outlined;
-  }
-  if (normalized.contains('kid') ||
-      normalized.contains('baby') ||
-      normalized.contains('toy')) {
-    return Icons.child_care_outlined;
-  }
-  if (normalized.contains('fashion') ||
-      normalized.contains('cloth') ||
-      normalized.contains('wear') ||
-      normalized.contains('shoe')) {
-    return Icons.checkroom_outlined;
-  }
-  if (normalized.contains('tool') ||
-      normalized.contains('diy') ||
-      normalized.contains('hardware')) {
-    return Icons.build_outlined;
-  }
-  if (normalized == 'all' || normalized == 'all nz') {
-    return Icons.explore_outlined;
-  }
-  return Icons.category_outlined;
 }
 
 class _HomeHeader extends StatelessWidget {
@@ -549,53 +432,6 @@ class _HomeHeader extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _HomeCategoryChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _HomeCategoryChip({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final iconData = _getCategoryIcon(label);
-    return ChoiceChip(
-      avatar: Icon(
-        iconData,
-        size: 16,
-        color: selected ? colors.onPrimaryContainer : colors.onSurfaceVariant,
-      ),
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      selectedColor: colors.primaryContainer,
-      backgroundColor: isDark
-          ? colors.surfaceContainerHighest.withValues(alpha: 0.72)
-          : colors.surface,
-      side: BorderSide(
-        color: selected ? colors.primary : colors.outline,
-        width: selected ? 1.5 : 1.0,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.full),
-      ),
-      showCheckmark: false,
-      labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-        color: selected ? colors.onPrimaryContainer : colors.onSurface,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-      ),
     );
   }
 }
@@ -738,6 +574,49 @@ class _HomeJumboCarouselState extends State<_HomeJumboCarousel> {
   }
 }
 
+class _HomeHeroBadge extends StatelessWidget {
+  const _HomeHeroBadge({
+    required this.icon,
+    required this.label,
+    required this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: iconColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HomeJumboCard extends StatelessWidget {
   final ItemModel item;
   final VoidCallback onTap;
@@ -806,104 +685,30 @@ class _HomeJumboCard extends StatelessWidget {
                 Positioned(
                   top: AppSpacing.sm,
                   left: AppSpacing.sm,
-                  right: 46,
-                  child: Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: 4,
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                          vertical: AppSpacing.xs,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.62),
-                          borderRadius: BorderRadius.circular(AppRadius.full),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.local_fire_department,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 2),
-                            Text(
-                              'Featured',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ],
-                        ),
+                      const _HomeHeroBadge(
+                        icon: Icons.local_fire_department,
+                        label: 'Featured',
+                        iconColor: Colors.white,
                       ),
-                      if (item.isSustainable)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: AppSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(AppRadius.full),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.eco,
-                                size: 14,
-                                color: Color(0xFF86EFAC),
-                              ),
-                              SizedBox(width: 2),
-                              Text(
-                                'ECO',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
-                          ),
+                      if (item.isSustainable) ...[
+                        const SizedBox(height: 5),
+                        const _HomeHeroBadge(
+                          icon: Icons.eco,
+                          label: 'Eco',
+                          iconColor: Color(0xFF86EFAC),
                         ),
-                      if (item.seller?.isStudentVerified == true)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: AppSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(AppRadius.full),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.verified,
-                                size: 14,
-                                color: Color(0xFF93C5FD),
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                'STUDENT VERIFIED',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
+                      ],
+                      if (item.seller?.isStudentVerified == true) ...[
+                        const SizedBox(height: 5),
+                        const _HomeHeroBadge(
+                          icon: Icons.verified,
+                          label: 'Student verified',
+                          iconColor: Color(0xFF93C5FD),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -1320,28 +1125,6 @@ class _RecommendedProductCard extends StatelessWidget {
   }
 }
 
-class _DiscoveryOptionsError extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _DiscoveryOptionsError({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(
-          child: Text('Categories and locations could not be loaded.'),
-        ),
-        TextButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh, size: 20),
-          label: const Text('Retry'),
-        ),
-      ],
-    );
-  }
-}
-
 class _HomeDiscoveryResults extends StatelessWidget {
   final List<ItemModel> products;
   final ItemModel? selectedItem;
@@ -1395,6 +1178,7 @@ class _HomeDiscoveryResults extends StatelessWidget {
               ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
             OutlinedButton.icon(
+              key: const Key('home-filter-button'),
               onPressed: onShowFilters,
               icon: const Icon(Icons.tune, size: 18),
               label: Text(

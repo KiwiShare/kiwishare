@@ -127,7 +127,7 @@ class GuestSignInState extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Sign in to view your chats and Watchlist, and keep your KiwiShare activity together.',
+                'Sign in to view your chats and watchlist, and keep your KiwiShare activity together.',
                 key: const Key('guest_sign_in_message'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(

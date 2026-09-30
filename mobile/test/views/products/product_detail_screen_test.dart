@@ -917,8 +917,16 @@ void main() {
       expect(find.text('Tent - 2 Person'), findsOneWidget);
       expect(find.text('\$65 NZD'), findsOneWidget);
 
-      // Tap on the similar item card
-      await tester.tap(find.byKey(const Key('similar-item-item_4')));
+      // Tap on the similar item card after bringing the recommendation rail
+      // into the viewport. The detail page now includes dedicated specs and
+      // location sections above recommendations.
+      final similarItem = find.byKey(const Key('similar-item-item_4'));
+      await tester.drag(
+        find.byKey(const Key('product-detail-scroll')),
+        const Offset(0, -700),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(similarItem);
       await tester.pumpAndSettle();
 
       expect(tappedItem, isNotNull);

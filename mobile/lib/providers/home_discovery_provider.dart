@@ -98,6 +98,7 @@ class HomeDiscoveryProvider extends ChangeNotifier {
   );
 
   int get activeFilterCount => [
+    _selectedCategory != allCategoriesLabel,
     _selectedPriceRange != HomePriceRange.any,
     _sustainableOnly,
     _selectedSort != HomeProductSort.recommended,
@@ -126,6 +127,14 @@ class HomeDiscoveryProvider extends ChangeNotifier {
 
   void toggleCategory(String category) {
     final next = _selectedCategory == category ? allCategoriesLabel : category;
+    if (_selectedCategory == next) return;
+    _selectedCategory = next;
+    _previewItemId = null;
+    notifyListeners();
+  }
+
+  void setCategory(String category) {
+    final next = category.trim().isEmpty ? allCategoriesLabel : category;
     if (_selectedCategory == next) return;
     _selectedCategory = next;
     _previewItemId = null;

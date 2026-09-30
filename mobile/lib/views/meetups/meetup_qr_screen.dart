@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -13,6 +14,7 @@ import '../profile/payment_checkout_screen.dart';
 import '../profile/payment_methods_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
 import '../shared/widgets/review_bottom_sheet.dart';
+import '../orders/widgets/order_lifecycle_panel.dart';
 import '../../services/payment_service.dart';
 
 class MeetupQrScreen extends StatefulWidget {
@@ -310,11 +312,6 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
     bool isDark,
   ) {
     final theme = Theme.of(context);
-    final date = meetup.scheduledAt.toLocal();
-    final formattedDate =
-        '${_weekday(date.weekday)}, ${date.day} ${_month(date.month)} ${date.year}';
-    final formattedTime =
-        '${date.hour % 12 == 0 ? 12 : date.hour % 12}:${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
 
     final isCompleted = meetup.status == 'completed';
     final isConfirmed =
@@ -496,152 +493,43 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 3. Confirmed Meetup Details Card (Time & Location)
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.medium),
-              side: BorderSide(color: colors.outline.withOpacity(0.18)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Confirmed Meetup Schedule',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Date & Time
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: colors.primaryContainer.withOpacity(0.5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.event,
-                          color: colors.primary,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              formattedDate,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              formattedTime,
-                              style: TextStyle(
-                                color: colors.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Location
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: colors.primaryContainer.withOpacity(0.5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.place_outlined,
-                          color: colors.primary,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              meetup.locationName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              'Auckland, New Zealand',
-                              style: TextStyle(
-                                color: colors.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Counterparty
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: colors.primaryContainer.withOpacity(0.5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.person_outline,
-                          color: colors.primary,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              meetup.counterpartyName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              meetup.counterpartyRole,
-                              style: TextStyle(
-                                color: colors.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+          // 3. Shared order lifecycle + meetup details
+          OrderLifecyclePanel(
+            orderId: meetup.orderNumber.isNotEmpty
+                ? meetup.orderNumber
+                : widget.orderId,
+            itemTitle: meetup.itemTitle,
+            amountNzd: meetup.itemPriceNzd,
+            isPaid: meetup.isPaid,
+            isMeetupConfirmed: meetup.isConfirmed,
+            isCompleted: meetup.isCompleted,
+            scheduledAt: meetup.scheduledAt,
+            locationName: meetup.locationName,
+            latitude: meetup.latitude,
+            longitude: meetup.longitude,
+            counterpartyName: meetup.counterpartyName,
+            statusLabel: meetup.isCompleted
+                ? 'Completed'
+                : meetup.isHandoverReady
+                ? 'Ready for handover'
+                : meetup.isConfirmed
+                ? (meetup.isPaid
+                      ? 'Meetup confirmed'
+                      : 'Meetup confirmed · payment needed')
+                : 'Meetup proposed',
+            itemImageUrl: meetup.itemImageUrl,
+            showItemRow: false,
+            actions: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('meetup-open-order'),
+                  onPressed: () => context.push('/orders/${widget.orderId}'),
+                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                  label: const Text('Open order'),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 20),
@@ -1291,29 +1179,4 @@ class _MeetupQrScreenState extends State<MeetupQrScreen> {
       ),
     );
   }
-
-  static String _weekday(int day) => switch (day) {
-    1 => 'Monday',
-    2 => 'Tuesday',
-    3 => 'Wednesday',
-    4 => 'Thursday',
-    5 => 'Friday',
-    6 => 'Saturday',
-    _ => 'Sunday',
-  };
-
-  static String _month(int month) => switch (month) {
-    1 => 'Jan',
-    2 => 'Feb',
-    3 => 'Mar',
-    4 => 'Apr',
-    5 => 'May',
-    6 => 'Jun',
-    7 => 'Jul',
-    8 => 'Aug',
-    9 => 'Sep',
-    10 => 'Oct',
-    11 => 'Nov',
-    _ => 'Dec',
-  };
 }

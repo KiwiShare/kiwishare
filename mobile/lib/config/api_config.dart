@@ -4,6 +4,18 @@ class ApiConfig {
   /// Default deployed Render production/staging server URL
   static const String remoteBaseUrl = 'https://kiwishare.onrender.com';
 
+  /// Public website used for links that leave the app (sharing, email, etc.).
+  /// Keep this separate from the API origin so shared links always open a
+  /// human-facing product page rather than a backend endpoint.
+  static const String _customWebBaseUrl = String.fromEnvironment(
+    'WEB_BASE_URL',
+    defaultValue: 'https://kiwishare.online',
+  );
+
+  static String get webBaseUrl => _customWebBaseUrl.endsWith('/')
+      ? _customWebBaseUrl.substring(0, _customWebBaseUrl.length - 1)
+      : _customWebBaseUrl;
+
   /// Custom base URL passed at build/run time via:
   /// `--dart-define=API_BASE_URL=https://kiwishare.onrender.com` or `--dart-define=API_BASE_URL=local`
   static const String _customBaseUrl = String.fromEnvironment('API_BASE_URL');
