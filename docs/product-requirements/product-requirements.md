@@ -11,6 +11,8 @@
 | Document owner | Five Guys |
 | Approval | Required from the project team before this document becomes a baseline |
 
+> **Implementation status note — 30 September 2026:** this v0.1 document records the original pilot-scope baseline and therefore still labels several capabilities as Conditional/Future below. The repository has since implemented a recommendation engine, server-backed search suggestions, AI-assisted listing creation, Stripe-backed payment/refund flows, wallet/saved-card UI, QR handover, the React admin portal, KiwiGold/VIP promotion, event-driven watchlist alerts, and native product deep links with web fallback. The original classifications are retained for traceability; use [`../product-capabilities.md`](../product-capabilities.md) for the current implemented capability map.
+
 ## 1. Purpose
 
 This Product Requirements Document (PRD) defines what KiwiShare must deliver for its University of Auckland pilot, how the product will be evaluated, and which proposed capabilities require an explicit scope decision before implementation.
