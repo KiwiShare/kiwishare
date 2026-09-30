@@ -46,9 +46,7 @@ void main() {
           ChangeNotifierProvider<FavoritesProvider>.value(value: watchlist),
         ],
         child: const MaterialApp(
-          home: Scaffold(
-            body: WatchlistHeartButton(item: item),
-          ),
+          home: Scaffold(body: WatchlistHeartButton(item: item)),
         ),
       ),
     );
