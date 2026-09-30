@@ -32,10 +32,8 @@ function sellerIdOf(item: MarketplaceItem): string {
   return seller?.toString() ?? item.ownerId ?? '';
 }
 
-function priceChangeEnabled(user: any): boolean {
-  const current = user?.notificationPreferences?.watchlistPriceChange;
-  const legacy = user?.notificationPreferences?.watchlistPriceDrop;
-  return current !== false && legacy !== false;
+function priceIncreaseEnabled(user: any): boolean {
+  return user?.notificationPreferences?.watchlistPriceIncrease === true;
 }
 
 async function activeTokens(userId: mongoose.Types.ObjectId | string) {
@@ -123,7 +121,7 @@ export async function notifyWatchlistPriceIncrease(request: {
           user.status === 'deleted' ||
           user.status === 'banned' ||
           user.isBanned ||
-          !priceChangeEnabled(user)
+          !priceIncreaseEnabled(user)
         ) {
           continue;
         }

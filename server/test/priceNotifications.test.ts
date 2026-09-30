@@ -341,24 +341,28 @@ describe('Watchlist Price Drop Notification Backend Tests', () => {
       expect(getRes.status).toBe(200);
       expect(getRes.body.preferences.watchlistPriceDrop).toBe(true);
       expect(getRes.body.preferences.watchlistPriceChange).toBe(true);
+      expect(getRes.body.preferences.watchlistPriceIncrease).toBe(false);
       expect(getRes.body.preferences.watchlistNearbyCategory).toBe(false);
 
       const patchRes = await request(app.callback())
         .patch('/api/notifications/preferences')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          watchlistPriceChange: false,
+          watchlistPriceDrop: false,
+          watchlistPriceIncrease: true,
           watchlistNearbyCategory: true
         });
 
       expect(patchRes.status).toBe(200);
       expect(patchRes.body.preferences.watchlistPriceDrop).toBe(false);
       expect(patchRes.body.preferences.watchlistPriceChange).toBe(false);
+      expect(patchRes.body.preferences.watchlistPriceIncrease).toBe(true);
       expect(patchRes.body.preferences.watchlistNearbyCategory).toBe(true);
 
       const updatedUser = await User.findById(user._id);
       expect(updatedUser?.notificationPreferences?.watchlistPriceDrop).toBe(false);
       expect(updatedUser?.notificationPreferences?.watchlistPriceChange).toBe(false);
+      expect(updatedUser?.notificationPreferences?.watchlistPriceIncrease).toBe(true);
       expect(updatedUser?.notificationPreferences?.watchlistNearbyCategory).toBe(true);
     });
   });

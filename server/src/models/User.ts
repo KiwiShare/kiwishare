@@ -45,6 +45,7 @@ export interface IUser extends Document {
   notificationPreferences?: {
     watchlistPriceDrop: boolean;
     watchlistPriceChange: boolean;
+    watchlistPriceIncrease: boolean;
     watchlistNearbyCategory: boolean;
   };
   registrationPlatform: 'web' | 'mobile_ios' | 'mobile_android' | 'mobile' | 'unknown';
@@ -99,7 +100,9 @@ const UserSchema = new Schema<IUser>(
     deletedAt: { type: Date },
     notificationPreferences: {
       watchlistPriceDrop: { type: Boolean, default: true },
+      // Legacy compatibility for older clients; mirrors price-drop behavior.
       watchlistPriceChange: { type: Boolean, default: true },
+      watchlistPriceIncrease: { type: Boolean, default: false },
       watchlistNearbyCategory: { type: Boolean, default: false }
     },
 

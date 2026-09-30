@@ -25,6 +25,7 @@ class WatchlistProvider extends ChangeNotifier {
   bool _hasMore = false;
   bool _isLoadingMore = false;
   bool? _watchlistPriceDropEnabled;
+  bool? _watchlistPriceIncreaseEnabled;
   bool? _watchlistNearbyCategoryEnabled;
   bool _isLoadingPreference = false;
   bool _isUpdatingPreference = false;
@@ -51,7 +52,16 @@ class WatchlistProvider extends ChangeNotifier {
   bool get hasMore => _hasMore;
   bool get isLoadingMore => _isLoadingMore;
   bool? get watchlistPriceDropEnabled => _watchlistPriceDropEnabled;
-  bool? get watchlistPriceChangeEnabled => _watchlistPriceDropEnabled;
+  bool? get watchlistPriceIncreaseEnabled => _watchlistPriceIncreaseEnabled;
+  bool? get watchlistPriceChangeEnabled {
+    if (_watchlistPriceDropEnabled == null &&
+        _watchlistPriceIncreaseEnabled == null) {
+      return null;
+    }
+    return _watchlistPriceDropEnabled == true ||
+        _watchlistPriceIncreaseEnabled == true;
+  }
+
   bool? get watchlistNearbyCategoryEnabled => _watchlistNearbyCategoryEnabled;
   bool get isLoadingPreference => _isLoadingPreference;
   bool get isUpdatingPreference => _isUpdatingPreference;
@@ -75,6 +85,7 @@ class WatchlistProvider extends ChangeNotifier {
     _hasMore = false;
     _isLoadingMore = false;
     _watchlistPriceDropEnabled = null;
+    _watchlistPriceIncreaseEnabled = null;
     _watchlistNearbyCategoryEnabled = null;
     _isLoadingPreference = false;
     _isUpdatingPreference = false;
@@ -216,11 +227,13 @@ class WatchlistProvider extends ChangeNotifier {
         );
         if (!_isCurrentSession(token, generation)) return;
         _watchlistPriceDropEnabled = preferences.priceChanges;
+        _watchlistPriceIncreaseEnabled = preferences.priceIncreases;
         _watchlistNearbyCategoryEnabled = preferences.nearbyCategory;
       } else {
         final value = await repository.fetchWatchlistPriceDrop(token: token);
         if (!_isCurrentSession(token, generation)) return;
         _watchlistPriceDropEnabled = value;
+        _watchlistPriceIncreaseEnabled ??= false;
         _watchlistNearbyCategoryEnabled ??= false;
       }
     } catch (_) {
@@ -236,10 +249,14 @@ class WatchlistProvider extends ChangeNotifier {
   }
 
   Future<bool> updateNotificationPreference(bool enabled) {
-    return updatePriceChangePreference(enabled);
+    return updatePriceDropPreference(enabled);
   }
 
-  Future<bool> updatePriceChangePreference(bool enabled) async {
+  Future<bool> updatePriceChangePreference(bool enabled) {
+    return updatePriceDropPreference(enabled);
+  }
+
+  Future<bool> updatePriceDropPreference(bool enabled) async {
     final token = _authToken;
     final generation = _authGeneration;
     final repository = preferencesRepository;
@@ -265,6 +282,7 @@ class WatchlistProvider extends ChangeNotifier {
         );
         if (!_isCurrentSession(token, generation)) return false;
         _watchlistPriceDropEnabled = saved.priceChanges;
+        _watchlistPriceIncreaseEnabled = saved.priceIncreases;
         _watchlistNearbyCategoryEnabled = saved.nearbyCategory;
       } else {
         final saved = await repository.updateWatchlistPriceDrop(
@@ -279,7 +297,51 @@ class WatchlistProvider extends ChangeNotifier {
       if (_isCurrentSession(token, generation)) {
         _watchlistPriceDropEnabled = previous;
         _preferenceError =
-            'Could not update price-change alerts. Please try again.';
+            'Could not update price-drop alerts. Please try again.';
+      }
+      return false;
+    } finally {
+      if (_isCurrentSession(token, generation)) {
+        _isUpdatingPreference = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> updatePriceIncreasePreference(bool enabled) async {
+    final token = _authToken;
+    final generation = _authGeneration;
+    final repository = preferencesRepository;
+    final extended = repository is ExtendedNotificationPreferencesRepository
+        ? repository as ExtendedNotificationPreferencesRepository
+        : null;
+    if (token == null ||
+        token.isEmpty ||
+        extended == null ||
+        _isUpdatingPreference) {
+      return false;
+    }
+
+    final previous = _watchlistPriceIncreaseEnabled;
+    _watchlistPriceIncreaseEnabled = enabled;
+    _isUpdatingPreference = true;
+    _preferenceError = null;
+    notifyListeners();
+    try {
+      final saved = await extended.updateWatchlistPreferences(
+        token: token,
+        priceIncreases: enabled,
+      );
+      if (!_isCurrentSession(token, generation)) return false;
+      _watchlistPriceDropEnabled = saved.priceChanges;
+      _watchlistPriceIncreaseEnabled = saved.priceIncreases;
+      _watchlistNearbyCategoryEnabled = saved.nearbyCategory;
+      return true;
+    } catch (_) {
+      if (_isCurrentSession(token, generation)) {
+        _watchlistPriceIncreaseEnabled = previous;
+        _preferenceError =
+            'Could not update price-increase alerts. Please try again.';
       }
       return false;
     } finally {
@@ -316,6 +378,7 @@ class WatchlistProvider extends ChangeNotifier {
       );
       if (!_isCurrentSession(token, generation)) return false;
       _watchlistPriceDropEnabled = saved.priceChanges;
+      _watchlistPriceIncreaseEnabled = saved.priceIncreases;
       _watchlistNearbyCategoryEnabled = saved.nearbyCategory;
       return true;
     } on NotificationPreferencesUnsupportedException catch (error) {

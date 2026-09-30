@@ -323,47 +323,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   } catch (_) {
                     watchlist = null;
                   }
-                  final isEnabled =
-                      watchlist?.watchlistPriceDropEnabled ?? false;
+                  final priceDropsEnabled =
+                      watchlist?.watchlistPriceDropEnabled ?? true;
+                  final priceIncreasesEnabled =
+                      watchlist?.watchlistPriceIncreaseEnabled ?? false;
                   final isUpdating = watchlist?.isUpdatingPreference ?? false;
+
+                  Future<void> updatePriceAlert({
+                    required bool enabled,
+                    required bool increase,
+                  }) async {
+                    if (watchlist == null) return;
+                    final success = increase
+                        ? await watchlist.updatePriceIncreasePreference(enabled)
+                        : await watchlist.updatePriceDropPreference(enabled);
+                    if (!context.mounted || success) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          increase
+                              ? 'Could not update price increase alerts. Please try again.'
+                              : 'Could not update price drop alerts. Please try again.',
+                        ),
+                      ),
+                    );
+                  }
+
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildDivider(),
                       SwitchListTile.adaptive(
                         key: const Key(
-                          'settings-watchlist-price-alerts-switch',
+                          'settings-watchlist-price-drop-alerts-switch',
                         ),
                         secondary: const Icon(Icons.trending_down_rounded),
                         title: const Text(
-                          'Watchlist Price Drop Alerts',
+                          'Price Drop Alerts',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 15,
                           ),
                         ),
                         subtitle: const Text(
-                          'Get notified when items in your watchlist drop in price',
+                          'Notify me when a saved item gets cheaper',
                           style: TextStyle(fontSize: 12),
                         ),
-                        value: isEnabled,
+                        value: priceDropsEnabled,
                         activeColor: const Color(0xFF059669),
                         onChanged: isUpdating || watchlist == null
                             ? null
-                            : (val) async {
-                                final success = await watchlist!
-                                    .updateNotificationPreference(val);
-                                if (!context.mounted) return;
-                                if (!success) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Could not update Price alerts. Please try again.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
+                            : (val) => updatePriceAlert(
+                                enabled: val,
+                                increase: false,
+                              ),
+                      ),
+                      _buildDivider(),
+                      SwitchListTile.adaptive(
+                        key: const Key(
+                          'settings-watchlist-price-increase-alerts-switch',
+                        ),
+                        secondary: const Icon(Icons.trending_up_rounded),
+                        title: const Text(
+                          'Price Increase Alerts',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          'Notify me when a saved item becomes more expensive',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        value: priceIncreasesEnabled,
+                        activeColor: const Color(0xFF059669),
+                        onChanged: isUpdating || watchlist == null
+                            ? null
+                            : (val) => updatePriceAlert(
+                                enabled: val,
+                                increase: true,
+                              ),
                       ),
                     ],
                   );

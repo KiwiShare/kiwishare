@@ -860,12 +860,22 @@ class _WatchlistStatusTabs extends StatelessWidget {
 class _WatchlistAlertsSheet extends StatelessWidget {
   const _WatchlistAlertsSheet();
 
-  Future<void> _setPriceAlerts(
+  Future<void> _setPriceDropAlerts(
     BuildContext context,
     WatchlistProvider watchlist,
     bool enabled,
   ) async {
-    final saved = await watchlist.updatePriceChangePreference(enabled);
+    final saved = await watchlist.updatePriceDropPreference(enabled);
+    if (!context.mounted || !saved || !enabled) return;
+    await offerContextualNotificationPermission(context);
+  }
+
+  Future<void> _setPriceIncreaseAlerts(
+    BuildContext context,
+    WatchlistProvider watchlist,
+    bool enabled,
+  ) async {
+    final saved = await watchlist.updatePriceIncreasePreference(enabled);
     if (!context.mounted || !saved || !enabled) return;
     await offerContextualNotificationPermission(context);
   }
@@ -937,15 +947,25 @@ class _WatchlistAlertsSheet extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
           _WatchlistAlertOption(
-            key: const Key('watchlist-price-change-alert-switch'),
-            icon: Icons.trending_up_rounded,
-            title: 'Price changes',
-            description:
-                'Notify me when a saved item gets cheaper or more expensive.',
-            value: watchlist.watchlistPriceChangeEnabled ?? true,
+            key: const Key('watchlist-price-drop-alert-switch'),
+            icon: Icons.trending_down_rounded,
+            title: 'Price drops',
+            description: 'Notify me when a saved item gets cheaper.',
+            value: watchlist.watchlistPriceDropEnabled ?? true,
             enabled: !busy,
             onChanged: (value) =>
-                unawaited(_setPriceAlerts(context, watchlist, value)),
+                unawaited(_setPriceDropAlerts(context, watchlist, value)),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _WatchlistAlertOption(
+            key: const Key('watchlist-price-increase-alert-switch'),
+            icon: Icons.trending_up_rounded,
+            title: 'Price increases',
+            description: 'Notify me when a saved item becomes more expensive.',
+            value: watchlist.watchlistPriceIncreaseEnabled ?? false,
+            enabled: !busy,
+            onChanged: (value) =>
+                unawaited(_setPriceIncreaseAlerts(context, watchlist, value)),
           ),
           const SizedBox(height: AppSpacing.sm),
           _WatchlistAlertOption(

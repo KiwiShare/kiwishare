@@ -51,9 +51,10 @@ void main() {
     // Verify SettingsScreen content
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Message Push Notifications'), findsOneWidget);
-    expect(find.text('Watchlist Price Drop Alerts'), findsOneWidget);
+    expect(find.text('Price Drop Alerts'), findsOneWidget);
+    expect(find.text('Price Increase Alerts'), findsOneWidget);
     expect(
-      find.byKey(const Key('settings-watchlist-price-alerts-switch')),
+      find.byKey(const Key('settings-watchlist-price-drop-alerts-switch')),
       findsOneWidget,
     );
     expect(find.text('Appearance'), findsOneWidget);
