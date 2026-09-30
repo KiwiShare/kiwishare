@@ -11,6 +11,7 @@ import '../../models/chat_conversation_model.dart';
 import '../../models/chat_message_model.dart';
 import '../../models/item_model.dart';
 import '../../models/meetup_model.dart';
+import '../../models/order_model.dart';
 import '../../models/report_draft.dart';
 import '../../config/api_config.dart';
 import '../../navigation/app_route_observer.dart';
@@ -25,6 +26,7 @@ import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../products/product_detail_screen.dart';
 import '../profile/payment_checkout_screen.dart';
+import '../profile/payment_methods_screen.dart';
 import '../profile/public_profile_screen.dart';
 import '../profile/report_screen.dart';
 import '../shared/widgets/review_bottom_sheet.dart';
@@ -87,6 +89,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   String? _specialOfferPrice;
   bool _itemPaid = false;
   bool _showActionPanel = false;
+  bool _voiceMode = false;
 
   @override
   void initState() {
@@ -123,6 +126,23 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       _messageFocusNode.unfocus();
       setState(() => _showActionPanel = true);
       _scrollToEnd();
+    }
+  }
+
+  void _toggleVoiceMode() {
+    if (_isRecording || _isStartingVoice || _isFinalizingVoice) return;
+    final nextVoiceMode = !_voiceMode;
+    if (nextVoiceMode) {
+      _messageFocusNode.unfocus();
+    }
+    setState(() {
+      _voiceMode = nextVoiceMode;
+      _showActionPanel = false;
+    });
+    if (!nextVoiceMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _messageFocusNode.requestFocus();
+      });
     }
   }
 
@@ -538,19 +558,31 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
   }
 
+  OrderModel? _orderForConversation(Iterable<OrderModel> orders) {
+    final participantId = _effectiveParticipantId;
+    if (participantId.isEmpty) return null;
+    final buying = widget.conversation.direction == ChatDirection.buying;
+    return orders
+        .where(
+          (order) =>
+              order.itemId == widget.conversation.itemId &&
+              order.counterparty.id == participantId &&
+              (buying ? order.isBuying : order.isSelling),
+        )
+        .firstOrNull;
+  }
+
   Future<void> _buyerBuyNow() async {
     final token = _currentAuthToken;
     if (token == null || token.isEmpty) return;
 
     final isSold = _activeItem?.status == ItemStatus.sold;
     final orders = _getOrderProvider()?.orders ?? const [];
+    final conversationOrder = _orderForConversation(orders);
     final isAlreadyPaid =
         _itemPaid ||
-        orders.any(
-          (o) =>
-              o.itemId == widget.conversation.itemId &&
-              (o.isPaid || o.isCompleted),
-        );
+        (conversationOrder != null &&
+            (conversationOrder.isPaid || conversationOrder.isCompleted));
 
     if (isSold || isAlreadyPaid) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -922,13 +954,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
     final status = _activeItem?.status ?? ItemStatus.active;
     final orders = _getOrderProvider(listen: true)?.orders ?? const [];
+    final conversationOrder = _orderForConversation(orders);
     final isOrderPaid =
         _itemPaid ||
-        orders.any(
-          (o) =>
-              o.itemId == widget.conversation.itemId &&
-              (o.isPaid || o.isCompleted),
-        );
+        (conversationOrder != null &&
+            (conversationOrder.isPaid || conversationOrder.isCompleted));
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
@@ -1242,9 +1272,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final isDark = theme.brightness == Brightness.dark;
 
     final orders = _getOrderProvider(listen: true)?.orders ?? const [];
-    final order = orders
-        .where((o) => o.itemId == widget.conversation.itemId)
-        .firstOrNull;
+    final order = _orderForConversation(orders);
 
     final messages = _chatProvider.messagesFor(widget.conversation.id);
     final latestMeetupMsg = messages.reversed
@@ -1266,10 +1294,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         (order != null && (order.isPaid || order.isCompleted)) ||
         (cachedMeetup != null && cachedMeetup.isPaid);
 
-    final hasMeetup =
+    final hasActiveMeetupProposal =
         meetup != null && !meetup.isCancelled && !meetup.isDeclined;
     final isMeetupConfirmed =
-        hasMeetup && (meetup.isConfirmed || cachedMeetup?.isConfirmed == true);
+        hasActiveMeetupProposal &&
+        (meetup.isConfirmed || cachedMeetup?.isConfirmed == true);
+    final hasMeetup = isMeetupConfirmed;
     final isCompleted =
         (order != null &&
             (order.isCompleted ||
@@ -1391,7 +1421,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       ),
                     ),
                     InkWell(
-                      onTap: () => context.push('/profile'),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const PaymentMethodsScreen(),
+                        ),
+                      ),
                       child: Text(
                         'Wallet',
                         style: TextStyle(
@@ -1458,6 +1493,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
     // If no order exists and no meetup exists, don't show order card
     if (order == null && !hasMeetup && !_itemPaid) {
+      return const SizedBox.shrink();
+    }
+
+    // A pending order by itself is not an active transaction milestone.
+    // Do not imply that a meetup exists until one is confirmed.
+    if (!isPaid && !hasMeetup) {
       return const SizedBox.shrink();
     }
 
@@ -1769,13 +1810,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       return const SizedBox.shrink();
     }
     final orders = _getOrderProvider(listen: true)?.orders ?? const [];
+    final conversationOrder = _orderForConversation(orders);
     final isOrderPaid =
         _itemPaid ||
-        orders.any(
-          (o) =>
-              o.itemId == widget.conversation.itemId &&
-              (o.isPaid || o.isCompleted),
-        );
+        (conversationOrder != null &&
+            (conversationOrder.isPaid || conversationOrder.isCompleted));
 
     return Container(
       decoration: BoxDecoration(
@@ -2401,6 +2440,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 onAddPhoto: _addPhoto,
                 onShareLocation: _shareLocation,
                 onSend: _send,
+                voiceMode: _voiceMode,
+                onToggleVoiceMode: _toggleVoiceMode,
                 isRecording: _isRecording,
                 recordingSeconds: _recordingSeconds,
                 onStartRecording: _startVoiceRecording,
@@ -2548,15 +2589,11 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     if (message.isMeetup && message.meetup != null) {
       return Align(
-        alignment: message.isMine
-            ? Alignment.centerRight
-            : Alignment.centerLeft,
+        alignment: Alignment.center,
         child: Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.md),
           child: Column(
-            crossAxisAlignment: message.isMine
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               MeetupCardBubble(
                 key: Key('chat_meetup_card_${message.id}'),
@@ -2953,6 +2990,8 @@ class _MessageComposer extends StatelessWidget {
     required this.onAddPhoto,
     required this.onShareLocation,
     required this.onSend,
+    required this.voiceMode,
+    required this.onToggleVoiceMode,
     required this.isRecording,
     required this.recordingSeconds,
     required this.onStartRecording,
@@ -2972,6 +3011,8 @@ class _MessageComposer extends StatelessWidget {
   final VoidCallback onAddPhoto;
   final VoidCallback onShareLocation;
   final VoidCallback onSend;
+  final bool voiceMode;
+  final VoidCallback onToggleVoiceMode;
   final bool isRecording;
   final int recordingSeconds;
   final VoidCallback onStartRecording;
@@ -2985,9 +3026,10 @@ class _MessageComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Material(
       elevation: 3,
-      color: Theme.of(context).colorScheme.surface,
+      color: colors.surface,
       child: SafeArea(
         key: const Key('chat_composer_safe_area'),
         top: false,
@@ -2996,12 +3038,7 @@ class _MessageComposer extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sm,
-                AppSpacing.sm,
-                AppSpacing.sm,
-                AppSpacing.sm,
-              ),
+              padding: const EdgeInsets.all(AppSpacing.sm),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -3009,77 +3046,32 @@ class _MessageComposer extends StatelessWidget {
                     width: 44,
                     height: 48,
                     child: IconButton(
-                      key: Key(
-                        isRecording
-                            ? 'chat_cancel_voice_button'
-                            : 'chat_action_panel_toggle_button',
-                      ),
-                      tooltip: isRecording
-                          ? 'Cancel recording'
-                          : showActionPanel
+                      key: const Key('chat_action_panel_toggle_button'),
+                      tooltip: showActionPanel
                           ? 'Close actions'
                           : 'More actions',
-                      onPressed: !enabled || isSending
+                      onPressed: !enabled || isSending || voiceMode
                           ? null
-                          : isRecording
-                          ? onCancelRecording
                           : onToggleActionPanel,
                       icon: Icon(
-                        isRecording
-                            ? Icons.delete_outline
-                            : showActionPanel
+                        showActionPanel
                             ? Icons.cancel_outlined
                             : Icons.add_circle_outline_rounded,
                         size: 24,
-                        color: isRecording
-                            ? Theme.of(context).colorScheme.error
-                            : showActionPanel
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
+                        color: showActionPanel ? colors.primary : null,
                       ),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
-                    child: isRecording
-                        ? Container(
-                            key: const Key('chat_voice_recording_tab'),
-                            height: 48,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.md,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .errorContainer
-                                  .withValues(alpha: 0.45),
-                              borderRadius: BorderRadius.circular(
-                                AppRadius.medium,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.graphic_eq_rounded,
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                Expanded(
-                                  child: Text(
-                                    '${_voiceDuration(recordingSeconds * 1000)} · release to send',
-                                    key: const Key(
-                                      'chat_voice_recording_timer',
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                ),
-                              ],
-                            ),
+                    child: voiceMode
+                        ? _VoiceHoldSurface(
+                            enabled: enabled && !isSending,
+                            recording: isRecording,
+                            recordingSeconds: recordingSeconds,
+                            onHoldStart: onStartRecording,
+                            onHoldEnd: onSendRecording,
+                            onHoldCancel: onCancelRecording,
                           )
                         : TextField(
                             key: const Key('chat_message_input'),
@@ -3107,16 +3099,32 @@ class _MessageComposer extends StatelessWidget {
                             ),
                           ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  _HoldToTalkButton(
-                    enabled: enabled && !isSending,
-                    recording: isRecording,
-                    onTap: isRecording ? onSendRecording : onStartRecording,
-                    onHoldStart: onStartRecording,
-                    onHoldEnd: onSendRecording,
-                    onHoldCancel: onCancelRecording,
+                  const SizedBox(width: AppSpacing.xs),
+                  SizedBox(
+                    width: 44,
+                    height: 48,
+                    child: IconButton(
+                      key: Key(
+                        voiceMode
+                            ? 'chat_keyboard_mode_button'
+                            : 'chat_record_voice_button',
+                      ),
+                      tooltip: voiceMode
+                          ? 'Switch to keyboard'
+                          : 'Voice message',
+                      onPressed: enabled && !isSending && !isRecording
+                          ? onToggleVoiceMode
+                          : null,
+                      icon: Icon(
+                        voiceMode
+                            ? Icons.keyboard_alt_outlined
+                            : Icons.mic_none_rounded,
+                        size: 24,
+                        color: voiceMode ? colors.primary : null,
+                      ),
+                    ),
                   ),
-                  if (!isRecording) ...[
+                  if (!voiceMode) ...[
                     const SizedBox(width: AppSpacing.xs),
                     SizedBox(
                       width: 48,
@@ -3138,14 +3146,8 @@ class _MessageComposer extends StatelessWidget {
                                   color: Colors.white,
                                 ),
                               )
-                            : Center(
-                                child: Transform.translate(
-                                  offset: const Offset(1.5, 0),
-                                  child: const Icon(
-                                    Icons.send_rounded,
-                                    size: 22,
-                                  ),
-                                ),
+                            : const Center(
+                                child: Icon(Icons.send_rounded, size: 22),
                               ),
                       ),
                     ),
@@ -3153,13 +3155,11 @@ class _MessageComposer extends StatelessWidget {
                 ],
               ),
             ),
-            if (!isRecording && showActionPanel) ...[
+            if (!voiceMode && !isRecording && showActionPanel) ...[
               const Divider(height: 1),
               Container(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                ),
+                color: colors.surface,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -3175,27 +3175,21 @@ class _MessageComposer extends StatelessWidget {
                       icon: Icons.receipt_long_rounded,
                       label: 'Orders',
                       color: const Color(0xFF6366F1),
-                      onTap: () {
-                        onOpenOrders?.call();
-                      },
+                      onTap: () => onOpenOrders?.call(),
                     ),
                     _ActionPanelItem(
                       key: const Key('chat_action_panel_pay'),
                       icon: Icons.payment_rounded,
                       label: 'Pay',
                       color: const Color(0xFFD97706),
-                      onTap: () {
-                        onPay?.call();
-                      },
+                      onTap: () => onPay?.call(),
                     ),
                     _ActionPanelItem(
                       key: const Key('chat_action_panel_meetup'),
                       icon: Icons.handshake_rounded,
                       label: 'Meetup',
                       color: const Color(0xFF059669),
-                      onTap: () {
-                        onScheduleMeetup?.call();
-                      },
+                      onTap: () => onScheduleMeetup?.call(),
                     ),
                     _ActionPanelItem(
                       key: const Key('chat_share_location_button'),
@@ -3215,11 +3209,11 @@ class _MessageComposer extends StatelessWidget {
   }
 }
 
-class _HoldToTalkButton extends StatefulWidget {
-  const _HoldToTalkButton({
+class _VoiceHoldSurface extends StatefulWidget {
+  const _VoiceHoldSurface({
     required this.enabled,
     required this.recording,
-    required this.onTap,
+    required this.recordingSeconds,
     required this.onHoldStart,
     required this.onHoldEnd,
     required this.onHoldCancel,
@@ -3227,89 +3221,145 @@ class _HoldToTalkButton extends StatefulWidget {
 
   final bool enabled;
   final bool recording;
-  final VoidCallback onTap;
+  final int recordingSeconds;
   final VoidCallback onHoldStart;
   final VoidCallback onHoldEnd;
   final VoidCallback onHoldCancel;
 
   @override
-  State<_HoldToTalkButton> createState() => _HoldToTalkButtonState();
+  State<_VoiceHoldSurface> createState() => _VoiceHoldSurfaceState();
 }
 
-class _HoldToTalkButtonState extends State<_HoldToTalkButton> {
-  Timer? _holdTimer;
-  bool _startedByPointer = false;
-  bool _sendOnRelease = false;
+class _VoiceHoldSurfaceState extends State<_VoiceHoldSurface> {
+  static const double _cancelThreshold = 56;
+  int? _pointerId;
+  Offset? _pointerOrigin;
+  bool _cancelOnRelease = false;
+
+  void _resetPointer() {
+    _pointerId = null;
+    _pointerOrigin = null;
+    if (_cancelOnRelease && mounted) {
+      setState(() => _cancelOnRelease = false);
+    } else {
+      _cancelOnRelease = false;
+    }
+  }
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (!widget.enabled) return;
-    _startedByPointer = !widget.recording;
-    if (_startedByPointer) {
-      _sendOnRelease = false;
-      _holdTimer?.cancel();
-      _holdTimer = Timer(
-        const Duration(milliseconds: 350),
-        () => _sendOnRelease = true,
-      );
-      widget.onHoldStart();
-    }
+    if (!widget.enabled || _pointerId != null) return;
+    _pointerId = event.pointer;
+    _pointerOrigin = event.position;
+    if (_cancelOnRelease) setState(() => _cancelOnRelease = false);
+    widget.onHoldStart();
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (_pointerId != event.pointer || _pointerOrigin == null) return;
+    final shouldCancel =
+        event.position.dy <= _pointerOrigin!.dy - _cancelThreshold;
+    if (shouldCancel == _cancelOnRelease) return;
+    setState(() => _cancelOnRelease = shouldCancel);
   }
 
   void _handlePointerUp(PointerUpEvent event) {
-    _holdTimer?.cancel();
-    if (!_startedByPointer) {
-      widget.onTap();
-    } else if (_sendOnRelease) {
+    if (_pointerId != event.pointer) return;
+    final shouldCancel = _cancelOnRelease;
+    _resetPointer();
+    if (shouldCancel) {
+      widget.onHoldCancel();
+    } else {
       widget.onHoldEnd();
     }
-    _startedByPointer = false;
-    _sendOnRelease = false;
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
-    _holdTimer?.cancel();
-    if (_startedByPointer) widget.onHoldCancel();
-    _startedByPointer = false;
-    _sendOnRelease = false;
-  }
-
-  @override
-  void dispose() {
-    _holdTimer?.cancel();
-    super.dispose();
+    if (_pointerId != event.pointer) return;
+    _resetPointer();
+    widget.onHoldCancel();
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final active = widget.recording || _pointerId != null;
+    final cancel = active && _cancelOnRelease;
+
     return Semantics(
       button: true,
       enabled: widget.enabled,
-      label: 'Hold to record a voice message. Release to send.',
-      onTap: widget.enabled ? widget.onTap : null,
+      label: widget.recording
+          ? (cancel
+                ? 'Release to cancel voice message'
+                : 'Release to send voice message')
+          : 'Hold to talk. Slide up to cancel.',
       child: Listener(
-        key: const Key('chat_record_voice_button'),
+        key: const Key('chat_hold_to_talk_button'),
         behavior: HitTestBehavior.opaque,
         onPointerDown: widget.enabled ? _handlePointerDown : null,
+        onPointerMove: _handlePointerMove,
         onPointerUp: _handlePointerUp,
         onPointerCancel: _handlePointerCancel,
-        child: Container(
-          key: widget.recording ? const Key('chat_send_voice_button') : null,
-          width: 44,
+        child: AnimatedContainer(
+          key: widget.recording
+              ? const Key('chat_voice_recording_tab')
+              : const Key('chat_voice_hold_tab'),
+          duration: const Duration(milliseconds: 120),
           height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
           decoration: BoxDecoration(
-            color: widget.recording
-                ? Theme.of(context).colorScheme.errorContainer
-                : Colors.transparent,
+            color: cancel
+                ? colors.errorContainer
+                : active
+                ? colors.primaryContainer.withValues(alpha: 0.55)
+                : colors.surfaceContainerHighest.withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(AppRadius.medium),
+            border: Border.all(
+              color: cancel
+                  ? colors.error.withValues(alpha: 0.65)
+                  : active
+                  ? colors.primary.withValues(alpha: 0.45)
+                  : colors.outline.withValues(alpha: 0.18),
+            ),
           ),
-          alignment: Alignment.center,
-          child: Icon(
-            widget.recording ? Icons.mic_rounded : Icons.mic_none_rounded,
-            color: !widget.enabled
-                ? Theme.of(context).disabledColor
-                : widget.recording
-                ? Theme.of(context).colorScheme.error
-                : null,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                cancel
+                    ? Icons.delete_outline_rounded
+                    : widget.recording
+                    ? Icons.graphic_eq_rounded
+                    : Icons.mic_rounded,
+                size: 20,
+                color: cancel
+                    ? colors.error
+                    : active
+                    ? colors.primary
+                    : colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  widget.recording
+                      ? '${_voiceDuration(widget.recordingSeconds * 1000)} · ${cancel ? 'release to cancel' : 'release to send'}'
+                      : 'Hold to Talk',
+                  key: widget.recording
+                      ? const Key('chat_voice_recording_timer')
+                      : const Key('chat_hold_to_talk_label'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: cancel
+                        ? colors.error
+                        : active
+                        ? colors.primary
+                        : colors.onSurface,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

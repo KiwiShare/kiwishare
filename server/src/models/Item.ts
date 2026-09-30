@@ -9,6 +9,7 @@ export interface IItem extends Document {
   price: number; // in cents
   currency: string;
   negotiable: boolean;
+  attributes: Map<string, string>;
   images: Array<{
     url: string;
     thumbnailUrl?: string;
@@ -51,6 +52,7 @@ const ItemSchema = new Schema<IItem>(
     price: { type: Number, required: true }, // cents
     currency: { type: String, required: true, default: 'NZD' },
     negotiable: { type: Boolean, default: false },
+    attributes: { type: Map, of: String, default: {} },
     images: [
       {
         url: { type: String, required: true },

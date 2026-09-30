@@ -244,7 +244,7 @@ void main() {
           ),
         );
 
-        expect(find.text('Meetup Proposed'), findsOneWidget);
+        expect(find.text('Meetup Proposal'), findsOneWidget);
         expect(find.text('UoA Engineering Quad'), findsOneWidget);
         expect(find.byKey(const Key('meetup_map_order-123')), findsOneWidget);
         expect(find.text('Open map'), findsOneWidget);
@@ -517,7 +517,7 @@ void main() {
           ),
         );
 
-        expect(find.text('Meetup Proposed'), findsOneWidget);
+        expect(find.text('Meetup Proposal'), findsOneWidget);
         expect(find.text('Accept'), findsOneWidget);
 
         // Tap accept
@@ -586,7 +586,7 @@ void main() {
         expect(promptShowed, isTrue);
         expect(fakeRepo.acceptCalled, isFalse);
         // Remains proposed because user rejected confirmation
-        expect(find.text('Meetup Proposed'), findsOneWidget);
+        expect(find.text('Meetup Proposal'), findsOneWidget);
       },
     );
 

@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
+import { isOutboundEmailDeliveryEnabled } from './emailSafety';
 
 export interface WatchlistPriceEmailOptions {
   to: string;
@@ -26,6 +27,8 @@ export async function sendWatchlistPriceEmail(options: WatchlistPriceEmailOption
   if (emailSenderOverride) {
     return emailSenderOverride(options);
   }
+
+  if (!isOutboundEmailDeliveryEnabled()) return;
 
   const { to, recipientName, itemTitle, itemId, oldPriceNzd, newPriceNzd, newPriceCents } = options;
   const isFree = newPriceCents === 0 || newPriceNzd === '0' || newPriceNzd === '0.00';

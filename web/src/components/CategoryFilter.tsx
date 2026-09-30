@@ -12,6 +12,9 @@ import {
   Trophy, 
   BookOpen, 
   Package,
+  House,
+  Baby,
+  Car,
   LucideIcon
 } from 'lucide-react';
 
@@ -31,6 +34,9 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Trophy,
   BookOpen,
   Package,
+  House,
+  Baby,
+  Car,
   Sparkles,
 };
 

@@ -155,8 +155,9 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
 
     return Container(
       key: Key('meetup_card_${widget.meetup.orderId}'),
-      constraints: const BoxConstraints(maxWidth: 290),
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      width: MediaQuery.sizeOf(context).width * 0.86,
+      constraints: const BoxConstraints(maxWidth: 360),
+      margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
         color: isConfirmed
             ? (isDark
@@ -218,7 +219,9 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                       ? 'Meetup Cancelled'
                       : isDeclined
                       ? 'Meetup Declined'
-                      : 'Meetup Proposed',
+                      : widget.isMine
+                      ? 'Meetup Proposal Sent'
+                      : 'Meetup Proposal',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -266,7 +269,7 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                     borderRadius: BorderRadius.circular(10),
                     child: SizedBox(
                       key: Key('meetup_map_${widget.meetup.orderId}'),
-                      height: 112,
+                      height: 148,
                       child: Stack(
                         children: [
                           Positioned.fill(
@@ -703,30 +706,81 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                   ),
                 ] else if (isProposed) ...[
                   if (widget.isMine) ...[
-                    Row(
-                      children: [
-                        const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 1.5),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Waiting for response...',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: colors.onSurfaceVariant,
+                    Container(
+                      key: Key('meetup_proposal_sent_${widget.meetup.orderId}'),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.primaryContainer.withValues(alpha: 0.28),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline_rounded,
+                            size: 17,
+                            color: colors.primary,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Proposal sent. The other person can accept or decline it.',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colors.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ] else ...[
+                    Container(
+                      key: Key(
+                        'meetup_response_needed_${widget.meetup.orderId}',
+                      ),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.touch_app_rounded,
+                            size: 16,
+                            color: Color(0xFFB45309),
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Your response is needed',
+                              style: TextStyle(
+                                color: Color(0xFF92400E),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton(
                             onPressed: _isLoading ? null : _declineMeetup,
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -742,7 +796,7 @@ class _MeetupCardBubbleState extends State<MeetupCardBubble> {
                             ),
                             onPressed: _isLoading ? null : _acceptMeetup,
                             style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
                               backgroundColor: const Color(0xFF059669),
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(

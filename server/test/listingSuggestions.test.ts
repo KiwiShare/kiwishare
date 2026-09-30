@@ -15,7 +15,8 @@ const validSuggestion = {
   description: 'A sturdy pre-owned desk with light signs of use.',
   category: 'Furniture',
   condition: 'Good',
-  priceNzd: '120'
+  priceNzd: '120',
+  attributes: {}
 };
 
 class FakeSuggestionProvider implements ListingSuggestionProvider {
@@ -169,6 +170,48 @@ describe('listing AI suggestions', () => {
     expect(provider.lastInput).toEqual({ description });
     expect(rejected.status).toBe(400);
     expect(provider.calls).toBe(1);
+  });
+
+  test('accepts Cars & Vehicles and returns only allowed vehicle attributes', async () => {
+    const provider = new FakeSuggestionProvider({
+      title: '2018 Toyota Corolla Hybrid',
+      description: 'Used Corolla. Review the details before publishing.',
+      category: 'Cars & Vehicles',
+      condition: 'Good',
+      priceNzd: '15900',
+      attributes: {
+        make: 'Toyota',
+        model: 'Corolla',
+        year: '2018',
+        mileageKm: '85000',
+        fuelType: 'Hybrid',
+        transmission: 'Automatic',
+        bodyType: 'Hatchback',
+        madeUpField: 'ignored'
+      }
+    });
+    setListingSuggestionProviderForTests(provider);
+
+    const response = await request(app.callback())
+      .post('/api/listing-suggestions')
+      .set('Authorization', `Bearer ${authToken('vehicle-ai-user')}`)
+      .send({
+        category: 'Cars & Vehicles',
+        imageBase64: 'dGVzdA==',
+        imageMimeType: 'image/jpeg'
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.suggestion.attributes).toEqual({
+      make: 'Toyota',
+      model: 'Corolla',
+      year: '2018',
+      mileageKm: '85000',
+      fuelType: 'Hybrid',
+      transmission: 'Automatic',
+      bodyType: 'Hatchback'
+    });
+    expect(response.body.suggestion.attributes.madeUpField).toBeUndefined();
   });
 
   test('rejects malformed or unsafe provider output without reflecting it', async () => {

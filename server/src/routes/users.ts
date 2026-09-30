@@ -2,6 +2,7 @@ import Router from 'koa-router';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { Resend } from 'resend';
+import { isOutboundEmailDeliveryEnabled } from '../services/emailSafety';
 import { authenticateToken } from '../middleware/auth';
 import User from '../models/User';
 import Item from '../models/Item';
@@ -342,7 +343,7 @@ router.post('/users/student-verification/send-otp', authenticateToken, async (ct
   console.log(`\n🎓 [Student Verification OTP] Email: ${normalizedEmail} (${institution}) | Code: ${code} (Expires in 10m)\n`);
 
   // Attempt to send email via Resend if available
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const resendApiKey = isOutboundEmailDeliveryEnabled() ? process.env.RESEND_API_KEY : undefined;
   const resendFrom = process.env.RESEND_FROM || 'onboarding@kiwishare.online';
 
   if (resendApiKey) {

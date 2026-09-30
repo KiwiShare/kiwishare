@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import PushDevice from '../models/PushDevice';
 import User from '../models/User';
 import { configuredFirebaseApp } from './pushNotification';
+import { isOutboundEmailDeliveryEnabled } from './emailSafety';
 
 export type AdminNotificationEventType =
   | 'transferred_to_user'
@@ -164,7 +165,7 @@ export async function sendAdminItemNotification(options: AdminNotificationOption
     const content = generateContent(options, recipientName);
 
     // 1. Send Email Notification via Resend (with SMTP fallback)
-    if (email) {
+    if (email && isOutboundEmailDeliveryEnabled()) {
       try {
         let sent = false;
         const resendApiKey = process.env.RESEND_API_KEY;

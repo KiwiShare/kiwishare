@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kiwishare/models/item_model.dart';
+import 'package:kiwishare/models/listing_category_config.dart';
 import 'package:kiwishare/providers/auth_provider.dart';
 import 'package:kiwishare/providers/listing_provider.dart';
 import 'package:kiwishare/repositories/item_repository.dart';
@@ -39,6 +40,7 @@ void main() {
     EdgeInsets safeAreaPadding = EdgeInsets.zero,
     AuthProvider? authProvider,
     ListingProvider? listingProvider,
+    String? initialCategory = 'Furniture',
   }) {
     final darkScheme = ColorScheme.fromSeed(
       seedColor: AppColors.brandSecondary,
@@ -67,6 +69,7 @@ void main() {
           suggestionService: suggestionService,
           authToken: authToken,
           onPostItem: onPostItem,
+          initialCategory: initialCategory,
         ),
       ),
     );
@@ -85,6 +88,189 @@ void main() {
     }
     return result;
   }
+
+  testWidgets('publish entry offers category-first and AI-first flows', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, initialCategory: null),
+    );
+
+    expect(find.byKey(const Key('post_start_page')), findsOneWidget);
+    expect(find.byKey(const Key('post_start_category_button')), findsOneWidget);
+    expect(find.byKey(const Key('post_start_ai_button')), findsOneWidget);
+    expect(find.text('Choose a category'), findsWidgets);
+    expect(find.text('AI list it for me'), findsOneWidget);
+    expect(find.byKey(const Key('post_item_form')), findsNothing);
+  });
+
+  testWidgets('Cars & Vehicles opens a vehicle-specific listing form', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildTestApp(onCancel: () {}, initialCategory: null),
+    );
+
+    await tester.tap(find.byKey(const Key('post_start_category_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('What are you selling?'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('post_selection_option_Cars & Vehicles')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('post_item_form')), findsOneWidget);
+    expect(find.text('Cars & Vehicles'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_condition_field')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final scrollable = find.byType(Scrollable).first;
+    final expectedKeys = <String>[
+      'post_attribute_make',
+      'post_attribute_model',
+      'post_attribute_year',
+      'post_attribute_mileageKm',
+      'post_attribute_fuelType',
+      'post_attribute_transmission',
+      'post_attribute_bodyType',
+      'post_attribute_engineSize',
+      'post_attribute_registration',
+      'post_attribute_wofExpiry',
+    ];
+    for (final key in expectedKeys) {
+      for (
+        var attempt = 0;
+        attempt < 6 && find.byKey(Key(key)).evaluate().isEmpty;
+        attempt += 1
+      ) {
+        await tester.drag(scrollable, const Offset(0, -260));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byKey(Key(key)), findsOneWidget);
+    }
+
+    final vehicleDefinition = listingCategoryDefinition('Cars & Vehicles');
+    expect(vehicleDefinition, isNotNull);
+    expect(
+      vehicleDefinition!.attributes.every((field) => !field.required),
+      isTrue,
+    );
+    expect(
+      listingAttributeField('Cars & Vehicles', 'year')?.type,
+      ListingAttributeInputType.year,
+    );
+    expect(
+      listingAttributeField('Cars & Vehicles', 'wofExpiry')?.type,
+      ListingAttributeInputType.date,
+    );
+    expect(find.text('Make *'), findsNothing);
+    expect(find.text('Mileage *'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('post_attribute_wofExpiry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(DatePickerDialog),
+        matching: find.text('Cancel'),
+      ),
+    );
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('AI-first photo flow detects a category and opens its form', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final suggestionService = FakeListingSuggestionService(
+      suggestion: const ListingSuggestion(
+        title: '2018 Toyota Corolla Hybrid',
+        description:
+            'Used Toyota Corolla. Review vehicle details before listing.',
+        category: 'Cars & Vehicles',
+        condition: 'Good',
+        priceNzd: '15900',
+        attributes: {
+          'make': 'Toyota',
+          'model': 'Corolla',
+          'year': '2018',
+          'fuelType': 'Hybrid',
+          'transmission': 'Automatic',
+          'bodyType': 'Hatchback',
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      buildTestApp(
+        onCancel: () {},
+        initialCategory: null,
+        authToken: 'valid-token',
+        suggestionService: suggestionService,
+        imagePicker: FakeListingImagePicker(
+          galleryPhotos: [testPhoto('car.png')],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('post_start_ai_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Take a photo'), findsOneWidget);
+    expect(find.text('Choose from gallery'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('post_choose_gallery_option')));
+    await tester.pumpAndSettle();
+
+    expect(suggestionService.calls, 1);
+    expect(suggestionService.input?.imageBase64, isNotEmpty);
+    expect(find.byKey(const Key('post_item_form')), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_category_field')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Cars & Vehicles'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_attribute_make')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final makeField = tester.widget<TextFormField>(
+      find.byKey(const Key('post_attribute_make')),
+    );
+    expect(makeField.controller?.text, 'Toyota');
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('post_attribute_fuelType')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Hybrid'), findsOneWidget);
+    expect(
+      find.textContaining('AI draft ready. Review the detected category'),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('renders the Figma listing form and photo slots', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -948,7 +1134,7 @@ void main() {
     expect(titleController.text, 'Keep this title');
   });
 
-  testWidgets('requires context and sign-in before requesting AI help', (
+  testWidgets('requires sign-in before requesting in-form AI help', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -960,36 +1146,15 @@ void main() {
     await tester.pumpWidget(
       buildTestApp(onCancel: () {}, suggestionService: service),
     );
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('post_ai_suggestion_button')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
-    await tester.pump();
-    expect(
-      find.text(
-        'Add a title, description, category, or condition before asking for help.',
-      ),
-      findsOneWidget,
-    );
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpAndSettle();
-    await tester.pumpWidget(
-      buildTestApp(onCancel: () {}, suggestionService: service),
-    );
-    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('post_title_field')), 'Desk');
     await tester.scrollUntilVisible(
       find.byKey(const Key('post_ai_suggestion_button')),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.ensureVisible(
-      find.byKey(const Key('post_ai_suggestion_button')),
-    );
     await tester.tap(find.byKey(const Key('post_ai_suggestion_button')));
     await tester.pump();
+
     expect(find.text('Please sign in to use AI suggestions.'), findsOneWidget);
     expect(service.calls, 0);
   });
@@ -1263,6 +1428,11 @@ Future<void> completeValidListing(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('post_selection_option_Good')));
   await tester.pumpAndSettle();
 
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('post_submit_button')),
+    350,
+    scrollable: find.byType(Scrollable).first,
+  );
   await tester.ensureVisible(find.byKey(const Key('post_submit_button')));
   await tester.pumpAndSettle();
 }
@@ -1360,6 +1530,7 @@ class FakeListingPublishService implements ListingPublishService {
       status: ItemStatus.active,
       description: draft.description,
       condition: draft.condition,
+      attributes: draft.attributes,
       latitude: draft.latitude,
       longitude: draft.longitude,
     );
@@ -1458,6 +1629,17 @@ class TrackingAuthProvider extends AuthProvider {
 }
 
 class FakeListingSuggestionService implements ListingSuggestionService {
+  FakeListingSuggestionService({
+    this.suggestion = const ListingSuggestion(
+      title: 'Solid wood study desk',
+      description: 'A sturdy pre-owned desk with light signs of use.',
+      category: 'Furniture',
+      condition: 'Good',
+      priceNzd: '120',
+    ),
+  });
+
+  final ListingSuggestion suggestion;
   int calls = 0;
   String? authToken;
   ListingSuggestionInput? input;
@@ -1470,13 +1652,7 @@ class FakeListingSuggestionService implements ListingSuggestionService {
     calls += 1;
     this.input = input;
     this.authToken = authToken;
-    return const ListingSuggestion(
-      title: 'Solid wood study desk',
-      description: 'A sturdy pre-owned desk with light signs of use.',
-      category: 'Furniture',
-      condition: 'Good',
-      priceNzd: '120',
-    );
+    return suggestion;
   }
 }
 

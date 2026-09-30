@@ -11,6 +11,7 @@ import '../../providers/chat_provider.dart';
 import '../../services/notification_permission_coordinator.dart';
 import '../../theme/app_theme.dart';
 import '../profile/notification_settings_screen.dart';
+import '../shared/widgets/guest_sign_in_state.dart';
 import 'widgets/chat_list_tile.dart';
 
 export '../../models/chat_conversation_model.dart'
@@ -333,6 +334,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final provider = _chatProvider;
     final token = widget.authToken ?? context.watch<AuthProvider?>()?.jwtToken;
     _ensureLoaded(token);
+    if (token == null || token.isEmpty) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: const SafeArea(
+          child: GuestSignInState(key: Key('chat_signed_out_state')),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
@@ -380,12 +389,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Widget _buildContent(ChatProvider provider) {
     final token = _currentAuthToken;
     if (token == null || token.isEmpty) {
-      return const _ChatMessageState(
-        key: Key('chat_signed_out_state'),
-        icon: Icons.lock_outline,
-        title: 'Please sign in to view your chats',
-        message: 'Your conversations will appear here after you sign in.',
-      );
+      return const GuestSignInState(key: Key('chat_signed_out_state'));
     }
 
     if (!provider.ownsSession(token)) {

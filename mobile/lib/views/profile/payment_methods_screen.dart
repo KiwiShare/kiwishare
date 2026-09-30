@@ -25,7 +25,15 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
 
   Future<void> _load() async {
     final token = context.read<AuthProvider>().jwtToken;
-    if (token == null) return;
+    if (token == null || token.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Please sign in to manage your wallet.';
+        });
+      }
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;

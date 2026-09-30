@@ -1432,6 +1432,9 @@ export const AdminDashboardPage: React.FC = () => {
                     <option value="Flower2">Flower / Plants</option>
                     <option value="Trophy">Trophy / Sports</option>
                     <option value="BookOpen">Book / Media</option>
+                    <option value="House">House / Home</option>
+                    <option value="Baby">Baby / Kids</option>
+                    <option value="Car">Car / Vehicles</option>
                   </select>
                 </div>
 
