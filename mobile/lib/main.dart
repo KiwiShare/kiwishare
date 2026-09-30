@@ -12,6 +12,7 @@ import 'views/home/home_screen.dart';
 import 'views/search/search_screen.dart';
 import 'views/watchlist/watchlist_screen.dart';
 import 'views/post/post_item_screen.dart';
+import 'views/post/widgets/listing_category_grid_sheet.dart';
 import 'views/messages/messages_screen.dart';
 import 'views/messages/chat_conversation_screen.dart';
 import 'views/profile/profile_screen.dart';
@@ -22,7 +23,6 @@ import 'views/meetups/meetup_qr_screen.dart';
 import 'views/auth/login_view.dart';
 import 'views/products/product_detail_screen.dart';
 import 'models/item_model.dart';
-import 'models/listing_category_config.dart';
 import 'models/order_model.dart';
 import 'navigation/app_route_observer.dart';
 
@@ -857,49 +857,10 @@ class KiwiShareShell extends StatelessWidget {
       return;
     }
 
-    final category = await showModalBottomSheet<String>(
-      context: shellContext,
-      useSafeArea: true,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'What are you listing?',
-                  style: Theme.of(
-                    sheetContext,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                ),
-              ),
-            ),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: listingCategoryNames.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final value = listingCategoryNames[index];
-                  return ListTile(
-                    key: Key('post-entry-category-$value'),
-                    title: Text(value),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Navigator.pop(sheetContext, value),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
+    final category = await ListingCategoryGridSheet.show(
+      shellContext,
+      title: 'What are you listing?',
+      subtitle: 'Pick the closest match so the listing form stays relevant.',
     );
     if (category == null || !shellContext.mounted) return;
     shellContext.go(

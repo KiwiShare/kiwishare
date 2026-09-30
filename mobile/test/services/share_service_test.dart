@@ -23,7 +23,18 @@ void main() {
 
     test('generates canonical share URL for item', () {
       final url = service.getItemShareUrl(testItem.id);
-      expect(url, 'https://kiwishare.online/products/test-item-123');
+      expect(url, 'https://kiwishare.online/s/test-item-123');
+    });
+
+    test('generates app deep link and full web fallback URL', () {
+      expect(
+        service.getItemDeepLink(testItem.id),
+        'kiwishare:///items/test-item-123',
+      );
+      expect(
+        service.getItemWebUrl(testItem.id),
+        'https://kiwishare.online/products/test-item-123',
+      );
     });
 
     test('generates expected share text', () {
@@ -38,10 +49,7 @@ void main() {
       final combined = service.getItemCombinedShareText(testItem);
       expect(combined, contains('Ergonomic Office Chair'));
       expect(combined, contains('\$150 NZD'));
-      expect(
-        combined,
-        contains('https://kiwishare.online/products/test-item-123'),
-      );
+      expect(combined, contains('https://kiwishare.online/s/test-item-123'));
     });
   });
 }

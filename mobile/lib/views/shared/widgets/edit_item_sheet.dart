@@ -11,6 +11,7 @@ import '../../../services/listing_image_picker.dart';
 import '../../../services/r2_upload_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/resilient_network_image.dart';
+import '../../post/widgets/listing_category_grid_sheet.dart';
 
 class EditItemSheet extends StatefulWidget {
   const EditItemSheet({
@@ -609,10 +610,11 @@ class _EditItemSheetState extends State<EditItemSheet> {
   }
 
   Future<void> _pickCategory() async {
-    final selected = await _showOptionPicker(
-      title: 'Category',
-      options: _categories,
-      selected: _category,
+    final selected = await ListingCategoryGridSheet.show(
+      context,
+      title: 'Choose a category',
+      subtitle: 'Pick the closest match for this listing.',
+      selectedValue: _category,
     );
     if (selected == null || !mounted) return;
     setState(() {

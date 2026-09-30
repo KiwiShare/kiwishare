@@ -15,6 +15,7 @@ import '../../services/listing_publish_service.dart';
 import '../../services/listing_suggestion_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/campus_locations.dart';
+import 'widgets/listing_category_grid_sheet.dart';
 
 const TextStyle _postPlaceholderStyle = TextStyle(color: Color(0xFF94A3B8));
 
@@ -150,16 +151,11 @@ class _PostItemScreenState extends State<PostItemScreen> {
   }
 
   Future<void> _startCategoryFlow() async {
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (context) => _SelectionSheet(
-        title: 'What are you selling?',
-        options: listingCategoryNames,
-        selectedValue: _category,
-      ),
+    final selected = await ListingCategoryGridSheet.show(
+      context,
+      title: 'What are you selling?',
+      subtitle: 'Choose a category to tailor the details we ask for.',
+      selectedValue: _category,
     );
     if (selected == null || !mounted) return;
     setState(() {
@@ -2925,6 +2921,14 @@ class _MobileSelectionFormField extends StatelessWidget {
   });
 
   Future<String?> _showOptions(BuildContext context, String? selectedValue) {
+    if (sheetTitle == 'Category') {
+      return ListingCategoryGridSheet.show(
+        context,
+        title: 'Choose a category',
+        subtitle: 'Pick the closest match for this listing.',
+        selectedValue: selectedValue,
+      );
+    }
     return showModalBottomSheet<String>(
       context: context,
       useSafeArea: true,
