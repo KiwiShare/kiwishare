@@ -280,7 +280,11 @@ void main() {
 
     expect(find.text('Watchlist alerts'), findsOneWidget);
     expect(
-      find.byKey(const Key('watchlist-price-change-alert-switch')),
+      find.byKey(const Key('watchlist-price-drop-alert-switch')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('watchlist-price-increase-alert-switch')),
       findsOneWidget,
     );
     expect(
@@ -288,9 +292,12 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(
-      find.byKey(const Key('watchlist-nearby-category-alert-switch')),
+    final nearbySwitch = find.byKey(
+      const Key('watchlist-nearby-category-alert-switch'),
     );
+    await tester.ensureVisible(nearbySwitch);
+    await tester.pumpAndSettle();
+    await tester.tap(nearbySwitch);
     await tester.pumpAndSettle();
     expect(preferences.nearbySaved, isTrue);
   });
@@ -316,9 +323,14 @@ class _PreferenceRepository
     implements
         NotificationPreferencesRepository,
         ExtendedNotificationPreferencesRepository {
-  _PreferenceRepository(this.saved, {this.nearbySaved = false});
+  _PreferenceRepository(
+    this.saved, {
+    this.increaseSaved = false,
+    this.nearbySaved = false,
+  });
 
   bool saved;
+  bool increaseSaved;
   bool nearbySaved;
 
   @override
@@ -339,6 +351,7 @@ class _PreferenceRepository
   }) async {
     return WatchlistNotificationPreferences(
       priceChanges: saved,
+      priceIncreases: increaseSaved,
       nearbyCategory: nearbySaved,
     );
   }
@@ -347,12 +360,15 @@ class _PreferenceRepository
   Future<WatchlistNotificationPreferences> updateWatchlistPreferences({
     required String token,
     bool? priceChanges,
+    bool? priceIncreases,
     bool? nearbyCategory,
   }) async {
     if (priceChanges != null) saved = priceChanges;
+    if (priceIncreases != null) increaseSaved = priceIncreases;
     if (nearbyCategory != null) nearbySaved = nearbyCategory;
     return WatchlistNotificationPreferences(
       priceChanges: saved,
+      priceIncreases: increaseSaved,
       nearbyCategory: nearbySaved,
     );
   }

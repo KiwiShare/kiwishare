@@ -7,11 +7,16 @@ import '../config/api_config.dart';
 class WatchlistNotificationPreferences {
   const WatchlistNotificationPreferences({
     required this.priceChanges,
+    required this.priceIncreases,
     required this.nearbyCategory,
   });
 
+  /// Compatibility name for the established price-drop preference.
   final bool priceChanges;
+  final bool priceIncreases;
   final bool nearbyCategory;
+
+  bool get priceDrops => priceChanges;
 }
 
 abstract class NotificationPreferencesRepository {
@@ -30,6 +35,7 @@ abstract interface class ExtendedNotificationPreferencesRepository {
   Future<WatchlistNotificationPreferences> updateWatchlistPreferences({
     required String token,
     bool? priceChanges,
+    bool? priceIncreases,
     bool? nearbyCategory,
   });
 }
@@ -53,15 +59,19 @@ class RestNotificationPreferencesRepository
     Map<String, dynamic>? preferences,
   ) {
     final priceChanges =
-        preferences?['watchlistPriceChange'] ??
         preferences?['watchlistPriceDrop'] ??
+        preferences?['watchlistPriceChange'] ??
         true;
+    final priceIncreases = preferences?['watchlistPriceIncrease'] ?? false;
     final nearbyCategory = preferences?['watchlistNearbyCategory'] ?? false;
-    if (priceChanges is! bool || nearbyCategory is! bool) {
+    if (priceChanges is! bool ||
+        priceIncreases is! bool ||
+        nearbyCategory is! bool) {
       throw const NotificationPreferencesException();
     }
     return WatchlistNotificationPreferences(
       priceChanges: priceChanges,
+      priceIncreases: priceIncreases,
       nearbyCategory: nearbyCategory,
     );
   }
@@ -102,10 +112,12 @@ class RestNotificationPreferencesRepository
   Future<WatchlistNotificationPreferences> updateWatchlistPreferences({
     required String token,
     bool? priceChanges,
+    bool? priceIncreases,
     bool? nearbyCategory,
   }) async {
     final payload = <String, dynamic>{
-      'watchlistPriceChange': ?priceChanges,
+      'watchlistPriceDrop': ?priceChanges,
+      'watchlistPriceIncrease': ?priceIncreases,
       'watchlistNearbyCategory': ?nearbyCategory,
     };
     if (payload.isEmpty) {
@@ -118,19 +130,6 @@ class RestNotificationPreferencesRepository
       body: jsonEncode(payload),
     );
     if (response.statusCode != 200) {
-      if (nearbyCategory != null && response.statusCode == 400) {
-        Map<String, dynamic>? errorBody;
-        try {
-          errorBody = jsonDecode(response.body) as Map<String, dynamic>?;
-        } catch (_) {}
-        final message = errorBody?['message']?.toString() ?? '';
-        if (message.contains('watchlistPriceDrop') ||
-            message.contains('notification preference')) {
-          throw const NotificationPreferencesUnsupportedException(
-            'Nearby-category alerts require the latest KiwiShare server.',
-          );
-        }
-      }
       throw const NotificationPreferencesException();
     }
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -147,7 +146,4 @@ class NotificationPreferencesUnsupportedException
   const NotificationPreferencesUnsupportedException(this.message);
 
   final String message;
-
-  @override
-  String toString() => message;
 }

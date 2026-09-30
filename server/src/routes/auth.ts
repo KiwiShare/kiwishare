@@ -763,7 +763,10 @@ router.post('/auth/google', async (ctx) => {
       lastActiveAt: now,
       lastLoginAt: now,
       notificationPreferences: {
-        watchlistPriceDrop: true
+        watchlistPriceDrop: true,
+        watchlistPriceChange: true,
+        watchlistPriceIncrease: false,
+        watchlistNearbyCategory: false
       }
     });
     await ensureGoogleUsername(user, googleName, googleEmail);
