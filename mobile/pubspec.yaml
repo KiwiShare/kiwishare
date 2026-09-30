@@ -56,6 +56,7 @@ dependencies:
   url_launcher: ^6.3.1
   share_plus: ^10.1.4
   google_maps_flutter: 2.18.1
+  flutter_svg: ^2.3.0
 
 
 dev_dependencies:
@@ -82,6 +83,7 @@ flutter:
   assets:
     - assets/icons/kiwishare-app-icon_V1.5/master/kiwishare-mark-green-4096.png
     - assets/icons/kiwishare-app-icon_V1.5/master/kiwishare-mark-ivory-4096.png
+    - assets/categories/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

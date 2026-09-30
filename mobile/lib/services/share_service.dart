@@ -11,14 +11,28 @@ class ShareService {
 
   static const ShareService instance = ShareService();
 
-  /// Generates the canonical public web URL for an item.
-  ///
-  /// This intentionally uses the website route instead of the API origin.
-  /// Native deep links can be added later without changing the shared URL.
-  String getItemShareUrl(String itemId) {
+  /// Web route that renders the full product detail page.
+  String getItemWebUrl(String itemId) {
     final encodedId = Uri.encodeComponent(itemId.trim());
     return '${ApiConfig.webBaseUrl}/products/$encodedId';
   }
+
+  /// Custom-scheme deep link handled by the installed iOS / Android app.
+  String getItemDeepLink(String itemId) {
+    final encodedId = Uri.encodeComponent(itemId.trim());
+    return 'kiwishare:///items/$encodedId';
+  }
+
+  /// Stable public short link used for social sharing.
+  ///
+  /// The web landing page attempts [getItemDeepLink] on mobile and falls back
+  /// to install options plus "Continue on web" when the app is unavailable.
+  String getItemShortLink(String itemId) {
+    final encodedId = Uri.encodeComponent(itemId.trim());
+    return '${ApiConfig.webBaseUrl}/s/$encodedId';
+  }
+
+  String getItemShareUrl(String itemId) => getItemShortLink(itemId);
 
   /// Generates standard share text for an item
   String getItemShareText(ItemModel item) {
