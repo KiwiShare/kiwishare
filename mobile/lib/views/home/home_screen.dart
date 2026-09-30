@@ -183,11 +183,6 @@ class _HomeScreenState extends State<HomeScreen> {
     context.push('/items/${item.id}', extra: item);
   }
 
-  void _clearSearch() {
-    _searchController.clear();
-    context.read<HomeDiscoveryProvider>().setQuery('');
-  }
-
   void _resetFilters() {
     _searchController.clear();
     context.read<HomeDiscoveryProvider>().resetFilters();
@@ -271,26 +266,24 @@ class _HomeScreenState extends State<HomeScreen> {
                   key: const Key('home-search-field'),
                   controller: _searchController,
                   focusNode: _searchFocusNode,
-                  onChanged: (value) {
-                    filters.setQuery(value);
-                    setState(() {});
+                  readOnly: true,
+                  showCursor: false,
+                  onTap: () {
+                    final query = _searchController.text.trim();
+                    context.push(
+                      Uri(
+                        path: '/search',
+                        queryParameters: query.isEmpty ? null : {'q': query},
+                      ).toString(),
+                    );
                   },
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: _searchFocusNode.hasFocus
-                        ? 'Search all KiwiShare'
-                        : 'Search all items',
-                    prefixIcon: const Icon(
+                  decoration: const InputDecoration(
+                    hintText: 'Search all KiwiShare',
+                    prefixIcon: Icon(
                       Icons.search,
                       color: AppColors.brandPrimary,
                     ),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            tooltip: 'Clear search',
-                            onPressed: _clearSearch,
-                            icon: const Icon(Icons.close),
-                          )
-                        : null,
+                    suffixIcon: Icon(Icons.chevron_right_rounded),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),

@@ -79,10 +79,6 @@ final GoRouter _router = GoRouter(
           builder: (context, state) => const WatchlistScreen(),
         ),
         GoRoute(
-          path: '/search',
-          builder: (context, state) => const SearchScreen(),
-        ),
-        GoRoute(
           path: '/post',
           builder: (context, state) => PostItemScreen(
             onCancel: () => context.go('/home'),
@@ -100,6 +96,11 @@ final GoRouter _router = GoRouter(
           builder: (context, state) => const ProfileScreen(),
         ),
       ],
+    ),
+    GoRoute(
+      path: '/search',
+      builder: (context, state) =>
+          SearchScreen(initialQuery: state.uri.queryParameters['q'] ?? ''),
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,

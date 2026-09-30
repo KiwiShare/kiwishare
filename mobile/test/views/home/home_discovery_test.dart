@@ -156,34 +156,34 @@ void main() {
     expect(find.text('Search'), findsNothing);
   });
 
-  testWidgets('Home keyword and preset price range filter together', (
-    tester,
-  ) async {
-    await _loadHome(tester, _homeApp());
+  testWidgets(
+    'Home search is a dedicated entry point and price filter stays on Home',
+    (tester) async {
+      await _loadHome(tester, _homeApp());
 
-    await tester.enterText(
-      find.byKey(const Key('home-search-field')),
-      'camping',
-    );
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump();
-    expect(find.text('4 items'), findsOneWidget);
+      final searchField = tester.widget<TextField>(
+        find.byKey(const Key('home-search-field')),
+      );
+      expect(searchField.readOnly, isTrue);
+      expect(find.text('7 items'), findsOneWidget);
 
-    await tester.ensureVisible(find.byKey(const Key('home-filter-button')));
-    await tester.tap(find.byKey(const Key('home-filter-button')));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const Key('home-price-range-under25')),
-    );
-    await tester.tap(find.byKey(const Key('home-price-range-under25')));
+      await tester.ensureVisible(find.byKey(const Key('home-filter-button')));
+      await tester.tap(find.byKey(const Key('home-filter-button')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('home-price-range-under25')),
+      );
+      await tester.tap(find.byKey(const Key('home-price-range-under25')));
 
-    await tester.tap(find.byKey(const Key('home-apply-filters')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('home-apply-filters')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('1 items'), findsOneWidget);
-    expect(find.text('Lantern'), findsOneWidget);
-    expect(find.text('Camping Stove'), findsNothing);
-  });
+      expect(find.text('2 items'), findsOneWidget);
+      expect(find.text('Monstera Plant'), findsWidgets);
+      expect(find.text('Lantern'), findsOneWidget);
+      expect(find.text('Camping Stove'), findsNothing);
+    },
+  );
 
   testWidgets('Home map uses a restrained NZ-only light basemap', (
     tester,
@@ -323,10 +323,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 650));
     await tester.pump();
 
-    await tester.enterText(
-      find.byKey(const Key('home-search-field')),
-      'monstera',
-    );
     discovery.setCategory('Plants');
     discovery.setView(HomeProductView.map);
 
@@ -341,7 +337,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('home-product-preview-card')), findsOneWidget);
-    expect(discovery.query, 'monstera');
+    expect(discovery.query, isEmpty);
     expect(discovery.selectedCategory, 'Plants');
     expect(discovery.view, HomeProductView.map);
   });

@@ -80,6 +80,35 @@ class ListingProvider extends ChangeNotifier {
     return items;
   }
 
+  Future<List<String>> getSearchSuggestions(
+    String query, {
+    int limit = 12,
+  }) async {
+    final repository = itemRepository;
+    if (repository is RestItemRepository) {
+      return repository.fetchSearchSuggestions(query, limit: limit);
+    }
+
+    final items = await repository.fetchDiscoveryItems(
+      DiscoveryQuery(query: query.trim()),
+    );
+    final seen = <String>{};
+    final suggestions = <String>[];
+    void add(String value) {
+      final normalized = value.trim();
+      if (normalized.isEmpty || !seen.add(normalized.toLowerCase())) return;
+      suggestions.add(normalized);
+    }
+
+    for (final item in items) {
+      add(item.title);
+      add(item.category);
+      add(item.displayLocation);
+      if (suggestions.length >= limit) break;
+    }
+    return suggestions.take(limit).toList(growable: false);
+  }
+
   Future<List<ItemModel>> searchListingItems(
     String query,
     String category,
