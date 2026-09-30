@@ -323,14 +323,10 @@ class _PreferenceRepository
     implements
         NotificationPreferencesRepository,
         ExtendedNotificationPreferencesRepository {
-  _PreferenceRepository(
-    this.saved, {
-    this.increaseSaved = false,
-    this.nearbySaved = false,
-  });
+  _PreferenceRepository(this.saved, {this.nearbySaved = false});
 
   bool saved;
-  bool increaseSaved;
+  bool increaseSaved = false;
   bool nearbySaved;
 
   @override
