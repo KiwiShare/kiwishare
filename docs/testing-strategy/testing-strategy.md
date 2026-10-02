@@ -5,9 +5,9 @@
 | Document owner | Five Guys |
 | Product | KiwiShare |
 | Course | COMPSCI 734 - Mobile, Web & Enterprise Computing |
-| Version | 0.1 (Draft for team review) |
-| Status | Proposed |
-| Last updated | 15 August 2026 |
+| Version | 1.0 |
+| Status | Final release strategy |
+| Last updated | 3 October 2026 |
 | Primary branch | `pre` |
 
 ## 1. Purpose
@@ -23,7 +23,7 @@ The strategy is intended to:
 - make quality evidence traceable to product requirements and GitHub issues;
 - reduce reliance on slow, inconsistent manual regression testing.
 
-This is a strategy document, not a catalogue of individual test cases. Detailed cases belong in the test code, issue acceptance criteria, and release/UAT checklists.
+This is a strategy document, not a catalogue of individual test cases. Detailed cases belong in the test code, issue acceptance criteria, and release/UAT checklists. The final manual/UAT matrix is maintained in `docs/testing-strategy/kiwishare-release-test-results-v0.2.xlsx`, with targeted verification notes in this directory and performance evidence under `docs/testing-evidence/`.
 
 ## 2. Source and Related Documents
 
@@ -42,7 +42,7 @@ It should be read together with:
 - `docs/schemas/`;
 - `docs/security-owasp.md`;
 - `docs/design-guidelines/`;
-- `docs/gitlab-flow.md`;
+- `docs/git-flow.md`;
 - `docs/deployment.md`.
 
 Where this document conflicts with an approved product requirement, API contract, schema, or security control, the conflict must be raised and resolved before implementation proceeds.
