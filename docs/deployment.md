@@ -1,28 +1,55 @@
-# Deployment and Release Documentation
+# Deployment & Release Guide
 
-This document explains the automated release flow and deployment topology for the Cloudflare-hosted web frontend, Render-hosted backend API, and mobile package distribution.
+This document describes the current KiwiShare deployment topology and release process used for the final COMPSCI 734 freeze.
 
 ---
 
+## 1. Production Topology
 
-## Production Web Frontend on Cloudflare Workers
+| Surface | Production target | Source / trigger |
+|---|---|---|
+| React/Vite web | Cloudflare Worker at `kiwishare.online` | Relevant changes on `pre` via `.github/workflows/web-deploy-cloudflare.yml` |
+| Koa API | Render Web Service at `kiwishare.onrender.com` | Render deployment from the production branch/configuration |
+| Media | Cloudflare R2 | Server-issued presigned upload URLs |
+| Database | MongoDB Atlas | Backend runtime configuration |
+| Android packages | GitHub Releases | Push/merge to `main` via `.github/workflows/release-publish.yml` |
+| iOS | Local/macOS build path | macOS + Xcode; not packaged by the current GitHub release workflow |
 
-The React/Vite application in `web/` is deployed to the Cloudflare Worker `kiwishare-web` and served through the custom domains:
+The React browser application calls the Koa API at:
+
+```text
+https://kiwishare.onrender.com/api
+```
+
+The Flutter client can use either the local backend or the deployed Render API depending on the launcher mode.
+
+---
+
+## 2. Production Web on Cloudflare Workers
+
+The React/Vite application in `web/` is deployed through Cloudflare Workers and served from:
 
 - `https://kiwishare.online`
 - `https://www.kiwishare.online`
 
-The Worker serves the generated `web/dist` assets from Cloudflare's edge. `not_found_handling = "single-page-application"` ensures browser-history routes such as `/products/:id`, `/orders/:orderId`, `/s/:itemId`, and other React Router paths resolve to `index.html` instead of returning a hosting-layer 404. The `/s/:itemId` route is the branded external-share handoff: it attempts the native `kiwishare:///items/:itemId` deep link on mobile and otherwise offers store/install destinations plus **Continue on web**.
+Relevant repository files:
 
-The web bundle is built with `VITE_API_URL=https://kiwishare.onrender.com/api`, so this migration changes only web hosting. The Koa API and Flutter remote-backend configuration remain on Render. The share landing also reads optional `VITE_IOS_APP_URL` and `VITE_ANDROID_APP_URL` values; until final store listing URLs exist, the code falls back to KiwiShare search destinations in the corresponding stores.
+- `wrangler.toml` — Worker/static-asset and custom-domain configuration
+- `worker.js` — edge/static-asset handler
+- `.github/workflows/web-deploy-cloudflare.yml` — production web build/deployment
 
-Deployment configuration lives in the repository root:
+The workflow is path-scoped and runs for relevant changes on `pre`. It:
 
-- `wrangler.toml` — Worker custom domains and static-asset binding
-- `worker.js` — minimal edge handler for the static asset binding
-- `.github/workflows/web-deploy-cloudflare.yml` — production web build/deployment after changes land on `pre`, plus manual dispatch
+1. installs the locked pnpm dependency graph;
+2. builds the React/Vite production bundle;
+3. deploys with Wrangler when `CLOUDFLARE_API_TOKEN` is configured;
+4. verifies the production edge response.
 
-The GitHub Actions deploy step requires the repository secret `CLOUDFLARE_API_TOKEN`. Until that secret is configured, CI still builds the production bundle but safely skips deployment instead of failing the branch. The Cloudflare account ID and Worker name are non-secret deployment metadata stored in the workflow/configuration.
+A successful production response includes:
+
+```text
+x-kiwishare-edge: cloudflare-worker
+```
 
 For a manual deployment from an authenticated developer machine:
 
@@ -31,146 +58,161 @@ VITE_API_URL=https://kiwishare.onrender.com/api pnpm --filter web run build
 npx wrangler deploy
 ```
 
-A successful production response includes the diagnostic header `x-kiwishare-edge: cloudflare-worker`, which can be used to confirm that the request is no longer being served by the previous Render static site.
-
-## 1. Automated Release Flow (Merge to `main`)
-
-We have fully automated our release pipeline via GitHub Actions. **Developers do not need to manually create tags or run release scripts locally.**
-
-### Workflow Summary:
-1. Feature branches are developed and merged into the **`pre`** branch via PR/MR for staging validation.
-2. Once verified, create a PR/MR from **`pre`** into **`main`**.
-3. Upon merging into **`main`**, GitHub Actions (`.github/workflows/release-publish.yml`) will automatically:
-   - Analyze commit history (using Conventional Commits) to calculate the next Semantic Version (`patch`, `minor`, `major`).
-   - Automatically tag the commit (e.g., `v1.2.0`) in GitHub.
-   - Build the **Android APK** (`KiwiShare-Android-vX.X.X.apk`).
-   - Build the **iOS Package** (`KiwiShare-iOS-vX.X.X.zip`).
-   - Create a **GitHub Release** with auto-generated release notes and attach both Android and iOS installation packages.
-   - Distribute the Android APK to **Firebase App Distribution** (if configured).
-
-### Release integrity and supply-chain controls
-
-The release workflow treats an existing release tag as immutable. It creates and pushes tags without force, so a concurrent release or unexpected tag collision fails safely instead of moving a tag that may already identify published artifacts. Resolve the version/tag conflict and rerun the workflow; do not force-update the release tag.
-
-GitHub Actions used by the release workflow are pinned to full commit SHAs. The trailing version comments (for example, `# v4`) record the reviewed upstream release without relying on a movable version tag at execution time. When updating an Action:
-
-1. review the upstream release notes and repository ownership;
-2. resolve the intended release tag to its commit (dereference annotated tags);
-3. replace the full SHA and update the version comment in the same review; and
-4. run the existing backend, web, and mobile CI checks before merging.
-
-Workflow token permissions are read-only by default. Only the version and publish jobs receive `contents: write`, and only the sync job receives `pull-requests: write`. Build jobs and the publishing checkout do not persist Git credentials. These boundaries reduce the impact of a compromised build tool or third-party Action while preserving the current release behaviour.
+The `VITE_FIREBASE_*` values used by the web client are public Firebase application metadata. They are not server credentials.
 
 ---
 
-## 2. Backend Deployment to Render (Cloud API)
+## 3. Backend on Render
 
-The backend Koa server is deployed to [Render.com](https://render.com) as a Web Service.
+The Koa/TypeScript backend is deployed as a Render Web Service.
 
-### Setup Instructions on Render:
+Recommended production configuration:
 
-1. **Create a MongoDB Database**:
-   - Set up a free cluster on [MongoDB Atlas](https://www.mongodb.com/products/platform/atlas-database).
-   - Get the connection string: `mongodb://REDACTED@@cluster.mongodb.net/kiwishare?retryWrites=true&w=majority`
+- **Root directory:** repository root
+- **Runtime:** Node.js
+- **Build command:**
 
-2. **Create a Render Web Service**:
-   - Log in to Render and click **New** -> **Web Service**.
-   - Connect your GitHub repository.
-   - Fill in the following configurations:
-     - **Name**: `kiwishare-backend`
-     - **Region**: Select a region close to your users (e.g., `Singapore` or `Oregon`).
-     - **Branch**: `main`
-     - **Auto-Deploy**: `Yes` *(Render will automatically redeploy on every merge to main)*
-     - **Root Directory**: Leave blank so Render builds from the repository root
-       and can read `pnpm-lock.yaml` and `pnpm-workspace.yaml`.
-     - **Runtime**: `Node`
-     - **Build Command**:
-       ```bash
-       npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter server run build
-       ```
-       The workspace allowlist permits the `ffmpeg-static` install lifecycle so
-       the voice-message decoder binary is provisioned during deployment. The
-       server `prebuild` hook also rebuilds this package to recover safely when
-       Render restores a dependency cache created before lifecycle scripts were
-       enabled.
-     - **Start Command**:
-       ```bash
-       node server/dist/index.js
-       ```
+```bash
+npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter server run build
+```
 
-3. **Configure Environment Variables in Render**:
-   In the **Variables** tab of your Render Web Service, add:
-   - `MONGODB_URI`: Your MongoDB Atlas connection string.
-   - `NODE_ENV`: `production`
-   - `PORT`: `10000` (Render binds to this automatically, but Koa will listen to it)
-   - `JWT_SECRET`: A secure random string for signing user authentication tokens.
+- **Start command:**
+
+```bash
+node server/dist/index.js
+```
+
+The root build is intentional so Render can use the committed workspace lockfiles and install the `ffmpeg-static` dependency required by voice-message processing.
+
+The backend runtime environment is described in the root README. At minimum, production requires a strong `JWT_SECRET` and valid MongoDB configuration. R2, Resend, Stripe, Gemini and Firebase Admin variables enable their corresponding external integrations.
+
+The real `server/.env` is **never committed**. Course markers receive it separately through the private-information ZIP.
 
 ---
 
-## 3. Mobile Deployment & Package Distribution
+## 4. Automated Production Release on `main`
 
-On every push/merge to `main`, GitHub Actions executes multi-platform builds:
+A push/merge to `main` triggers:
 
-### Packages Available on GitHub Releases:
-- **Android APK**: `KiwiShare-Android-vX.X.X.apk` (Directly installable on any Android device).
-- **iOS App Package**: `KiwiShare-iOS-vX.X.X.zip` (Contains the built `Runner.app` bundle).
+```text
+.github/workflows/release-publish.yml
+```
 
-### Android Release Signing
+The current workflow is Android-focused and performs:
 
-Production Android releases support a stable signing key through GitHub Actions secrets. If these secrets are absent, local/course-demo release APKs continue to use the debug signing key so development builds remain installable.
+1. **Android signing preflight** — required production keystore secrets must be configured.
+2. **Release version/tag calculation** — the workflow determines the GitHub Release version/tag.
+3. **Flutter toolchain setup** — Flutter 3.47.5.
+4. **Signed APK build**.
+5. **Signed AAB build**.
+6. **Signature verification** for both package types.
+7. **GitHub Release publication** with Android assets.
+8. **Optional Firebase App Distribution** when the Firebase distribution secrets are present.
+9. **`main` → `pre` synchronization workflow** when needed.
 
-Configure these repository secrets for stable production signing:
+The expected release assets are:
 
-- `ANDROID_KEYSTORE_BASE64`: Base64-encoded JKS/keystore file.
-- `ANDROID_KEYSTORE_PASSWORD`: Keystore password.
-- `ANDROID_KEY_ALIAS`: Signing key alias.
-- `ANDROID_KEY_PASSWORD`: Signing key password.
+```text
+KiwiShare-Android-vX.Y.Z.apk
+KiwiShare-Android-vX.Y.Z.aab
+```
 
-After choosing the stable release key, add its SHA-1 and SHA-256 certificate fingerprints to the existing Firebase Android app (`app.kiwishare.android`) and download the refreshed `google-services.json`. This is required for reliable Google Sign-In in a release-signed Android build.
+### iOS
 
-The release workflow also passes the generated semantic version into Flutter as Android `versionName` and uses the GitHub Actions run number as `versionCode`, keeping the APK metadata aligned with the GitHub Release.
+The current automated GitHub release pipeline does **not** build or publish an iOS ZIP/package.
 
-### Google Sign-In (Web, Android, iOS)
+A local release-mode iOS build remains available on macOS + Xcode:
 
-KiwiShare uses one backend endpoint (`POST /api/auth/google`) and platform-specific Google sign-in clients:
+```bash
+pnpm mobile:build:ios
+```
 
-- Web: Firebase Authentication JS SDK with the Google provider.
-- Android: native Google Sign-In for package `app.kiwishare.android`.
-- iOS: native Google Sign-In for bundle ID `com.kiwishare.ios`.
-
-The backend accepts the Google identity token obtained by each platform and only accepts configured OAuth client audiences. Override the built-in client list with `GOOGLE_OAUTH_CLIENT_IDS` when credentials change.
-
-#### Web Firebase Authentication setup
-
-The React web app is registered as the Firebase Web App `KiwiShare Web` in project `kiwishare-2791f`. Production injects the public Firebase web config through `VITE_FIREBASE_*` variables and uses `GoogleAuthProvider` with `signInWithPopup()`.
-
-Firebase Authentication must keep `kiwishare.online` in **Authentication > Settings > Authorized domains**. The Google provider must remain enabled in **Authentication > Sign-in method**. The Firebase web config is public application metadata; server credentials and OAuth client secrets must never be exposed to the browser.
-
-#### Android certificate fingerprints
-
-Google Sign-In on Android is tied to both the package name and the APK signing certificate. Register the SHA-1 and SHA-256 fingerprints for every signing key that should be allowed (developer debug keys and the stable production release key) on the Firebase Android app `app.kiwishare.android`, then download a refreshed `google-services.json`.
-
-Do not rely on an ephemeral CI debug keystore for a production Google-enabled release. Configure the stable Android release keystore secrets above and register that release certificate in Firebase before promoting to `main`.
-
-#### iOS
-
-The repository's `GoogleService-Info.plist` and URL scheme must stay matched to the Firebase iOS app `com.kiwishare.ios`. The Web/server client ID remains the `GIDServerClientID` so the backend can validate the resulting Google identity token.
-
-### GitHub Actions Secrets Configuration:
-
-To enable automated Firebase App Distribution, configure the following secrets in **GitHub Repository** -> **Settings** -> **Secrets and variables** -> **Actions**:
-
-1. **`FIREBASE_APP_ID`**:
-   - The App ID for your Android app in Firebase (format: `1:XXXXXX:android:XXXXXX`).
-2. **`FIREBASE_TOKEN`**:
-   - CI token generated via `firebase login:ci`.
+This distinction is intentional and should be preserved in README/demo/release documentation.
 
 ---
 
-## 4. Verification
+## 5. Android Release Signing
 
-After merging a PR/MR from `pre` into `main`:
-1. **GitHub Actions Tab**: Observe the `Release & Publish Pipeline` running `Calculate Version & Tag`, `Build Android APK`, `Build iOS Package`, and `Publish Release & Distribute`.
-2. **GitHub Releases Tab**: A new Release entry will appear containing the release notes and downloadable `.apk` & `.zip` packages.
-3. **Cloudflare Worker**: For a web change on `pre`, confirm the `Deploy Web to Cloudflare` workflow built the Vite bundle and, when `CLOUDFLARE_API_TOKEN` is configured, deployed `kiwishare-web`. Verify `https://kiwishare.online` returns `x-kiwishare-edge: cloudflare-worker`.
-4. **Render Dashboard**: The backend service remains independent and will show its own deploy event when the backend deployment branch is updated.
+The production workflow requires a stable release key supplied through GitHub Actions secrets:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+The workflow decodes the keystore only inside the CI runner, creates the temporary `key.properties`, builds the packages and verifies their signatures.
+
+Do **not** place the keystore or signing passwords in:
+
+- the repository;
+- the course private-information ZIP;
+- README/docs;
+- PR screenshots or logs.
+
+For Google Sign-In to work in the signed Android build, the production signing certificate fingerprints must remain registered for the Firebase Android app.
+
+---
+
+## 6. Release-Tag / Source Integrity
+
+A published Git tag is an immutable identifier for one source revision. Do not force-move an existing release tag and do not attach newly built artifacts from a different source SHA to an old tag.
+
+Before accepting the final release, verify:
+
+```text
+GitHub Release tag SHA
+        ==
+main SHA that triggered the workflow
+        ==
+source SHA used to build APK/AAB
+```
+
+If any of these differ, create a new release/tag from the correct source instead of rewriting release history.
+
+---
+
+## 7. Firebase / Google Identity Configuration
+
+KiwiShare uses platform-specific Google/Firebase configuration:
+
+- **Web:** Firebase JS SDK + Google provider.
+- **Android:** native Google Sign-In for package `app.kiwishare.android`.
+- **iOS:** native Google Sign-In for bundle ID `com.kiwishare.ios`.
+- **Backend:** validates accepted Google identity audiences and issues KiwiShare JWT sessions.
+
+Tracked application configuration:
+
+- `mobile/android/app/google-services.json`
+- `mobile/ios/Runner/GoogleService-Info.plist`
+- `web/.env.example` for public browser configuration
+
+Server-side Firebase Admin credentials are different: they are private runtime credentials. If they are not configured, push delivery is disabled gracefully; the core API remains usable.
+
+---
+
+## 8. Optional Firebase App Distribution
+
+The Android release can also be distributed through Firebase App Distribution when these GitHub Actions secrets are configured:
+
+- `FIREBASE_APP_ID`
+- `FIREBASE_TOKEN`
+
+This is optional distribution infrastructure. GitHub Releases remain the course-visible Android package source.
+
+---
+
+## 9. Final Freeze Verification
+
+After the final `pre` → `main` promotion:
+
+1. Confirm the relevant GitHub Actions checks are green.
+2. Confirm the **Release & Publish Pipeline** completed successfully.
+3. Confirm the GitHub Release contains both APK and AAB.
+4. Confirm the release tag/source SHA matches the `main` commit used by the build.
+5. Confirm the APK/AAB signature verification step passed.
+6. Confirm `https://kiwishare.online` serves through Cloudflare.
+7. Confirm `https://kiwishare.onrender.com` is reachable.
+8. Confirm no `.env`, keystore, API secret or private credential entered Git history.
+9. Confirm the release/UAT evidence under `docs/testing-strategy/` matches the submitted release candidate.
+
+For the branch/review process, see [`docs/git-flow.md`](git-flow.md).
