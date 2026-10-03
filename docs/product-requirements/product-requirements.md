@@ -549,7 +549,7 @@ The team shall record each decision in this table and update all affected issues
 - `docs/deployment.md`
 - `docs/design-guidelines/kiwishare-ui-design-guidelines-v1.3.md`
 - `docs/domain-rules.md` — planned
-- `docs/gitlab-flow.md`
+- `docs/git-flow.md`
 - `docs/schemas/`
 - `docs/security-owasp.md`
 - `docs/testing-strategy.md` — planned
