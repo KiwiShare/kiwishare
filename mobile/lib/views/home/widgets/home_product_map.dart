@@ -180,11 +180,15 @@ class _HomeProductMapState extends State<HomeProductMap> {
                 cameraTargetBounds: CameraTargetBounds(
                   HomeProductMap.newZealandCameraBounds,
                 ),
+                zoomGesturesEnabled: true,
+                scrollGesturesEnabled: true,
+                rotateGesturesEnabled: true,
+                tiltGesturesEnabled: true,
                 compassEnabled: false,
                 mapToolbarEnabled: false,
                 myLocationEnabled: false,
                 myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
+                zoomControlsEnabled: true,
                 buildingsEnabled: true,
                 onMapCreated: (controller) {
                   _controller = controller;
