@@ -200,6 +200,13 @@ void main() {
     );
     expect(map.minMaxZoomPreference.minZoom, HomeProductMap.minimumZoom);
     expect(map.minMaxZoomPreference.maxZoom, HomeProductMap.maximumZoom);
+    expect(HomeProductMap.minimumZoom, lessThan(4.0));
+    expect(map.gestureRecognizers, isNotEmpty);
+    expect(map.zoomGesturesEnabled, isTrue);
+    expect(map.scrollGesturesEnabled, isTrue);
+    expect(map.rotateGesturesEnabled, isTrue);
+    expect(map.tiltGesturesEnabled, isTrue);
+    expect(map.zoomControlsEnabled, isFalse);
     expect(map.mapType, MapType.normal);
     expect(
       map.markers.any((marker) => marker.markerId.value == 'product-item_1'),
