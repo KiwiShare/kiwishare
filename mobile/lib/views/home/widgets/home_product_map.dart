@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -8,8 +10,21 @@ import '../../../theme/app_theme.dart';
 import 'home_product_preview_card.dart';
 
 class HomeProductMap extends StatefulWidget {
-  static const minimumZoom = 4.8;
+  // Keep enough zoom-out headroom to make the NZ-wide map genuinely
+  // explorable. The previous 4.8 minimum was only 0.2 below the default
+  // zoom of 5, which made zoom-out appear broken on physical devices.
+  static const minimumZoom = 3.0;
   static const maximumZoom = 16.0;
+
+  // HomeProductMap is embedded in a SingleChildScrollView. Without an
+  // explicit recognizer the parent scroll view can win Flutter's gesture
+  // arena before the native Google Map sees the interaction. Eagerly claiming
+  // gestures that begin on the map keeps pan/pinch/rotate reliable on both
+  // Android and iOS.
+  static final Set<Factory<OneSequenceGestureRecognizer>> gestureRecognizers =
+      <Factory<OneSequenceGestureRecognizer>>{
+        Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+      };
   static const newZealandCenter = LatLng(-41.2, 172.7);
   static final newZealandCameraBounds = LatLngBounds(
     southwest: const LatLng(-49.5, 164.0),
@@ -180,10 +195,17 @@ class _HomeProductMapState extends State<HomeProductMap> {
                 cameraTargetBounds: CameraTargetBounds(
                   HomeProductMap.newZealandCameraBounds,
                 ),
+                gestureRecognizers: HomeProductMap.gestureRecognizers,
+                zoomGesturesEnabled: true,
+                scrollGesturesEnabled: true,
+                rotateGesturesEnabled: true,
+                tiltGesturesEnabled: true,
                 compassEnabled: false,
                 mapToolbarEnabled: false,
                 myLocationEnabled: false,
                 myLocationButtonEnabled: false,
+                // Native zoom controls are Android-only. Keep them disabled so
+                // Android and iOS share the same gesture-first interaction.
                 zoomControlsEnabled: false,
                 buildingsEnabled: true,
                 onMapCreated: (controller) {

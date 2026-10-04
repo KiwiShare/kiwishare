@@ -83,12 +83,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleQuickFill = (userEmail: string, userPass: string) => {
-    setEmail(userEmail);
-    setPassword(userPass);
-    setMode('password');
-  };
-
   const handleGoogleCredential = React.useCallback(
     async (idToken: string) => {
       try {
@@ -333,46 +327,6 @@ export const LoginPage: React.FC = () => {
           onCredential={handleGoogleCredential}
           onError={setError}
         />
-
-        {/* Quick Fill Testing Helper */}
-        <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-            Quick Demo Accounts:
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('admin@kiwishare.online', 'password123')}
-              style={{
-                fontSize: '0.75rem',
-                color: '#047857',
-                backgroundColor: '#ecfdf5',
-                padding: '5px 12px',
-                borderRadius: 'var(--radius-full)',
-                border: '1px solid #a7f3d0',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              👑 Admin: admin@kiwishare.online
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('sam@kiwishare.co.nz', 'password123')}
-              style={{
-                fontSize: '0.75rem',
-                color: 'var(--primary-700)',
-                backgroundColor: 'var(--primary-50)',
-                padding: '5px 12px',
-                borderRadius: 'var(--radius-full)',
-                border: '1px solid var(--primary-200)',
-                cursor: 'pointer',
-              }}
-            >
-              👤 User: sam@kiwishare.co.nz
-            </button>
-          </div>
-        </div>
 
         {/* Footer */}
         <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
