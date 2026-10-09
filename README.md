@@ -23,7 +23,7 @@
 
 KiwiShare is a team-built marketplace prototype developed during **COMPSCI 734 at the University of Auckland (2026)**. The product focuses on local discovery, safer person-to-person transactions and practical reuse.
 
-This repository is a **public portfolio snapshot of the course project's final `main` source tree**, rather than a mirror of the university's private GitHub repository. The internal coursework history, administrative evidence, operational credentials and deployment automation are intentionally not published.
+This repository publishes a **sanitized portfolio edition** of the University's private coursework project, including its original development history. The final `main` codebase is retained, while browser profiles, private testing evidence, production credentials, and deployment automation are excluded. Historical commit author names, chronology, merge relationships, branches, and release tags are preserved; commit SHAs differ from the original because sensitive content and private contributor email addresses were removed.
 
 ## Features
 
@@ -114,7 +114,7 @@ Developed as a five-person University of Auckland group project (**Team Five Guy
 - [Jenny Yin](https://github.com/jennyyinUOA)
 - [Arthur](https://github.com/ArthurMorgan750)
 
-The original coursework repository, its issues, PRs and wiki remain private in the university organisation. This public snapshot begins with a new commit and does not recreate those records.
+The original coursework repository, Issues, Pull Request reviews, and Wiki remain private in the university organisation. This public repository contains a cleaned copy of the Git history (677 original commits, 138 branch names and 15 version tags at migration), followed by the public-portfolio preparation commits. Original commit SHAs and GitHub PR/Issue URLs in old commit messages may not resolve here after rewriting.
 
 ## License
 
