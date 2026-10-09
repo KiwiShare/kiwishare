@@ -34,7 +34,7 @@ describe('student verification trust-score reward', () => {
     token = jwt.sign({ id: userId }, process.env.JWT_SECRET!);
   });
 
-  async function addOtp(code: string, email = 'demo@example.com') {
+  async function addOtp(code: string, email = 'student@aucklanduni.ac.nz') {
     await Otp.create({
       email,
       code,
@@ -43,7 +43,7 @@ describe('student verification trust-score reward', () => {
     });
   }
 
-  function verify(code: string, email = 'demo@example.com') {
+  function verify(code: string, email = 'student@aucklanduni.ac.nz') {
     return request(app.callback())
       .post('/api/users/student-verification/verify-otp')
       .set('Authorization', `Bearer ${token}`)
@@ -60,7 +60,7 @@ describe('student verification trust-score reward', () => {
       trustScore: 115,
       isStudentVerified: true,
       studentInstitution: 'University of Auckland',
-      studentEmail: 'demo@example.com'
+      studentEmail: 'student@aucklanduni.ac.nz'
     });
     expect((await User.findById(userId))?.trustScore).toBe(115);
   });
@@ -112,7 +112,7 @@ describe('student verification trust-score reward', () => {
   test('invalid and expired codes do not change score or verification state', async () => {
     await addOtp('678901');
     await Otp.create({
-      email: 'demo@example.com',
+      email: 'student@aucklanduni.ac.nz',
       code: '789012',
       expiresAt: new Date(Date.now() - 1000),
       used: false

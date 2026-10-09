@@ -1,0 +1,47 @@
+KiwiShare Source-Available License 1.0
+
+Copyright (c) 2026 KiwiShare project contributors.
+All rights reserved except as expressly permitted below.
+
+1. Permitted Access
+
+You may view, download, and clone the source code solely for:
+- personal review and evaluation;
+- educational study and security research;
+- testing KiwiShare for non-production purposes; and
+- preparing and submitting contributions to the official KiwiShare project.
+
+2. Reuse Requires Prior Written Permission
+
+Except for the activities expressly permitted in Section 1, you may not, without prior written permission from the applicable copyright holder(s):
+
+- copy or reuse all or a substantial part of the source code;
+- modify the source code to create an independent or derivative product;
+- redistribute, sublicense, sell, publish, or otherwise provide the source code or binaries to third parties;
+- deploy, host, operate, or offer the software or a derivative as a product or service;
+- use the software or a derivative for commercial purposes;
+- rebrand, white-label, or incorporate the software into another application, service, or codebase.
+
+Permission requests may be made through the official KiwiShare repository maintainers. A permission grant is valid only when provided in writing by the applicable copyright holder(s).
+
+3. Contributions
+
+By submitting a contribution to the official KiwiShare repository, you grant the project and its users the rights necessary to use that contribution as part of KiwiShare under this license. You retain copyright in your contribution unless separately agreed in writing.
+
+4. Third-Party Software
+
+Third-party libraries, assets, APIs, and other dependencies remain subject to their own licenses and terms. This license does not override those rights.
+
+5. Trademarks
+
+No trademark, branding, logo, or name rights are granted by this license.
+
+6. Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE COPYRIGHT HOLDERS AND CONTRIBUTORS SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+7. Source-Available Status
+
+This license makes the source code publicly viewable, but it is not an OSI-approved open-source license because reuse is restricted and requires permission.
+
+Use of the software outside the permissions in Section 1 constitutes acceptance of the requirement to obtain prior written permission.

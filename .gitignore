@@ -41,3 +41,8 @@ server/firebase-adminsdk.json
 server/.env
 .env
 .env.local
+
+# Local Firebase configuration and operational signing assets (portfolio snapshot)
+mobile/android/app/google-services.json
+mobile/ios/Runner/GoogleService-Info.plist
+mobile/firebase.json

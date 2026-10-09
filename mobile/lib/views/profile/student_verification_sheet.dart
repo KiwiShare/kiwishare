@@ -213,7 +213,7 @@ class _StudentVerificationSheetState extends State<StudentVerificationSheet> {
               autofocus: true,
               decoration: InputDecoration(
                 labelText: 'Student email (.ac.nz)',
-                hintText: 'e.g. demo@example.com',
+                hintText: 'e.g. s.yao@aucklanduni.ac.nz',
                 prefixIcon: const Icon(Icons.mail_outline_rounded),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),

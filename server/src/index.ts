@@ -5,7 +5,7 @@ import { getJwtSecret } from './middleware/auth';
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://REDACTED@/kiwishare';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/kiwishare';
 const MONGODB_URI_TEST = process.env.MONGODB_URI_TEST || MONGODB_URI;
 
 async function startServer() {

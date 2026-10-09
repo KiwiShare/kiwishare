@@ -54,15 +54,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/UOA-CS734-S2-2026/project-implementation-five-guys.git"
+    "url": "git+https://github.com/KiwiShare/kiwishare.git"
   },
   "keywords": [],
   "author": "",
   "license": "SEE LICENSE IN LICENSE",
   "bugs": {
-    "url": "https://github.com/UOA-CS734-S2-2026/project-implementation-five-guys/issues"
+    "url": "https://github.com/KiwiShare/kiwishare/issues"
   },
-  "homepage": "https://github.com/UOA-CS734-S2-2026/project-implementation-five-guys#readme",
+  "homepage": "https://github.com/KiwiShare/kiwishare#readme",
   "devDependencies": {
     "concurrently": "^8.2.2",
     "husky": "^9.1.7",
